@@ -12,8 +12,8 @@ jobs:
     strategy:
       matrix:
         platform: [ubuntu-latest, macos-latest]
-    if: matrix.platform == 'ubuntu-latest' || github.ref == 'main' || github.ref == 'develop'
     runs-on: ${{ matrix.platform }}
+    if: runner.name == 'ubuntu-latest' || github.ref == 'main' || github.ref == 'develop'
     name: Integration tests
     steps:
       - uses: actions/checkout@v3
