@@ -11,19 +11,24 @@ jobs:
   test:
     strategy:
       matrix:
-        platform: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest]
+        run:
+          [
+            false,
+            matrix.os == 'macos-latest' && github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged,
+          ]
     runs-on: ${{ matrix.platform }}
     if: runner.name == 'ubuntu-latest' || runner.name == 'macos-latest' && github.event.pull_request.merged == true
     name: Integration tests
     steps:
       - uses: actions/checkout@v3
         with:
-          submodules: 'true'
+          submodules: "true"
       - uses: actions/checkout@v3
         with:
-          repository: 'near/pagoda-relayer-rs-fastauth'
-          ref: 'daniyar/custom-entrypoint'
-          path: 'relayer'
+          repository: "near/pagoda-relayer-rs-fastauth"
+          ref: "daniyar/custom-entrypoint"
+          path: "relayer"
           ssh-key: ${{ secrets.RELAYER_DEPLOY_SSH_KEY }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
