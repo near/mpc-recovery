@@ -13,7 +13,7 @@ jobs:
       matrix:
         platform: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.platform }}
-    if: runner.name == 'ubuntu-latest' || github.ref == 'main' || github.ref == 'develop'
+    if: runner.name == 'ubuntu-latest' || runner.name == 'macos-latest' && github.event.pull_request.merged == true
     name: Integration tests
     steps:
       - uses: actions/checkout@v3
