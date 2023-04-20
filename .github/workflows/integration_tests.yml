@@ -17,8 +17,7 @@ jobs:
             true,
             matrix.os == 'macos-latest' && github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged,
           ]
-    runs-on: ${{ matrix.platform }}
-    if: runner.name == 'ubuntu-latest' || runner.name == 'macos-latest' && github.event.pull_request.merged == true
+    runs-on: ${{ matrix.os }}
     name: Integration tests
     steps:
       - uses: actions/checkout@v3
