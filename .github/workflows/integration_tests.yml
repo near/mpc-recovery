@@ -12,11 +12,6 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        run:
-          [
-            true,
-            github.event.pull_request.merged == true,
-          ]
     runs-on: ${{ matrix.os }}
     name: Integration tests
     steps:
