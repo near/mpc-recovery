@@ -1,5 +1,6 @@
 use threshold_crypto::{PublicKeySet, SecretKeySet, SecretKeyShare};
 
+pub mod gcp;
 mod key_recovery;
 mod leader_node;
 pub mod msg;

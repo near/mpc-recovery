@@ -1,4 +1,5 @@
-use crate::key_recovery::{get_user_recovery_pk, get_user_recovery_sk};
+use crate::gcp::GcpService;
+use crate::key_recovery::UserSecretKey;
 use crate::msg::{
     AddKeyRequest, AddKeyResponse, LeaderRequest, LeaderResponse, NewAccountRequest,
     NewAccountResponse, SigShareRequest, SigShareResponse,
@@ -26,6 +27,7 @@ use std::net::SocketAddr;
 use threshold_crypto::{PublicKeySet, SecretKeyShare};
 
 pub struct Config {
+    pub gcp_service: GcpService,
     pub id: NodeId,
     pub pk_set: PublicKeySet,
     pub sk_share: SecretKeyShare,
@@ -41,6 +43,7 @@ pub struct Config {
 
 pub async fn run(config: Config) {
     let Config {
+        gcp_service,
         id,
         pk_set,
         sk_share,
@@ -83,6 +86,7 @@ pub async fn run(config: Config) {
         sk_share,
         sign_nodes,
         client,
+        gcp_service,
         near_root_account: near_root_account.parse().unwrap(),
         account_creator_id,
         account_creator_sk,
@@ -113,6 +117,7 @@ struct LeaderState {
     sk_share: SecretKeyShare,
     sign_nodes: Vec<String>,
     client: NearRpcAndRelayerClient,
+    gcp_service: GcpService,
     near_root_account: AccountId,
     account_creator_id: AccountId,
     // TODO: temporary solution
@@ -153,11 +158,15 @@ async fn process_new_account(
             )
             .await?;
 
+        let user_secret_key = UserSecretKey::random(internal_acc_id.clone());
+        let public_key = user_secret_key.public_key();
+        state.gcp_service.insert(user_secret_key).await?;
+
         let delegate_action = get_create_account_delegate_action(
             state.account_creator_id.clone(),
             state.account_creator_sk.public_key(),
             new_user_account_id.clone(),
-            get_user_recovery_pk(internal_acc_id.clone()),
+            public_key,
             new_user_account_pk.clone(),
             state.near_root_account.clone(),
             nonce,
@@ -247,15 +256,13 @@ async fn process_add_key(
 ) -> anyhow::Result<(StatusCode, Json<AddKeyResponse>)> {
     let user_account_id: AccountId = request.near_account_id.parse()?;
     let new_public_key: PublicKey = request.public_key.parse()?;
+    let user_secret_key: UserSecretKey = state.gcp_service.get(internal_acc_id.clone()).await?;
 
     nar::retry(|| async {
         // Get nonce and recent block hash
         let (_hash, block_height, nonce) = match state
             .client
-            .access_key(
-                user_account_id.clone(),
-                get_user_recovery_pk(internal_acc_id.clone()),
-            )
+            .access_key(user_account_id.clone(), user_secret_key.public_key())
             .await
         {
             Ok(val) => val,
@@ -282,7 +289,7 @@ async fn process_add_key(
         let max_block_height: u64 = block_height + 100;
         let delegate_action = get_add_key_delegate_action(
             user_account_id.clone(),
-            get_user_recovery_pk(internal_acc_id.clone()),
+            user_secret_key.public_key(),
             new_public_key.clone(),
             nonce,
             max_block_height,
@@ -290,7 +297,7 @@ async fn process_add_key(
         let signed_delegate_action = get_signed_delegated_action(
             delegate_action,
             user_account_id.clone(),
-            get_user_recovery_sk(internal_acc_id.clone()),
+            user_secret_key.secret_key.clone(),
         );
 
         let result = state.client.send_meta_tx(signed_delegate_action).await;

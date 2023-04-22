@@ -1,14 +1,32 @@
-use crate::primitives::InternalAccountId;
-use near_crypto::{PublicKey, SecretKey};
+use crate::{gcp::DatastoreEntity, primitives::InternalAccountId};
+use near_crypto::{KeyType, PublicKey, SecretKey};
+use serde::{Deserialize, Serialize};
 
-pub fn get_user_recovery_pk(_id: InternalAccountId) -> PublicKey {
-    // TODO: use key derivation or other techniques to generate a key
-    "ed25519:3BUQYE4ZfQ6A94CqCtAbdLURxo4eHv2L8JjC2KiXXdFn"
-        .parse()
-        .unwrap()
+#[derive(Serialize, Deserialize, Clone)]
+pub struct UserSecretKey {
+    pub internal_account_id: InternalAccountId,
+    pub secret_key: SecretKey,
 }
 
-pub fn get_user_recovery_sk(_id: InternalAccountId) -> SecretKey {
-    // TODO: use key derivation or other techniques to generate a key
-    "ed25519:5pFJN3czPAHFWHZYjD4oTtnJE7PshLMeTkSU7CmWkvLaQWchCLgXGF1wwcJmh2AQChGH85EwcL5VW7tUavcAZDSG".parse().unwrap()
+impl DatastoreEntity for UserSecretKey {
+    fn kind() -> String {
+        "UserSecretKey".to_string()
+    }
+
+    fn name(&self) -> String {
+        self.internal_account_id.clone()
+    }
+}
+
+impl UserSecretKey {
+    pub fn random(internal_account_id: InternalAccountId) -> Self {
+        Self {
+            internal_account_id,
+            secret_key: SecretKey::from_random(KeyType::ED25519),
+        }
+    }
+
+    pub fn public_key(&self) -> PublicKey {
+        self.secret_key.public_key()
+    }
 }

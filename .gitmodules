@@ -1,3 +1,0 @@
-[submodule "mpc-recovery-gcp/googleapis"]
-path = mpc-recovery-gcp/googleapis
-url = https://github.com/googleapis/googleapis.git

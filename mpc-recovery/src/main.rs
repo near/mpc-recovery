@@ -1,10 +1,7 @@
 use clap::Parser;
-use gcp::GcpService;
-use mpc_recovery::LeaderConfig;
+use mpc_recovery::{gcp::GcpService, LeaderConfig};
 use near_primitives::types::AccountId;
 use threshold_crypto::{serde_impl::SerdeSecret, PublicKeySet, SecretKeyShare};
-
-mod gcp;
 
 #[derive(Parser, Debug)]
 enum Cli {
@@ -51,6 +48,9 @@ enum Cli {
         /// TEMPORARY - Account creator ed25519 secret key
         #[arg(long, env("MPC_RECOVERY_ACCOUNT_CREATOR_SK"))]
         account_creator_sk: Option<String>,
+        /// GCP project ID
+        #[arg(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
+        gcp_project_id: String,
     },
     StartSign {
         /// Node ID
@@ -65,6 +65,9 @@ enum Cli {
         /// The web port for this server
         #[arg(long, env("MPC_RECOVERY_WEB_PORT"))]
         web_port: u16,
+        /// GCP project ID
+        #[arg(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
+        gcp_project_id: String,
     },
 }
 
@@ -129,8 +132,9 @@ async fn main() -> anyhow::Result<()> {
             near_root_account,
             account_creator_id,
             account_creator_sk,
+            gcp_project_id,
         } => {
-            let gcp_service = GcpService::new().await?;
+            let gcp_service = GcpService::new(gcp_project_id).await?;
             let sk_share = load_sh_skare(&gcp_service, node_id, sk_share).await?;
             let account_creator_sk =
                 load_account_creator_sk(&gcp_service, node_id, account_creator_sk).await?;
@@ -140,6 +144,7 @@ async fn main() -> anyhow::Result<()> {
             let account_creator_sk = account_creator_sk.parse()?;
 
             mpc_recovery::run_leader_node(LeaderConfig {
+                gcp_service,
                 id: node_id,
                 pk_set,
                 sk_share,
@@ -159,8 +164,9 @@ async fn main() -> anyhow::Result<()> {
             pk_set,
             sk_share,
             web_port,
+            gcp_project_id,
         } => {
-            let gcp_service = GcpService::new().await?;
+            let gcp_service = GcpService::new(gcp_project_id).await?;
             let sk_share = load_sh_skare(&gcp_service, node_id, sk_share).await?;
 
             let pk_set: PublicKeySet = serde_json::from_str(&pk_set).unwrap();

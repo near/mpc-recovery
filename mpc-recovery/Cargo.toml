@@ -25,11 +25,12 @@ chrono = "0.4.24"
 clap = { version = "4.2", features = ["derive", "env"] }
 ed25519-dalek = "1"
 futures = "0.3"
+google-datastore1 = "5"
+google-secretmanager1 = "5"
 hex = "0.4"
 hyper = { version = "0.14", features = ["full"] }
-hyper-rustls = { version = "0.24", features = ["http2"] }
+hyper-rustls = { version = "=0.23", features = ["http2"] }
 jsonwebtoken = "8.3.0"
-mpc-recovery-gcp = { path = "../mpc-recovery-gcp" }
 oauth2 = "4.3.0"
 rand = "0.7"
 rand8 = { package = "rand", version = "0.8" }
@@ -49,4 +50,3 @@ near-jsonrpc-primitives = "0.16.1"
 near-primitives = "0.16.1"
 near-crypto = "0.16.1"
 tower-http = { version = "0.4.0", features = ["cors"] }
-yup-oauth2 = "8"
