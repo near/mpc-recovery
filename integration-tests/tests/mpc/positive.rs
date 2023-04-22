@@ -1,4 +1,5 @@
 use crate::{account, check, key, token, with_nodes};
+use hyper::StatusCode;
 use mpc_recovery::msg::{
     AddKeyRequest, AddKeyResponse, LeaderRequest, LeaderResponse, NewAccountRequest,
     NewAccountResponse,
@@ -22,7 +23,7 @@ async fn test_trio() -> anyhow::Result<()> {
                 })
                 .await?;
 
-            assert_eq!(status_code, 200);
+            assert_eq!(status_code, StatusCode::OK);
             if let LeaderResponse::Ok { signature } = response {
                 assert!(ctx.pk_set.public_key().verify(&signature, payload));
             } else {
@@ -51,7 +52,7 @@ async fn test_basic_action() -> anyhow::Result<()> {
                     public_key: user_public_key.clone(),
                 })
                 .await?;
-            assert_eq!(status_code, 200);
+            assert_eq!(status_code, StatusCode::OK);
             assert!(matches!(new_acc_response, NewAccountResponse::Ok));
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
@@ -68,7 +69,7 @@ async fn test_basic_action() -> anyhow::Result<()> {
                     public_key: new_user_public_key.clone(),
                 })
                 .await?;
-            assert_eq!(status_code, 200);
+            assert_eq!(status_code, StatusCode::OK);
             assert!(matches!(add_key_response, AddKeyResponse::Ok));
 
             tokio::time::sleep(Duration::from_millis(2000)).await;

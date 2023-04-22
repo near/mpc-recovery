@@ -17,7 +17,8 @@ use axum::{http::StatusCode, routing::post, Extension, Json, Router};
 use futures::stream::FuturesUnordered;
 use hyper::client::ResponseFuture;
 use hyper::{Body, Client, Method, Request};
-use near_crypto::{PublicKey, SecretKey};
+use near_crypto::{ParseKeyError, PublicKey, SecretKey};
+use near_primitives::account::id::ParseAccountError;
 use near_primitives::types::AccountId;
 use near_primitives::views::FinalExecutionStatus;
 use rand::{distributions::Alphanumeric, Rng};
@@ -130,21 +131,43 @@ async fn parse(response_future: ResponseFuture) -> anyhow::Result<SigShareRespon
     Ok(serde_json::from_slice(&response_body)?)
 }
 
-async fn process_new_account(
-    state: &LeaderState,
-    request: &NewAccountRequest,
-    internal_acc_id: InternalAccountId,
-) -> anyhow::Result<(StatusCode, Json<NewAccountResponse>)> {
+#[derive(thiserror::Error, Debug)]
+enum NewAccountError {
+    #[error("malformed account id: {0}")]
+    MalformedAccountId(String, ParseAccountError),
+    #[error("malformed public key {0}: {1}")]
+    MalformedPublicKey(String, ParseKeyError),
+    #[error("failed to verify oidc token: {0}")]
+    OidcVerificationFailed(anyhow::Error),
+    #[error("relayer error: {0}")]
+    RelayerError(#[from] RelayerError),
+    #[error("{0}")]
+    Other(#[from] anyhow::Error),
+}
+async fn process_new_account<T: OAuthTokenVerifier>(
+    state: LeaderState,
+    request: NewAccountRequest,
+) -> Result<NewAccountResponse, NewAccountError> {
     // Create a transaction to create new NEAR account
-    let new_user_account_pk: PublicKey = request.public_key.clone().parse()?;
-    let new_user_account_id: AccountId = request.near_account_id.clone().parse()?;
+    let new_user_account_pk: PublicKey = request
+        .public_key
+        .parse()
+        .map_err(|e| NewAccountError::MalformedPublicKey(request.public_key, e))?;
+    let new_user_account_id: AccountId = request
+        .near_account_id
+        .parse()
+        .map_err(|e| NewAccountError::MalformedAccountId(request.near_account_id, e))?;
+    let oidc_token_claims = T::verify_token(&request.oidc_token)
+        .await
+        .map_err(NewAccountError::OidcVerificationFailed)?;
+    let internal_acc_id = get_internal_account_id(oidc_token_claims);
 
     state
         .client
         .register_account(RegisterAccountRequest {
             account_id: new_user_account_id.clone(),
             allowance: 300_000_000_000_000,
-            oauth_token: request.oidc_token.clone(),
+            oauth_token: request.oidc_token,
         })
         .await?;
 
@@ -178,6 +201,7 @@ async fn process_new_account(
             state.account_creator_sk.clone(),
         );
 
+        // Send delegate action to relayer
         let result = state.client.send_meta_tx(signed_delegate_action).await;
         if let Err(err) = &result {
             let err_str = format!("{:?}", err);
@@ -196,19 +220,53 @@ async fn process_new_account(
 
         // TODO: Probably need to check more fields
         if matches!(response.status, FinalExecutionStatus::SuccessValue(_)) {
-            Ok((StatusCode::OK, Json(NewAccountResponse::Ok)))
+            Ok(NewAccountResponse::Ok)
         } else {
-            Err(anyhow::anyhow!(
-                "transaction failed with {:?}",
-                response.status
-            ))
+            Err(anyhow::anyhow!("transaction failed with {:?}", response.status).into())
         }
     })
     .await
 }
 
-pub fn get_internal_account_id(claims: IdTokenClaims) -> InternalAccountId {
+fn get_internal_account_id(claims: IdTokenClaims) -> InternalAccountId {
     format!("{}:{}", claims.iss, claims.sub)
+}
+
+mod response {
+    use crate::msg::AddKeyResponse;
+    use crate::msg::NewAccountResponse;
+    use axum::Json;
+    use hyper::StatusCode;
+
+    pub fn new_acc_bad_request(msg: String) -> (StatusCode, Json<NewAccountResponse>) {
+        (StatusCode::BAD_REQUEST, Json(NewAccountResponse::err(msg)))
+    }
+
+    pub fn new_acc_unauthorized(msg: String) -> (StatusCode, Json<NewAccountResponse>) {
+        (StatusCode::UNAUTHORIZED, Json(NewAccountResponse::err(msg)))
+    }
+
+    pub fn new_acc_internal_error(msg: String) -> (StatusCode, Json<NewAccountResponse>) {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(NewAccountResponse::err(msg)),
+        )
+    }
+
+    pub fn add_key_bad_request(msg: String) -> (StatusCode, Json<AddKeyResponse>) {
+        (StatusCode::BAD_REQUEST, Json(AddKeyResponse::err(msg)))
+    }
+
+    pub fn add_key_unauthorized(msg: String) -> (StatusCode, Json<AddKeyResponse>) {
+        (StatusCode::UNAUTHORIZED, Json(AddKeyResponse::err(msg)))
+    }
+
+    pub fn add_key_internal_error(msg: String) -> (StatusCode, Json<AddKeyResponse>) {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(AddKeyResponse::err(msg)),
+        )
+    }
 }
 
 #[tracing::instrument(level = "info", skip_all, fields(id = state.id))]
@@ -217,73 +275,71 @@ async fn new_account<T: OAuthTokenVerifier>(
     Json(request): Json<NewAccountRequest>,
 ) -> (StatusCode, Json<NewAccountResponse>) {
     tracing::info!(
-        access_token = format!("{:.5}...", request.oidc_token),
-        "new request"
+        near_account_id = hex::encode(request.near_account_id.clone()),
+        public_key = hex::encode(request.public_key.clone()),
+        iodc_token = format!("{:.5}...", request.oidc_token),
+        "new_account request"
     );
 
-    match T::verify_token(&request.oidc_token).await {
-        Ok(claims) => {
-            tracing::info!("access token is valid");
-            match process_new_account(&state, &request, get_internal_account_id(claims)).await {
-                Ok(result) => result,
-                Err(e) => {
-                    tracing::error!(err = ?e);
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(NewAccountResponse::Err {
-                            msg: format!("failed to process new account: {}", e),
-                        }),
-                    )
-                }
-            }
+    match process_new_account::<T>(state, request).await {
+        Ok(response) => (StatusCode::OK, Json(response)),
+        Err(ref e @ NewAccountError::MalformedPublicKey(ref pk, _)) => {
+            tracing::error!(err = ?e);
+            response::new_acc_bad_request(format!("bad public_key: {}", pk))
+        }
+        Err(ref e @ NewAccountError::MalformedAccountId(ref account_id, _)) => {
+            tracing::error!(err = ?e);
+            response::new_acc_bad_request(format!("bad near_account_id: {}", account_id))
+        }
+        Err(ref e @ NewAccountError::OidcVerificationFailed(ref err_msg)) => {
+            tracing::error!(err = ?e);
+            response::new_acc_unauthorized(format!("failed to verify oidc token: {}", err_msg))
         }
         Err(e) => {
-            tracing::error!("access token verification failed");
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(NewAccountResponse::Err {
-                    msg: format!("access token verification failed: {}", e),
-                }),
-            )
+            tracing::error!(err = ?e);
+            response::new_acc_internal_error(format!("failed to process new account: {}", e))
         }
     }
 }
 
-async fn process_add_key(
-    state: &LeaderState,
-    request: &AddKeyRequest,
-    internal_acc_id: InternalAccountId,
-) -> anyhow::Result<(StatusCode, Json<AddKeyResponse>)> {
-    let user_account_id: AccountId = request.near_account_id.parse()?;
-    let new_public_key: PublicKey = request.public_key.parse()?;
+#[derive(thiserror::Error, Debug)]
+enum AddKeyError {
+    #[error("malformed account id: {0}")]
+    MalformedAccountId(String, ParseAccountError),
+    #[error("malformed public key {0}: {1}")]
+    MalformedPublicKey(String, ParseKeyError),
+    #[error("failed to verify oidc token: {0}")]
+    OidcVerificationFailed(anyhow::Error),
+    #[error("relayer error: {0}")]
+    RelayerError(#[from] RelayerError),
+    #[error("{0}")]
+    Other(#[from] anyhow::Error),
+}
+
+async fn process_add_key<T: OAuthTokenVerifier>(
+    state: LeaderState,
+    request: AddKeyRequest,
+) -> Result<AddKeyResponse, AddKeyError> {
+    let oidc_token_claims = T::verify_token(&request.oidc_token)
+        .await
+        .map_err(AddKeyError::OidcVerificationFailed)?;
+    let internal_acc_id = get_internal_account_id(oidc_token_claims);
+    let user_account_id: AccountId = request
+        .near_account_id
+        .parse()
+        .map_err(|e| AddKeyError::MalformedAccountId(request.near_account_id, e))?;
+    let new_public_key: PublicKey = request
+        .public_key
+        .parse()
+        .map_err(|e| AddKeyError::MalformedPublicKey(request.public_key, e))?;
     let user_secret_key: UserSecretKey = state.gcp_service.get(internal_acc_id.clone()).await?;
 
     nar::retry(|| async {
         // Get nonce and recent block hash
-        let (_hash, block_height, nonce) = match state
+        let (_hash, block_height, nonce) = state
             .client
             .access_key(user_account_id.clone(), user_secret_key.public_key())
-            .await
-        {
-            Ok(val) => val,
-            Err(RelayerError::UnknownAccount(account_id)) => {
-                return Ok((
-                    StatusCode::BAD_REQUEST,
-                    Json(AddKeyResponse::Err {
-                        msg: format!("account {account_id} does not exist"),
-                    }),
-                ))
-            }
-            Err(RelayerError::UnknownAccessKey(public_key)) => {
-                return Ok((
-                    StatusCode::BAD_REQUEST,
-                    Json(AddKeyResponse::Err {
-                        msg: format!("public key {public_key} does not exist"),
-                    }),
-                ))
-            }
-            Err(RelayerError::Other(e)) => return Err(e),
-        };
+            .await?;
 
         // Create a transaction to create a new account
         let max_block_height: u64 = block_height + 100;
@@ -300,8 +356,8 @@ async fn process_add_key(
             user_secret_key.secret_key.clone(),
         );
 
-        let result = state.client.send_meta_tx(signed_delegate_action).await;
-        if let Err(err) = result {
+        let resp = state.client.send_meta_tx(signed_delegate_action).await;
+        if let Err(err) = resp {
             let err_str = format!("{:?}", err);
             state
                 .client
@@ -313,10 +369,16 @@ async fn process_add_key(
                     &err_str,
                 )
                 .await;
-            return Err(err);
+            return Err(err.into());
         }
+        let resp = resp?;
 
-        Ok((StatusCode::OK, Json(AddKeyResponse::Ok)))
+        // TODO: Probably need to check more fields
+        if matches!(resp.status, FinalExecutionStatus::SuccessValue(_)) {
+            Ok(AddKeyResponse::Ok)
+        } else {
+            Err(anyhow::anyhow!("transaction failed with {:?}", resp.status).into())
+        }
     })
     .await
 }
@@ -327,35 +389,29 @@ async fn add_key<T: OAuthTokenVerifier>(
     Json(request): Json<AddKeyRequest>,
 ) -> (StatusCode, Json<AddKeyResponse>) {
     tracing::info!(
-        access_token = format!("{:.5}...", request.oidc_token),
+        near_account_id = hex::encode(&request.near_account_id),
         public_key = hex::encode(&request.public_key),
-        "new request"
+        iodc_token = format!("{:.5}...", request.oidc_token),
+        "add_key request"
     );
 
-    match T::verify_token(&request.oidc_token).await {
-        Ok(claims) => {
-            tracing::info!("access token is valid");
-            match process_add_key(&state, &request, get_internal_account_id(claims)).await {
-                Ok(result) => result,
-                Err(e) => {
-                    tracing::error!(err = ?e);
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(AddKeyResponse::Err {
-                            msg: "internal error".to_string(),
-                        }),
-                    )
-                }
-            }
+    match process_add_key::<T>(state, request).await {
+        Ok(response) => (StatusCode::OK, Json(response)),
+        Err(ref e @ AddKeyError::MalformedPublicKey(ref pk, _)) => {
+            tracing::error!(err = ?e);
+            response::add_key_bad_request(format!("bad public_key: {}", pk))
         }
-        Err(_) => {
-            tracing::error!("access token verification failed");
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(AddKeyResponse::Err {
-                    msg: "access token verification failed".into(),
-                }),
-            )
+        Err(ref e @ AddKeyError::MalformedAccountId(ref account_id, _)) => {
+            tracing::error!(err = ?e);
+            response::add_key_bad_request(format!("bad near_account_id: {}", account_id))
+        }
+        Err(ref e @ AddKeyError::OidcVerificationFailed(ref err_msg)) => {
+            tracing::error!(err = ?e);
+            response::add_key_unauthorized(format!("failed to verify oidc token: {}", err_msg))
+        }
+        Err(e) => {
+            tracing::error!(err = ?e);
+            response::add_key_internal_error(format!("failed to process new account: {}", e))
         }
     }
 }

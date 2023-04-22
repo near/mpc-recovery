@@ -17,6 +17,12 @@ pub enum NewAccountResponse {
     Err { msg: String },
 }
 
+impl NewAccountResponse {
+    pub fn err(msg: String) -> Self {
+        NewAccountResponse::Err { msg }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AddKeyRequest {
     pub near_account_id: String,
@@ -30,6 +36,12 @@ pub struct AddKeyRequest {
 pub enum AddKeyResponse {
     Ok,
     Err { msg: String },
+}
+
+impl AddKeyResponse {
+    pub fn err(msg: String) -> Self {
+        AddKeyResponse::Err { msg }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
