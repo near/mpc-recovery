@@ -3,13 +3,14 @@ mod mpc;
 
 use crate::docker::{LeaderNode, SignNode};
 use bollard::Docker;
-use docker::{redis::Redis, relayer::Relayer};
+use docker::{datastore::Datastore, redis::Redis, relayer::Relayer};
 use futures::future::BoxFuture;
 use std::time::Duration;
 use threshold_crypto::PublicKeySet;
 use workspaces::{network::Sandbox, AccountId, Worker};
 
 const NETWORK: &str = "mpc_recovery_integration_test_network";
+const GCP_PROJECT_ID: &str = "mpc-recovery-gcp-project";
 #[cfg(target_os = "linux")]
 const HOST_MACHINE_FROM_DOCKER: &str = "172.17.0.1";
 #[cfg(target_os = "macos")]
@@ -59,6 +60,7 @@ where
     let (creator_account_id, creator_account_sk) = create_account(&worker).await?;
 
     let near_rpc = format!("http://{HOST_MACHINE_FROM_DOCKER}:{}", worker.rpc_port());
+    let datastore = Datastore::start(&docker, NETWORK, GCP_PROJECT_ID).await?;
     let redis = Redis::start(&docker, NETWORK).await?;
     let relayer = Relayer::start(
         &docker,
@@ -85,6 +87,8 @@ where
         sign_nodes.iter().map(|n| n.address.clone()).collect(),
         &near_rpc,
         &relayer.address,
+        &datastore.address,
+        GCP_PROJECT_ID,
         near_root_account.id(),
         &creator_account_id,
         &creator_account_sk,
@@ -101,6 +105,7 @@ where
     })
     .await;
 
+    drop(datastore);
     drop(leader_node);
     drop(sign_nodes);
     drop(relayer);

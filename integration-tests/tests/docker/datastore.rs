@@ -1,29 +1,22 @@
+use std::collections::HashMap;
+
 use crate::drop_container;
 use bollard::{
     container::{Config, RemoveContainerOptions},
+    image::CreateImageOptions,
     service::{HostConfig, PortBinding},
     Docker,
 };
-use near_crypto::SecretKey;
-use std::collections::HashMap;
-use workspaces::AccountId;
+use futures::TryStreamExt;
 
-pub struct Relayer {
+pub struct Datastore {
     docker: Docker,
     container_id: String,
     pub address: String,
 }
 
-impl Relayer {
-    pub async fn start(
-        docker: &Docker,
-        network: &str,
-        near_rpc: &str,
-        redis_hostname: &str,
-        relayer_account_id: &AccountId,
-        relayer_account_sk: &SecretKey,
-        creator_account_id: &AccountId,
-    ) -> anyhow::Result<Self> {
+impl Datastore {
+    pub async fn start(docker: &Docker, network: &str, project_id: &str) -> anyhow::Result<Self> {
         super::create_network(docker, network).await?;
         let web_port = portpicker::pick_unused_port().expect("no free ports");
 
@@ -39,34 +32,49 @@ impl Relayer {
             }]),
         );
 
-        let relayer_config = Config {
-            image: Some("pagoda-relayer-rs-fastauth:latest".to_string()),
+        docker
+            .create_image(
+                Some(CreateImageOptions {
+                    from_image: "google/cloud-sdk:latest",
+                    ..Default::default()
+                }),
+                None,
+                None,
+            )
+            .try_collect::<Vec<_>>()
+            .await?;
+
+        let config = Config {
+            image: Some("google/cloud-sdk:latest".to_string()),
             tty: Some(true),
             attach_stdout: Some(true),
             attach_stderr: Some(true),
             exposed_ports: Some(exposed_ports),
-            cmd: None,
+            cmd: Some(vec![
+                "gcloud".to_string(),
+                "beta".to_string(),
+                "emulators".to_string(),
+                "datastore".to_string(),
+                "start".to_string(),
+                format!("--project={project_id}"),
+                "--host-port".to_string(),
+                format!("0.0.0.0:{web_port}"),
+                "--no-store-on-disk".to_string(),
+            ]),
+            env: Some(vec![
+                format!("DATASTORE_EMULATOR_HOST=0.0.0.0:{web_port}"),
+                format!("DATASTORE_PROJECT_ID={project_id}"),
+            ]),
             host_config: Some(HostConfig {
                 network_mode: Some(network.to_string()),
                 port_bindings: Some(port_bindings),
                 ..Default::default()
             }),
-            env: Some(vec![
-                "RUST_LOG=mpc_recovery=DEBUG".to_string(),
-                "NETWORK=custom".to_string(),
-                format!("SERVER_PORT={}", web_port),
-                format!("RELAYER_RPC_URL={}", near_rpc),
-                format!("RELAYER_ACCOUNT_ID={}", relayer_account_id),
-                format!("REDIS_HOST={}", redis_hostname),
-                format!("PUBLIC_KEY={}", relayer_account_sk.public_key()),
-                format!("PRIVATE_KEY={}", relayer_account_sk),
-                format!("RELAYER_WHITELISTED_CONTRACT={}", creator_account_id),
-            ]),
             ..Default::default()
         };
 
         let container_id = docker
-            .create_container::<&str, String>(None, relayer_config)
+            .create_container::<&str, String>(None, config)
             .await?
             .id;
 
@@ -92,9 +100,9 @@ impl Relayer {
         Ok(Self {
             docker: docker.clone(),
             container_id,
-            address: format!("http://{ip_address}:{web_port}"),
+            address: format!("http://{ip_address}:{web_port}/"),
         })
     }
 }
 
-drop_container!(Relayer);
+drop_container!(Datastore);

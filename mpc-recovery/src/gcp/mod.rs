@@ -3,6 +3,7 @@ pub mod value;
 
 use self::value::{FromValue, IntoValue};
 use google_datastore1::api::{CommitRequest, Entity, Key, LookupRequest, Mutation, PathElement};
+use google_datastore1::oauth2::AccessTokenAuthenticator;
 use google_datastore1::Datastore;
 use google_secretmanager1::oauth2::authenticator::ApplicationDefaultCredentialsTypes;
 use google_secretmanager1::oauth2::{
@@ -24,12 +25,12 @@ pub trait KeyKind {
 }
 
 impl GcpService {
-    pub async fn new(project_id: String) -> anyhow::Result<Self> {
-        let opts = ApplicationDefaultCredentialsFlowOpts::default();
-        let authenticator = match ApplicationDefaultCredentialsAuthenticator::builder(opts).await {
-            ApplicationDefaultCredentialsTypes::InstanceMetadata(auth) => auth.build().await?,
-            ApplicationDefaultCredentialsTypes::ServiceAccount(auth) => auth.build().await?,
-        };
+    pub async fn new(
+        project_id: String,
+        gcp_datastore_url: Option<String>,
+    ) -> anyhow::Result<Self> {
+        let mut datastore;
+        let secret_manager;
         let client = hyper::Client::builder().build(
             hyper_rustls::HttpsConnectorBuilder::new()
                 .with_native_roots()
@@ -38,8 +39,26 @@ impl GcpService {
                 .enable_http2()
                 .build(),
         );
-        let secret_manager = SecretManager::new(client.clone(), authenticator.clone());
-        let datastore = Datastore::new(client, authenticator);
+        if let Some(gcp_datastore_url) = gcp_datastore_url {
+            // Assuming custom GCP URL points to an emulator, so the token does not matter
+            let authenticator = AccessTokenAuthenticator::builder("TOKEN".to_string())
+                .build()
+                .await?;
+            secret_manager = SecretManager::new(client.clone(), authenticator.clone());
+            datastore = Datastore::new(client, authenticator);
+            datastore.base_url(gcp_datastore_url.clone());
+            datastore.root_url(gcp_datastore_url);
+        } else {
+            let opts = ApplicationDefaultCredentialsFlowOpts::default();
+            let authenticator = match ApplicationDefaultCredentialsAuthenticator::builder(opts)
+                .await
+            {
+                ApplicationDefaultCredentialsTypes::InstanceMetadata(auth) => auth.build().await?,
+                ApplicationDefaultCredentialsTypes::ServiceAccount(auth) => auth.build().await?,
+            };
+            secret_manager = SecretManager::new(client.clone(), authenticator.clone());
+            datastore = Datastore::new(client, authenticator);
+        }
 
         Ok(Self {
             project_id,
@@ -48,6 +67,7 @@ impl GcpService {
         })
     }
 
+    #[tracing::instrument(level = "debug", skip_all, fields(name = name.as_ref()))]
     pub async fn load_secret<T: AsRef<str>>(&self, name: T) -> anyhow::Result<Vec<u8>> {
         let (_, response) = self
             .secret_manager
@@ -58,12 +78,15 @@ impl GcpService {
         let secret_payload = response
             .payload
             .ok_or_else(|| anyhow::anyhow!("secret value is missing payload"))?;
-
-        Ok(secret_payload
+        let data = secret_payload
             .data
-            .ok_or_else(|| anyhow::anyhow!("secret value payload is missing data"))?)
+            .ok_or_else(|| anyhow::anyhow!("secret value payload is missing data"))?;
+        tracing::debug!("loaded secret successfully");
+
+        Ok(data)
     }
 
+    #[tracing::instrument(level = "debug", skip_all, fields(key = name_key.to_string()))]
     pub async fn get<K: ToString, T: FromValue + KeyKind>(&self, name_key: K) -> anyhow::Result<T> {
         let request = LookupRequest {
             keys: Some(vec![Key {
@@ -83,6 +106,7 @@ impl GcpService {
             .lookup(request, &self.project_id)
             .doit()
             .await?;
+        tracing::debug!(?response, "received response");
         let found_entity = response
             .found
             .and_then(|mut results| results.pop())
@@ -91,6 +115,7 @@ impl GcpService {
         Ok(T::from_value(found_entity.into_value())?)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     pub async fn insert<T: IntoValue>(&self, value: T) -> anyhow::Result<()> {
         let entity = Entity::from_value(value.into_value())?;
 
@@ -108,11 +133,13 @@ impl GcpService {
             single_use_transaction: None,
             transaction: None,
         };
-        self.datastore
+        let (_, response) = self
+            .datastore
             .projects()
             .commit(request, &self.project_id)
             .doit()
             .await?;
+        tracing::debug!(?response, "received response");
 
         Ok(())
     }

@@ -51,6 +51,9 @@ enum Cli {
         /// GCP project ID
         #[arg(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
         gcp_project_id: String,
+        /// GCP datastore URL
+        #[arg(long, env("MPC_RECOVERY_GCP_DATASTORE_URL"))]
+        gcp_datastore_url: Option<String>,
     },
     StartSign {
         /// Node ID
@@ -68,6 +71,9 @@ enum Cli {
         /// GCP project ID
         #[arg(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
         gcp_project_id: String,
+        /// GCP datastore URL
+        #[arg(long, env("MPC_RECOVERY_GCP_DATASTORE_URL"))]
+        gcp_datastore_url: Option<String>,
     },
 }
 
@@ -133,8 +139,9 @@ async fn main() -> anyhow::Result<()> {
             account_creator_id,
             account_creator_sk,
             gcp_project_id,
+            gcp_datastore_url,
         } => {
-            let gcp_service = GcpService::new(gcp_project_id).await?;
+            let gcp_service = GcpService::new(gcp_project_id, gcp_datastore_url).await?;
             let sk_share = load_sh_skare(&gcp_service, node_id, sk_share).await?;
             let account_creator_sk =
                 load_account_creator_sk(&gcp_service, node_id, account_creator_sk).await?;
@@ -165,8 +172,9 @@ async fn main() -> anyhow::Result<()> {
             sk_share,
             web_port,
             gcp_project_id,
+            gcp_datastore_url,
         } => {
-            let gcp_service = GcpService::new(gcp_project_id).await?;
+            let gcp_service = GcpService::new(gcp_project_id, gcp_datastore_url).await?;
             let sk_share = load_sh_skare(&gcp_service, node_id, sk_share).await?;
 
             let pk_set: PublicKeySet = serde_json::from_str(&pk_set).unwrap();

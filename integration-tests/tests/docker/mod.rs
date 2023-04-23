@@ -1,3 +1,7 @@
+pub mod datastore;
+pub mod redis;
+pub mod relayer;
+
 use bollard::{
     container::{AttachContainerOptions, AttachContainerResults, Config, RemoveContainerOptions},
     network::CreateNetworkOptions,
@@ -18,10 +22,35 @@ use threshold_crypto::{serde_impl::SerdeSecret, PublicKeySet, SecretKeyShare};
 use tokio::io::AsyncWriteExt;
 use workspaces::AccountId;
 
-pub mod redis;
-pub mod relayer;
-
 static NETWORK_MUTEX: Lazy<Mutex<i32>> = Lazy::new(|| Mutex::new(0));
+
+// Removing container is an asynchronous operation and hence has to be scheduled to execute
+// outside of `drop`'s scope. This leads to problems when the drop happens right before the
+// execution ends. The invoker needs to be aware of this behavior and give `drop` some time
+// to finalize.
+#[macro_export]
+macro_rules! drop_container {
+    ( $container:ident ) => {
+        #[cfg(feature = "drop-containers")]
+        impl Drop for $container {
+            fn drop(&mut self) {
+                let container_id = self.container_id.clone();
+                let docker = self.docker.clone();
+                tokio::spawn(async move {
+                    docker
+                        .remove_container(
+                            &container_id,
+                            Some(RemoveContainerOptions {
+                                force: true,
+                                ..Default::default()
+                            }),
+                        )
+                        .await
+                });
+            }
+        }
+    };
+}
 
 async fn continuously_print_docker_output(docker: &Docker, id: &str) -> anyhow::Result<()> {
     let AttachContainerResults { mut output, .. } = docker
@@ -158,6 +187,8 @@ impl LeaderNode {
         sign_nodes: Vec<String>,
         near_rpc: &str,
         relayer_url: &str,
+        datastore_url: &str,
+        gcp_project_id: &str,
         near_root_account: &AccountId,
         account_creator_id: &AccountId,
         account_creator_sk: &SecretKey,
@@ -185,6 +216,10 @@ impl LeaderNode {
             account_creator_id.to_string(),
             "--account-creator-sk".to_string(),
             account_creator_sk.to_string(),
+            "--gcp-project-id".to_string(),
+            gcp_project_id.to_string(),
+            "--gcp-datastore-url".to_string(),
+            datastore_url.to_string(),
         ];
         for sign_node in sign_nodes {
             cmd.push("--sign-nodes".to_string());
@@ -249,28 +284,6 @@ impl LeaderNode {
     }
 }
 
-// Removing container is an asynchronous operation and hence has to be scheduled to execute
-// outside of `drop`'s scope. This leads to problems when the drop happens right before the
-// execution ends. The invoker needs to be aware of this behavior and give `drop` some time
-// to finalize.
-impl Drop for LeaderNode {
-    fn drop(&mut self) {
-        let container_id = self.container_id.clone();
-        let docker = self.docker.clone();
-        tokio::spawn(async move {
-            docker
-                .remove_container(
-                    &container_id,
-                    Some(RemoveContainerOptions {
-                        force: true,
-                        ..Default::default()
-                    }),
-                )
-                .await
-        });
-    }
-}
-
 pub struct SignNode {
     docker: Docker,
     container_id: String,
@@ -298,6 +311,8 @@ impl SignNode {
             serde_json::to_string(&SerdeSecret(sk_share))?,
             "--web-port".to_string(),
             web_port.to_string(),
+            "--gcp-project-id".to_string(),
+            "pagoda-123".to_string(),
         ];
 
         let (container_id, ip_address) =
@@ -311,24 +326,5 @@ impl SignNode {
     }
 }
 
-// Removing container is an asynchronous operation and hence has to be scheduled to execute
-// outside of `drop`'s scope. This leads to problems when the drop happens right before the
-// execution ends. The invoker needs to be aware of this behavior and give `drop` some time
-// to finalize.
-impl Drop for SignNode {
-    fn drop(&mut self) {
-        let container_id = self.container_id.clone();
-        let docker = self.docker.clone();
-        tokio::spawn(async move {
-            docker
-                .remove_container(
-                    &container_id,
-                    Some(RemoveContainerOptions {
-                        force: true,
-                        ..Default::default()
-                    }),
-                )
-                .await
-        });
-    }
-}
+drop_container!(LeaderNode);
+drop_container!(SignNode);
