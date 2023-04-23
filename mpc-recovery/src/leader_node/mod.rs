@@ -40,6 +40,7 @@ pub struct Config {
     pub account_creator_id: AccountId,
     // TODO: temporary solution
     pub account_creator_sk: SecretKey,
+    pub account_lookup_url: String,
 }
 
 pub async fn run(config: Config) {
@@ -55,6 +56,7 @@ pub async fn run(config: Config) {
         near_root_account,
         account_creator_id,
         account_creator_sk,
+        account_lookup_url,
     } = config;
     let _span = tracing::debug_span!("run", id, port);
     tracing::debug!(?sign_nodes, "running a leader node");
@@ -91,6 +93,7 @@ pub async fn run(config: Config) {
         near_root_account: near_root_account.parse().unwrap(),
         account_creator_id,
         account_creator_sk,
+        account_lookup_url,
     };
 
     //TODO: not secure, allow only for testnet, whitelist endpoint etc. for mainnet
@@ -123,6 +126,7 @@ struct LeaderState {
     account_creator_id: AccountId,
     // TODO: temporary solution
     account_creator_sk: SecretKey,
+    account_lookup_url: String,
 }
 
 async fn parse(response_future: ResponseFuture) -> anyhow::Result<SigShareResponse> {
@@ -313,8 +317,26 @@ enum AddKeyError {
     OidcVerificationFailed(anyhow::Error),
     #[error("relayer error: {0}")]
     RelayerError(#[from] RelayerError),
+    #[error("failed to find associated account id for pk: {0}")]
+    AccountNotFound(String),
     #[error("{0}")]
     Other(#[from] anyhow::Error),
+}
+
+fn get_acc_id_from_pk(
+    public_key: PublicKey,
+    account_lookup_url: String,
+) -> Result<AccountId, anyhow::Error> {
+    let url = format!("{}/publicKey/{}/accounts", account_lookup_url, public_key);
+    let client = reqwest::blocking::Client::new();
+    let response = client.get(url).send()?.text()?;
+    let accounts: Vec<String> = serde_json::from_str(&response)?;
+    Ok(accounts
+        .first()
+        .cloned()
+        .unwrap_or_default()
+        .parse()
+        .unwrap())
 }
 
 async fn process_add_key<T: OAuthTokenVerifier>(
@@ -325,15 +347,24 @@ async fn process_add_key<T: OAuthTokenVerifier>(
         .await
         .map_err(AddKeyError::OidcVerificationFailed)?;
     let internal_acc_id = get_internal_account_id(oidc_token_claims);
-    let user_account_id: AccountId = request
-        .near_account_id
-        .parse()
-        .map_err(|e| AddKeyError::MalformedAccountId(request.near_account_id, e))?;
     let new_public_key: PublicKey = request
         .public_key
         .parse()
         .map_err(|e| AddKeyError::MalformedPublicKey(request.public_key, e))?;
     let user_secret_key: UserSecretKey = state.gcp_service.get(internal_acc_id.clone()).await?;
+
+    let user_account_id: AccountId = match &request.near_account_id {
+        Some(near_account_id) => near_account_id
+            .parse()
+            .map_err(|e| AddKeyError::MalformedAccountId(request.near_account_id.unwrap(), e))?,
+        None => match get_acc_id_from_pk(user_secret_key.public_key(), state.account_lookup_url) {
+            Ok(near_account_id) => near_account_id,
+            Err(e) => {
+                tracing::error!(err = ?e);
+                return Err(AddKeyError::AccountNotFound(e.to_string()));
+            }
+        },
+    };
 
     nar::retry(|| async {
         // Get nonce and recent block hash
@@ -390,7 +421,10 @@ async fn add_key<T: OAuthTokenVerifier>(
     Json(request): Json<AddKeyRequest>,
 ) -> (StatusCode, Json<AddKeyResponse>) {
     tracing::info!(
-        near_account_id = hex::encode(&request.near_account_id),
+        near_account_id = hex::encode(match &request.near_account_id {
+            Some(ref near_account_id) => near_account_id,
+            None => "not specified",
+        }),
         public_key = hex::encode(&request.public_key),
         iodc_token = format!("{:.5}...", request.oidc_token),
         "add_key request"
@@ -536,5 +570,30 @@ async fn submit<T: OAuthTokenVerifier>(
             sig_shares_num
         );
         (StatusCode::INTERNAL_SERVER_ERROR, Json(LeaderResponse::Err))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_acc_id_from_pk_mainnet() {
+        let url = "https://api.kitwallet.app".to_string();
+        let public_key: PublicKey = "ed25519:2uF6ZUghFFUg3Kta9rW47iiJ3crNzRdaPD2rBPQWEwyc"
+            .parse()
+            .unwrap();
+        let first_account = get_acc_id_from_pk(public_key, url).unwrap();
+        assert_eq!(first_account.to_string(), "serhii.near".to_string());
+    }
+
+    #[test]
+    fn test_get_acc_id_from_pk_testnet() {
+        let url = "https://testnet-api.kitwallet.app".to_string();
+        let public_key: PublicKey = "ed25519:7WYR7ifUbdVo2soQCvzAHnfdGfDhUhF8Und5CKZYK9b8"
+            .parse()
+            .unwrap();
+        let first_account = get_acc_id_from_pk(public_key, url).unwrap();
+        assert_eq!(first_account.to_string(), "serhii.testnet".to_string());
     }
 }

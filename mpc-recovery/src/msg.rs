@@ -25,7 +25,7 @@ impl NewAccountResponse {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AddKeyRequest {
-    pub near_account_id: String,
+    pub near_account_id: Option<String>,
     pub public_key: String,
     pub oidc_token: String,
 }

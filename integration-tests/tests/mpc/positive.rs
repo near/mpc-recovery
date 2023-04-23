@@ -64,7 +64,7 @@ async fn test_basic_action() -> anyhow::Result<()> {
             let (status_code, add_key_response) = ctx
                 .leader_node
                 .add_key(AddKeyRequest {
-                    near_account_id: account_id.to_string(),
+                    near_account_id: Some(account_id.to_string()),
                     oidc_token: token::valid(),
                     public_key: new_user_public_key.clone(),
                 })

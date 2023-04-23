@@ -33,7 +33,9 @@ Newly created NEAR account will have two full access keys. One that was provided
 
     URL: /add_key
     Request parameters: {
-        near_account_id: String,
+        // in case NEAR AccointId is not provided,
+        // it will be determined using recovery PK and NEAR Wallet APIs
+        near_account_id: Option(String),
         public_key: String,
         oidc_token: String
     }
