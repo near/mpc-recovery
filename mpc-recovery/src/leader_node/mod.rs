@@ -144,6 +144,7 @@ enum NewAccountError {
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }
+
 async fn process_new_account<T: OAuthTokenVerifier>(
     state: LeaderState,
     request: NewAccountRequest,
