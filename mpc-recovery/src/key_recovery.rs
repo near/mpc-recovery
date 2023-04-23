@@ -12,18 +12,18 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct UserSecretKey {
+pub struct UserCredentials {
     pub internal_account_id: InternalAccountId,
     pub secret_key: SecretKey,
 }
 
-impl KeyKind for UserSecretKey {
+impl KeyKind for UserCredentials {
     fn kind() -> String {
-        "UserSecretKey".to_string()
+        "UserCredentials".to_string()
     }
 }
 
-impl IntoValue for UserSecretKey {
+impl IntoValue for UserCredentials {
     fn into_value(self) -> Value {
         let mut properties = HashMap::new();
         properties.insert(
@@ -37,7 +37,7 @@ impl IntoValue for UserSecretKey {
         Value::EntityValue {
             key: Key {
                 path: Some(vec![PathElement {
-                    kind: Some(UserSecretKey::kind()),
+                    kind: Some(UserCredentials::kind()),
                     name: Some(self.internal_account_id),
                     id: None,
                 }]),
@@ -48,7 +48,7 @@ impl IntoValue for UserSecretKey {
     }
 }
 
-impl FromValue for UserSecretKey {
+impl FromValue for UserCredentials {
     fn from_value(value: Value) -> Result<Self, ConvertError> {
         match value {
             Value::EntityValue { mut properties, .. } => {
@@ -65,7 +65,7 @@ impl FromValue for UserSecretKey {
                 let secret_key = String::from_value(secret_key)?;
                 let secret_key = secret_key.parse().unwrap();
 
-                Ok(UserSecretKey {
+                Ok(Self {
                     internal_account_id,
                     secret_key,
                 })
@@ -78,7 +78,7 @@ impl FromValue for UserSecretKey {
     }
 }
 
-impl UserSecretKey {
+impl UserCredentials {
     pub fn random(internal_account_id: InternalAccountId) -> Self {
         Self {
             internal_account_id,

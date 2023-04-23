@@ -1,5 +1,5 @@
 use crate::gcp::GcpService;
-use crate::key_recovery::UserSecretKey;
+use crate::key_recovery::UserCredentials;
 use crate::msg::{
     AddKeyRequest, AddKeyResponse, LeaderRequest, LeaderResponse, NewAccountRequest,
     NewAccountResponse, SigShareRequest, SigShareResponse,
@@ -186,7 +186,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             )
             .await?;
 
-        let user_secret_key = UserSecretKey::random(internal_acc_id.clone());
+        let user_secret_key = UserCredentials::random(internal_acc_id.clone());
         let public_key = user_secret_key.public_key();
         state.gcp_service.insert(user_secret_key).await?;
 
@@ -351,13 +351,13 @@ async fn process_add_key<T: OAuthTokenVerifier>(
         .public_key
         .parse()
         .map_err(|e| AddKeyError::MalformedPublicKey(request.public_key, e))?;
-    let user_secret_key: UserSecretKey = state.gcp_service.get(internal_acc_id.clone()).await?;
+    let user_credentials: UserCredentials = state.gcp_service.get(internal_acc_id.clone()).await?;
 
     let user_account_id: AccountId = match &request.near_account_id {
         Some(near_account_id) => near_account_id
             .parse()
             .map_err(|e| AddKeyError::MalformedAccountId(request.near_account_id.unwrap(), e))?,
-        None => match get_acc_id_from_pk(user_secret_key.public_key(), state.account_lookup_url) {
+        None => match get_acc_id_from_pk(user_credentials.public_key(), state.account_lookup_url) {
             Ok(near_account_id) => near_account_id,
             Err(e) => {
                 tracing::error!(err = ?e);
@@ -370,14 +370,14 @@ async fn process_add_key<T: OAuthTokenVerifier>(
         // Get nonce and recent block hash
         let (_hash, block_height, nonce) = state
             .client
-            .access_key(user_account_id.clone(), user_secret_key.public_key())
+            .access_key(user_account_id.clone(), user_credentials.public_key())
             .await?;
 
         // Create a transaction to create a new account
         let max_block_height: u64 = block_height + 100;
         let delegate_action = get_add_key_delegate_action(
             user_account_id.clone(),
-            user_secret_key.public_key(),
+            user_credentials.public_key(),
             new_public_key.clone(),
             nonce,
             max_block_height,
@@ -385,7 +385,7 @@ async fn process_add_key<T: OAuthTokenVerifier>(
         let signed_delegate_action = get_signed_delegated_action(
             delegate_action,
             user_account_id.clone(),
-            user_secret_key.secret_key.clone(),
+            user_credentials.secret_key.clone(),
         );
 
         let resp = state.client.send_meta_tx(signed_delegate_action).await;
