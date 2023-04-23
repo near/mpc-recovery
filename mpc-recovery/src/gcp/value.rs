@@ -137,8 +137,6 @@ impl From<google_datastore1::api::Value> for Value {
             Value::IntegerValue(val)
         } else if let Some(val) = value.double_value {
             Value::DoubleValue(val)
-        } else if let Some(_) = value.timestamp_value {
-            unimplemented!()
         } else if let Some(val) = value.key_value {
             Value::KeyValue(val)
         } else if let Some(val) = value.string_value {
@@ -165,7 +163,7 @@ impl From<google_datastore1::api::Value> for Value {
                 val.values
                     .unwrap_or_default()
                     .into_iter()
-                    .map(|e| Value::from(e))
+                    .map(Value::from)
                     .collect(),
             )
         } else {
@@ -372,7 +370,7 @@ impl FromValue for google_datastore1::api::Value {
             Value::ArrayValue(val) => {
                 let values = val
                     .into_iter()
-                    .map(|v| FromValue::from_value(v))
+                    .map(FromValue::from_value)
                     .collect::<Result<Vec<google_datastore1::api::Value>, ConvertError>>()?;
                 google_datastore1::api::Value {
                     array_value: Some(ArrayValue {
