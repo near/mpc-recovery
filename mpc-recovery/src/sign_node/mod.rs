@@ -14,7 +14,13 @@ pub async fn run(id: NodeId, pk_set: PublicKeySet, sk_share: SecretKeyShare, por
         return;
     }
 
-    let state = SignNodeState { id, sk_share };
+    let pagoda_firebase_audience_id = "pagoda-firebase-audience-id".to_string();
+
+    let state = SignNodeState {
+        id,
+        sk_share,
+        pagoda_firebase_audience_id,
+    };
 
     let app = Router::new()
         .route("/sign", post(sign::<UniversalTokenVerifier>))
@@ -32,6 +38,7 @@ pub async fn run(id: NodeId, pk_set: PublicKeySet, sk_share: SecretKeyShare, por
 struct SignNodeState {
     id: NodeId,
     sk_share: SecretKeyShare,
+    pagoda_firebase_audience_id: String,
 }
 
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.id))]
@@ -43,7 +50,7 @@ async fn sign<T: OAuthTokenVerifier>(
 
     // TODO: extract access token from payload
     let access_token = "validToken";
-    match T::verify_token(access_token).await {
+    match T::verify_token(access_token, &state.pagoda_firebase_audience_id).await {
         Ok(_) => {
             tracing::debug!("access token is valid");
             let response = SigShareResponse::Ok {

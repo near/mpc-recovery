@@ -78,6 +78,9 @@ where
         let addr = SignNode::start(&docker, NETWORK, i as u64, &pk_set, &sk_shares[i - 1]).await?;
         sign_nodes.push(addr);
     }
+
+    let pagoda_firebase_audience_id = "not actually used in integration tests";
+
     let leader_node = LeaderNode::start(
         &docker,
         NETWORK,
@@ -92,6 +95,7 @@ where
         near_root_account.id(),
         &creator_account_id,
         &creator_account_sk,
+        pagoda_firebase_audience_id,
     )
     .await?;
 

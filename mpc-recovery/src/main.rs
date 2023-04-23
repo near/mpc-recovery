@@ -54,6 +54,8 @@ enum Cli {
             default_value("https://api.kitwallet.app")
         )]
         account_lookup_url: String,
+        #[arg(long, env("PAGODA_FIREBASE_AUDIENCE_ID"))]
+        pagoda_firebase_audience_id: String,
         /// GCP project ID
         #[arg(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
         gcp_project_id: String,
@@ -145,6 +147,7 @@ async fn main() -> anyhow::Result<()> {
             account_creator_id,
             account_creator_sk,
             account_lookup_url,
+            pagoda_firebase_audience_id,
             gcp_project_id,
             gcp_datastore_url,
         } => {
@@ -171,6 +174,7 @@ async fn main() -> anyhow::Result<()> {
                 account_creator_id,
                 account_creator_sk,
                 account_lookup_url,
+                pagoda_firebase_audience_id,
             })
             .await;
         }

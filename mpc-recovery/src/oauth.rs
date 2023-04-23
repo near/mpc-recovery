@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 #[async_trait::async_trait]
 pub trait OAuthTokenVerifier {
-    async fn verify_token(token: &str) -> anyhow::Result<IdTokenClaims>;
+    async fn verify_token(token: &str, audience: &str) -> anyhow::Result<IdTokenClaims>;
 
     /// This function validates JWT (OIDC ID token) by checking the signature received
     /// from the issuer, issuer, audience, and expiration time.
@@ -38,13 +38,13 @@ pub struct UniversalTokenVerifier {}
 
 #[async_trait::async_trait]
 impl OAuthTokenVerifier for UniversalTokenVerifier {
-    async fn verify_token(token: &str) -> anyhow::Result<IdTokenClaims> {
+    async fn verify_token(token: &str, audience: &str) -> anyhow::Result<IdTokenClaims> {
         match get_token_verifier_type(token) {
             SupportedTokenVerifiers::PagodaFirebaseTokenVerifier => {
-                return PagodaFirebaseTokenVerifier::verify_token(token).await;
+                return PagodaFirebaseTokenVerifier::verify_token(token, audience).await;
             }
             SupportedTokenVerifiers::TestTokenVerifier => {
-                return TestTokenVerifier::verify_token(token).await;
+                return TestTokenVerifier::verify_token(token, audience).await;
             }
         }
     }
@@ -72,21 +72,17 @@ impl OAuthTokenVerifier for PagodaFirebaseTokenVerifier {
     // Specs for ID token verification:
     // Google: https://developers.google.com/identity/openid-connect/openid-connect#validatinganidtoken
     // Firebase: https://firebase.google.com/docs/auth/admin/verify-id-tokens#verify_id_tokens_using_a_third-party_jwt_library
-    async fn verify_token(token: &str) -> anyhow::Result<IdTokenClaims> {
+    async fn verify_token(token: &str, audience: &str) -> anyhow::Result<IdTokenClaims> {
         let public_key = get_pagoda_firebase_public_key().expect("Failed to get Google public key");
 
-        // this is a tmp Project ID, the real one is: pagoda-onboarding-dev
-        let pagoda_firebase_audience_id: String = "pagoda-fast-auth-441fe".to_string();
-        let pagoda_firebase_issuer_id: String = format!(
-            "https://securetoken.google.com/{}",
-            pagoda_firebase_audience_id
-        );
+        let pagoda_firebase_issuer_id: String =
+            format!("https://securetoken.google.com/{}", audience);
 
         let claims = Self::validate_jwt(
             token,
             public_key.as_bytes(),
             &pagoda_firebase_issuer_id,
-            &pagoda_firebase_audience_id,
+            audience,
         )
         .expect("Failed to validate JWT");
 
@@ -99,7 +95,7 @@ pub struct TestTokenVerifier {}
 
 #[async_trait::async_trait]
 impl OAuthTokenVerifier for TestTokenVerifier {
-    async fn verify_token(token: &str) -> anyhow::Result<IdTokenClaims> {
+    async fn verify_token(token: &str, _audience: &str) -> anyhow::Result<IdTokenClaims> {
         match token {
             "validToken" => {
                 tracing::info!(target: "test-token-verifier", "access token is valid");
@@ -242,15 +238,17 @@ mod tests {
     #[tokio::test]
     async fn test_verify_token_valid() {
         let token = "validToken";
-        let claims = TestTokenVerifier::verify_token(token).await.unwrap();
         let test_claims = get_test_claims();
+        let claims = TestTokenVerifier::verify_token(token, &test_claims.aud)
+            .await
+            .unwrap();
         assert!(compare_claims(claims, test_claims));
     }
 
     #[tokio::test]
     async fn test_verify_token_invalid_with_test_verifier() {
         let token = "invalid";
-        let result = TestTokenVerifier::verify_token(token).await;
+        let result = TestTokenVerifier::verify_token(token, "rand").await;
         match result {
             Ok(_) => panic!("Token verification should fail"),
             Err(e) => assert_eq!(e.to_string(), "Invalid token"),
@@ -260,15 +258,17 @@ mod tests {
     #[tokio::test]
     async fn test_verify_token_valid_with_test_verifier() {
         let token = "validToken";
-        let claims = TestTokenVerifier::verify_token(token).await.unwrap();
         let test_claims = get_test_claims();
+        let claims = TestTokenVerifier::verify_token(token, &test_claims.aud)
+            .await
+            .unwrap();
         assert!(compare_claims(claims, test_claims));
     }
 
     #[tokio::test]
     async fn test_verify_token_invalid_with_universal_verifier() {
         let token = "invalid";
-        let result = UniversalTokenVerifier::verify_token(token).await;
+        let result = UniversalTokenVerifier::verify_token(token, "rand").await;
         match result {
             Ok(_) => panic!("Token verification should fail"),
             Err(e) => assert_eq!(e.to_string(), "Invalid token"),
@@ -278,8 +278,10 @@ mod tests {
     #[tokio::test]
     async fn test_verify_token_valid_with_universal_verifier() {
         let token = "validToken";
-        let claims = UniversalTokenVerifier::verify_token(token).await.unwrap();
         let test_claims = get_test_claims();
+        let claims = UniversalTokenVerifier::verify_token(token, &test_claims.aud)
+            .await
+            .unwrap();
         assert!(compare_claims(claims, test_claims));
     }
 
