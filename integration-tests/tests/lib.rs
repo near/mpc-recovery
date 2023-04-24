@@ -18,7 +18,7 @@ const HOST_MACHINE_FROM_DOCKER: &str = "docker.for.mac.localhost";
 
 pub struct TestContext<'a> {
     leader_node: &'a LeaderNode,
-    pk_set: &'a Vec<Point<Ed25519>>,
+    _pk_set: &'a Vec<Point<Ed25519>>,
     worker: &'a Worker<Sandbox>,
     signer_nodes: &'a Vec<SignNode>,
 }
@@ -76,7 +76,16 @@ where
 
     let mut signer_nodes = Vec::new();
     for (i, share) in sk_shares.iter().enumerate().take(nodes) {
-        let addr = SignNode::start(&docker, NETWORK, i as u64, &pk_set, share).await?;
+        let addr = SignNode::start(
+            &docker,
+            NETWORK,
+            i as u64,
+            &pk_set,
+            share,
+            &datastore.address,
+            GCP_PROJECT_ID,
+        )
+        .await?;
         signer_nodes.push(addr);
     }
 
@@ -105,7 +114,7 @@ where
 
     let result = f(TestContext {
         leader_node: &leader_node,
-        pk_set: &pk_set,
+        _pk_set: &pk_set,
         signer_nodes: &signer_nodes,
         worker: &worker,
     })

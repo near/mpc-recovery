@@ -3,7 +3,8 @@ use ed25519_dalek::Verifier;
 use hyper::StatusCode;
 use mpc_recovery::{
     msg::{AddKeyRequest, AddKeyResponse, NewAccountRequest, NewAccountResponse},
-    transaction::{sign, to_dalek_combined_public_key},
+    oauth::get_test_claims,
+    transaction::{call, sign, to_dalek_combined_public_key},
 };
 use rand::{distributions::Alphanumeric, Rng};
 use std::time::Duration;
@@ -26,9 +27,18 @@ async fn test_trio() -> anyhow::Result<()> {
                 .map(|s| s.local_address.clone())
                 .collect();
 
-            let signature = sign(&client, &signer_urls, payload.clone().into()).await?;
+            let signature = sign(
+                &client,
+                &signer_urls,
+                "validToken".to_string(),
+                payload.clone().into(),
+            )
+            .await?;
 
-            let combined_pub = to_dalek_combined_public_key(ctx.pk_set).unwrap();
+            let account_id = get_test_claims().get_internal_account_id();
+            let res = call(&client, &signer_urls, "public_key", account_id).await?;
+
+            let combined_pub = to_dalek_combined_public_key(&res).unwrap();
             combined_pub.verify(payload.as_bytes(), &signature)?;
 
             Ok(())

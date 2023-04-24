@@ -6,15 +6,17 @@ use crate::{
     },
     primitives::InternalAccountId,
 };
+use curv::elliptic::curves::{Ed25519, Point};
 use google_datastore1::api::{Key, PathElement};
-use near_crypto::{KeyType, PublicKey, SecretKey};
+use multi_party_eddsa::protocols::ExpandedKeyPair;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct UserCredentials {
+    pub node_id: usize,
     pub internal_account_id: InternalAccountId,
-    pub secret_key: SecretKey,
+    pub key_pair: ExpandedKeyPair,
 }
 
 impl KeyKind for UserCredentials {
@@ -27,18 +29,22 @@ impl IntoValue for UserCredentials {
     fn into_value(self) -> Value {
         let mut properties = HashMap::new();
         properties.insert(
+            "node_id".to_string(),
+            Value::IntegerValue(self.node_id as i64),
+        );
+        properties.insert(
             "internal_account_id".to_string(),
             Value::StringValue(self.internal_account_id.clone()),
         );
         properties.insert(
-            "secret_key".to_string(),
-            Value::StringValue(self.secret_key.to_string()),
+            "key_pair".to_string(),
+            Value::StringValue(serde_json::to_string(&self.key_pair).unwrap()),
         );
         Value::EntityValue {
             key: Key {
                 path: Some(vec![PathElement {
                     kind: Some(UserCredentials::kind()),
-                    name: Some(self.internal_account_id),
+                    name: Some(format!("{}/{}", self.node_id, self.internal_account_id)),
                     id: None,
                 }]),
                 partition_id: None,
@@ -52,6 +58,10 @@ impl FromValue for UserCredentials {
     fn from_value(value: Value) -> Result<Self, ConvertError> {
         match value {
             Value::EntityValue { mut properties, .. } => {
+                let (_, node_id) = properties
+                    .remove_entry("node_id")
+                    .ok_or_else(|| ConvertError::MissingProperty("node_id".to_string()))?;
+                let node_id = i64::from_value(node_id)? as usize;
                 let (_, internal_account_id) = properties
                     .remove_entry("internal_account_id")
                     .ok_or_else(|| {
@@ -59,15 +69,17 @@ impl FromValue for UserCredentials {
                     })?;
                 let internal_account_id = String::from_value(internal_account_id)?;
 
-                let (_, secret_key) = properties
-                    .remove_entry("secret_key")
-                    .ok_or_else(|| ConvertError::MissingProperty("secret_key".to_string()))?;
-                let secret_key = String::from_value(secret_key)?;
-                let secret_key = secret_key.parse().unwrap();
+                let (_, key_pair) = properties
+                    .remove_entry("key_pair")
+                    .ok_or_else(|| ConvertError::MissingProperty("key_pair".to_string()))?;
+                let key_pair = String::from_value(key_pair)?;
+                let key_pair = serde_json::from_str(&key_pair)
+                    .map_err(|_| ConvertError::MalformedProperty("key_pair".to_string()))?;
 
                 Ok(Self {
+                    node_id,
                     internal_account_id,
-                    secret_key,
+                    key_pair,
                 })
             }
             value => Err(ConvertError::UnexpectedPropertyType {
@@ -79,14 +91,15 @@ impl FromValue for UserCredentials {
 }
 
 impl UserCredentials {
-    pub fn random(internal_account_id: InternalAccountId) -> Self {
+    pub fn random(node_id: usize, internal_account_id: InternalAccountId) -> Self {
         Self {
+            node_id,
             internal_account_id,
-            secret_key: SecretKey::from_random(KeyType::ED25519),
+            key_pair: ExpandedKeyPair::create(),
         }
     }
 
-    pub fn public_key(&self) -> PublicKey {
-        self.secret_key.public_key()
+    pub fn public_key(&self) -> &Point<Ed25519> {
+        &self.key_pair.public_key
     }
 }

@@ -87,7 +87,10 @@ impl GcpService {
     }
 
     #[tracing::instrument(level = "debug", skip_all, fields(key = name_key.to_string()))]
-    pub async fn get<K: ToString, T: FromValue + KeyKind>(&self, name_key: K) -> anyhow::Result<T> {
+    pub async fn get<K: ToString, T: FromValue + KeyKind>(
+        &self,
+        name_key: K,
+    ) -> anyhow::Result<Option<T>> {
         let request = LookupRequest {
             keys: Some(vec![Key {
                 path: Some(vec![PathElement {
@@ -107,12 +110,14 @@ impl GcpService {
             .doit()
             .await?;
         tracing::debug!(?response, "received response");
-        let found_entity = response
+        match response
             .found
             .and_then(|mut results| results.pop())
             .and_then(|result| result.entity)
-            .ok_or_else(|| anyhow::anyhow!("not found"))?;
-        Ok(T::from_value(found_entity.into_value())?)
+        {
+            Some(found_entity) => Ok(Some(T::from_value(found_entity.into_value())?)),
+            None => Ok(None),
+        }
     }
 
     #[tracing::instrument(level = "debug", skip_all)]

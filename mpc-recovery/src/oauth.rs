@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
+use crate::primitives::InternalAccountId;
+
 #[async_trait::async_trait]
 pub trait OAuthTokenVerifier {
     async fn verify_token(token: &str, audience: &str) -> anyhow::Result<IdTokenClaims>;
@@ -117,6 +119,12 @@ pub struct IdTokenClaims {
     pub exp: usize,
 }
 
+impl IdTokenClaims {
+    pub fn get_internal_account_id(&self) -> InternalAccountId {
+        format!("{}:{}", self.iss, self.sub)
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 struct OpenIdConfig {
     jwks_uri: String,
@@ -138,7 +146,7 @@ fn get_pagoda_firebase_public_key() -> Result<String, reqwest::Error> {
     Ok(key)
 }
 
-fn get_test_claims() -> IdTokenClaims {
+pub fn get_test_claims() -> IdTokenClaims {
     IdTokenClaims {
         iss: "test_issuer".to_string(),
         sub: "test_subject".to_string(),

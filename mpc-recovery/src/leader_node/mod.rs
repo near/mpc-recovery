@@ -1,7 +1,6 @@
 use crate::key_recovery::get_user_recovery_pk;
 use crate::msg::{AddKeyRequest, AddKeyResponse, NewAccountRequest, NewAccountResponse};
-use crate::oauth::{IdTokenClaims, OAuthTokenVerifier, UniversalTokenVerifier};
-use crate::primitives::InternalAccountId;
+use crate::oauth::{OAuthTokenVerifier, UniversalTokenVerifier};
 use crate::relayer::error::RelayerError;
 use crate::relayer::msg::RegisterAccountRequest;
 use crate::relayer::NearRpcAndRelayerClient;
@@ -139,7 +138,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
             .await
             .map_err(NewAccountError::OidcVerificationFailed)?;
-    let internal_acc_id = get_internal_account_id(oidc_token_claims);
+    let internal_acc_id = oidc_token_claims.get_internal_account_id();
 
     state
         .client
@@ -209,10 +208,6 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         }
     })
     .await
-}
-
-fn get_internal_account_id(claims: IdTokenClaims) -> InternalAccountId {
-    format!("{}:{}", claims.iss, claims.sub)
 }
 
 mod response {
@@ -325,7 +320,7 @@ async fn process_add_key<T: OAuthTokenVerifier>(
         T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
             .await
             .map_err(AddKeyError::OidcVerificationFailed)?;
-    let internal_acc_id = get_internal_account_id(oidc_token_claims);
+    let internal_acc_id = oidc_token_claims.get_internal_account_id();
     let user_recovery_pk = get_user_recovery_pk(
         &state.reqwest_client,
         &state.sign_nodes,
@@ -370,6 +365,7 @@ async fn process_add_key<T: OAuthTokenVerifier>(
         let signed_delegate_action = get_mpc_signed_delegated_action(
             &state.reqwest_client,
             &state.sign_nodes,
+            request.oidc_token.clone(),
             delegate_action,
         )
         .await?;

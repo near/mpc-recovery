@@ -180,7 +180,7 @@ async fn main() -> anyhow::Result<()> {
             // TODO Import just the private key and derive the rest
             let sk_share: ExpandedKeyPair = serde_json::from_str(&sk_share).unwrap();
 
-            mpc_recovery::run_sign_node(node_id, pk_set, sk_share, web_port).await;
+            mpc_recovery::run_sign_node(gcp_service, node_id, pk_set, sk_share, web_port).await;
         }
     }
 

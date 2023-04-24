@@ -1,4 +1,6 @@
 use self::aggregate_signer::{NodeInfo, Reveal, SignedCommitment, SigningState};
+use self::user_credentials::UserCredentials;
+use crate::gcp::GcpService;
 use crate::msg::SigShareRequest;
 use crate::oauth::{OAuthTokenVerifier, UniversalTokenVerifier};
 use crate::primitives::InternalAccountId;
@@ -13,8 +15,9 @@ use tokio::sync::RwLock;
 pub mod aggregate_signer;
 pub mod user_credentials;
 
-#[tracing::instrument(level = "debug", skip(node_key, nodes_public_keys))]
+#[tracing::instrument(level = "debug", skip(gcp_service, node_key, nodes_public_keys))]
 pub async fn run(
+    gcp_service: GcpService,
     our_index: NodeId,
     nodes_public_keys: Vec<Point<Ed25519>>,
     node_key: ExpandedKeyPair,
@@ -33,6 +36,7 @@ pub async fn run(
     let signing_state = Arc::new(RwLock::new(SigningState::new()));
 
     let state = SignNodeState {
+        gcp_service,
         node_key,
         signing_state,
         pagoda_firebase_audience_id,
@@ -59,10 +63,71 @@ pub async fn run(
 
 #[derive(Clone)]
 struct SignNodeState {
+    gcp_service: GcpService,
     pagoda_firebase_audience_id: String,
     node_key: ExpandedKeyPair,
     signing_state: Arc<RwLock<SigningState>>,
     node_info: NodeInfo,
+}
+
+#[derive(thiserror::Error, Debug)]
+enum CommitError {
+    #[error("failed to verify oidc token: {0}")]
+    OidcVerificationFailed(anyhow::Error),
+    #[error("{0}")]
+    Other(#[from] anyhow::Error),
+}
+
+async fn get_or_generate_user_creds(
+    state: &SignNodeState,
+    internal_account_id: InternalAccountId,
+) -> anyhow::Result<UserCredentials> {
+    match state
+        .gcp_service
+        .get::<_, UserCredentials>(format!(
+            "{}/{}",
+            state.node_info.our_index, internal_account_id
+        ))
+        .await
+    {
+        Ok(Some(user_credentials)) => Ok(user_credentials),
+        Ok(None) => {
+            let user_credentials = UserCredentials {
+                node_id: state.node_info.our_index,
+                internal_account_id,
+                key_pair: ExpandedKeyPair::create(),
+            };
+            state.gcp_service.insert(user_credentials.clone()).await?;
+            Ok(user_credentials)
+        }
+        Err(e) => Err(e),
+    }
+}
+
+async fn process_commit<T: OAuthTokenVerifier>(
+    state: SignNodeState,
+    request: SigShareRequest,
+) -> Result<SignedCommitment, CommitError> {
+    let oidc_token_claims =
+        T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
+            .await
+            .map_err(CommitError::OidcVerificationFailed)?;
+    let internal_account_id = oidc_token_claims.get_internal_account_id();
+
+    let user_credentials = get_or_generate_user_creds(&state, internal_account_id).await?;
+
+    let response = state
+        .signing_state
+        .write()
+        .await
+        .get_commitment(
+            &user_credentials.key_pair,
+            &state.node_key,
+            // TODO Restrict this payload
+            request.payload,
+        )
+        .map_err(|e| anyhow::anyhow!(e))?;
+    Ok(response)
 }
 
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
@@ -70,30 +135,21 @@ async fn commit<T: OAuthTokenVerifier>(
     Extension(state): Extension<SignNodeState>,
     Json(request): Json<SigShareRequest>,
 ) -> (StatusCode, Json<Result<SignedCommitment, String>>) {
-    // TODO: extract access token from payload
-    let access_token = "validToken";
-    match T::verify_token(access_token, &state.pagoda_firebase_audience_id).await {
-        Ok(_) => {
-            tracing::debug!("access token is valid");
-
-            // TODO use seperate signing and node keys + key derivation
-            let response = state.signing_state.write().await.get_commitment(
-                &state.node_key,
-                &state.node_key,
-                // TODO Restrict this payload
-                request.payload,
-            );
-            match &response {
-                Ok(_) => tracing::debug!("Successful commitment"),
-                Err(e) => tracing::error!("Commitment payload failed: {}", e),
-            };
-
-            (StatusCode::OK, Json(response))
+    match process_commit::<T>(state, request).await {
+        Ok(signed_commitment) => (StatusCode::OK, Json(Ok(signed_commitment))),
+        Err(ref e @ CommitError::OidcVerificationFailed(ref err_msg)) => {
+            tracing::error!(err = ?e);
+            (
+                StatusCode::BAD_REQUEST,
+                Json(Err(format!("failed to verify oidc token: {}", err_msg))),
+            )
         }
-        Err(_) => {
-            const ERR: &str = "access token verification failed";
-            tracing::debug!(ERR);
-            (StatusCode::UNAUTHORIZED, Json(Err(ERR.to_string())))
+        Err(e) => {
+            tracing::error!(err = ?e);
+            (
+                StatusCode::BAD_REQUEST,
+                Json(Err(format!("failed to process new account: {}", e))),
+            )
         }
     }
 }
@@ -142,10 +198,24 @@ async fn signature_share(
     }
 }
 
+#[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn public_key(
     Extension(state): Extension<SignNodeState>,
-    Json(_request): Json<InternalAccountId>,
+    Json(request): Json<InternalAccountId>,
 ) -> (StatusCode, Json<Result<Point<Ed25519>, String>>) {
-    // TODO lookup correct public key
-    (StatusCode::OK, Json(Ok(state.node_key.public_key)))
+    match get_or_generate_user_creds(&state, request).await {
+        Ok(user_credentials) => (
+            StatusCode::OK,
+            Json(Ok(user_credentials.public_key().clone())),
+        ),
+        Err(err) => {
+            tracing::error!(?err);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(Err(
+                    "failed to fetch/generate a public key for given account".to_string(),
+                )),
+            )
+        }
+    }
 }

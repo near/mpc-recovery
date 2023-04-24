@@ -287,6 +287,8 @@ impl SignNode {
         node_id: u64,
         pk_set: &Vec<Point<Ed25519>>,
         sk_share: &ExpandedKeyPair,
+        datastore_url: &str,
+        gcp_project_id: &str,
     ) -> anyhow::Result<SignNode> {
         create_network(docker, network).await?;
         let web_port = portpicker::pick_unused_port().expect("no free ports");
@@ -302,7 +304,9 @@ impl SignNode {
             "--web-port".to_string(),
             web_port.to_string(),
             "--gcp-project-id".to_string(),
-            "pagoda-123".to_string(),
+            gcp_project_id.to_string(),
+            "--gcp-datastore-url".to_string(),
+            datastore_url.to_string(),
         ];
 
         let (container_id, ip_address) =

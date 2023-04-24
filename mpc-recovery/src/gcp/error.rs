@@ -4,4 +4,6 @@ pub enum ConvertError {
     MissingProperty(String),
     #[error("expected property type `{expected}`, got `{got}`")]
     UnexpectedPropertyType { expected: String, got: String },
+    #[error("property `{0}` is malfored")]
+    MalformedProperty(String),
 }

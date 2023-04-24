@@ -62,6 +62,7 @@ pub enum LeaderResponse {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SigShareRequest {
+    pub oidc_token: String,
     pub payload: Vec<u8>,
 }
 

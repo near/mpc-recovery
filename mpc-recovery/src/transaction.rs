@@ -115,6 +115,7 @@ pub fn get_local_signed_delegated_action(
 pub async fn get_mpc_signed_delegated_action(
     client: &reqwest::Client,
     sign_nodes: &[String],
+    oidc_token: String,
     delegate_action: DelegateAction,
 ) -> anyhow::Result<SignedDelegateAction> {
     let signable_message =
@@ -124,7 +125,7 @@ pub async fn get_mpc_signed_delegated_action(
 
     let hash = hash(&bytes);
 
-    let signature = sign(client, sign_nodes, hash.as_bytes().to_vec()).await?;
+    let signature = sign(client, sign_nodes, oidc_token, hash.as_bytes().to_vec()).await?;
 
     Ok(SignedDelegateAction {
         delegate_action,
@@ -135,9 +136,13 @@ pub async fn get_mpc_signed_delegated_action(
 pub async fn sign(
     client: &reqwest::Client,
     sign_nodes: &[String],
+    oidc_token: String,
     payload: Vec<u8>,
 ) -> anyhow::Result<Signature> {
-    let commit_request = SigShareRequest { payload };
+    let commit_request = SigShareRequest {
+        oidc_token,
+        payload,
+    };
 
     let commitments: Vec<SignedCommitment> =
         call(client, sign_nodes, "commit", commit_request).await?;
