@@ -55,7 +55,12 @@ async fn test_basic_action() -> anyhow::Result<()> {
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
-            assert!(matches!(new_acc_response, NewAccountResponse::Ok));
+            assert!(matches!(new_acc_response, NewAccountResponse::Ok {
+                    user_public_key: user_pk,
+                    user_recovery_public_key: _,
+                    near_account_id: acc_id,
+                } if user_pk == user_public_key && acc_id == account_id.to_string()
+            ));
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
 
@@ -73,7 +78,13 @@ async fn test_basic_action() -> anyhow::Result<()> {
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
-            assert!(matches!(add_key_response, AddKeyResponse::Ok));
+            assert!(matches!(
+                add_key_response,
+                AddKeyResponse::Ok {
+                    user_public_key: new_pk,
+                    near_account_id: acc_id,
+                } if new_pk == new_user_public_key && acc_id == account_id.to_string()
+            ));
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
 
