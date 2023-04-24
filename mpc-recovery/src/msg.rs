@@ -12,8 +12,14 @@ pub struct NewAccountRequest {
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum NewAccountResponse {
-    Ok,
-    Err { msg: String },
+    Ok {
+        user_public_key: String,
+        user_recovery_public_key: String,
+        near_account_id: String,
+    },
+    Err {
+        msg: String,
+    },
 }
 
 impl NewAccountResponse {
@@ -33,8 +39,13 @@ pub struct AddKeyRequest {
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum AddKeyResponse {
-    Ok,
-    Err { msg: String },
+    Ok {
+        user_public_key: String,
+        near_account_id: String,
+    },
+    Err {
+        msg: String,
+    },
 }
 
 impl AddKeyResponse {

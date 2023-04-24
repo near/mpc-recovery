@@ -170,7 +170,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             state.account_creator_id.clone(),
             state.account_creator_sk.public_key(),
             new_user_account_id.clone(),
-            mpc_user_recovery_pk,
+            mpc_user_recovery_pk.clone(),
             new_user_account_pk.clone(),
             state.near_root_account.clone(),
             nonce,
@@ -202,7 +202,11 @@ async fn process_new_account<T: OAuthTokenVerifier>(
 
         // TODO: Probably need to check more fields
         if matches!(response.status, FinalExecutionStatus::SuccessValue(_)) {
-            Ok(NewAccountResponse::Ok)
+            Ok(NewAccountResponse::Ok {
+                user_public_key: new_user_account_pk.to_string(),
+                user_recovery_public_key: mpc_user_recovery_pk.to_string(),
+                near_account_id: new_user_account_id.to_string(),
+            })
         } else {
             Err(anyhow::anyhow!("transaction failed with {:?}", response.status).into())
         }
@@ -392,7 +396,10 @@ async fn process_add_key<T: OAuthTokenVerifier>(
 
         // TODO: Probably need to check more fields
         if matches!(resp.status, FinalExecutionStatus::SuccessValue(_)) {
-            Ok(AddKeyResponse::Ok)
+            Ok(AddKeyResponse::Ok {
+                user_public_key: new_public_key.to_string(),
+                near_account_id: user_account_id.to_string(),
+            })
         } else {
             Err(anyhow::anyhow!("transaction failed with {:?}", resp.status).into())
         }
