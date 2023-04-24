@@ -20,7 +20,15 @@ The recovery service is currently hosted at <https://mpc-recovery-7tk2cmmtcq-ue.
         oidc_token: String,
         public_key: String
     }
-    Response: Ok / {"Err": String}
+    Response:
+    Ok {
+        user_public_key: String,
+        user_recovery_public_key: String,
+        near_account_id: String,
+    } /
+    Err {
+        msg: String
+    }
 
 This creates an account with the name in `near_account_id`. If this name is already taken then this operation will fail with no action having been taken.
 
@@ -39,7 +47,14 @@ Newly created NEAR account will have two full access keys. One that was provided
         public_key: String,
         oidc_token: String
     }
-    Response: "Ok" / {"Err": String}
+    Response:
+    Ok {
+        user_public_key: String,
+        near_account_id: String,
+    } /
+    Err{
+        msg: String
+    }
 
 ## OIDC (OAuth 2.0) authentication
 
