@@ -50,7 +50,8 @@ pub async fn run(config: Config) {
 
     let client = NearRpcAndRelayerClient::connect(&near_rpc, relayer_url);
     // FIXME: We don't have a token for ourselves, but are still forced to allocate allowance.
-    // Using randomly generated tokens ensures the uniqueness of tokens on the relayer side.
+    // Using randomly generated tokens ensures the uniqueness of tokens on the relayer side so
+    // we can update the allowance on each server run.
     let fake_oauth_token: String = rand::thread_rng()
         .sample_iter(&Alphanumeric)
         .take(16)
@@ -59,7 +60,7 @@ pub async fn run(config: Config) {
     client
         .register_account(RegisterAccountRequest {
             account_id: account_creator_id.clone(),
-            allowance: 300_000_000_000_000,
+            allowance: 18_000_000_000_000_000_000, // should be enough to create 700_000+ accs
             oauth_token: fake_oauth_token,
         })
         .await
