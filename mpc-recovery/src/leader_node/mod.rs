@@ -10,6 +10,7 @@ use crate::transaction::{
 };
 use crate::{nar, NodeId};
 use axum::{http::StatusCode, routing::post, Extension, Json, Router};
+use curv::elliptic::curves::{Ed25519, Point};
 use near_crypto::{ParseKeyError, PublicKey, SecretKey};
 use near_primitives::account::id::ParseAccountError;
 use near_primitives::types::AccountId;
@@ -75,6 +76,17 @@ pub async fn run(config: Config) {
         account_lookup_url,
         pagoda_firebase_audience_id,
     };
+
+    // Get keys from all sign nodes, and broadcast them out as a set.
+    let Ok(pk_set) = gather_sign_node_pks(&state).await else {
+        tracing::error!("Unable to gather public keys");
+        return;
+    };
+    let Ok(messages) = broadcast_pk_set(&state, pk_set).await else {
+        tracing::error!("Unable to broadcast public keys");
+        return;
+    };
+    tracing::debug!(?messages, "broadcasted public key statuses");
 
     //TODO: not secure, allow only for testnet, whitelist endpoint etc. for mainnet
     let cors_layer = tower_http::cors::CorsLayer::permissive();
@@ -439,6 +451,35 @@ async fn add_key<T: OAuthTokenVerifier>(
         }
     }
 }
+
+async fn gather_sign_node_pks(state: &LeaderState) -> anyhow::Result<Vec<Point<Ed25519>>> {
+    let mut results: Vec<(usize, Point<Ed25519>)> = crate::transaction::call(
+        &state.reqwest_client,
+        &state.sign_nodes,
+        "public_key_node",
+        (),
+    )
+    .await?;
+    results.sort_by_key(|(index, _)| *index);
+    let results = results.into_iter().map(|(_index, point)| point).collect();
+    Ok(results)
+}
+
+async fn broadcast_pk_set(
+    state: &LeaderState,
+    pk_set: Vec<Point<Ed25519>>,
+) -> anyhow::Result<Vec<String>> {
+    let messages: Vec<String> = crate::transaction::call(
+        &state.reqwest_client,
+        &state.sign_nodes,
+        "accept_pk_set",
+        pk_set,
+    )
+    .await?;
+
+    Ok(messages)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

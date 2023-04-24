@@ -1,3 +1,4 @@
+use curv::elliptic::curves::{Ed25519, Point};
 use ed25519_dalek::Signature;
 use serde::{Deserialize, Serialize};
 
@@ -75,6 +76,11 @@ pub enum LeaderResponse {
 pub struct SigShareRequest {
     pub oidc_token: String,
     pub payload: Vec<u8>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AcceptNodePublicKeysRequest {
+    pub public_keys: Vec<Point<Ed25519>>,
 }
 
 mod hex_sig_share {

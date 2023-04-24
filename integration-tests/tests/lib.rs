@@ -80,7 +80,6 @@ where
             &docker,
             NETWORK,
             i as u64,
-            &pk_set,
             share,
             &datastore.address,
             GCP_PROJECT_ID,
