@@ -8,17 +8,15 @@ use bollard::{
     service::{HostConfig, Ipam, PortBinding},
     Docker,
 };
+use curv::elliptic::curves::{Ed25519, Point};
 use futures::{lock::Mutex, StreamExt};
 use hyper::{Body, Client, Method, Request, StatusCode, Uri};
-use mpc_recovery::msg::{
-    AddKeyRequest, AddKeyResponse, LeaderRequest, LeaderResponse, NewAccountRequest,
-    NewAccountResponse,
-};
+use mpc_recovery::msg::{AddKeyRequest, AddKeyResponse, NewAccountRequest, NewAccountResponse};
+use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_crypto::SecretKey;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use threshold_crypto::{serde_impl::SerdeSecret, PublicKeySet, SecretKeyShare};
 use tokio::io::AsyncWriteExt;
 use workspaces::AccountId;
 
@@ -182,8 +180,6 @@ impl LeaderNode {
         docker: &Docker,
         network: &str,
         node_id: u64,
-        pk_set: &PublicKeySet,
-        sk_share: &SecretKeyShare,
         sign_nodes: Vec<String>,
         near_rpc: &str,
         relayer_url: &str,
@@ -201,10 +197,6 @@ impl LeaderNode {
             "start-leader".to_string(),
             "--node-id".to_string(),
             node_id.to_string(),
-            "--pk-set".to_string(),
-            serde_json::to_string(&pk_set)?,
-            "--sk-share".to_string(),
-            serde_json::to_string(&SerdeSecret(sk_share))?,
             "--web-port".to_string(),
             web_port.to_string(),
             "--near-rpc".to_string(),
@@ -263,13 +255,6 @@ impl LeaderNode {
         Ok((status, response))
     }
 
-    pub async fn submit(
-        &self,
-        request: LeaderRequest,
-    ) -> anyhow::Result<(StatusCode, LeaderResponse)> {
-        self.post(format!("{}/submit", self.address), request).await
-    }
-
     pub async fn new_account(
         &self,
         request: NewAccountRequest,
@@ -291,6 +276,8 @@ pub struct SignNode {
     docker: Docker,
     container_id: String,
     pub address: String,
+    /// For calling directly from tests
+    pub local_address: String,
 }
 
 impl SignNode {
@@ -298,8 +285,8 @@ impl SignNode {
         docker: &Docker,
         network: &str,
         node_id: u64,
-        pk_set: &PublicKeySet,
-        sk_share: &SecretKeyShare,
+        pk_set: &Vec<Point<Ed25519>>,
+        sk_share: &ExpandedKeyPair,
     ) -> anyhow::Result<SignNode> {
         create_network(docker, network).await?;
         let web_port = portpicker::pick_unused_port().expect("no free ports");
@@ -311,7 +298,7 @@ impl SignNode {
             "--pk-set".to_string(),
             serde_json::to_string(&pk_set)?,
             "--sk-share".to_string(),
-            serde_json::to_string(&SerdeSecret(sk_share))?,
+            serde_json::to_string(&sk_share)?,
             "--web-port".to_string(),
             web_port.to_string(),
             "--gcp-project-id".to_string(),
@@ -319,12 +306,13 @@ impl SignNode {
         ];
 
         let (container_id, ip_address) =
-            start_mpc_node(docker, network, cmd, web_port, false).await?;
+            start_mpc_node(docker, network, cmd, web_port, true).await?;
 
         Ok(SignNode {
             docker: docker.clone(),
             container_id,
             address: format!("http://{ip_address}:{web_port}"),
+            local_address: format!("http://localhost:{web_port}"),
         })
     }
 }

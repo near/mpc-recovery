@@ -1,24 +1,18 @@
 use clap::Parser;
+use curv::elliptic::curves::{Ed25519, Point};
 use mpc_recovery::{gcp::GcpService, LeaderConfig};
+use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_primitives::types::AccountId;
-use threshold_crypto::{serde_impl::SerdeSecret, PublicKeySet, SecretKeyShare};
 
 #[derive(Parser, Debug)]
 enum Cli {
     Generate {
         n: usize,
-        t: usize,
     },
     StartLeader {
         /// Node ID
         #[arg(long, env("MPC_RECOVERY_NODE_ID"))]
         node_id: u64,
-        /// Root public key
-        #[arg(long, env("MPC_RECOVERY_PK_SET"))]
-        pk_set: String,
-        /// Secret key share, will be pulled from GCP Secret Manager if omitted
-        #[arg(long, env("MPC_RECOVERY_SK_SHARE"))]
-        sk_share: Option<String>,
         /// The web port for this server
         #[arg(long, env("MPC_RECOVERY_WEB_PORT"))]
         web_port: u16,
@@ -124,21 +118,19 @@ async fn main() -> anyhow::Result<()> {
     let _span = tracing::trace_span!("cli").entered();
 
     match Cli::parse() {
-        Cli::Generate { n, t } => {
-            let (pk_set, sk_shares) = mpc_recovery::generate(n, t)?;
+        Cli::Generate { n } => {
+            let (pk_set, sk_shares) = mpc_recovery::generate(n);
             println!("Public key set: {}", serde_json::to_string(&pk_set)?);
             for (i, sk_share) in sk_shares.iter().enumerate() {
                 println!(
                     "Secret key share {}: {}",
                     i,
-                    serde_json::to_string(&SerdeSecret(sk_share))?
+                    serde_json::to_string(sk_share)?
                 );
             }
         }
         Cli::StartLeader {
             node_id,
-            pk_set,
-            sk_share,
             web_port,
             sign_nodes,
             near_rpc,
@@ -152,19 +144,13 @@ async fn main() -> anyhow::Result<()> {
             gcp_datastore_url,
         } => {
             let gcp_service = GcpService::new(gcp_project_id, gcp_datastore_url).await?;
-            let sk_share = load_sh_skare(&gcp_service, node_id, sk_share).await?;
             let account_creator_sk =
                 load_account_creator_sk(&gcp_service, node_id, account_creator_sk).await?;
 
-            let pk_set: PublicKeySet = serde_json::from_str(&pk_set)?;
-            let sk_share: SecretKeyShare = serde_json::from_str(&sk_share)?;
             let account_creator_sk = account_creator_sk.parse()?;
 
             mpc_recovery::run_leader_node(LeaderConfig {
-                gcp_service,
                 id: node_id,
-                pk_set,
-                sk_share,
                 port: web_port,
                 sign_nodes,
                 near_rpc,
@@ -189,8 +175,10 @@ async fn main() -> anyhow::Result<()> {
             let gcp_service = GcpService::new(gcp_project_id, gcp_datastore_url).await?;
             let sk_share = load_sh_skare(&gcp_service, node_id, sk_share).await?;
 
-            let pk_set: PublicKeySet = serde_json::from_str(&pk_set).unwrap();
-            let sk_share: SecretKeyShare = serde_json::from_str(&sk_share).unwrap();
+            // TODO put these in a better defined format
+            let pk_set: Vec<Point<Ed25519>> = serde_json::from_str(&pk_set).unwrap();
+            // TODO Import just the private key and derive the rest
+            let sk_share: ExpandedKeyPair = serde_json::from_str(&sk_share).unwrap();
 
             mpc_recovery::run_sign_node(node_id, pk_set, sk_share, web_port).await;
         }

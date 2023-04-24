@@ -23,7 +23,6 @@ async-trait = "0.1"
 axum = "0.5.17"
 chrono = "0.4.24"
 clap = { version = "4.2", features = ["derive", "env"] }
-ed25519-dalek = "1"
 futures = "0.3"
 google-datastore1 = "5"
 google-secretmanager1 = "5"
@@ -39,7 +38,6 @@ rsa = "0.8.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
-threshold_crypto = "0.4.0"
 tokio = { version = "1.0", features = ["full"] }
 tokio-retry = "0.3"
 tonic = { version = "0.9", features = ["tls"] }
@@ -50,3 +48,7 @@ near-jsonrpc-primitives = "0.16.1"
 near-primitives = "0.16.1"
 near-crypto = "0.16.1"
 tower-http = { version = "0.4.0", features = ["cors"] }
+yup-oauth2 = "8"
+multi-party-eddsa = { git = "https://github.com/DavidM-D/multi-party-eddsa.git", rev = "25ae4fdc5ff7819ae70e73ab4afacf1c24fc4da1" }
+curv = { package = "curv-kzen", version = "0.9", default-features = false }
+ed25519-dalek = {version = "1.0.1", features = ["serde"]}

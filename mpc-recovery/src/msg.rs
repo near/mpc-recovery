@@ -1,6 +1,5 @@
-use crate::NodeId;
+use ed25519_dalek::Signature;
 use serde::{Deserialize, Serialize};
-use threshold_crypto::{Signature, SignatureShare};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NewAccountRequest {
@@ -63,28 +62,18 @@ pub enum LeaderResponse {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SigShareRequest {
-    pub payload: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-#[allow(clippy::large_enum_variant)]
-pub enum SigShareResponse {
-    Ok {
-        node_id: NodeId,
-        sig_share: SignatureShare,
-    },
-    Err,
+    pub payload: Vec<u8>,
 }
 
 mod hex_sig_share {
+    use ed25519_dalek::Signature;
     use serde::{Deserialize, Deserializer, Serializer};
-    use threshold_crypto::Signature;
 
     pub fn serialize<S>(sig_share: &Signature, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let s = hex::encode(sig_share.to_bytes());
+        let s = hex::encode(Signature::to_bytes(*sig_share));
         serializer.serialize_str(&s)
     }
 
@@ -94,14 +83,16 @@ mod hex_sig_share {
     {
         let s = String::deserialize(deserializer)?;
         Signature::from_bytes(
-            <[u8; 96]>::try_from(hex::decode(s).map_err(serde::de::Error::custom)?).map_err(
-                |v: Vec<u8>| {
-                    serde::de::Error::custom(format!(
-                        "signature has incorrect length: expected 96 bytes, but got {}",
-                        v.len()
-                    ))
-                },
-            )?,
+            &<[u8; Signature::BYTE_SIZE]>::try_from(
+                hex::decode(s).map_err(serde::de::Error::custom)?,
+            )
+            .map_err(|v: Vec<u8>| {
+                serde::de::Error::custom(format!(
+                    "signature has incorrect length: expected {} bytes, but got {}",
+                    Signature::BYTE_SIZE,
+                    v.len()
+                ))
+            })?,
         )
         .map_err(serde::de::Error::custom)
     }
