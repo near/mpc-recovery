@@ -143,8 +143,7 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
             let access_keys = ctx.worker.view_access_keys(&account_id).await?;
             let recovery_access_key1 = access_keys
                 .into_iter()
-                .filter(|ak| ak.public_key.to_string() != user_public_key)
-                .next()
+                .find(|ak| ak.public_key.to_string() != user_public_key)
                 .ok_or_else(|| anyhow::anyhow!("missing recovery access key"))?;
 
             // Generate another user
@@ -166,8 +165,7 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
             let access_keys = ctx.worker.view_access_keys(&account_id).await?;
             let recovery_access_key2 = access_keys
                 .into_iter()
-                .filter(|ak| ak.public_key.to_string() != user_public_key)
-                .next()
+                .find(|ak| ak.public_key.to_string() != user_public_key)
                 .ok_or_else(|| anyhow::anyhow!("missing recovery access key"))?;
 
             assert_ne!(
