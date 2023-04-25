@@ -26,6 +26,7 @@ pub struct Config {
     pub port: u16,
     pub sign_nodes: Vec<String>,
     pub near_rpc: String,
+    pub relayer_api_key: Option<String>,
     pub relayer_url: String,
     pub near_root_account: String,
     pub account_creator_id: AccountId,
@@ -41,6 +42,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         port,
         sign_nodes,
         near_rpc,
+        relayer_api_key,
         relayer_url,
         near_root_account,
         account_creator_id,
@@ -51,7 +53,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
     let _span = tracing::debug_span!("run", env, port);
     tracing::debug!(?sign_nodes, "running a leader node");
 
-    let client = NearRpcAndRelayerClient::connect(&near_rpc, relayer_url);
+    let client = NearRpcAndRelayerClient::connect(&near_rpc, relayer_url, relayer_api_key);
     // FIXME: We don't have a token for ourselves, but are still forced to allocate allowance.
     // Using randomly generated tokens ensures the uniqueness of tokens on the relayer side so
     // we can update the allowance on each server run.

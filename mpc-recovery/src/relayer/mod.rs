@@ -16,6 +16,7 @@ pub struct NearRpcAndRelayerClient {
     rpc_client: JsonRpcClient,
     relayer_url: String,
     cached_nonces: CachedAccessKeyNonces,
+    api_key: Option<String>,
 }
 
 impl Clone for NearRpcAndRelayerClient {
@@ -23,6 +24,7 @@ impl Clone for NearRpcAndRelayerClient {
         Self {
             rpc_client: self.rpc_client.clone(),
             relayer_url: self.relayer_url.clone(),
+            api_key: self.api_key.clone(),
             // all the cached nonces will not get cloned, and instead get invalidated:
             cached_nonces: Default::default(),
         }
@@ -30,11 +32,12 @@ impl Clone for NearRpcAndRelayerClient {
 }
 
 impl NearRpcAndRelayerClient {
-    pub fn connect(near_rpc: &str, relayer_url: String) -> Self {
+    pub fn connect(near_rpc: &str, relayer_url: String, api_key: Option<String>) -> Self {
         Self {
             rpc_client: JsonRpcClient::connect(near_rpc),
             relayer_url,
             cached_nonces: Default::default(),
+            api_key,
         }
     }
 
@@ -53,12 +56,16 @@ impl NearRpcAndRelayerClient {
 
     #[tracing::instrument(level = "debug", skip_all, fields(account_id = request.account_id.to_string()))]
     pub async fn register_account(&self, request: RegisterAccountRequest) -> anyhow::Result<()> {
-        let request = Request::builder()
+        let mut req = Request::builder()
             .method(Method::POST)
             .uri(format!("{}/register_account", self.relayer_url))
-            .header("content-type", "application/json")
-            .body(Body::from(serde_json::to_vec(&request)?))
-            .unwrap();
+            .header("content-type", "application/json");
+
+        if let Some(api_key) = &self.api_key {
+            req = req.header("x-api-key", api_key);
+        };
+
+        let request = req.body(Body::from(serde_json::to_vec(&request)?)).unwrap();
 
         tracing::debug!("constructed http request to {}", self.relayer_url);
         let client = Client::new();
@@ -129,7 +136,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_access_key() -> anyhow::Result<()> {
-        let testnet = NearRpcAndRelayerClient::connect(TESTNET_URL, RELAYER_URI.to_string());
+        let testnet = NearRpcAndRelayerClient::connect(TESTNET_URL, RELAYER_URI.to_string(), None);
         let (block_hash, block_height, nonce) = testnet
             .access_key(
                 "dev-1636354824855-78504059330123".parse()?,

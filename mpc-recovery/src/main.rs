@@ -30,6 +30,9 @@ enum Cli {
         )]
         near_rpc: String,
         /// NEAR meta transaction relayer URL
+        #[arg(long, env("MPC_RECOVERY_RELAYER_API_KEY"))]
+        relayer_api_key: Option<String>,
+        /// NEAR meta transaction relayer URL
         #[arg(
             long,
             env("MPC_RECOVERY_RELAYER_URL"),
@@ -150,6 +153,7 @@ async fn main() -> anyhow::Result<()> {
             web_port,
             sign_nodes,
             near_rpc,
+            relayer_api_key,
             relayer_url,
             near_root_account,
             account_creator_id,
@@ -172,6 +176,7 @@ async fn main() -> anyhow::Result<()> {
                 port: web_port,
                 sign_nodes,
                 near_rpc,
+                relayer_api_key,
                 relayer_url,
                 near_root_account,
                 // TODO: Create such an account for testnet and mainnet in a secure way
