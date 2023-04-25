@@ -38,7 +38,7 @@ pub trait OAuthTokenVerifier {
             claims = format!("{:?}", claims),
             "validate_jwt call successful"
         );
-        
+
         Ok(claims)
     }
 }
