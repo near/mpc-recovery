@@ -81,7 +81,7 @@ impl OAuthTokenVerifier for PagodaFirebaseTokenVerifier {
         let pagoda_firebase_issuer_id: String =
             format!("https://securetoken.google.com/{}", audience);
 
-        let mut last_occured_error = anyhow::anyhow!("Unexpected error");
+        let mut last_occured_error = anyhow::anyhow!("Unexpected error. Firebase public keys not found");
         for public_key in public_keys {
             match Self::validate_jwt(
                 token,
