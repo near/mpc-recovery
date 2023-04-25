@@ -1,7 +1,7 @@
 use crate::key_recovery::get_user_recovery_pk;
 use crate::msg::{AddKeyRequest, AddKeyResponse, NewAccountRequest, NewAccountResponse};
 use crate::nar;
-use crate::oauth::{OAuthTokenVerifier, UniversalTokenVerifier};
+use crate::oauth::OAuthTokenVerifier;
 use crate::relayer::error::RelayerError;
 use crate::relayer::msg::RegisterAccountRequest;
 use crate::relayer::NearRpcAndRelayerClient;
@@ -31,7 +31,7 @@ pub struct Config {
     pub pagoda_firebase_audience_id: String,
 }
 
-pub async fn run(config: Config) {
+pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
     let Config {
         env,
         port,
@@ -81,8 +81,8 @@ pub async fn run(config: Config) {
     let cors_layer = tower_http::cors::CorsLayer::permissive();
 
     let app = Router::new()
-        .route("/new_account", post(new_account::<UniversalTokenVerifier>))
-        .route("/add_key", post(add_key::<UniversalTokenVerifier>))
+        .route("/new_account", post(new_account::<T>))
+        .route("/add_key", post(add_key::<T>))
         .layer(Extension(state))
         .layer(cors_layer);
 

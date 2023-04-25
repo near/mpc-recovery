@@ -1,6 +1,10 @@
 use clap::Parser;
 use curv::elliptic::curves::{Ed25519, Point};
-use mpc_recovery::{gcp::GcpService, LeaderConfig};
+use mpc_recovery::{
+    gcp::GcpService,
+    oauth::{PagodaFirebaseTokenVerifier, UniversalTokenVerifier},
+    LeaderConfig,
+};
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_primitives::types::AccountId;
 
@@ -56,6 +60,9 @@ enum Cli {
         /// GCP datastore URL
         #[arg(long, env("MPC_RECOVERY_GCP_DATASTORE_URL"))]
         gcp_datastore_url: Option<String>,
+        /// Whether to accept test tokens
+        #[arg(long, env("MPC_RECOVERY_TEST"), default_value("false"))]
+        test: bool,
     },
     StartSign {
         /// Environment to run in (`dev` or `prod`)
@@ -79,6 +86,9 @@ enum Cli {
         /// GCP datastore URL
         #[arg(long, env("MPC_RECOVERY_GCP_DATASTORE_URL"))]
         gcp_datastore_url: Option<String>,
+        /// Whether to accept test tokens
+        #[arg(long, env("MPC_RECOVERY_TEST"), default_value("false"))]
+        test: bool,
     },
 }
 
@@ -152,6 +162,7 @@ async fn main() -> anyhow::Result<()> {
             pagoda_firebase_audience_id,
             gcp_project_id,
             gcp_datastore_url,
+            test,
         } => {
             let gcp_service =
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
@@ -160,7 +171,7 @@ async fn main() -> anyhow::Result<()> {
 
             let account_creator_sk = account_creator_sk.parse()?;
 
-            mpc_recovery::run_leader_node(LeaderConfig {
+            let config = LeaderConfig {
                 env,
                 port: web_port,
                 sign_nodes,
@@ -172,8 +183,13 @@ async fn main() -> anyhow::Result<()> {
                 account_creator_sk,
                 account_lookup_url,
                 pagoda_firebase_audience_id,
-            })
-            .await;
+            };
+
+            if test {
+                mpc_recovery::run_leader_node::<UniversalTokenVerifier>(config).await;
+            } else {
+                mpc_recovery::run_leader_node::<PagodaFirebaseTokenVerifier>(config).await;
+            }
         }
         Cli::StartSign {
             env,
@@ -183,6 +199,7 @@ async fn main() -> anyhow::Result<()> {
             web_port,
             gcp_project_id,
             gcp_datastore_url,
+            test,
         } => {
             let gcp_service =
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
@@ -193,7 +210,25 @@ async fn main() -> anyhow::Result<()> {
             // TODO Import just the private key and derive the rest
             let sk_share: ExpandedKeyPair = serde_json::from_str(&sk_share).unwrap();
 
-            mpc_recovery::run_sign_node(gcp_service, node_id, pk_set, sk_share, web_port).await;
+            if test {
+                mpc_recovery::run_sign_node::<UniversalTokenVerifier>(
+                    gcp_service,
+                    node_id,
+                    pk_set,
+                    sk_share,
+                    web_port,
+                )
+                .await;
+            } else {
+                mpc_recovery::run_sign_node::<PagodaFirebaseTokenVerifier>(
+                    gcp_service,
+                    node_id,
+                    pk_set,
+                    sk_share,
+                    web_port,
+                )
+                .await;
+            }
         }
     }
 

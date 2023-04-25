@@ -2,7 +2,7 @@ use self::aggregate_signer::{NodeInfo, Reveal, SignedCommitment, SigningState};
 use self::user_credentials::UserCredentials;
 use crate::gcp::GcpService;
 use crate::msg::SigShareRequest;
-use crate::oauth::{OAuthTokenVerifier, UniversalTokenVerifier};
+use crate::oauth::OAuthTokenVerifier;
 use crate::primitives::InternalAccountId;
 use crate::NodeId;
 use axum::{http::StatusCode, routing::post, Extension, Json, Router};
@@ -16,7 +16,7 @@ pub mod aggregate_signer;
 pub mod user_credentials;
 
 #[tracing::instrument(level = "debug", skip(gcp_service, node_key, nodes_public_keys))]
-pub async fn run(
+pub async fn run<T: OAuthTokenVerifier + 'static>(
     gcp_service: GcpService,
     our_index: NodeId,
     nodes_public_keys: Vec<Point<Ed25519>>,
@@ -47,7 +47,7 @@ pub async fn run(
     };
 
     let app = Router::new()
-        .route("/commit", post(commit::<UniversalTokenVerifier>))
+        .route("/commit", post(commit::<T>))
         .route("/reveal", post(reveal))
         .route("/signature_share", post(signature_share))
         .route("/public_key", post(public_key))
