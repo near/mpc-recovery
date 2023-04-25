@@ -158,6 +158,7 @@ async fn reveal(
         .write()
         .await
         .get_reveal(state.node_info, request)
+        .await
     {
         Ok(r) => {
             tracing::debug!("Successful reveal");
@@ -218,14 +219,16 @@ async fn public_key(
     }
 }
 
+// TODO: remove type complexity
+#[allow(clippy::type_complexity)]
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn public_key_node(
     Extension(state): Extension<SignNodeState>,
     Json(_): Json<()>,
-) -> (StatusCode, Json<(usize, Point<Ed25519>)>) {
+) -> (StatusCode, Json<Result<(usize, Point<Ed25519>), String>>) {
     (
         StatusCode::OK,
-        Json((state.node_info.our_index, state.node_key.public_key)),
+        Json(Ok((state.node_info.our_index, state.node_key.public_key))),
     )
 }
 
@@ -233,30 +236,26 @@ async fn public_key_node(
 async fn accept_pk_set(
     Extension(state): Extension<SignNodeState>,
     Json(request): Json<AcceptNodePublicKeysRequest>,
-) -> (StatusCode, Json<String>) {
+) -> (StatusCode, Json<Result<String, String>>) {
     let index = state.node_info.our_index;
     if request.public_keys.get(index) != Some(&state.node_key.public_key) {
         tracing::error!("provided secret share does not match the node id");
-        return (StatusCode::BAD_REQUEST, Json(format!(
-            "Sign node could not accept the public keys: current node index={index} does not match up")));
+        return (StatusCode::BAD_REQUEST, Json(Err(format!(
+            "Sign node could not accept the public keys: current node index={index} does not match up"))));
     }
 
-    let Ok(mut public_keys) = state.node_info.nodes_public_keys.write() else {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json("Unable to write into public keys. RwLock potentially poisoned".into()));
-    };
-    *public_keys = Some(request.public_keys);
+    let mut public_keys = state.node_info.nodes_public_keys.write().await;
+    tracing::debug!("Setting node public keys => {:?}", request.public_keys);
+    public_keys.replace(request.public_keys);
     (
         StatusCode::OK,
-        Json("Successfully set node public keys".to_string()),
+        Json(Ok("Successfully set node public keys".to_string())),
     )
 }
 
 /// Validate whether the current state of the sign node is useable or not.
 async fn check_if_ready(state: &SignNodeState) -> Result<(), String> {
-    let Ok(public_keys) =  state.node_info.nodes_public_keys.read() else {
-        return Err("Unable to check public keys. RwLock potentially poisoned".into());
-    };
-
+    let public_keys = state.node_info.nodes_public_keys.read().await;
     if public_keys.is_none() {
         return Err(
             "Sign node is not ready yet: waiting on all public keys from leader node".into(),

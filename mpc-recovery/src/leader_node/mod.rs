@@ -1,5 +1,8 @@
 use crate::key_recovery::get_user_recovery_pk;
-use crate::msg::{AddKeyRequest, AddKeyResponse, NewAccountRequest, NewAccountResponse};
+use crate::msg::{
+    AcceptNodePublicKeysRequest, AddKeyRequest, AddKeyResponse, NewAccountRequest,
+    NewAccountResponse,
+};
 use crate::oauth::{OAuthTokenVerifier, UniversalTokenVerifier};
 use crate::relayer::error::RelayerError;
 use crate::relayer::msg::RegisterAccountRequest;
@@ -78,13 +81,20 @@ pub async fn run(config: Config) {
     };
 
     // Get keys from all sign nodes, and broadcast them out as a set.
-    let Ok(pk_set) = gather_sign_node_pks(&state).await else {
-        tracing::error!("Unable to gather public keys");
-        return;
+    let pk_set = match gather_sign_node_pks(&state).await {
+        Ok(pk_set) => pk_set,
+        Err(err) => {
+            tracing::error!("Unable to gather public keys: {err}");
+            return;
+        }
     };
-    let Ok(messages) = broadcast_pk_set(&state, pk_set).await else {
-        tracing::error!("Unable to broadcast public keys");
-        return;
+    tracing::debug!(?pk_set, "Gathered public keys");
+    let messages = match broadcast_pk_set(&state, pk_set).await {
+        Ok(messages) => messages,
+        Err(err) => {
+            tracing::error!("Unable to broadcast public keys: {err}");
+            return;
+        }
     };
     tracing::debug!(?messages, "broadcasted public key statuses");
 
@@ -463,7 +473,10 @@ async fn gather_sign_node_pks(state: &LeaderState) -> anyhow::Result<Vec<Point<E
         .await;
         let mut results = match results {
             Ok(results) => results,
-            Err(err) => return Err(err),
+            Err(err) => {
+                tracing::debug!("failed to gather pk: {err}");
+                return Err(err);
+            }
         };
 
         results.sort_by_key(|(index, _)| *index);
@@ -483,11 +496,15 @@ async fn broadcast_pk_set(
     state: &LeaderState,
     pk_set: Vec<Point<Ed25519>>,
 ) -> anyhow::Result<Vec<String>> {
+    let request = AcceptNodePublicKeysRequest {
+        public_keys: pk_set,
+    };
+
     let messages: Vec<String> = crate::transaction::call(
         &state.reqwest_client,
         &state.sign_nodes,
         "accept_pk_set",
-        pk_set,
+        request,
     )
     .await?;
 
