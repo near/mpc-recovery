@@ -75,20 +75,31 @@ impl OAuthTokenVerifier for PagodaFirebaseTokenVerifier {
     // Google: https://developers.google.com/identity/openid-connect/openid-connect#validatinganidtoken
     // Firebase: https://firebase.google.com/docs/auth/admin/verify-id-tokens#verify_id_tokens_using_a_third-party_jwt_library
     async fn verify_token(token: &str, audience: &str) -> anyhow::Result<IdTokenClaims> {
-        let public_key = get_pagoda_firebase_public_key().expect("Failed to get Google public key");
+        let public_keys =
+            get_pagoda_firebase_public_keys().expect("Failed to get Firebase public keys");
 
         let pagoda_firebase_issuer_id: String =
             format!("https://securetoken.google.com/{}", audience);
 
-        let claims = Self::validate_jwt(
-            token,
-            public_key.as_bytes(),
-            &pagoda_firebase_issuer_id,
-            audience,
-        )
-        .expect("Failed to validate JWT");
-
-        Ok(claims)
+        let mut last_occured_error = anyhow::anyhow!("Unexpected error");
+        for public_key in public_keys {
+            match Self::validate_jwt(
+                token,
+                public_key.as_bytes(),
+                &pagoda_firebase_issuer_id,
+                audience,
+            ) {
+                Ok(claims) => {
+                    tracing::info!(target: "pagoda-firebase-token-verifier", "access token is valid");
+                    return Ok(claims);
+                }
+                Err(e) => {
+                    tracing::info!(target: "pagoda-firebase-token-verifier", "access token verification failed: {}", e);
+                    last_occured_error = e;
+                }
+            }
+        }
+        Err(last_occured_error)
     }
 }
 
@@ -135,15 +146,14 @@ struct Jwks {
     keys: Vec<Value>,
 }
 
-fn get_pagoda_firebase_public_key() -> Result<String, reqwest::Error> {
-    // TODO: handle errors
+fn get_pagoda_firebase_public_keys() -> anyhow::Result<Vec<String>> {
     let url =
         "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
     let client = reqwest::blocking::Client::new();
     let response = client.get(url).send()?;
-    let json: HashMap<String, Value> = response.json()?;
-    let key = json.iter().next().unwrap().1.as_str().unwrap().to_string();
-    Ok(key)
+    let json: HashMap<String, String> = response.json()?;
+    let keys: Vec<String> = json.values().cloned().collect();
+    Ok(keys)
 }
 
 pub fn get_test_claims() -> IdTokenClaims {
@@ -175,7 +185,7 @@ mod tests {
 
     #[test]
     fn test_get_pagoda_firebase_public_key() {
-        let pk = get_pagoda_firebase_public_key().unwrap();
+        let pk = get_pagoda_firebase_public_keys().unwrap();
         assert!(!pk.is_empty());
     }
 
