@@ -4,6 +4,7 @@ use crate::gcp::GcpService;
 use crate::msg::{AcceptNodePublicKeysRequest, SigShareRequest};
 use crate::oauth::{OAuthTokenVerifier, UniversalTokenVerifier};
 use crate::primitives::InternalAccountId;
+use crate::sign_node::pk_set::SignerNodePkSet;
 use crate::NodeId;
 use axum::{http::StatusCode, routing::post, Extension, Json, Router};
 use curv::elliptic::curves::{Ed25519, Point};
@@ -13,12 +14,18 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub mod aggregate_signer;
+pub mod pk_set;
 pub mod user_credentials;
 
 #[tracing::instrument(level = "debug", skip(gcp_service, node_key))]
 pub async fn run(gcp_service: GcpService, our_index: NodeId, node_key: ExpandedKeyPair, port: u16) {
     tracing::debug!("running a sign node");
     let our_index = usize::try_from(our_index).expect("This index is way to big");
+
+    let pk_set = gcp_service
+        .get::<_, SignerNodePkSet>(pk_set::MAIN_KEY)
+        .await
+        .expect("failed to connect to GCP Datastore");
 
     let pagoda_firebase_audience_id = "pagoda-firebase-audience-id".to_string();
     let signing_state = Arc::new(RwLock::new(SigningState::new()));
@@ -27,7 +34,7 @@ pub async fn run(gcp_service: GcpService, our_index: NodeId, node_key: ExpandedK
         node_key,
         signing_state,
         pagoda_firebase_audience_id,
-        node_info: NodeInfo::new(our_index, None),
+        node_info: NodeInfo::new(our_index, pk_set.map(|set| set.public_keys)),
     };
 
     let app = Router::new()
@@ -245,12 +252,32 @@ async fn accept_pk_set(
     }
 
     let mut public_keys = state.node_info.nodes_public_keys.write().await;
+    if public_keys.is_some() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(Err(
+                "This node is already initialized with public keys".to_string()
+            )),
+        );
+    }
     tracing::debug!("Setting node public keys => {:?}", request.public_keys);
-    public_keys.replace(request.public_keys);
-    (
-        StatusCode::OK,
-        Json(Ok("Successfully set node public keys".to_string())),
-    )
+    public_keys.replace(request.public_keys.clone());
+    match state
+        .gcp_service
+        .insert(SignerNodePkSet {
+            public_keys: request.public_keys,
+        })
+        .await
+    {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(Ok("Successfully set node public keys".to_string())),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(Ok("failed to save the keys".to_string())),
+        ),
+    }
 }
 
 /// Validate whether the current state of the sign node is useable or not.
