@@ -1,5 +1,6 @@
 use crate::key_recovery::get_user_recovery_pk;
 use crate::msg::{AddKeyRequest, AddKeyResponse, NewAccountRequest, NewAccountResponse};
+use crate::nar;
 use crate::oauth::{OAuthTokenVerifier, UniversalTokenVerifier};
 use crate::relayer::error::RelayerError;
 use crate::relayer::msg::RegisterAccountRequest;
@@ -8,7 +9,6 @@ use crate::transaction::{
     get_add_key_delegate_action, get_create_account_delegate_action,
     get_local_signed_delegated_action, get_mpc_signed_delegated_action,
 };
-use crate::{nar, NodeId};
 use axum::{http::StatusCode, routing::post, Extension, Json, Router};
 use near_crypto::{ParseKeyError, PublicKey, SecretKey};
 use near_primitives::account::id::ParseAccountError;
@@ -18,7 +18,7 @@ use rand::{distributions::Alphanumeric, Rng};
 use std::net::SocketAddr;
 
 pub struct Config {
-    pub id: NodeId,
+    pub env: String,
     pub port: u16,
     pub sign_nodes: Vec<String>,
     pub near_rpc: String,
@@ -33,7 +33,7 @@ pub struct Config {
 
 pub async fn run(config: Config) {
     let Config {
-        id,
+        env,
         port,
         sign_nodes,
         near_rpc,
@@ -44,7 +44,7 @@ pub async fn run(config: Config) {
         account_lookup_url,
         pagoda_firebase_audience_id,
     } = config;
-    let _span = tracing::debug_span!("run", id, port);
+    let _span = tracing::debug_span!("run", env, port);
     tracing::debug!(?sign_nodes, "running a leader node");
 
     let client = NearRpcAndRelayerClient::connect(&near_rpc, relayer_url);
@@ -66,7 +66,7 @@ pub async fn run(config: Config) {
         .unwrap();
 
     let state = LeaderState {
-        id,
+        env,
         sign_nodes,
         client,
         reqwest_client: reqwest::Client::new(),
@@ -96,7 +96,7 @@ pub async fn run(config: Config) {
 
 #[derive(Clone)]
 struct LeaderState {
-    id: NodeId,
+    env: String,
     sign_nodes: Vec<String>,
     client: NearRpcAndRelayerClient,
     reqwest_client: reqwest::Client,
@@ -252,7 +252,7 @@ mod response {
     }
 }
 
-#[tracing::instrument(level = "info", skip_all, fields(id = state.id))]
+#[tracing::instrument(level = "info", skip_all, fields(env = state.env))]
 async fn new_account<T: OAuthTokenVerifier>(
     Extension(state): Extension<LeaderState>,
     Json(request): Json<NewAccountRequest>,
@@ -405,7 +405,7 @@ async fn process_add_key<T: OAuthTokenVerifier>(
     .await
 }
 
-#[tracing::instrument(level = "info", skip_all, fields(id = state.id))]
+#[tracing::instrument(level = "info", skip_all, fields(env = state.env))]
 async fn add_key<T: OAuthTokenVerifier>(
     Extension(state): Extension<LeaderState>,
     Json(request): Json<AddKeyRequest>,
