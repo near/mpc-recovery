@@ -113,8 +113,14 @@ async fn load_account_creator_sk(
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // install global collector configured based on RUST_LOG env var.
-    tracing_subscriber::fmt::init();
+    // Install global collector configured based on RUST_LOG env var.
+    let mut subscriber = tracing_subscriber::fmt();
+    // Check if running in Google Cloud Run: https://cloud.google.com/run/docs/container-contract#services-env-vars
+    if std::env::var("K_SERVICE").is_ok() {
+        // Disable colored logging as it messes up Google's log formatting
+        subscriber = subscriber.with_ansi(false);
+    }
+    subscriber.init();
     let _span = tracing::trace_span!("cli").entered();
 
     match Cli::parse() {
