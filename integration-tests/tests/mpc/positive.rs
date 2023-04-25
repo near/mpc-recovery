@@ -54,13 +54,14 @@ async fn test_basic_action() -> anyhow::Result<()> {
         Box::pin(async move {
             let account_id = account::random(ctx.worker)?;
             let user_public_key = key::random();
+            let oidc_token = token::valid_random();
 
             // Create account
             let (status_code, new_acc_response) = ctx
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
-                    oidc_token: token::valid_random(),
+                    oidc_token: oidc_token.clone(),
                     public_key: user_public_key.clone(),
                 })
                 .await?;
@@ -83,7 +84,7 @@ async fn test_basic_action() -> anyhow::Result<()> {
                 .leader_node
                 .add_key(AddKeyRequest {
                     near_account_id: Some(account_id.to_string()),
-                    oidc_token: token::valid_random(),
+                    oidc_token: oidc_token.clone(),
                     public_key: new_user_public_key.clone(),
                 })
                 .await?;
@@ -105,7 +106,7 @@ async fn test_basic_action() -> anyhow::Result<()> {
                 .leader_node
                 .add_key(AddKeyRequest {
                     near_account_id: Some(account_id.to_string()),
-                    oidc_token: token::valid_random(),
+                    oidc_token,
                     public_key: new_user_public_key.clone(),
                 })
                 .await?;

@@ -9,6 +9,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
         Box::pin(async move {
             let account_id = account::random(ctx.worker)?;
             let user_public_key = key::random();
+            let oidc_token = token::valid_random();
 
             let (status_code, new_acc_response) = ctx
                 .leader_node
@@ -26,7 +27,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
-                    oidc_token: token::valid_random(),
+                    oidc_token: oidc_token.clone(),
                     public_key: user_public_key.clone(),
                 })
                 .await?;
@@ -60,7 +61,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                 .leader_node
                 .add_key(AddKeyRequest {
                     near_account_id: Some(account_id.to_string()),
-                    oidc_token: token::valid_random(),
+                    oidc_token,
                     public_key: new_user_public_key.clone(),
                 })
                 .await?;
@@ -90,12 +91,13 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
         Box::pin(async move {
             let malformed_account_id = account::malformed();
             let user_public_key = key::random();
+            let oidc_token = token::valid_random();
 
             let (status_code, new_acc_response) = ctx
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: malformed_account_id.to_string(),
-                    oidc_token: token::valid_random(),
+                    oidc_token: oidc_token.clone(),
                     public_key: user_public_key.clone(),
                 })
                 .await?;
@@ -109,7 +111,7 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
-                    oidc_token: token::valid_random(),
+                    oidc_token: oidc_token.clone(),
                     public_key: user_public_key.clone(),
                 })
                 .await?;
@@ -131,7 +133,7 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
                 .leader_node
                 .add_key(AddKeyRequest {
                     near_account_id: Some(malformed_account_id.to_string()),
-                    oidc_token: token::valid_random(),
+                    oidc_token: oidc_token.clone(),
                     public_key: new_user_public_key.clone(),
                 })
                 .await?;
@@ -143,7 +145,7 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
                 .leader_node
                 .add_key(AddKeyRequest {
                     near_account_id: Some(account_id.to_string()),
-                    oidc_token: token::valid_random(),
+                    oidc_token,
                     public_key: new_user_public_key.clone(),
                 })
                 .await?;
@@ -172,12 +174,13 @@ async fn test_malformed_public_key() -> anyhow::Result<()> {
         Box::pin(async move {
             let account_id = account::random(ctx.worker)?;
             let malformed_public_key = key::malformed();
+            let oidc_token = token::valid_random();
 
             let (status_code, new_acc_response) = ctx
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
-                    oidc_token: token::valid_random(),
+                    oidc_token: oidc_token.clone(),
                     public_key: malformed_public_key.clone(),
                 })
                 .await?;
@@ -191,7 +194,7 @@ async fn test_malformed_public_key() -> anyhow::Result<()> {
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
-                    oidc_token: token::valid_random(),
+                    oidc_token: oidc_token.clone(),
                     public_key: user_public_key.clone(),
                 })
                 .await?;
@@ -211,7 +214,7 @@ async fn test_malformed_public_key() -> anyhow::Result<()> {
                 .leader_node
                 .add_key(AddKeyRequest {
                     near_account_id: Some(account_id.to_string()),
-                    oidc_token: token::valid_random(),
+                    oidc_token: oidc_token.clone(),
                     public_key: malformed_public_key.clone(),
                 })
                 .await?;
@@ -225,7 +228,7 @@ async fn test_malformed_public_key() -> anyhow::Result<()> {
                 .leader_node
                 .add_key(AddKeyRequest {
                     near_account_id: Some(account_id.to_string()),
-                    oidc_token: token::valid_random(),
+                    oidc_token,
                     public_key: new_user_public_key.clone(),
                 })
                 .await?;
