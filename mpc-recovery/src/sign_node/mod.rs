@@ -222,8 +222,9 @@ async fn public_key(
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(Err(
-                    "failed to fetch/generate a public key for given account".to_string(),
-                )),
+                    format!("failed to fetch/generate a public key for given account: {}",
+                    err,
+                ))),
             )
         }
     }
