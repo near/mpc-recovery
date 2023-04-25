@@ -94,7 +94,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         Ok(messages) => messages,
         Err(err) => {
             tracing::error!("Unable to broadcast public keys: {err}");
-            return;
+            Vec::new()
         }
     };
     tracing::debug!(?messages, "broadcasted public key statuses");
