@@ -11,7 +11,7 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn test_trio() -> anyhow::Result<()> {
-    with_nodes(4, |ctx| {
+    with_nodes(3, |ctx| {
         Box::pin(async move {
             let payload: String = rand::thread_rng()
                 .sample_iter(&Alphanumeric)
@@ -50,7 +50,7 @@ async fn test_trio() -> anyhow::Result<()> {
 // TODO: write a test with real token
 #[tokio::test]
 async fn test_basic_action() -> anyhow::Result<()> {
-    with_nodes(4, |ctx| {
+    with_nodes(3, |ctx| {
         Box::pin(async move {
             let account_id = account::random(ctx.worker)?;
             let user_public_key = key::random();

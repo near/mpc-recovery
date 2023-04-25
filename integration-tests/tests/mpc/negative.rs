@@ -5,7 +5,7 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn test_invalid_token() -> anyhow::Result<()> {
-    with_nodes(4, |ctx| {
+    with_nodes(1, |ctx| {
         Box::pin(async move {
             let account_id = account::random(ctx.worker)?;
             let user_public_key = key::random();
@@ -86,7 +86,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_malformed_account_id() -> anyhow::Result<()> {
-    with_nodes(4, |ctx| {
+    with_nodes(1, |ctx| {
         Box::pin(async move {
             let malformed_account_id = account::malformed();
             let user_public_key = key::random();
@@ -168,7 +168,7 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_malformed_public_key() -> anyhow::Result<()> {
-    with_nodes(4, |ctx| {
+    with_nodes(1, |ctx| {
         Box::pin(async move {
             let account_id = account::random(ctx.worker)?;
             let malformed_public_key = key::malformed();
@@ -252,7 +252,7 @@ async fn test_malformed_public_key() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_add_key_to_non_existing_account() -> anyhow::Result<()> {
-    with_nodes(4, |ctx| {
+    with_nodes(1, |ctx| {
         Box::pin(async move {
             let account_id = account::random(ctx.worker)?;
             let user_public_key = key::random();
