@@ -23,6 +23,9 @@ impl Relayer {
         relayer_account_id: &AccountId,
         relayer_account_sk: &SecretKey,
         creator_account_id: &AccountId,
+        social_db_id: &AccountId,
+        social_account_id: &AccountId,
+        social_account_sk: &SecretKey,
     ) -> anyhow::Result<Self> {
         super::create_network(docker, network).await?;
         let web_port = portpicker::pick_unused_port().expect("no free ports");
@@ -61,6 +64,10 @@ impl Relayer {
                 format!("PUBLIC_KEY={}", relayer_account_sk.public_key()),
                 format!("PRIVATE_KEY={}", relayer_account_sk),
                 format!("RELAYER_WHITELISTED_CONTRACT={}", creator_account_id),
+                format!("CUSTOM_SOCIAL_DB_ID={}", social_db_id),
+                format!("STORAGE_ACCOUNT_ID={}", social_account_id),
+                format!("STORAGE_PUBLIC_KEY={}", social_account_sk.public_key()),
+                format!("STORAGE_PRIVATE_KEY={}", social_account_sk),
             ]),
             ..Default::default()
         };
