@@ -95,7 +95,6 @@ where
     let leader_node = LeaderNode::start(
         &docker,
         NETWORK,
-        0,
         signer_urls.clone(),
         &near_rpc,
         &relayer.address,

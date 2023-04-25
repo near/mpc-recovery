@@ -15,6 +15,7 @@ use hyper_rustls::HttpsConnector;
 
 #[derive(Clone)]
 pub struct GcpService {
+    env: String,
     project_id: String,
     datastore: Datastore<HttpsConnector<HttpConnector>>,
     secret_manager: SecretManager<HttpsConnector<HttpConnector>>,
@@ -26,6 +27,7 @@ pub trait KeyKind {
 
 impl GcpService {
     pub async fn new(
+        env: String,
         project_id: String,
         gcp_datastore_url: Option<String>,
     ) -> anyhow::Result<Self> {
@@ -61,6 +63,7 @@ impl GcpService {
         }
 
         Ok(Self {
+            env,
             project_id,
             datastore,
             secret_manager,
@@ -94,7 +97,9 @@ impl GcpService {
         let request = LookupRequest {
             keys: Some(vec![Key {
                 path: Some(vec![PathElement {
-                    kind: Some(T::kind()),
+                    // We can't create multiple datastore databases in GCP, so we have to suffix
+                    // type kinds with env (`dev`, `prod`).
+                    kind: Some(format!("{}-{}", T::kind(), self.env)),
                     name: Some(name_key.to_string()),
                     id: None,
                 }]),
@@ -122,8 +127,18 @@ impl GcpService {
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
-    pub async fn insert<T: IntoValue>(&self, value: T) -> anyhow::Result<()> {
-        let entity = Entity::from_value(value.into_value())?;
+    pub async fn insert<T: IntoValue + KeyKind>(&self, value: T) -> anyhow::Result<()> {
+        let mut entity = Entity::from_value(value.into_value())?;
+        let path_element = entity
+            .key
+            .as_mut()
+            .and_then(|k| k.path.as_mut())
+            .and_then(|p| p.first_mut());
+        if let Some(path_element) = path_element {
+            // We can't create multiple datastore databases in GCP, so we have to suffix
+            // type kinds with env (`dev`, `prod`).
+            path_element.kind = Some(format!("{}-{}", T::kind(), self.env))
+        }
 
         let request = CommitRequest {
             database_id: Some("".to_string()),
