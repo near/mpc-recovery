@@ -90,12 +90,21 @@ async fn get_or_generate_user_creds(
         ))
         .await
     {
-        Ok(Some(user_credentials)) => Ok(user_credentials),
+        Ok(Some(user_credentials)) => {
+            tracing::debug!(internal_account_id, "found an existing user");
+            Ok(user_credentials)
+        }
         Ok(None) => {
+            let key_pair = ExpandedKeyPair::create();
+            tracing::debug!(
+                internal_account_id,
+                public_key = ?key_pair.public_key,
+                "generating credentials for a new user"
+            );
             let user_credentials = UserCredentials {
                 node_id: state.node_info.our_index,
                 internal_account_id,
-                key_pair: ExpandedKeyPair::create(),
+                key_pair,
             };
             state.gcp_service.insert(user_credentials.clone()).await?;
             Ok(user_credentials)

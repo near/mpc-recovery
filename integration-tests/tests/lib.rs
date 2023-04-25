@@ -181,8 +181,15 @@ mod key {
 }
 
 mod token {
-    pub fn valid() -> String {
-        "validToken".to_string()
+    use rand::{distributions::Alphanumeric, Rng};
+
+    pub fn valid_random() -> String {
+        let random: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(10)
+            .map(char::from)
+            .collect();
+        format!("validToken:{}", random)
     }
 
     pub fn invalid() -> String {
