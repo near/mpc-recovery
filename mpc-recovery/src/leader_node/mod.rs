@@ -328,15 +328,28 @@ fn get_acc_id_from_pk(
     account_lookup_url: String,
 ) -> Result<AccountId, anyhow::Error> {
     let url = format!("{}/publicKey/{}/accounts", account_lookup_url, public_key);
+    tracing::info!(
+        url = url.clone(),
+        public_key = public_key.to_string(),
+        "fetching account id from public key"
+    );
     let client = reqwest::blocking::Client::new();
     let response = client.get(url).send()?.text()?;
     let accounts: Vec<String> = serde_json::from_str(&response)?;
-    Ok(accounts
-        .first()
-        .cloned()
-        .unwrap_or_default()
-        .parse()
-        .unwrap())
+    tracing::info!(accounts = ?accounts, "fetched accounts");
+    match accounts.first() {
+        Some(account_id) => {
+            tracing::info!(account_id = account_id, "using first account id");
+            Ok(account_id.parse()?)
+        }
+        None => {
+            tracing::error!(
+                public_key = public_key.to_string(),
+                "no account found for pk"
+            );
+            Err(anyhow::anyhow!("no account found for pk: {}", public_key))
+        }
+    }
 }
 
 async fn process_add_key<T: OAuthTokenVerifier>(
