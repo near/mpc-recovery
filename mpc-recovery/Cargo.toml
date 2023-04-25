@@ -7,15 +7,6 @@ edition = "2021"
 name = "mpc-recovery"
 path = "src/main.rs"
 
-# We have encountered issue with linking GMP on ARM macos machines. This is a temporary fix that
-# replaces GMP implementation with num-bigint.
-# [target.'cfg(macos)'.dependencies]
-# curv = { package = "curv-kzen", version = "0.9", default-features = false, features = ["num-bigint"] }
-# multi-party-eddsa = { git = "https://github.com/ZenGo-X/multi-party-eddsa.git", default-features = false }
-
-# [target.'cfg(unix)'.dependencies]
-# multi-party-eddsa = { git = "https://github.com/ZenGo-X/multi-party-eddsa.git" }
-
 [dependencies]
 actix-rt = "2.8"
 anyhow = "1"
