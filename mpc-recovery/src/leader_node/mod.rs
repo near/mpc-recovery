@@ -82,7 +82,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
     };
 
     // Get keys from all sign nodes, and broadcast them out as a set.
-    let pk_set = match gather_sign_node_pks(&state).await {
+    let pk_set = match gather_sign_node_pk_shares(&state).await {
         Ok(pk_set) => pk_set,
         Err(err) => {
             tracing::error!("Unable to gather public keys: {err}");
@@ -463,15 +463,16 @@ async fn add_key<T: OAuthTokenVerifier>(
     }
 }
 
-async fn gather_sign_node_pks(state: &LeaderState) -> anyhow::Result<Vec<Point<Ed25519>>> {
+async fn gather_sign_node_pk_shares(state: &LeaderState) -> anyhow::Result<Vec<Point<Ed25519>>> {
     let fut = nar::retry_every(std::time::Duration::from_secs(1), || async {
-        let results: anyhow::Result<Vec<(usize, Point<Ed25519>)>> = crate::transaction::call(
-            &state.reqwest_client,
-            &state.sign_nodes,
-            "public_key_node",
-            (),
-        )
-        .await;
+        let results: anyhow::Result<Vec<(usize, Point<Ed25519>)>> =
+            crate::transaction::call_all_nodes(
+                &state.reqwest_client,
+                &state.sign_nodes,
+                "public_key_node",
+                (),
+            )
+            .await;
         let mut results = match results {
             Ok(results) => results,
             Err(err) => {
@@ -501,7 +502,7 @@ async fn broadcast_pk_set(
         public_keys: pk_set,
     };
 
-    let messages: Vec<String> = crate::transaction::call(
+    let messages: Vec<String> = crate::transaction::call_all_nodes(
         &state.reqwest_client,
         &state.sign_nodes,
         "accept_pk_set",

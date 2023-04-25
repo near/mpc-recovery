@@ -1,5 +1,4 @@
 use curv::elliptic::curves::{Ed25519, Point};
-use ed25519_dalek::Signature;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -56,23 +55,6 @@ impl AddKeyResponse {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct LeaderRequest {
-    pub payload: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
-#[allow(clippy::large_enum_variant)]
-pub enum LeaderResponse {
-    Ok {
-        #[serde(with = "hex_sig_share")]
-        signature: Signature,
-    },
-    Err,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
 pub struct SigShareRequest {
     pub oidc_token: String,
     pub payload: Vec<u8>,
@@ -81,37 +63,4 @@ pub struct SigShareRequest {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AcceptNodePublicKeysRequest {
     pub public_keys: Vec<Point<Ed25519>>,
-}
-
-mod hex_sig_share {
-    use ed25519_dalek::Signature;
-    use serde::{Deserialize, Deserializer, Serializer};
-
-    pub fn serialize<S>(sig_share: &Signature, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let s = hex::encode(Signature::to_bytes(*sig_share));
-        serializer.serialize_str(&s)
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Signature, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        Signature::from_bytes(
-            &<[u8; Signature::BYTE_SIZE]>::try_from(
-                hex::decode(s).map_err(serde::de::Error::custom)?,
-            )
-            .map_err(|v: Vec<u8>| {
-                serde::de::Error::custom(format!(
-                    "signature has incorrect length: expected {} bytes, but got {}",
-                    Signature::BYTE_SIZE,
-                    v.len()
-                ))
-            })?,
-        )
-        .map_err(serde::de::Error::custom)
-    }
 }

@@ -88,7 +88,7 @@ enum Cli {
     },
 }
 
-async fn load_sh_skare(
+async fn load_sh_share(
     gcp_service: &GcpService,
     env: &str,
     node_id: u64,
@@ -198,7 +198,7 @@ async fn main() -> anyhow::Result<()> {
         } => {
             let gcp_service =
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
-            let sk_share = load_sh_skare(&gcp_service, &env, node_id, sk_share).await?;
+            let sk_share = load_sh_share(&gcp_service, &env, node_id, sk_share).await?;
 
             // TODO Import just the private key and derive the rest
             let sk_share: ExpandedKeyPair = serde_json::from_str(&sk_share).unwrap();
