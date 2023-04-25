@@ -75,7 +75,8 @@ impl OAuthTokenVerifier for PagodaFirebaseTokenVerifier {
     // Google: https://developers.google.com/identity/openid-connect/openid-connect#validatinganidtoken
     // Firebase: https://firebase.google.com/docs/auth/admin/verify-id-tokens#verify_id_tokens_using_a_third-party_jwt_library
     async fn verify_token(token: &str, audience: &str) -> anyhow::Result<IdTokenClaims> {
-        let public_key = get_pagoda_firebase_public_key().expect("Failed to get Google public key");
+        let public_key = get_pagoda_firebase_public_key()
+            .map_err(|e| anyhow::anyhow!("failed to get Firebase public key: {e}"))?;
 
         let pagoda_firebase_issuer_id: String =
             format!("https://securetoken.google.com/{}", audience);
@@ -86,7 +87,7 @@ impl OAuthTokenVerifier for PagodaFirebaseTokenVerifier {
             &pagoda_firebase_issuer_id,
             audience,
         )
-        .expect("Failed to validate JWT");
+        .map_err(|e| anyhow::anyhow!("failed to validate JWT: {e}"))?;
 
         Ok(claims)
     }
@@ -135,14 +136,21 @@ struct Jwks {
     keys: Vec<Value>,
 }
 
-fn get_pagoda_firebase_public_key() -> Result<String, reqwest::Error> {
+fn get_pagoda_firebase_public_key() -> anyhow::Result<String> {
     // TODO: handle errors
     let url =
         "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
     let client = reqwest::blocking::Client::new();
     let response = client.get(url).send()?;
     let json: HashMap<String, Value> = response.json()?;
-    let key = json.iter().next().unwrap().1.as_str().unwrap().to_string();
+    let key = json
+        .iter()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("Firebase response json object has no fields"))?
+        .1
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("Firebase public key is not a valid string"))?
+        .to_string();
     Ok(key)
 }
 
