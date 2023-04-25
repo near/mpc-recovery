@@ -28,7 +28,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(
     let our_index = usize::try_from(our_index).expect("This index is way to big");
 
     let pk_set = gcp_service
-        .get::<_, SignerNodePkSet>(pk_set::MAIN_KEY)
+        .get::<_, SignerNodePkSet>(format!("{}/{}", our_index, pk_set::MAIN_KEY))
         .await
         .unwrap_or_default();
 
@@ -280,6 +280,7 @@ async fn accept_pk_set(
     match state
         .gcp_service
         .insert(SignerNodePkSet {
+            node_id: state.node_info.our_index,
             public_keys: request.public_keys,
         })
         .await
