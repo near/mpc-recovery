@@ -179,7 +179,6 @@ impl LeaderNode {
     pub async fn start(
         docker: &Docker,
         network: &str,
-        node_id: u64,
         sign_nodes: Vec<String>,
         near_rpc: &str,
         relayer_url: &str,
@@ -195,8 +194,6 @@ impl LeaderNode {
 
         let mut cmd = vec![
             "start-leader".to_string(),
-            "--node-id".to_string(),
-            node_id.to_string(),
             "--web-port".to_string(),
             web_port.to_string(),
             "--near-rpc".to_string(),
