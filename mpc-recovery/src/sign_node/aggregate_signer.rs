@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use std::sync::{Arc, RwLock};
 
 use curv::arithmetic::Converter;
 use curv::cryptographic_primitives::commitments::{
@@ -227,16 +228,25 @@ impl Revealed {
 // Stores info about the other nodes we're interacting with
 #[derive(Clone)]
 pub struct NodeInfo {
-    pub nodes_public_keys: Option<Vec<Point<Ed25519>>>,
+    pub nodes_public_keys: Arc<RwLock<Option<Vec<Point<Ed25519>>>>>,
     pub our_index: usize,
 }
 
 impl NodeInfo {
+    pub fn new(our_index: usize, nodes_public_keys: Option<Vec<Point<Ed25519>>>) -> Self {
+        Self {
+            our_index,
+            nodes_public_keys: Arc::new(RwLock::new(nodes_public_keys)),
+        }
+    }
+
     fn signed_by_every_node(
         &self,
         signed: Vec<SignedCommitment>,
     ) -> Result<Vec<(AggrCommitment, Point<Ed25519>)>, String> {
         self.nodes_public_keys
+            .read()
+            .map_err(|e| e.to_string())?
             .as_ref()
             .ok_or_else(|| "No nodes public keys available to sign".to_string())?
             .iter()
@@ -351,10 +361,7 @@ mod tests {
             n3.public_key.clone(),
         ];
 
-        let ni = |n| NodeInfo {
-            nodes_public_keys: Some(nodes_public_keys.clone()),
-            our_index: n,
-        };
+        let ni = |n| NodeInfo::new(n, Some(nodes_public_keys.clone()));
 
         // Set up nodes with that config
         let mut s1 = SigningState::new();

@@ -27,10 +27,7 @@ pub async fn run(gcp_service: GcpService, our_index: NodeId, node_key: ExpandedK
         node_key,
         signing_state,
         pagoda_firebase_audience_id,
-        node_info: NodeInfo {
-            nodes_public_keys: None,
-            our_index,
-        },
+        node_info: NodeInfo::new(our_index, None),
     };
 
     let app = Router::new()
@@ -124,7 +121,7 @@ async fn commit<T: OAuthTokenVerifier>(
     Extension(state): Extension<SignNodeState>,
     Json(request): Json<SigShareRequest>,
 ) -> (StatusCode, Json<Result<SignedCommitment, String>>) {
-    if let Err(msg) = check_if_ready(&state) {
+    if let Err(msg) = check_if_ready(&state).await {
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(Err(msg)));
     }
 
@@ -152,7 +149,7 @@ async fn reveal(
     Extension(state): Extension<SignNodeState>,
     Json(request): Json<Vec<SignedCommitment>>,
 ) -> (StatusCode, Json<Result<Reveal, String>>) {
-    if let Err(msg) = check_if_ready(&state) {
+    if let Err(msg) = check_if_ready(&state).await {
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(Err(msg)));
     }
 
@@ -178,7 +175,7 @@ async fn signature_share(
     Extension(state): Extension<SignNodeState>,
     Json(request): Json<Vec<Reveal>>,
 ) -> (StatusCode, Json<Result<protocols::Signature, String>>) {
-    if let Err(msg) = check_if_ready(&state) {
+    if let Err(msg) = check_if_ready(&state).await {
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(Err(msg)));
     }
 
@@ -234,7 +231,7 @@ async fn public_key_node(
 
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn accept_pk_set(
-    Extension(mut state): Extension<SignNodeState>,
+    Extension(state): Extension<SignNodeState>,
     Json(request): Json<AcceptNodePublicKeysRequest>,
 ) -> (StatusCode, Json<String>) {
     let index = state.node_info.our_index;
@@ -244,7 +241,10 @@ async fn accept_pk_set(
             "Sign node could not accept the public keys: current node index={index} does not match up")));
     }
 
-    state.node_info.nodes_public_keys = Some(request.public_keys);
+    let Ok(mut public_keys) = state.node_info.nodes_public_keys.write() else {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json("Unable to write into public keys. RwLock potentially poisoned".into()));
+    };
+    *public_keys = Some(request.public_keys);
     (
         StatusCode::OK,
         Json("Successfully set node public keys".to_string()),
@@ -252,8 +252,12 @@ async fn accept_pk_set(
 }
 
 /// Validate whether the current state of the sign node is useable or not.
-fn check_if_ready(state: &SignNodeState) -> Result<(), String> {
-    if state.node_info.nodes_public_keys.is_none() {
+async fn check_if_ready(state: &SignNodeState) -> Result<(), String> {
+    let Ok(public_keys) =  state.node_info.nodes_public_keys.read() else {
+        return Err("Unable to check public keys. RwLock potentially poisoned".into());
+    };
+
+    if public_keys.is_none() {
         return Err(
             "Sign node is not ready yet: waiting on all public keys from leader node".into(),
         );

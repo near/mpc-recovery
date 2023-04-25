@@ -29,7 +29,7 @@ where
     F: FnMut() -> T,
     T: core::future::Future<Output = core::result::Result<R, E>>,
 {
-    let retry_strategy = std::iter::repeat_with(|| interval.clone());
+    let retry_strategy = std::iter::repeat_with(|| interval);
     let task = Retry::spawn(retry_strategy, task);
     task.await
 }
