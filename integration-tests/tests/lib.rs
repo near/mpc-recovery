@@ -148,11 +148,11 @@ where
 }
 
 async fn up_funds_for_account(worker: &Worker<Sandbox>, id: &AccountId) -> anyhow::Result<()> {
-    const amount: u128 = 99 * 10u128.pow(24);
+    const AMOUNT: u128 = 99 * 10u128.pow(24);
     for _ in 0..10 {
         let tmp_account = worker.dev_create_account().await?;
-        tmp_account.transfer_near(id, amount).await?;
-        tmp_account.delete_account(id).await?;
+        tmp_account.transfer_near(id, AMOUNT).await?.into_result()?;
+        tmp_account.delete_account(id).await?.into_result()?;
     }
     Ok(())
 }

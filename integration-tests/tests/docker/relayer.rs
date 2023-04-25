@@ -15,6 +15,7 @@ pub struct Relayer {
 }
 
 impl Relayer {
+    #[allow(clippy::too_many_arguments)] // TODO: fix later
     pub async fn start(
         docker: &Docker,
         network: &str,
