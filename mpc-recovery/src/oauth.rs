@@ -21,8 +21,8 @@ pub trait OAuthTokenVerifier {
         tracing::info!(
             iodc_token = format!("{:.5}...", token),
             public_key = String::from_utf8(public_key.to_vec()).unwrap_or_default(),
-            issuer = issuer.clone(),
-            audience = audience.clone(),
+            issuer = issuer,
+            audience = audience,
             "validate_jwt call"
         );
         let mut validation = Validation::new(Algorithm::RS256);
