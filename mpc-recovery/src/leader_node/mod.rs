@@ -3,7 +3,7 @@ use crate::msg::{
     AcceptNodePublicKeysRequest, AddKeyRequest, AddKeyResponse, NewAccountRequest,
     NewAccountResponse,
 };
-use crate::oauth::{OAuthTokenVerifier, UniversalTokenVerifier};
+use crate::oauth::OAuthTokenVerifier;
 use crate::relayer::error::RelayerError;
 use crate::relayer::msg::RegisterAccountRequest;
 use crate::relayer::NearRpcAndRelayerClient;
@@ -35,7 +35,7 @@ pub struct Config {
     pub pagoda_firebase_audience_id: String,
 }
 
-pub async fn run(config: Config) {
+pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
     let Config {
         id,
         port,
@@ -53,7 +53,8 @@ pub async fn run(config: Config) {
 
     let client = NearRpcAndRelayerClient::connect(&near_rpc, relayer_url);
     // FIXME: We don't have a token for ourselves, but are still forced to allocate allowance.
-    // Using randomly generated tokens ensures the uniqueness of tokens on the relayer side.
+    // Using randomly generated tokens ensures the uniqueness of tokens on the relayer side so
+    // we can update the allowance on each server run.
     let fake_oauth_token: String = rand::thread_rng()
         .sample_iter(&Alphanumeric)
         .take(16)
@@ -62,7 +63,7 @@ pub async fn run(config: Config) {
     client
         .register_account(RegisterAccountRequest {
             account_id: account_creator_id.clone(),
-            allowance: 300_000_000_000_000,
+            allowance: 18_000_000_000_000_000_000, // should be enough to create 700_000+ accs
             oauth_token: fake_oauth_token,
         })
         .await
@@ -102,8 +103,8 @@ pub async fn run(config: Config) {
     let cors_layer = tower_http::cors::CorsLayer::permissive();
 
     let app = Router::new()
-        .route("/new_account", post(new_account::<UniversalTokenVerifier>))
-        .route("/add_key", post(add_key::<UniversalTokenVerifier>))
+        .route("/new_account", post(new_account::<T>))
+        .route("/add_key", post(add_key::<T>))
         .layer(Extension(state))
         .layer(cors_layer);
 

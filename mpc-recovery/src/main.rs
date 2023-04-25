@@ -1,5 +1,9 @@
 use clap::Parser;
-use mpc_recovery::{gcp::GcpService, LeaderConfig};
+use mpc_recovery::{
+    gcp::GcpService,
+    oauth::{PagodaFirebaseTokenVerifier, UniversalTokenVerifier},
+    LeaderConfig,
+};
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_primitives::types::AccountId;
 
@@ -55,6 +59,9 @@ enum Cli {
         /// GCP datastore URL
         #[arg(long, env("MPC_RECOVERY_GCP_DATASTORE_URL"))]
         gcp_datastore_url: Option<String>,
+        /// Whether to accept test tokens
+        #[arg(long, env("MPC_RECOVERY_TEST"), default_value("false"))]
+        test: bool,
     },
     StartSign {
         /// Node ID
@@ -72,6 +79,9 @@ enum Cli {
         /// GCP datastore URL
         #[arg(long, env("MPC_RECOVERY_GCP_DATASTORE_URL"))]
         gcp_datastore_url: Option<String>,
+        /// Whether to accept test tokens
+        #[arg(long, env("MPC_RECOVERY_TEST"), default_value("false"))]
+        test: bool,
     },
 }
 
@@ -109,8 +119,14 @@ async fn load_account_creator_sk(
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // install global collector configured based on RUST_LOG env var.
-    tracing_subscriber::fmt::init();
+    // Install global collector configured based on RUST_LOG env var.
+    let mut subscriber = tracing_subscriber::fmt();
+    // Check if running in Google Cloud Run: https://cloud.google.com/run/docs/container-contract#services-env-vars
+    if std::env::var("K_SERVICE").is_ok() {
+        // Disable colored logging as it messes up Google's log formatting
+        subscriber = subscriber.with_ansi(false);
+    }
+    subscriber.init();
     let _span = tracing::trace_span!("cli").entered();
 
     match Cli::parse() {
@@ -138,6 +154,7 @@ async fn main() -> anyhow::Result<()> {
             pagoda_firebase_audience_id,
             gcp_project_id,
             gcp_datastore_url,
+            test,
         } => {
             let gcp_service = GcpService::new(gcp_project_id, gcp_datastore_url).await?;
             let account_creator_sk =
@@ -145,7 +162,7 @@ async fn main() -> anyhow::Result<()> {
 
             let account_creator_sk = account_creator_sk.parse()?;
 
-            mpc_recovery::run_leader_node(LeaderConfig {
+            let config = LeaderConfig {
                 id: node_id,
                 port: web_port,
                 sign_nodes,
@@ -157,8 +174,13 @@ async fn main() -> anyhow::Result<()> {
                 account_creator_sk,
                 account_lookup_url,
                 pagoda_firebase_audience_id,
-            })
-            .await;
+            };
+
+            if test {
+                mpc_recovery::run_leader_node::<UniversalTokenVerifier>(config).await;
+            } else {
+                mpc_recovery::run_leader_node::<PagodaFirebaseTokenVerifier>(config).await;
+            }
         }
         Cli::StartSign {
             node_id,
@@ -166,6 +188,7 @@ async fn main() -> anyhow::Result<()> {
             web_port,
             gcp_project_id,
             gcp_datastore_url,
+            test,
         } => {
             let gcp_service = GcpService::new(gcp_project_id, gcp_datastore_url).await?;
             let sk_share = load_sh_skare(&gcp_service, node_id, sk_share).await?;
@@ -173,7 +196,23 @@ async fn main() -> anyhow::Result<()> {
             // TODO Import just the private key and derive the rest
             let sk_share: ExpandedKeyPair = serde_json::from_str(&sk_share).unwrap();
 
-            mpc_recovery::run_sign_node(gcp_service, node_id, sk_share, web_port).await;
+            if test {
+                mpc_recovery::run_sign_node::<UniversalTokenVerifier>(
+                    gcp_service,
+                    node_id,
+                    sk_share,
+                    web_port,
+                )
+                .await;
+            } else {
+                mpc_recovery::run_sign_node::<PagodaFirebaseTokenVerifier>(
+                    gcp_service,
+                    node_id,
+                    sk_share,
+                    web_port,
+                )
+                .await;
+            }
         }
     }
 

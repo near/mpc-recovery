@@ -2,7 +2,7 @@ use self::aggregate_signer::{NodeInfo, Reveal, SignedCommitment, SigningState};
 use self::user_credentials::UserCredentials;
 use crate::gcp::GcpService;
 use crate::msg::{AcceptNodePublicKeysRequest, SigShareRequest};
-use crate::oauth::{OAuthTokenVerifier, UniversalTokenVerifier};
+use crate::oauth::OAuthTokenVerifier;
 use crate::primitives::InternalAccountId;
 use crate::sign_node::pk_set::SignerNodePkSet;
 use crate::NodeId;
@@ -18,7 +18,12 @@ pub mod pk_set;
 pub mod user_credentials;
 
 #[tracing::instrument(level = "debug", skip(gcp_service, node_key))]
-pub async fn run(gcp_service: GcpService, our_index: NodeId, node_key: ExpandedKeyPair, port: u16) {
+pub async fn run<T: OAuthTokenVerifier + 'static>(
+    gcp_service: GcpService,
+    our_index: NodeId,
+    node_key: ExpandedKeyPair,
+    port: u16,
+) {
     tracing::debug!("running a sign node");
     let our_index = usize::try_from(our_index).expect("This index is way to big");
 
@@ -38,7 +43,7 @@ pub async fn run(gcp_service: GcpService, our_index: NodeId, node_key: ExpandedK
     };
 
     let app = Router::new()
-        .route("/commit", post(commit::<UniversalTokenVerifier>))
+        .route("/commit", post(commit::<T>))
         .route("/reveal", post(reveal))
         .route("/signature_share", post(signature_share))
         .route("/public_key", post(public_key))
@@ -83,12 +88,21 @@ async fn get_or_generate_user_creds(
         ))
         .await
     {
-        Ok(Some(user_credentials)) => Ok(user_credentials),
+        Ok(Some(user_credentials)) => {
+            tracing::debug!(internal_account_id, "found an existing user");
+            Ok(user_credentials)
+        }
         Ok(None) => {
+            let key_pair = ExpandedKeyPair::create();
+            tracing::debug!(
+                internal_account_id,
+                public_key = ?key_pair.public_key,
+                "generating credentials for a new user"
+            );
             let user_credentials = UserCredentials {
                 node_id: state.node_info.our_index,
                 internal_account_id,
-                key_pair: ExpandedKeyPair::create(),
+                key_pair,
             };
             state.gcp_service.insert(user_credentials.clone()).await?;
             Ok(user_credentials)
@@ -218,9 +232,10 @@ async fn public_key(
             tracing::error!(?err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(Err(
-                    "failed to fetch/generate a public key for given account".to_string(),
-                )),
+                Json(Err(format!(
+                    "failed to fetch/generate a public key for given account: {}",
+                    err,
+                ))),
             )
         }
     }
