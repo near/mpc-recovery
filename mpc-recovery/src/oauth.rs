@@ -18,6 +18,13 @@ pub trait OAuthTokenVerifier {
         issuer: &str,
         audience: &str,
     ) -> anyhow::Result<IdTokenClaims> {
+        tracing::info!(
+            iodc_token = format!("{:.5}...", token),
+            public_key = String::from_utf8(public_key.to_vec()).unwrap_or_default(),
+            issuer = issuer.clone(),
+            audience = audience.clone(),
+            "validate_jwt call"
+        );
         let mut validation = Validation::new(Algorithm::RS256);
         validation.set_issuer(&[issuer]);
         validation.set_audience(&[audience]);
@@ -26,6 +33,12 @@ pub trait OAuthTokenVerifier {
 
         let claims =
             decode::<IdTokenClaims>(token, &decoding_key, &validation).map(|t| t.claims)?;
+
+        tracing::info!(
+            claims = format!("{:?}", claims),
+            "validate_jwt call successful"
+        );
+        
         Ok(claims)
     }
 }
