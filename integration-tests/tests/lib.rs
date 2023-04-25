@@ -110,7 +110,7 @@ where
     .await?;
 
     // Wait until all nodes initialize
-    tokio::time::sleep(Duration::from_millis(2000)).await;
+    tokio::time::sleep(Duration::from_millis(10000)).await;
 
     let result = f(TestContext {
         leader_node: &leader_node,

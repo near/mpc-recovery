@@ -103,6 +103,7 @@ impl GcpService {
             read_options: None,
             database_id: Some("".to_string()),
         };
+        tracing::debug!(?request);
         let (_, response) = self
             .datastore
             .projects()
@@ -138,6 +139,7 @@ impl GcpService {
             single_use_transaction: None,
             transaction: None,
         };
+        tracing::debug!(?request);
         let (_, response) = self
             .datastore
             .projects()

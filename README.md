@@ -56,14 +56,9 @@ Internally, we are identifying users by their issuer id (iss) and their unique I
 
 ### Contribute
 
-In order to build the project, you will need to have `protoc` installed and execute the following:
+In order to build the project, you will need to have `protoc` and `gmp` installed. Refer to your system's package manager on how to do this.
 
-```BASH
-# init submodules
-git submodule update --init --recursive
-```
-
-alternatively if you have [nix](https://nixos.org/) and [direnv](https://direnv.net/) installed, you can set up a development environment by running:
+If you have [nix](https://nixos.org/) and [direnv](https://direnv.net/) installed, you can set up a development environment by running:
 
 ```BASH
 direnv allow
