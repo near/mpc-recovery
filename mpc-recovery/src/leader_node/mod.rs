@@ -463,7 +463,7 @@ async fn add_key<T: OAuthTokenVerifier>(
 }
 
 async fn gather_sign_node_pks(state: &LeaderState) -> anyhow::Result<Vec<Point<Ed25519>>> {
-    let fut = nar::retry_every(std::time::Duration::from_millis(250), || async {
+    let fut = nar::retry_every(std::time::Duration::from_secs(1), || async {
         let results: anyhow::Result<Vec<(usize, Point<Ed25519>)>> = crate::transaction::call(
             &state.reqwest_client,
             &state.sign_nodes,
@@ -486,7 +486,7 @@ async fn gather_sign_node_pks(state: &LeaderState) -> anyhow::Result<Vec<Point<E
         anyhow::Result::Ok(results)
     });
 
-    let results = tokio::time::timeout(std::time::Duration::from_secs(10), fut)
+    let results = tokio::time::timeout(std::time::Duration::from_secs(60), fut)
         .await
         .map_err(|_| anyhow::anyhow!("timeout gathering sign node pks"))??;
     Ok(results)

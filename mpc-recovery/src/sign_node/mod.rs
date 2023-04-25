@@ -25,7 +25,7 @@ pub async fn run(gcp_service: GcpService, our_index: NodeId, node_key: ExpandedK
     let pk_set = gcp_service
         .get::<_, SignerNodePkSet>(pk_set::MAIN_KEY)
         .await
-        .expect("failed to connect to GCP Datastore");
+        .unwrap_or_default();
 
     let pagoda_firebase_audience_id = "pagoda-firebase-audience-id".to_string();
     let signing_state = Arc::new(RwLock::new(SigningState::new()));
