@@ -6,6 +6,7 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 use near_crypto::PublicKey;
 use near_jsonrpc_client::errors::{JsonRpcError, JsonRpcServerError};
@@ -22,6 +23,16 @@ use tokio_retry::Retry;
 use crate::relayer::error::RelayerError;
 
 pub(crate) type CachedAccessKeyNonces = RwLock<HashMap<(AccountId, PublicKey), AtomicU64>>;
+
+pub(crate) async fn retry_every<R, E, T, F>(interval: Duration, task: F) -> T::Output
+where
+    F: FnMut() -> T,
+    T: core::future::Future<Output = core::result::Result<R, E>>,
+{
+    let retry_strategy = std::iter::repeat_with(|| interval.clone());
+    let task = Retry::spawn(retry_strategy, task);
+    task.await
+}
 
 pub(crate) async fn retry<R, E, T, F>(task: F) -> T::Output
 where
