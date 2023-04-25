@@ -469,6 +469,13 @@ async fn add_key<T: OAuthTokenVerifier>(
             tracing::error!(err = ?e);
             response::add_key_unauthorized(format!("failed to verify oidc token: {}", err_msg))
         }
+        Err(ref e @ AddKeyError::AccountNotFound(ref err_msg)) => {
+            tracing::error!(err = ?e);
+            response::add_key_bad_request(format!(
+                "failed to recover account_id from pk: {}",
+                err_msg
+            ))
+        }
         Err(e) => {
             tracing::error!(err = ?e);
             response::add_key_internal_error(format!("failed to process new account: {}", e))
@@ -560,7 +567,7 @@ mod tests {
             Err(e) => {
                 assert_eq!(
                     e.to_string(),
-                    format!("no account found for pk: {}", public_key.to_string())
+                    format!("no account found for pk: {}", public_key)
                 );
             }
         }
