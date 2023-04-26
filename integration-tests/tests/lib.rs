@@ -74,6 +74,8 @@ where
     )
     .await?;
 
+    let pagoda_firebase_audience_id = "not actually used in integration tests";
+
     let mut signer_nodes = Vec::new();
     for (i, share) in sk_shares.iter().enumerate().take(nodes) {
         let addr = SignNode::start(
@@ -83,12 +85,11 @@ where
             share,
             &datastore.address,
             GCP_PROJECT_ID,
+            pagoda_firebase_audience_id,
         )
         .await?;
         signer_nodes.push(addr);
     }
-
-    let pagoda_firebase_audience_id = "not actually used in integration tests";
 
     let signer_urls: &Vec<_> = &signer_nodes.iter().map(|n| n.address.clone()).collect();
 

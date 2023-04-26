@@ -285,6 +285,7 @@ impl SignNode {
         sk_share: &ExpandedKeyPair,
         datastore_url: &str,
         gcp_project_id: &str,
+        pagoda_firebase_audience_id: &str,
     ) -> anyhow::Result<SignNode> {
         create_network(docker, network).await?;
         let web_port = portpicker::pick_unused_port().expect("no free ports");
@@ -297,6 +298,8 @@ impl SignNode {
             serde_json::to_string(&sk_share)?,
             "--web-port".to_string(),
             web_port.to_string(),
+            "--pagoda-firebase-audience-id".to_string(),
+            pagoda_firebase_audience_id.to_string(),
             "--gcp-project-id".to_string(),
             gcp_project_id.to_string(),
             "--gcp-datastore-url".to_string(),
