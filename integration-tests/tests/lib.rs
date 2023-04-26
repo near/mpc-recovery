@@ -89,6 +89,7 @@ where
         &social_account_sk,
     )
     .await?;
+    tokio::time::sleep(Duration::from_millis(10000)).await;
 
     let mut signer_nodes = Vec::new();
     for (i, share) in sk_shares.iter().enumerate().take(nodes) {
