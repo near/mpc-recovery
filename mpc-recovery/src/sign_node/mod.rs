@@ -234,6 +234,7 @@ async fn signature_share(
     }
 }
 
+#[allow(clippy::type_complexity)]
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn signature_share_node(
     Extension(state): Extension<SignNodeState>,
