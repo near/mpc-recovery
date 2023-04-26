@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 pub struct RegisterAccountRequest {
     pub account_id: AccountId,
     pub allowance: u64,
+    // This is actually an InternalAccountId.
+    // TODO: rename it to internal_account_id on the relayer side
     pub oauth_token: String,
 }
 

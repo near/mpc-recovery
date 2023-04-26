@@ -54,10 +54,11 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
     tracing::debug!(?sign_nodes, "running a leader node");
 
     let client = NearRpcAndRelayerClient::connect(&near_rpc, relayer_url, relayer_api_key);
-    // FIXME: We don't have a token for ourselves, but are still forced to allocate allowance.
-    // Using randomly generated tokens ensures the uniqueness of tokens on the relayer side so
+    // FIXME: Internal account id is retrieved from the ID token. We don't have a token for ourselves,
+    // but are still forced to allocate allowance.
+    // Using randomly generated internal account id ensures the uniqueness of user idenrifier on the relayer side so
     // we can update the allowance on each server run.
-    let fake_oauth_token: String = rand::thread_rng()
+    let fake_internal_account_id: String = rand::thread_rng()
         .sample_iter(&Alphanumeric)
         .take(16)
         .map(char::from)
@@ -66,7 +67,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         .register_account(RegisterAccountRequest {
             account_id: account_creator_id.clone(),
             allowance: 18_000_000_000_000_000_000, // should be enough to create 700_000+ accs
-            oauth_token: fake_oauth_token,
+            oauth_token: fake_internal_account_id,
         })
         .await
         .unwrap();
@@ -170,7 +171,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         .register_account(RegisterAccountRequest {
             account_id: new_user_account_id.clone(),
             allowance: 300_000_000_000_000,
-            oauth_token: request.oidc_token,
+            oauth_token: internal_acc_id.clone(),
         })
         .await?;
 
