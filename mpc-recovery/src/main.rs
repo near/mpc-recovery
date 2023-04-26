@@ -54,6 +54,7 @@ enum Cli {
             default_value("https://api.kitwallet.app")
         )]
         account_lookup_url: String,
+        /// Firebase Audience ID
         #[arg(long, env("PAGODA_FIREBASE_AUDIENCE_ID"))]
         pagoda_firebase_audience_id: String,
         /// GCP project ID
@@ -79,6 +80,9 @@ enum Cli {
         /// The web port for this server
         #[arg(long, env("MPC_RECOVERY_WEB_PORT"))]
         web_port: u16,
+        /// Firebase Audience ID
+        #[arg(long, env("PAGODA_FIREBASE_AUDIENCE_ID"))]
+        pagoda_firebase_audience_id: String,
         /// GCP project ID
         #[arg(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
         gcp_project_id: String,
@@ -197,6 +201,7 @@ async fn main() -> anyhow::Result<()> {
             node_id,
             sk_share,
             web_port,
+            pagoda_firebase_audience_id,
             gcp_project_id,
             gcp_datastore_url,
             test,
@@ -214,6 +219,7 @@ async fn main() -> anyhow::Result<()> {
                     node_id,
                     sk_share,
                     web_port,
+                    pagoda_firebase_audience_id,
                 )
                 .await;
             } else {
@@ -222,6 +228,7 @@ async fn main() -> anyhow::Result<()> {
                     node_id,
                     sk_share,
                     web_port,
+                    pagoda_firebase_audience_id,
                 )
                 .await;
             }

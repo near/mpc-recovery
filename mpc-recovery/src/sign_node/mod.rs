@@ -23,6 +23,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(
     our_index: NodeId,
     node_key: ExpandedKeyPair,
     port: u16,
+    pagoda_firebase_audience_id: String,
 ) {
     tracing::debug!("running a sign node");
     let our_index = usize::try_from(our_index).expect("This index is way to big");
@@ -32,7 +33,6 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(
         .await
         .unwrap_or_default();
 
-    let pagoda_firebase_audience_id = "pagoda-firebase-audience-id".to_string();
     let signing_state = Arc::new(RwLock::new(SigningState::new()));
     let state = SignNodeState {
         gcp_service,
@@ -152,7 +152,10 @@ async fn commit<T: OAuthTokenVerifier>(
             tracing::error!(err = ?e);
             (
                 StatusCode::BAD_REQUEST,
-                Json(Err(format!("failed to verify oidc token: {}", err_msg))),
+                Json(Err(format!(
+                    "signer failed to verify oidc token: {}",
+                    err_msg
+                ))),
             )
         }
         Err(e) => {

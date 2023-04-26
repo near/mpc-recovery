@@ -289,7 +289,10 @@ async fn new_account<T: OAuthTokenVerifier>(
     );
 
     match process_new_account::<T>(state, request).await {
-        Ok(response) => (StatusCode::OK, Json(response)),
+        Ok(response) => {
+            tracing::debug!("responding with OK");
+            (StatusCode::OK, Json(response))
+        }
         Err(ref e @ NewAccountError::MalformedPublicKey(ref pk, _)) => {
             tracing::error!(err = ?e);
             response::new_acc_bad_request(format!("bad public_key: {}", pk))
@@ -458,7 +461,10 @@ async fn add_key<T: OAuthTokenVerifier>(
     );
 
     match process_add_key::<T>(state, request).await {
-        Ok(response) => (StatusCode::OK, Json(response)),
+        Ok(response) => {
+            tracing::debug!("responding with OK");
+            (StatusCode::OK, Json(response))
+        }
         Err(ref e @ AddKeyError::MalformedPublicKey(ref pk, _)) => {
             tracing::error!(err = ?e);
             response::add_key_bad_request(format!("bad public_key: {}", pk))
