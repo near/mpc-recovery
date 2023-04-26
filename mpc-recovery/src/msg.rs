@@ -84,6 +84,7 @@ pub struct SigShareRequest {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AcceptNodePublicKeysRequest {
     pub public_keys: Vec<Point<Ed25519>>,
+    pub signature_shares: Vec<multi_party_eddsa::protocols::Signature>,
 }
 
 mod hex_sig_share {

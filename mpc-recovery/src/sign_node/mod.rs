@@ -58,6 +58,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         .route("/commit", post(commit::<T>))
         .route("/reveal", post(reveal))
         .route("/signature_share", post(signature_share))
+        .route("/signature_share_node", post(signature_share_node))
         .route("/public_key", post(public_key))
         .route("/public_key_node", post(public_key_node))
         .route("/accept_pk_set", post(accept_pk_set))
@@ -234,6 +235,25 @@ async fn signature_share(
 }
 
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
+async fn signature_share_node(
+    Extension(state): Extension<SignNodeState>,
+    Json(_): Json<()>,
+) -> (
+    StatusCode,
+    Json<Result<(usize, protocols::Signature), String>>,
+) {
+    let mut node_pks = state.node_info.nodes_public_keys.write().await;
+    match node_pks.initialize(&state.node_key) {
+        Ok(sig) => (StatusCode::OK, Json(Ok((state.node_info.our_index, sig)))),
+        Err(err) => {
+            tracing::error!(err = ?err, "failed to initialize node public keys");
+            let msg = format!("failed to initialize node public keys: {}", err);
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(Err(msg)))
+        }
+    }
+}
+
+#[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn public_key(
     Extension(state): Extension<SignNodeState>,
     Json(request): Json<InternalAccountId>,
@@ -281,17 +301,18 @@ async fn accept_pk_set(
             "Sign node could not accept the public keys: current node index={index} does not match up"))));
     }
 
-    let mut public_keys = state.node_info.nodes_public_keys.write().await;
-    if public_keys.is_some() {
+    let mut node_pks = state.node_info.nodes_public_keys.write().await;
+    if let Err(err) =
+        node_pks.finalize(index, request.public_keys.clone(), request.signature_shares)
+    {
+        tracing::error!(err = ?err, "failed to finalize node public keys");
         return (
             StatusCode::BAD_REQUEST,
-            Json(Err(
-                "This node is already initialized with public keys".to_string()
-            )),
+            Json(Err(format!(
+                "Sign node could not accept the public keys: {err}",
+            ))),
         );
     }
-    tracing::debug!("Setting node public keys => {:?}", request.public_keys);
-    public_keys.replace(request.public_keys.clone());
     match state
         .gcp_service
         .insert(SignerNodePkSet {
@@ -313,10 +334,10 @@ async fn accept_pk_set(
 
 /// Validate whether the current state of the sign node is useable or not.
 async fn check_if_ready(state: &SignNodeState) -> Result<(), String> {
-    let public_keys = state.node_info.nodes_public_keys.read().await;
-    if public_keys.is_none() {
+    let node_pks = state.node_info.nodes_public_keys.read().await;
+    if node_pks.get().is_none() {
         return Err(
-            "Sign node is not ready yet: waiting on all public keys from leader node".into(),
+            "Sign node is not ready yet: waiting to receive public keys from leader node".into(),
         );
     }
 
