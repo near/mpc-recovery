@@ -261,6 +261,8 @@ impl NodeInfo {
     }
 }
 
+// Shouldn't be a huge concern to have large enum variant: each node only has one of these
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum NodePublicKeys {
     Uninitialized,
