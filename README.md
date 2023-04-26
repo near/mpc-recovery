@@ -90,7 +90,7 @@ Running integration tests requires you to have relayer docker image present on y
 
 ```BASH
 # TODO: upstream these changes
-git clone -b daniyar/custom-entrypoint git@github.com:near/pagoda-relayer-rs-fastauth.git
+git clone -b mpc/entrypoint git@github.com:near/pagoda-relayer-rs-fastauth.git
 docker build pagoda-relayer-rs-fastauth -t pagoda-relayer-rs-fastauth
 ```
 
