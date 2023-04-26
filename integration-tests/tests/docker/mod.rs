@@ -279,6 +279,7 @@ pub struct SignNode {
 }
 
 impl SignNode {
+    #[allow(clippy::too_many_arguments)]
     pub async fn start(
         docker: &Docker,
         network: &str,

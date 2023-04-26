@@ -6,7 +6,7 @@ use clap::Parser;
 use mpc_recovery::{
     gcp::GcpService,
     oauth::{PagodaFirebaseTokenVerifier, UniversalTokenVerifier},
-    LeaderConfig, SignerConfig,
+    GenerateResult, LeaderConfig, SignerConfig,
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_primitives::types::AccountId;
@@ -166,17 +166,14 @@ async fn main() -> anyhow::Result<()> {
 
     match Cli::parse() {
         Cli::Generate { n } => {
-            let (pk_set, sk_shares, cipher_keys) = mpc_recovery::generate(n);
+            let GenerateResult { pk_set, secrets } = mpc_recovery::generate(n);
             println!("Public key set: {}", serde_json::to_string(&pk_set)?);
-            for (i, sk_share) in sk_shares.iter().enumerate() {
+            for (i, (sk_share, cipher_key)) in secrets.iter().enumerate() {
                 println!(
                     "Secret key share {}: {}",
                     i,
                     serde_json::to_string(sk_share)?
                 );
-            }
-
-            for (i, cipher_key) in cipher_keys.iter().enumerate() {
                 println!("Cipher {}: {}", i, hex::encode(cipher_key));
             }
         }

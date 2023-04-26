@@ -25,22 +25,23 @@ pub use leader_node::Config as LeaderConfig;
 pub use sign_node::run as run_sign_node;
 pub use sign_node::Config as SignerConfig;
 
+pub struct GenerateResult {
+    pub pk_set: Vec<Point<Ed25519>>,
+    pub secrets: Vec<(ExpandedKeyPair, GenericArray<u8, U32>)>,
+}
+
 #[tracing::instrument(level = "debug", skip_all, fields(n = n))]
-pub fn generate(
-    n: usize,
-) -> (
-    Vec<Point<Ed25519>>,
-    Vec<ExpandedKeyPair>,
-    Vec<GenericArray<u8, U32>>,
-) {
+pub fn generate(n: usize) -> GenerateResult {
     // Let's tie this up to a deterministic RNG when we can
     let sk_set: Vec<_> = (1..=n).map(|_| ExpandedKeyPair::create()).collect();
-    let pk_set: Vec<_> = sk_set.iter().map(|sk| sk.public_key.clone()).collect();
-    tracing::debug!(public_key = ?pk_set);
-
     let cipher_keys: Vec<_> = (1..=n)
         .map(|_| Aes256Gcm::generate_key(&mut OsRng))
         .collect();
+    let pk_set: Vec<_> = sk_set.iter().map(|sk| sk.public_key.clone()).collect();
+    tracing::debug!(public_key = ?pk_set);
 
-    (pk_set, sk_set, cipher_keys)
+    GenerateResult {
+        pk_set,
+        secrets: sk_set.into_iter().zip(cipher_keys.into_iter()).collect(),
+    }
 }
