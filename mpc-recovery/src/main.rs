@@ -1,8 +1,12 @@
+use aes_gcm::{
+    aead::{consts::U32, generic_array::GenericArray, KeyInit},
+    Aes256Gcm,
+};
 use clap::Parser;
 use mpc_recovery::{
     gcp::GcpService,
     oauth::{PagodaFirebaseTokenVerifier, UniversalTokenVerifier},
-    LeaderConfig,
+    LeaderConfig, SignerConfig,
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_primitives::types::AccountId;
@@ -74,6 +78,9 @@ enum Cli {
         /// Node ID
         #[arg(long, env("MPC_RECOVERY_NODE_ID"))]
         node_id: u64,
+        /// Cipher key to encrypt stored user credentials, will be pulled from GCP Secret Manager if omitted
+        #[arg(long, env("MPC_RECOVERY_CIPHER_KEY"))]
+        cipher_key: Option<String>,
         /// Secret key share, will be pulled from GCP Secret Manager if omitted
         #[arg(long, env("MPC_RECOVERY_SK_SHARE"))]
         sk_share: Option<String>,
@@ -112,6 +119,23 @@ async fn load_sh_skare(
     }
 }
 
+async fn load_cipher_key(
+    gcp_service: &GcpService,
+    env: &str,
+    node_id: u64,
+    cipher_key_arg: Option<String>,
+) -> anyhow::Result<String> {
+    match cipher_key_arg {
+        Some(cipher_key) => Ok(cipher_key),
+        None => {
+            let name = format!(
+                "projects/pagoda-discovery-platform-dev/secrets/mpc-recovery-encryption-cipher-{node_id}-{env}/versions/latest"
+            );
+            Ok(std::str::from_utf8(&gcp_service.load_secret(name).await?)?.to_string())
+        }
+    }
+}
+
 async fn load_account_creator_sk(
     gcp_service: &GcpService,
     env: &str,
@@ -142,7 +166,7 @@ async fn main() -> anyhow::Result<()> {
 
     match Cli::parse() {
         Cli::Generate { n } => {
-            let (pk_set, sk_shares) = mpc_recovery::generate(n);
+            let (pk_set, sk_shares, cipher_keys) = mpc_recovery::generate(n);
             println!("Public key set: {}", serde_json::to_string(&pk_set)?);
             for (i, sk_share) in sk_shares.iter().enumerate() {
                 println!(
@@ -150,6 +174,10 @@ async fn main() -> anyhow::Result<()> {
                     i,
                     serde_json::to_string(sk_share)?
                 );
+            }
+
+            for (i, cipher_key) in cipher_keys.iter().enumerate() {
+                println!("Cipher {}: {}", i, hex::encode(cipher_key));
             }
         }
         Cli::StartLeader {
@@ -200,6 +228,7 @@ async fn main() -> anyhow::Result<()> {
             env,
             node_id,
             sk_share,
+            cipher_key,
             web_port,
             pagoda_firebase_audience_id,
             gcp_project_id,
@@ -208,29 +237,30 @@ async fn main() -> anyhow::Result<()> {
         } => {
             let gcp_service =
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
+            let cipher_key = load_cipher_key(&gcp_service, &env, node_id, cipher_key).await?;
+            println!("Trying cipher key: {}", cipher_key);
+            let cipher_key = hex::decode(cipher_key)?;
+            let cipher_key = GenericArray::<u8, U32>::clone_from_slice(&cipher_key);
+            let cipher = Aes256Gcm::new(&cipher_key);
+            println!("Generated cipher");
+
             let sk_share = load_sh_skare(&gcp_service, &env, node_id, sk_share).await?;
 
             // TODO Import just the private key and derive the rest
             let sk_share: ExpandedKeyPair = serde_json::from_str(&sk_share).unwrap();
 
+            let config = SignerConfig {
+                gcp_service,
+                our_index: node_id,
+                node_key: sk_share,
+                cipher,
+                port: web_port,
+                pagoda_firebase_audience_id,
+            };
             if test {
-                mpc_recovery::run_sign_node::<UniversalTokenVerifier>(
-                    gcp_service,
-                    node_id,
-                    sk_share,
-                    web_port,
-                    pagoda_firebase_audience_id,
-                )
-                .await;
+                mpc_recovery::run_sign_node::<UniversalTokenVerifier>(config).await;
             } else {
-                mpc_recovery::run_sign_node::<PagodaFirebaseTokenVerifier>(
-                    gcp_service,
-                    node_id,
-                    sk_share,
-                    web_port,
-                    pagoda_firebase_audience_id,
-                )
-                .await;
+                mpc_recovery::run_sign_node::<PagodaFirebaseTokenVerifier>(config).await;
             }
         }
     }

@@ -8,6 +8,7 @@ name = "mpc-recovery"
 path = "src/main.rs"
 
 [dependencies]
+aes-gcm = "0.10"
 actix-rt = "2.8"
 anyhow = "1"
 async-trait = "0.1"

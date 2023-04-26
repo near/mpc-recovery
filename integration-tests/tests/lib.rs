@@ -44,7 +44,7 @@ where
 {
     let docker = Docker::connect_with_local_defaults()?;
 
-    let (pk_set, sk_shares) = mpc_recovery::generate(nodes);
+    let (pk_set, sk_shares, cipher_keys) = mpc_recovery::generate(nodes);
     let worker = workspaces::sandbox().await?;
     let near_root_account = worker.root_account()?;
     near_root_account
@@ -77,12 +77,18 @@ where
     let pagoda_firebase_audience_id = "not actually used in integration tests";
 
     let mut signer_nodes = Vec::new();
-    for (i, share) in sk_shares.iter().enumerate().take(nodes) {
+    for (i, (share, cipher_key)) in sk_shares
+        .iter()
+        .zip(cipher_keys.iter())
+        .enumerate()
+        .take(nodes)
+    {
         let addr = SignNode::start(
             &docker,
             NETWORK,
             i as u64,
             share,
+            cipher_key,
             &datastore.address,
             GCP_PROJECT_ID,
             pagoda_firebase_audience_id,

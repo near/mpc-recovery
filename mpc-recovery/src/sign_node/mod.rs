@@ -1,11 +1,12 @@
 use self::aggregate_signer::{NodeInfo, Reveal, SignedCommitment, SigningState};
-use self::user_credentials::UserCredentials;
+use self::user_credentials::EncryptedUserCredentials;
 use crate::gcp::GcpService;
 use crate::msg::{AcceptNodePublicKeysRequest, SigShareRequest};
 use crate::oauth::OAuthTokenVerifier;
 use crate::primitives::InternalAccountId;
 use crate::sign_node::pk_set::SignerNodePkSet;
 use crate::NodeId;
+use aes_gcm::Aes256Gcm;
 use axum::{http::StatusCode, routing::post, Extension, Json, Router};
 use curv::elliptic::curves::{Ed25519, Point};
 use multi_party_eddsa::protocols::{self, ExpandedKeyPair};
@@ -17,15 +18,25 @@ pub mod aggregate_signer;
 pub mod pk_set;
 pub mod user_credentials;
 
-#[tracing::instrument(level = "debug", skip(gcp_service, node_key))]
-pub async fn run<T: OAuthTokenVerifier + 'static>(
-    gcp_service: GcpService,
-    our_index: NodeId,
-    node_key: ExpandedKeyPair,
-    port: u16,
-    pagoda_firebase_audience_id: String,
-) {
+pub struct Config {
+    pub gcp_service: GcpService,
+    pub our_index: NodeId,
+    pub node_key: ExpandedKeyPair,
+    pub cipher: Aes256Gcm,
+    pub port: u16,
+    pub pagoda_firebase_audience_id: String,
+}
+
+pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
     tracing::debug!("running a sign node");
+    let Config {
+        gcp_service,
+        our_index,
+        node_key,
+        cipher,
+        port,
+        pagoda_firebase_audience_id,
+    } = config;
     let our_index = usize::try_from(our_index).expect("This index is way to big");
 
     let pk_set = gcp_service
@@ -37,6 +48,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(
     let state = SignNodeState {
         gcp_service,
         node_key,
+        cipher,
         signing_state,
         pagoda_firebase_audience_id,
         node_info: NodeInfo::new(our_index, pk_set.map(|set| set.public_keys)),
@@ -64,6 +76,7 @@ struct SignNodeState {
     gcp_service: GcpService,
     pagoda_firebase_audience_id: String,
     node_key: ExpandedKeyPair,
+    cipher: Aes256Gcm,
     signing_state: Arc<RwLock<SigningState>>,
     node_info: NodeInfo,
 }
@@ -79,10 +92,10 @@ enum CommitError {
 async fn get_or_generate_user_creds(
     state: &SignNodeState,
     internal_account_id: InternalAccountId,
-) -> anyhow::Result<UserCredentials> {
+) -> anyhow::Result<EncryptedUserCredentials> {
     match state
         .gcp_service
-        .get::<_, UserCredentials>(format!(
+        .get::<_, EncryptedUserCredentials>(format!(
             "{}/{}",
             state.node_info.our_index, internal_account_id
         ))
@@ -93,17 +106,16 @@ async fn get_or_generate_user_creds(
             Ok(user_credentials)
         }
         Ok(None) => {
-            let key_pair = ExpandedKeyPair::create();
+            let user_credentials = EncryptedUserCredentials::random(
+                state.node_info.our_index,
+                internal_account_id.clone(),
+                &state.cipher,
+            )?;
             tracing::debug!(
                 internal_account_id,
-                public_key = ?key_pair.public_key,
+                public_key = ?user_credentials.public_key,
                 "generating credentials for a new user"
             );
-            let user_credentials = UserCredentials {
-                node_id: state.node_info.our_index,
-                internal_account_id,
-                key_pair,
-            };
             state.gcp_service.insert(user_credentials.clone()).await?;
             Ok(user_credentials)
         }
@@ -128,7 +140,7 @@ async fn process_commit<T: OAuthTokenVerifier>(
         .write()
         .await
         .get_commitment(
-            &user_credentials.key_pair,
+            &user_credentials.decrypt_key_pair(&state.cipher)?,
             &state.node_key,
             // TODO Restrict this payload
             request.payload,

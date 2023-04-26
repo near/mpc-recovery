@@ -8,6 +8,7 @@ use bollard::{
     service::{HostConfig, Ipam, PortBinding},
     Docker,
 };
+use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::GenericArray};
 use futures::{lock::Mutex, StreamExt};
 use hyper::{Body, Client, Method, Request, StatusCode, Uri};
 use mpc_recovery::msg::{AddKeyRequest, AddKeyResponse, NewAccountRequest, NewAccountResponse};
@@ -283,6 +284,7 @@ impl SignNode {
         network: &str,
         node_id: u64,
         sk_share: &ExpandedKeyPair,
+        cipher_key: &GenericArray<u8, U32>,
         datastore_url: &str,
         gcp_project_id: &str,
         pagoda_firebase_audience_id: &str,
@@ -296,6 +298,8 @@ impl SignNode {
             node_id.to_string(),
             "--sk-share".to_string(),
             serde_json::to_string(&sk_share)?,
+            "--cipher-key".to_string(),
+            hex::encode(cipher_key),
             "--web-port".to_string(),
             web_port.to_string(),
             "--pagoda-firebase-audience-id".to_string(),
