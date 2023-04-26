@@ -235,11 +235,9 @@ async fn main() -> anyhow::Result<()> {
             let gcp_service =
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
             let cipher_key = load_cipher_key(&gcp_service, &env, node_id, cipher_key).await?;
-            println!("Trying cipher key: {}", cipher_key);
             let cipher_key = hex::decode(cipher_key)?;
             let cipher_key = GenericArray::<u8, U32>::clone_from_slice(&cipher_key);
             let cipher = Aes256Gcm::new(&cipher_key);
-            println!("Generated cipher");
 
             let sk_share = load_sh_skare(&gcp_service, &env, node_id, sk_share).await?;
 

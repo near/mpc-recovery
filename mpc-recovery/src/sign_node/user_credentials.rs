@@ -119,13 +119,10 @@ impl EncryptedUserCredentials {
         cipher: &Aes256Gcm,
     ) -> anyhow::Result<Self> {
         let key_pair = ExpandedKeyPair::create();
-        println!("GENERATING NONCE");
         let nonce = Nonce::from_slice(&[0u8; 12]);
-        println!("GENERATED NONCE");
         let encrypted_key_pair = cipher
             .encrypt(nonce, serde_json::to_vec(&key_pair)?.as_slice())
             .unwrap();
-        println!("GENERATED KEY PAIR");
         Ok(Self {
             node_id,
             internal_account_id,

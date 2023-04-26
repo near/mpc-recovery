@@ -40,6 +40,14 @@ You also need a Ed25519 key pair that you can generate by running `cargo run -- 
 
 Now save it to GCP Secret Manager under the name of your choosing (e.g. `mpc-recovery-key-prod`). This name will be referred to as `GCP_SM_KEY_NAME`.
 
+You also need to grab the AES cipher key that was printed after `Cipher 0:`; it should like this:
+
+```
+23855bcee709c32e98fdbf2a44f0e86fb122b87774394f77ed31c1875244dcd7
+```
+
+Save it to GCP Secret Manager under the name of your choosing (e.g. `mpc-recovery-cipher-prod`). This name will be referred to as `GCP_SM_CIPHER_NAME`.
+
 ## Uploading Docker Image
 
 First, let's create a new repository in GCP Artifact Registry. Go to `https://console.cloud.google.com/artifacts?project=<GCP_PROJECT_ID>`, press `CREATE REPOSITORY` and follow the form to create a new repository with **Docker** format and **Standard** mode. Name can be anything we will refer to it as `GCP_ARTIFACT_REPO`.
@@ -82,7 +90,7 @@ $ gcloud run deploy <GCP_CLOUD_RUN_SERVICE> \
     --min-instances=1 \
     --max-instances=1 \
     --set-env-vars=MPC_RECOVERY_NODE_ID=<MPC_NODE_ID>,MPC_RECOVERY_WEB_PORT=3000,RUST_LOG=mpc_recovery=debug,MPC_RECOVERY_GCP_PROJECT_ID=<GCP_PROJECT_ID> \
-    --set-secrets=MPC_RECOVERY_SK_SHARE=<GCP_SM_KEY_NAME>:latest \
+    --set-secrets=MPC_RECOVERY_SK_SHARE=<GCP_SM_KEY_NAME>:latest,MPC_RECOVERY_CIPHER_KEY=<GCP_SM_CIPHER_NAME>:latest \
     --no-cpu-throttling \
     --region=<GCP_REGION> \
     --project=<GCP_PROJECT_ID>
