@@ -14,6 +14,7 @@ use crate::transaction::{
 };
 use axum::{http::StatusCode, routing::post, Extension, Json, Router};
 use curv::elliptic::curves::{Ed25519, Point};
+use multi_party_eddsa::protocols;
 use near_crypto::{ParseKeyError, PublicKey, SecretKey};
 use near_primitives::account::id::ParseAccountError;
 use near_primitives::types::AccountId;
@@ -91,8 +92,15 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
             return;
         }
     };
+    let sigs = match gather_sign_node_signatures(&state).await {
+        Ok(sigs) => sigs,
+        Err(err) => {
+            tracing::error!("Unable to gather signatures: {err}");
+            return;
+        }
+    };
     tracing::debug!(?pk_set, "Gathered public keys");
-    let messages = match broadcast_pk_set(&state, pk_set).await {
+    let messages = match broadcast_pk_set(&state, pk_set, sigs).await {
         Ok(messages) => messages,
         Err(err) => {
             tracing::error!("Unable to broadcast public keys: {err}");
@@ -521,12 +529,46 @@ async fn gather_sign_node_pks(state: &LeaderState) -> anyhow::Result<Vec<Point<E
     Ok(results)
 }
 
+async fn gather_sign_node_signatures(
+    state: &LeaderState,
+) -> anyhow::Result<Vec<protocols::Signature>> {
+    let fut = nar::retry_every(std::time::Duration::from_secs(1), || async {
+        let results: anyhow::Result<Vec<(usize, protocols::Signature)>> = crate::transaction::call(
+            &state.reqwest_client,
+            &state.sign_nodes,
+            "signature_share_node",
+            (),
+        )
+        .await;
+        let mut results = match results {
+            Ok(results) => results,
+            Err(err) => {
+                tracing::debug!("failed to gather signature: {err}");
+                return Err(err);
+            }
+        };
+
+        results.sort_by_key(|(index, _)| *index);
+        let results: Vec<protocols::Signature> =
+            results.into_iter().map(|(_index, sig)| sig).collect();
+
+        anyhow::Result::Ok(results)
+    });
+
+    let results = tokio::time::timeout(std::time::Duration::from_secs(60), fut)
+        .await
+        .map_err(|_| anyhow::anyhow!("timeout gathering sign node signatures"))??;
+    Ok(results)
+}
+
 async fn broadcast_pk_set(
     state: &LeaderState,
     pk_set: Vec<Point<Ed25519>>,
+    sigs: Vec<protocols::Signature>,
 ) -> anyhow::Result<Vec<String>> {
     let request = AcceptNodePublicKeysRequest {
         public_keys: pk_set,
+        signature_shares: sigs,
     };
 
     let messages: Vec<String> = crate::transaction::call(

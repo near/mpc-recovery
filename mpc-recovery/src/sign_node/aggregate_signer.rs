@@ -16,7 +16,7 @@ use rand8::Rng;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use crate::transaction::{to_dalek_public_key, to_dalek_signature};
+use crate::transaction::{to_dalek_combined_public_key, to_dalek_public_key, to_dalek_signature};
 
 pub struct SigningState {
     committed: HashMap<AggrCommitment, Committed>,
@@ -230,7 +230,7 @@ impl Revealed {
 // Stores info about the other nodes we're interacting with
 #[derive(Clone)]
 pub struct NodeInfo {
-    pub nodes_public_keys: Arc<RwLock<Option<Vec<Point<Ed25519>>>>>,
+    pub nodes_public_keys: Arc<RwLock<NodePublicKeys>>,
     pub our_index: usize,
 }
 
@@ -238,7 +238,10 @@ impl NodeInfo {
     pub fn new(our_index: usize, nodes_public_keys: Option<Vec<Point<Ed25519>>>) -> Self {
         Self {
             our_index,
-            nodes_public_keys: Arc::new(RwLock::new(nodes_public_keys)),
+            nodes_public_keys: Arc::new(RwLock::new(
+                nodes_public_keys
+                    .map_or_else(|| NodePublicKeys::Uninitialized, NodePublicKeys::Restored),
+            )),
         }
     }
 
@@ -249,12 +252,78 @@ impl NodeInfo {
         self.nodes_public_keys
             .read()
             .await
-            .as_ref()
+            .get()
             .ok_or_else(|| "No nodes public keys available to sign".to_string())?
             .iter()
             .zip(signed.iter())
             .map(|(public_key, signed)| signed.verify(public_key))
             .collect()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum NodePublicKeys {
+    Uninitialized,
+    Initializing(protocols::Signature),
+    Initialized(Vec<Point<Ed25519>>),
+    Restored(Vec<Point<Ed25519>>),
+}
+
+impl NodePublicKeys {
+    const MESSAGE: &'static [u8] = b"NEAR";
+
+    pub fn get(&self) -> Option<&[Point<Ed25519>]> {
+        match self {
+            Self::Initialized(keys) => Some(keys),
+            Self::Restored(keys) => Some(keys),
+            _ => None,
+        }
+    }
+
+    pub fn initialize(
+        &mut self,
+        sk: &protocols::ExpandedKeyPair,
+    ) -> anyhow::Result<protocols::Signature> {
+        if !matches!(self, Self::Uninitialized) {
+            tracing::debug!("Invalid NodePublicKeys state: {self:?}");
+            anyhow::bail!("Node public keys must be in Uninitialized to be initialized");
+        }
+
+        tracing::debug!("Initializing NodePublicKeys state");
+        let signature = aggsig::sign_single(Self::MESSAGE, sk);
+        let _ = std::mem::replace(self, NodePublicKeys::Initializing(signature.clone()));
+        Ok(signature)
+    }
+
+    pub fn finalize(
+        &mut self,
+        our_index: usize,
+        pks: Vec<Point<Ed25519>>,
+        sigs: Vec<protocols::Signature>,
+    ) -> anyhow::Result<()> {
+        let Self::Initializing(sig) = self else {
+            tracing::debug!("Invalid NodePublicKeys state: {self:?}");
+            anyhow::bail!("Node public keys must be in Initializing stage for finalization");
+        };
+
+        if sigs.get(our_index) != Some(sig) {
+            tracing::debug!("Received invalid signature for our index: {sig:?} not in {sigs:?}");
+            anyhow::bail!("Received invalid signature for our index while finalizing public keys");
+        }
+
+        tracing::debug!("Verifying NodePublicKeys state");
+        let raw_sig = aggsig::add_signature_parts(&sigs[..]);
+        let sig = to_dalek_signature(&raw_sig)?;
+
+        let combined_pub = to_dalek_combined_public_key(&pks)?;
+        combined_pub.verify(Self::MESSAGE, &sig).map_err(|err| {
+            tracing::error!("Signature unable to be verified: {err}");
+            anyhow::anyhow!("Unable to verify signature with public keys: {err}")
+        })?;
+
+        let _ = std::mem::replace(self, NodePublicKeys::Initialized(pks));
+        tracing::debug!("Initialized NodePublicKeys state");
+        Ok(())
     }
 }
 
