@@ -9,7 +9,7 @@ use mpc_recovery::{
 };
 use rand::{distributions::Alphanumeric, Rng};
 use std::time::Duration;
-use workspaces::types::{AccessKeyPermission};
+use workspaces::types::AccessKeyPermission;
 
 #[tokio::test]
 async fn test_trio() -> anyhow::Result<()> {
