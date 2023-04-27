@@ -15,6 +15,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
+                    limited_public_key: None,
                     oidc_token: token::invalid(),
                     public_key: user_public_key.clone(),
                 })
@@ -27,6 +28,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
+                    limited_public_key: None,
                     oidc_token: oidc_token.clone(),
                     public_key: user_public_key.clone(),
                 })
@@ -97,6 +99,7 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: malformed_account_id.to_string(),
+                    limited_public_key: None,
                     oidc_token: oidc_token.clone(),
                     public_key: user_public_key.clone(),
                 })
@@ -111,6 +114,7 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
+                    limited_public_key: None,
                     oidc_token: oidc_token.clone(),
                     public_key: user_public_key.clone(),
                 })
@@ -180,6 +184,7 @@ async fn test_malformed_public_key() -> anyhow::Result<()> {
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
+                    limited_public_key: None,
                     oidc_token: oidc_token.clone(),
                     public_key: malformed_public_key.clone(),
                 })
@@ -194,6 +199,7 @@ async fn test_malformed_public_key() -> anyhow::Result<()> {
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
+                    limited_public_key: None,
                     oidc_token: oidc_token.clone(),
                     public_key: user_public_key.clone(),
                 })

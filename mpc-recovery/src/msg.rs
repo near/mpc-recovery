@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NewAccountRequest {
     pub public_key: String,
+    pub limited_public_key: Option<String>,
     pub near_account_id: String,
     pub oidc_token: String,
 }

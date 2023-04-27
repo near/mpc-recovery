@@ -156,6 +156,14 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         .public_key
         .parse()
         .map_err(|e| NewAccountError::MalformedPublicKey(request.public_key, e))?;
+    let limited_user_account_pk: Option<PublicKey> = request
+        .limited_public_key
+        .clone()
+        .map(|k| k.parse())
+        .transpose()
+        .map_err(|e| {
+            NewAccountError::MalformedPublicKey(request.limited_public_key.unwrap_or_default(), e)
+        })?;
     let new_user_account_id: AccountId = request
         .near_account_id
         .parse()
@@ -198,6 +206,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             new_user_account_id.clone(),
             mpc_user_recovery_pk.clone(),
             new_user_account_pk.clone(),
+            limited_user_account_pk.clone(),
             state.near_root_account.clone(),
             nonce,
             block_height + 100,

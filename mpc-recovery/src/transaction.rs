@@ -22,9 +22,23 @@ use crate::msg::SigShareRequest;
 use crate::sign_node::aggregate_signer::{Reveal, SignedCommitment};
 
 #[derive(Serialize, Deserialize)]
+/// Information about any limited access keys that are being added to the account as part of `create_account_advanced`.
+pub struct LimitedAccessKey {
+    /// The public key of the limited access key.
+    pub public_key: PublicKey,
+    /// The amount of yoctoNEAR$ that can be spent on Gas by this key.
+    pub allowance: String,
+    /// Which contract should this key be allowed to call.
+    pub receiver_id: AccountId,
+    /// Which methods should this key be allowed to call.
+    pub method_names: String,
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct CreateAccountOptions {
     // Note: original structure contains other unrelated fields
     pub full_access_keys: Option<Vec<PublicKey>>,
+    pub limited_access_keys: Option<Vec<LimitedAccessKey>>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -34,12 +48,20 @@ pub fn get_create_account_delegate_action(
     new_account_id: AccountId,
     new_account_recovery_pk: PublicKey,
     new_account_user_pk: PublicKey,
+    limited_user_account_pk: Option<PublicKey>,
     near_root_account: AccountId,
     nonce: Nonce,
     max_block_height: u64,
 ) -> anyhow::Result<DelegateAction> {
+    let limited_user_account_pk = limited_user_account_pk.map(|pk| LimitedAccessKey {
+        public_key: pk,
+        allowance: "0".to_string(), // Unlimited
+        receiver_id: AccountId::try_from("".to_string()).unwrap(), // TODO: replace with an actual account
+        method_names: "".to_string(),                              // Any method can called
+    });
     let create_acc_options = CreateAccountOptions {
         full_access_keys: Some(vec![new_account_user_pk, new_account_recovery_pk]),
+        limited_access_keys: limited_user_account_pk.map(|pk| vec![pk]),
     };
     let create_acc_action = Action::FunctionCall(FunctionCallAction {
         method_name: "create_account_advanced".to_string(),

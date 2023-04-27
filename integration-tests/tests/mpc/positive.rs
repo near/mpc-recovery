@@ -61,6 +61,7 @@ async fn test_basic_action() -> anyhow::Result<()> {
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
+                    limited_public_key: None,
                     oidc_token: oidc_token.clone(),
                     public_key: user_public_key.clone(),
                 })
@@ -133,6 +134,7 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
+                    limited_public_key: None,
                     oidc_token: token::valid_random(),
                     public_key: user_public_key.clone(),
                 })
@@ -155,6 +157,7 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
+                    limited_public_key: None,
                     oidc_token: token::valid_random(),
                     public_key: user_public_key.clone(),
                 })
