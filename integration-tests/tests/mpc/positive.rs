@@ -1,4 +1,5 @@
 use crate::{account, check, key, token, with_nodes};
+use anyhow::anyhow;
 use ed25519_dalek::Verifier;
 use hyper::StatusCode;
 use mpc_recovery::{
@@ -8,6 +9,7 @@ use mpc_recovery::{
 };
 use rand::{distributions::Alphanumeric, Rng};
 use std::time::Duration;
+use workspaces::types::{AccessKeyPermission, FunctionCallPermission};
 
 #[tokio::test]
 async fn test_trio() -> anyhow::Result<()> {
@@ -128,15 +130,16 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
     with_nodes(4, |ctx| {
         Box::pin(async move {
             let account_id = account::random(ctx.worker)?;
-            let user_public_key = key::random();
+            let user_full_access_key = key::random();
+            let user_limited_access_key = key::random();
 
             let (status_code, _) = ctx
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
-                    limited_public_key: None,
+                    limited_public_key: Some(user_limited_access_key.clone()),
                     oidc_token: token::valid_random(),
-                    public_key: user_public_key.clone(),
+                    public_key: user_full_access_key.clone(),
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
@@ -144,10 +147,43 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
             tokio::time::sleep(Duration::from_millis(2000)).await;
 
             let access_keys = ctx.worker.view_access_keys(&account_id).await?;
-            let recovery_access_key1 = access_keys
+            let recovery_full_access_key1 = access_keys
+                .clone()
                 .into_iter()
-                .find(|ak| ak.public_key.to_string() != user_public_key)
+                .find(|ak| ak.public_key.to_string() != user_full_access_key)
                 .ok_or_else(|| anyhow::anyhow!("missing recovery access key"))?;
+
+            match recovery_full_access_key1.access_key.permission {
+                AccessKeyPermission::FullAccess => (),
+                AccessKeyPermission::FunctionCall(_) => {
+                    return Err(anyhow!(
+                        "Got a limited access key when we expected a full access key"
+                    ))
+                }
+            };
+
+            let recovery_limited_access_key1 = access_keys
+                .into_iter()
+                .find(|ak| ak.public_key.to_string() != user_limited_access_key)
+                .ok_or_else(|| anyhow::anyhow!("missing recovery access key"))?;
+
+            match recovery_limited_access_key1.access_key.permission {
+                AccessKeyPermission::FullAccess => {
+                    return Err(anyhow!(
+                        "Got a full access key when we expected a limited access key"
+                    ))
+                }
+                AccessKeyPermission::FunctionCall(FunctionCallPermission {
+                    allowance,
+                    receiver_id,
+                    method_names,
+                }) => {
+                    assert_eq!(allowance, None);
+                    // TODO replace with real reciever ID
+                    assert_eq!(receiver_id, "".to_string());
+                    assert_eq!(method_names, Vec::<String>::new());
+                }
+            };
 
             // Generate another user
             let account_id = account::random(ctx.worker)?;
@@ -167,13 +203,13 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
             tokio::time::sleep(Duration::from_millis(2000)).await;
 
             let access_keys = ctx.worker.view_access_keys(&account_id).await?;
-            let recovery_access_key2 = access_keys
+            let recovery_full_access_key2 = access_keys
                 .into_iter()
                 .find(|ak| ak.public_key.to_string() != user_public_key)
                 .ok_or_else(|| anyhow::anyhow!("missing recovery access key"))?;
 
             assert_ne!(
-                recovery_access_key1.public_key, recovery_access_key2.public_key,
+                recovery_full_access_key1.public_key, recovery_full_access_key2.public_key,
                 "MPC recovery should generate random recovery keys for each user"
             );
 
