@@ -5,7 +5,9 @@ use hyper::StatusCode;
 use mpc_recovery::{
     msg::{AddKeyRequest, AddKeyResponse, NewAccountRequest, NewAccountResponse},
     oauth::get_test_claims,
-    transaction::{call, sign, to_dalek_combined_public_key, CreateAccountOptions},
+    transaction::{
+        call, sign, to_dalek_combined_public_key, CreateAccountOptions, LimitedAccessKey,
+    },
 };
 use rand::{distributions::Alphanumeric, Rng};
 use std::time::Duration;
@@ -137,9 +139,16 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
             let account_id = account::random(ctx.worker)?;
             let user_full_access_key = key::random();
 
+            let user_limited_access_key = LimitedAccessKey {
+                public_key: key::random().parse().unwrap(),
+                allowance: "100".to_string(),
+                receiver_id: account::random(ctx.worker)?.to_string().parse().unwrap(), // TODO: type issues here
+                method_names: "method_names".to_string(),
+            };
+
             let create_account_options = CreateAccountOptions {
                 full_access_keys: Some(vec![user_full_access_key.clone().parse().unwrap()]),
-                limited_access_keys: None,
+                limited_access_keys: Some(vec![user_limited_access_key.clone()]),
                 contract_bytes: None,
             };
 
@@ -156,10 +165,15 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
             tokio::time::sleep(Duration::from_millis(2000)).await;
 
             let access_keys = ctx.worker.view_access_keys(&account_id).await?;
+
             let recovery_full_access_key1 = access_keys
                 .clone()
                 .into_iter()
-                .find(|ak| ak.public_key.to_string() != user_full_access_key)
+                .find(|ak| {
+                    ak.public_key.to_string() != user_full_access_key
+                        && ak.public_key.to_string()
+                            != user_limited_access_key.public_key.to_string()
+                })
                 .ok_or_else(|| anyhow::anyhow!("missing recovery access key"))?;
 
             match recovery_full_access_key1.access_key.permission {
@@ -168,6 +182,31 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
                     return Err(anyhow!(
                         "Got a limited access key when we expected a full access key"
                     ))
+                }
+            };
+
+            let la_key = access_keys
+                .into_iter()
+                .find(|ak| {
+                    ak.public_key.to_string() == user_limited_access_key.public_key.to_string()
+                })
+                .ok_or_else(|| anyhow::anyhow!("missing limited access key"))?;
+
+            match la_key.access_key.permission {
+                AccessKeyPermission::FullAccess => {
+                    return Err(anyhow!(
+                        "Got a full access key when we expected a limited access key"
+                    ))
+                }
+                AccessKeyPermission::FunctionCall(fc) => {
+                    assert_eq!(
+                        fc.receiver_id,
+                        user_limited_access_key.receiver_id.to_string()
+                    );
+                    assert_eq!(
+                        fc.method_names.first().unwrap(),
+                        &user_limited_access_key.method_names.to_string()
+                    );
                 }
             };
 
