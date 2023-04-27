@@ -34,17 +34,28 @@ macro_rules! drop_container {
             fn drop(&mut self) {
                 let container_id = self.container_id.clone();
                 let docker = self.docker.clone();
-                tokio::spawn(async move {
-                    docker
-                        .remove_container(
-                            &container_id,
-                            Some(RemoveContainerOptions {
-                                force: true,
-                                ..Default::default()
-                            }),
-                        )
-                        .await
-                });
+                let handle = tokio::runtime::Handle::current();
+                std::thread::spawn(move || {
+                    handle.block_on(async {
+                        println!("REMOVING {}", container_id);
+                        docker
+                            .remove_container(
+                                &container_id,
+                                Some(RemoveContainerOptions {
+                                    force: true,
+                                    ..Default::default()
+                                }),
+                            )
+                            .await
+                            .expect(&format!("failed to drop Docker container {}", container_id));
+                        println!("REMOVED {}", container_id);
+                    });
+                })
+                .join()
+                .expect(&format!(
+                    "failed to drop Docker container {}",
+                    self.container_id
+                ));
             }
         }
     };

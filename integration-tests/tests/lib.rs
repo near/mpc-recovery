@@ -5,7 +5,7 @@ use crate::docker::{LeaderNode, SignNode};
 use bollard::Docker;
 use curv::elliptic::curves::{Ed25519, Point};
 use docker::{datastore::Datastore, redis::Redis, relayer::Relayer};
-use futures::future::BoxFuture;
+use futures::future::{self, BoxFuture};
 use mpc_recovery::GenerateResult;
 use std::time::Duration;
 use workspaces::{network::Sandbox, AccountId, Worker};
@@ -138,6 +138,7 @@ where
     })
     .await;
 
+    println!("DROPPING");
     drop(datastore);
     drop(leader_node);
     drop(signer_nodes);
@@ -153,11 +154,19 @@ where
 
 async fn up_funds_for_account(worker: &Worker<Sandbox>, id: &AccountId) -> anyhow::Result<()> {
     const AMOUNT: u128 = 99 * 10u128.pow(24);
-    for _ in 0..10 {
+    async fn up_once(worker: &Worker<Sandbox>, id: &AccountId) -> anyhow::Result<()> {
         let tmp_account = worker.dev_create_account().await?;
         tmp_account.transfer_near(id, AMOUNT).await?.into_result()?;
         tmp_account.delete_account(id).await?.into_result()?;
+        Ok(())
     }
+    let futures: Vec<_> = (0..10)
+        .map(|_| async { up_once(worker, id).await })
+        .collect();
+    future::join_all(futures)
+        .await
+        .into_iter()
+        .collect::<anyhow::Result<Vec<_>>>()?;
     Ok(())
 }
 
