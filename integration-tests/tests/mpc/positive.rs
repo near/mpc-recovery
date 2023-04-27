@@ -5,11 +5,11 @@ use hyper::StatusCode;
 use mpc_recovery::{
     msg::{AddKeyRequest, AddKeyResponse, NewAccountRequest, NewAccountResponse},
     oauth::get_test_claims,
-    transaction::{call, sign, to_dalek_combined_public_key},
+    transaction::{call, sign, to_dalek_combined_public_key, CreateAccountOptions},
 };
 use rand::{distributions::Alphanumeric, Rng};
 use std::time::Duration;
-use workspaces::types::{AccessKeyPermission, FunctionCallPermission};
+use workspaces::types::{AccessKeyPermission};
 
 #[tokio::test]
 async fn test_trio() -> anyhow::Result<()> {
@@ -58,22 +58,27 @@ async fn test_basic_action() -> anyhow::Result<()> {
             let user_public_key = key::random();
             let oidc_token = token::valid_random();
 
+            let create_account_options = CreateAccountOptions {
+                full_access_keys: Some(vec![user_public_key.clone().parse().unwrap()]),
+                limited_access_keys: None,
+                contract_bytes: None,
+            };
+
             // Create account
             let (status_code, new_acc_response) = ctx
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
-                    limited_public_key: None,
+                    create_account_options,
                     oidc_token: oidc_token.clone(),
-                    public_key: user_public_key.clone(),
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
             assert!(matches!(new_acc_response, NewAccountResponse::Ok {
-                    user_public_key: user_pk,
+                    create_account_options: _,
                     user_recovery_public_key: _,
                     near_account_id: acc_id,
-                } if user_pk == user_public_key && acc_id == account_id.to_string()
+                } if acc_id == account_id.to_string()
             ));
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
@@ -131,15 +136,19 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
         Box::pin(async move {
             let account_id = account::random(ctx.worker)?;
             let user_full_access_key = key::random();
-            let user_limited_access_key = key::random();
+
+            let create_account_options = CreateAccountOptions {
+                full_access_keys: Some(vec![user_full_access_key.clone().parse().unwrap()]),
+                limited_access_keys: None,
+                contract_bytes: None,
+            };
 
             let (status_code, _) = ctx
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
-                    limited_public_key: Some(user_limited_access_key.clone()),
+                    create_account_options,
                     oidc_token: token::valid_random(),
-                    public_key: user_full_access_key.clone(),
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
@@ -162,40 +171,22 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
                 }
             };
 
-            let recovery_limited_access_key1 = access_keys
-                .into_iter()
-                .find(|ak| ak.public_key.to_string() != user_limited_access_key)
-                .ok_or_else(|| anyhow::anyhow!("missing recovery access key"))?;
-
-            match recovery_limited_access_key1.access_key.permission {
-                AccessKeyPermission::FullAccess => {
-                    return Err(anyhow!(
-                        "Got a full access key when we expected a limited access key"
-                    ))
-                }
-                AccessKeyPermission::FunctionCall(FunctionCallPermission {
-                    allowance,
-                    receiver_id,
-                    method_names,
-                }) => {
-                    assert_eq!(allowance, None);
-                    // TODO replace with real reciever ID
-                    assert_eq!(receiver_id, "".to_string());
-                    assert_eq!(method_names, Vec::<String>::new());
-                }
-            };
-
             // Generate another user
             let account_id = account::random(ctx.worker)?;
             let user_public_key = key::random();
+
+            let create_account_options = CreateAccountOptions {
+                full_access_keys: Some(vec![user_public_key.clone().parse().unwrap()]),
+                limited_access_keys: None,
+                contract_bytes: None,
+            };
 
             let (status_code, _) = ctx
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
-                    limited_public_key: None,
+                    create_account_options,
                     oidc_token: token::valid_random(),
-                    public_key: user_public_key.clone(),
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::OK);

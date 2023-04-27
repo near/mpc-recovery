@@ -21,7 +21,21 @@ use serde_json::json;
 use crate::msg::SigShareRequest;
 use crate::sign_node::aggregate_signer::{Reveal, SignedCommitment};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CreateAccountOptions {
+    pub full_access_keys: Option<Vec<PublicKey>>,
+    pub limited_access_keys: Option<Vec<LimitedAccessKey>>,
+    pub contract_bytes: Option<Vec<u8>>,
+}
+
+impl std::fmt::Display for CreateAccountOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json_string = serde_json::to_string(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{}", json_string)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 /// Information about any limited access keys that are being added to the account as part of `create_account_advanced`.
 pub struct LimitedAccessKey {
     /// The public key of the limited access key.
@@ -34,40 +48,21 @@ pub struct LimitedAccessKey {
     pub method_names: String,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct CreateAccountOptions {
-    // Note: original structure contains other unrelated fields
-    pub full_access_keys: Option<Vec<PublicKey>>,
-    pub limited_access_keys: Option<Vec<LimitedAccessKey>>,
-}
-
 #[allow(clippy::too_many_arguments)]
 pub fn get_create_account_delegate_action(
     signer_id: AccountId,
     signer_pk: PublicKey,
     new_account_id: AccountId,
-    new_account_recovery_pk: PublicKey,
-    new_account_user_pk: PublicKey,
-    limited_user_account_pk: Option<PublicKey>,
+    new_account_options: CreateAccountOptions,
     near_root_account: AccountId,
     nonce: Nonce,
     max_block_height: u64,
 ) -> anyhow::Result<DelegateAction> {
-    let limited_user_account_pk = limited_user_account_pk.map(|pk| LimitedAccessKey {
-        public_key: pk,
-        allowance: "0".to_string(), // Unlimited
-        receiver_id: AccountId::try_from("".to_string()).unwrap(), // TODO: replace with an actual account
-        method_names: "".to_string(),                              // Any method can called
-    });
-    let create_acc_options = CreateAccountOptions {
-        full_access_keys: Some(vec![new_account_user_pk, new_account_recovery_pk]),
-        limited_access_keys: limited_user_account_pk.map(|pk| vec![pk]),
-    };
     let create_acc_action = Action::FunctionCall(FunctionCallAction {
         method_name: "create_account_advanced".to_string(),
         args: json!({
             "new_account_id": new_account_id,
-            "options": create_acc_options,
+            "options": new_account_options,
         })
         .to_string()
         .into_bytes(),

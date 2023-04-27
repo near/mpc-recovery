@@ -1,6 +1,9 @@
 use crate::{account, check, key, token, with_nodes};
 use hyper::StatusCode;
-use mpc_recovery::msg::{AddKeyRequest, AddKeyResponse, NewAccountRequest, NewAccountResponse};
+use mpc_recovery::{
+    msg::{AddKeyRequest, AddKeyResponse, NewAccountRequest, NewAccountResponse},
+    transaction::CreateAccountOptions,
+};
 use std::time::Duration;
 
 #[tokio::test]
@@ -11,13 +14,18 @@ async fn test_invalid_token() -> anyhow::Result<()> {
             let user_public_key = key::random();
             let oidc_token = token::valid_random();
 
+            let create_account_options = CreateAccountOptions {
+                full_access_keys: Some(vec![user_public_key.clone().parse().unwrap()]),
+                limited_access_keys: None,
+                contract_bytes: None,
+            };
+
             let (status_code, new_acc_response) = ctx
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
-                    limited_public_key: None,
+                    create_account_options: create_account_options.clone(),
                     oidc_token: token::invalid(),
-                    public_key: user_public_key.clone(),
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::UNAUTHORIZED);
@@ -28,17 +36,16 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
-                    limited_public_key: None,
+                    create_account_options,
                     oidc_token: oidc_token.clone(),
-                    public_key: user_public_key.clone(),
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
             assert!(matches!(new_acc_response, NewAccountResponse::Ok {
-                    user_public_key: user_pk,
+                    create_account_options: _,
                     user_recovery_public_key: _,
                     near_account_id: acc_id,
-                } if user_pk == user_public_key && acc_id == account_id.to_string()
+                } if acc_id == account_id.to_string()
             ));
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
@@ -95,13 +102,18 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
             let user_public_key = key::random();
             let oidc_token = token::valid_random();
 
+            let create_account_options = CreateAccountOptions {
+                full_access_keys: Some(vec![user_public_key.clone().parse().unwrap()]),
+                limited_access_keys: None,
+                contract_bytes: None,
+            };
+
             let (status_code, new_acc_response) = ctx
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: malformed_account_id.to_string(),
-                    limited_public_key: None,
+                    create_account_options: create_account_options.clone(),
                     oidc_token: oidc_token.clone(),
-                    public_key: user_public_key.clone(),
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::BAD_REQUEST);
@@ -114,17 +126,16 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
-                    limited_public_key: None,
+                    create_account_options: create_account_options.clone(),
                     oidc_token: oidc_token.clone(),
-                    public_key: user_public_key.clone(),
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
             assert!(matches!(new_acc_response, NewAccountResponse::Ok {
-                    user_public_key: user_pk,
+                    create_account_options: _,
                     user_recovery_public_key: _,
                     near_account_id: acc_id,
-                } if user_pk == user_public_key && acc_id == account_id.to_string()
+                } if acc_id == account_id.to_string()
             ));
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
@@ -180,13 +191,18 @@ async fn test_malformed_public_key() -> anyhow::Result<()> {
             let malformed_public_key = key::malformed();
             let oidc_token = token::valid_random();
 
+            let malformed_create_account_options = CreateAccountOptions {
+                full_access_keys: Some(vec![malformed_public_key.clone().parse().unwrap()]),
+                limited_access_keys: None,
+                contract_bytes: None,
+            };
+
             let (status_code, new_acc_response) = ctx
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
-                    limited_public_key: None,
+                    create_account_options: malformed_create_account_options,
                     oidc_token: oidc_token.clone(),
-                    public_key: malformed_public_key.clone(),
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::BAD_REQUEST);
@@ -194,22 +210,27 @@ async fn test_malformed_public_key() -> anyhow::Result<()> {
 
             let user_public_key = key::random();
 
+            let create_account_options = CreateAccountOptions {
+                full_access_keys: Some(vec![user_public_key.clone().parse().unwrap()]),
+                limited_access_keys: None,
+                contract_bytes: None,
+            };
+
             // Check that the service is still available
             let (status_code, new_acc_response) = ctx
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
-                    limited_public_key: None,
+                    create_account_options,
                     oidc_token: oidc_token.clone(),
-                    public_key: user_public_key.clone(),
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
             assert!(matches!(new_acc_response, NewAccountResponse::Ok {
-                    user_public_key: user_pk,
+                    create_account_options: _,
                     user_recovery_public_key: _,
                     near_account_id: acc_id,
-                } if user_pk == user_public_key && acc_id == account_id.to_string()
+                } if acc_id == account_id.to_string()
             ));
 
             tokio::time::sleep(Duration::from_millis(2000)).await;

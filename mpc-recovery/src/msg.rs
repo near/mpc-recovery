@@ -2,10 +2,11 @@ use curv::elliptic::curves::{Ed25519, Point};
 use ed25519_dalek::Signature;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug)]
+use crate::transaction::CreateAccountOptions;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NewAccountRequest {
-    pub public_key: String,
-    pub limited_public_key: Option<String>,
+    pub create_account_options: CreateAccountOptions,
     pub near_account_id: String,
     pub oidc_token: String,
 }
@@ -15,7 +16,7 @@ pub struct NewAccountRequest {
 #[serde(rename_all = "snake_case")]
 pub enum NewAccountResponse {
     Ok {
-        user_public_key: String,
+        create_account_options: CreateAccountOptions,
         user_recovery_public_key: String,
         near_account_id: String,
     },
