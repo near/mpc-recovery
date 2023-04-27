@@ -21,14 +21,10 @@ jobs:
           ssh-key: ${{ secrets.RELAYER_DEPLOY_SSH_KEY }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
-      - name: Build Docker image
-        uses: docker/build-push-action@v4
-        with:
-          context: relayer
-          tags: pagoda-relayer-rs-fastauth
-          load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Pull Relayer Docker Image
+        run: |
+          docker pull ghcr.io/near/pagoda-relayer-rs-fastauth
+          docker tag ghcr.io/near/pagoda-relayer-rs-fastauth pagoda-relayer-rs-fastauth
       - name: Install stable toolchain
         uses: actions-rs/toolchain@v1
         with:
