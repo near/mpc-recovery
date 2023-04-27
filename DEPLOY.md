@@ -10,7 +10,7 @@ Make sure that:
 * You have a GCP Project (its ID will be referred to as `GCP_PROJECT_ID` below, should look something like `pagoda-discovery-platform-dev`)
 * `GCP_PROJECT_ID` has the following services enabled:
     * `Artifact Registry`
-    * `Cloud Run`
+    * `Cloud Run Admin API` (can be enabled by trying to create a Cloud Run instance, no need to proceed with creation after you pressed the `CREATE SERVICE` button)
     * `Datastore` (should also be initialized with the default database)
     * `Secret Manager`
 * You have a service account dedicated to mpc-recovery (will be referred to as `GCP_SERVICE_ACCOUNT` below, should look something like `mpc-recovery@pagoda-discovery-platform-dev.iam.gserviceaccount.com`).
@@ -26,6 +26,16 @@ Make sure that:
     4. Press `ADD KEY` and then `Create new key`.
     5. Choose `JSON` and press `CREATE`.
     6. Save the keys somewhere to your filesystem, we will refer to its location as `GCP_SERVICE_ACCOUNT_KEY_PATH`.
+    
+## Requirements
+
+⚠️ **Warning: You must use an x86 machine, M1 will not work**
+
+You need Rust 1.68 or later. Update your `rustc` by running:
+
+```
+$ rustup install stable
+```
 
 ## Configuration
 
@@ -89,7 +99,7 @@ $ gcloud run deploy <GCP_CLOUD_RUN_SERVICE> \
     --memory=2Gi \
     --min-instances=1 \
     --max-instances=1 \
-    --set-env-vars=MPC_RECOVERY_NODE_ID=<MPC_NODE_ID>,MPC_RECOVERY_WEB_PORT=3000,RUST_LOG=mpc_recovery=debug,MPC_RECOVERY_GCP_PROJECT_ID=<GCP_PROJECT_ID> \
+    --set-env-vars=MPC_RECOVERY_NODE_ID=<MPC_NODE_ID>,MPC_RECOVERY_GCP_PROJECT_ID=<GCP_PROJECT_ID>,MPC_RECOVERY_WEB_PORT=3000,RUST_LOG=mpc_recovery=debug,PAGODA_FIREBASE_AUDIENCE_ID=near-fastauth-prod \
     --set-secrets=MPC_RECOVERY_SK_SHARE=<GCP_SM_KEY_NAME>:latest,MPC_RECOVERY_CIPHER_KEY=<GCP_SM_CIPHER_NAME>:latest \
     --no-cpu-throttling \
     --region=<GCP_REGION> \
