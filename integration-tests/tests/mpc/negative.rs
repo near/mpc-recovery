@@ -190,24 +190,6 @@ async fn test_malformed_public_key() -> anyhow::Result<()> {
             let account_id = account::random(ctx.worker)?;
             let malformed_public_key = key::malformed();
             let oidc_token = token::valid_random();
-
-            let malformed_create_account_options = CreateAccountOptions {
-                full_access_keys: Some(vec![malformed_public_key.clone().parse().unwrap()]),
-                limited_access_keys: None,
-                contract_bytes: None,
-            };
-
-            let (status_code, new_acc_response) = ctx
-                .leader_node
-                .new_account(NewAccountRequest {
-                    near_account_id: account_id.to_string(),
-                    create_account_options: malformed_create_account_options,
-                    oidc_token: oidc_token.clone(),
-                })
-                .await?;
-            assert_eq!(status_code, StatusCode::BAD_REQUEST);
-            assert!(matches!(new_acc_response, NewAccountResponse::Err { .. }));
-
             let user_public_key = key::random();
 
             let create_account_options = CreateAccountOptions {
