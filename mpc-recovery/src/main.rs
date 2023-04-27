@@ -10,6 +10,7 @@ use mpc_recovery::{
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_primitives::types::AccountId;
+use tracing_subscriber::EnvFilter;
 
 #[derive(Parser, Debug)]
 enum Cli {
@@ -155,7 +156,9 @@ async fn load_account_creator_sk(
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Install global collector configured based on RUST_LOG env var.
-    let mut subscriber = tracing_subscriber::fmt();
+    let mut subscriber = tracing_subscriber::fmt()
+        .with_thread_ids(true)
+        .with_env_filter(EnvFilter::from_default_env());
     // Check if running in Google Cloud Run: https://cloud.google.com/run/docs/container-contract#services-env-vars
     if std::env::var("K_SERVICE").is_ok() {
         // Disable colored logging as it messes up Google's log formatting
