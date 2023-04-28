@@ -198,6 +198,7 @@ mod key {
             .to_string()
     }
 
+    #[allow(dead_code)]
     pub fn malformed() -> String {
         let random: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)
