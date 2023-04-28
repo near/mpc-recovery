@@ -33,8 +33,8 @@ impl NewAccountResponse {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AddKeyRequest {
+    pub create_account_options: CreateAccountOptions,
     pub near_account_id: Option<String>,
-    pub public_key: String,
     pub oidc_token: String,
 }
 
@@ -43,7 +43,8 @@ pub struct AddKeyRequest {
 #[serde(rename_all = "snake_case")]
 pub enum AddKeyResponse {
     Ok {
-        user_public_key: String,
+        full_access_keys: Vec<String>,
+        limited_access_keys: Vec<String>,
         near_account_id: String,
     },
     Err {

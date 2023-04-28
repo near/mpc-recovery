@@ -5,7 +5,7 @@ use futures::{future, FutureExt};
 use multi_party_eddsa::protocols::aggsig::KeyAgg;
 use multi_party_eddsa::protocols::{self, aggsig};
 use near_crypto::{InMemorySigner, PublicKey, SecretKey};
-use near_primitives::account::{AccessKey, AccessKeyPermission};
+use near_primitives::account::{AccessKey, AccessKeyPermission, FunctionCallPermission};
 use near_primitives::borsh::BorshSerialize;
 use near_primitives::hash::hash;
 use near_primitives::transaction::{Action, AddKeyAction, FunctionCallAction};
@@ -87,24 +87,47 @@ pub fn get_create_account_delegate_action(
 pub fn get_add_key_delegate_action(
     account_id: AccountId,
     signer_pk: PublicKey,
-    new_public_key: PublicKey,
+    create_account_options: CreateAccountOptions,
     nonce: Nonce,
     max_block_height: u64,
 ) -> anyhow::Result<DelegateAction> {
-    let add_key_action = Action::AddKey(AddKeyAction {
-        public_key: new_public_key,
-        access_key: AccessKey {
-            nonce: 0,
-            permission: AccessKeyPermission::FullAccess,
-        },
-    });
-
-    let delegate_add_key_action = NonDelegateAction::try_from(add_key_action)?;
+    let full_access_keys: Vec<_> = create_account_options
+        .full_access_keys
+        .unwrap_or_default()
+        .into_iter()
+        .map(|pk| {
+            NonDelegateAction::try_from(Action::AddKey(AddKeyAction {
+                public_key: pk,
+                access_key: AccessKey {
+                    nonce: 0,
+                    permission: AccessKeyPermission::FullAccess,
+                },
+            }))
+        })
+        .collect::<Result<_, _>>()?;
+    let limited_access_keys: Vec<_> = create_account_options
+        .limited_access_keys
+        .unwrap_or_default()
+        .into_iter()
+        .map(|lka| {
+            NonDelegateAction::try_from(Action::AddKey(AddKeyAction {
+                public_key: lka.public_key,
+                access_key: AccessKey {
+                    nonce: 0,
+                    permission: AccessKeyPermission::FunctionCall(FunctionCallPermission {
+                        allowance: Some(lka.allowance.parse().unwrap()),
+                        receiver_id: lka.receiver_id.to_string(),
+                        method_names: lka.method_names.split(',').map(|s| s.to_string()).collect(),
+                    }),
+                },
+            }))
+        })
+        .collect::<Result<_, _>>()?;
 
     let delegate_action = DelegateAction {
         sender_id: account_id.clone(),
         receiver_id: account_id,
-        actions: vec![delegate_add_key_action],
+        actions: [full_access_keys, limited_access_keys].concat(),
         nonce,
         max_block_height,
         public_key: signer_pk,

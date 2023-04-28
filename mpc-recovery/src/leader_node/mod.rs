@@ -369,10 +369,6 @@ async fn process_add_key<T: OAuthTokenVerifier>(
         internal_acc_id.clone(),
     )
     .await?;
-    let new_public_key: PublicKey = request
-        .public_key
-        .parse()
-        .map_err(|e| AddKeyError::MalformedPublicKey(request.public_key, e))?;
 
     let user_account_id: AccountId = match &request.near_account_id {
         Some(near_account_id) => near_account_id
@@ -399,7 +395,7 @@ async fn process_add_key<T: OAuthTokenVerifier>(
         let delegate_action = get_add_key_delegate_action(
             user_account_id.clone(),
             user_recovery_pk.clone(),
-            new_public_key.clone(),
+            request.create_account_options.clone(),
             nonce,
             max_block_height,
         )?;
@@ -432,7 +428,22 @@ async fn process_add_key<T: OAuthTokenVerifier>(
         // TODO: Probably need to check more fields
         if matches!(resp.status, FinalExecutionStatus::SuccessValue(_)) {
             Ok(AddKeyResponse::Ok {
-                user_public_key: new_public_key.to_string(),
+                full_access_keys: request
+                    .create_account_options
+                    .clone()
+                    .full_access_keys
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|pk| pk.to_string())
+                    .collect(),
+                limited_access_keys: request
+                    .create_account_options
+                    .clone()
+                    .limited_access_keys
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|lak| lak.public_key.to_string())
+                    .collect(),
                 near_account_id: user_account_id.to_string(),
             })
         } else {
@@ -452,7 +463,7 @@ async fn add_key<T: OAuthTokenVerifier>(
             Some(ref near_account_id) => near_account_id,
             None => "not specified",
         },
-        public_key = &request.public_key,
+        create_account_options = request.create_account_options.to_string(),
         iodc_token = format!("{:.5}...", request.oidc_token),
         "add_key request"
     );

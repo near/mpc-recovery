@@ -95,17 +95,24 @@ async fn test_basic_action() -> anyhow::Result<()> {
                 .add_key(AddKeyRequest {
                     near_account_id: Some(account_id.to_string()),
                     oidc_token: oidc_token.clone(),
-                    public_key: new_user_public_key.clone(),
+                    create_account_options: CreateAccountOptions {
+                        full_access_keys: Some(vec![new_user_public_key.parse()?]),
+                        limited_access_keys: None,
+                        contract_bytes: None,
+                    },
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
-            assert!(matches!(
-                add_key_response,
-                AddKeyResponse::Ok {
-                    user_public_key: new_pk,
-                    near_account_id: acc_id,
-                } if new_pk == new_user_public_key && acc_id == account_id.to_string()
-            ));
+            let AddKeyResponse::Ok {
+                full_access_keys,
+                limited_access_keys,
+                near_account_id,
+            } = add_key_response else {
+                anyhow::bail!("unexpected pattern");
+            };
+            assert_eq!(full_access_keys, vec![new_user_public_key.clone()]);
+            assert_eq!(limited_access_keys, Vec::<String>::new());
+            assert_eq!(near_account_id, account_id.to_string());
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
 
@@ -117,7 +124,11 @@ async fn test_basic_action() -> anyhow::Result<()> {
                 .add_key(AddKeyRequest {
                     near_account_id: Some(account_id.to_string()),
                     oidc_token,
-                    public_key: new_user_public_key.clone(),
+                    create_account_options: CreateAccountOptions {
+                        full_access_keys: Some(vec![new_user_public_key.clone().parse()?]),
+                        limited_access_keys: None,
+                        contract_bytes: None,
+                    },
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
