@@ -117,7 +117,11 @@ pub fn get_add_key_delegate_action(
                     permission: AccessKeyPermission::FunctionCall(FunctionCallPermission {
                         allowance: Some(lka.allowance.parse().unwrap()),
                         receiver_id: lka.receiver_id.to_string(),
-                        method_names: lka.method_names.split(',').map(|s| s.to_string()).collect(),
+                        method_names: if lka.method_names.is_empty() {
+                            vec![]
+                        } else {
+                            lka.method_names.split(',').map(|s| s.to_string()).collect()
+                        },
                     }),
                 },
             }))
