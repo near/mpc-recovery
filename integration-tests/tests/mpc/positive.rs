@@ -14,7 +14,7 @@ use std::time::Duration;
 use workspaces::types::AccessKeyPermission;
 
 #[tokio::test]
-async fn test_trio() -> anyhow::Result<()> {
+async fn test_aggregate_signatures() -> anyhow::Result<()> {
     with_nodes(3, |ctx| {
         Box::pin(async move {
             let payload: String = rand::thread_rng()
@@ -23,13 +23,8 @@ async fn test_trio() -> anyhow::Result<()> {
                 .map(char::from)
                 .collect();
 
-            // TODO integrate this better with testing
             let client = reqwest::Client::new();
-            let signer_urls: Vec<_> = ctx
-                .signer_nodes
-                .iter()
-                .map(|s| s.local_address.clone())
-                .collect();
+            let signer_urls: Vec<_> = ctx.signer_nodes.iter().map(|s| s.address.clone()).collect();
 
             let signature = sign(
                 &client,
@@ -51,7 +46,6 @@ async fn test_trio() -> anyhow::Result<()> {
     .await
 }
 
-// TODO: write a test with real token
 #[tokio::test]
 async fn test_basic_action() -> anyhow::Result<()> {
     with_nodes(3, |ctx| {
@@ -145,7 +139,7 @@ async fn test_basic_action() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_random_recovery_keys() -> anyhow::Result<()> {
-    with_nodes(4, |ctx| {
+    with_nodes(3, |ctx| {
         Box::pin(async move {
             let account_id = account::random(ctx.worker)?;
             let user_full_access_key = key::random();

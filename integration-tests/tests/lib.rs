@@ -1,119 +1,83 @@
-mod docker;
+mod containers;
+// mod docker;
 mod mpc;
+mod sandbox;
 
-use crate::docker::{LeaderNode, SignNode};
-use bollard::Docker;
+use containers::{LeaderNodeApi, SignerNodeApi};
 use curv::elliptic::curves::{Ed25519, Point};
-use docker::{datastore::Datastore, redis::Redis, relayer::Relayer};
 use futures::future::BoxFuture;
 use mpc_recovery::GenerateResult;
+use near_units::parse_near;
 use std::time::Duration;
-use workspaces::{network::Sandbox, AccountId, Worker};
+use workspaces::{network::Sandbox, Worker};
 
 const NETWORK: &str = "mpc_recovery_integration_test_network";
 const GCP_PROJECT_ID: &str = "mpc-recovery-gcp-project";
+// TODO: figure out how to instantiate an use a local firebase deployment
+const FIREBASE_AUDIENCE_ID: &str = "not actually used in integration tests";
 #[cfg(target_os = "linux")]
 const HOST_MACHINE_FROM_DOCKER: &str = "172.17.0.1";
 #[cfg(target_os = "macos")]
 const HOST_MACHINE_FROM_DOCKER: &str = "docker.for.mac.localhost";
 
 pub struct TestContext<'a> {
-    leader_node: &'a LeaderNode,
+    leader_node: &'a LeaderNodeApi,
     _pk_set: &'a Vec<Point<Ed25519>>,
     worker: &'a Worker<Sandbox>,
-    signer_nodes: &'a Vec<SignNode>,
-}
-
-async fn create_account(
-    worker: &Worker<Sandbox>,
-) -> anyhow::Result<(AccountId, near_crypto::SecretKey)> {
-    let (account_id, account_sk) = worker.dev_generate().await;
-    worker
-        .create_tla(account_id.clone(), account_sk.clone())
-        .await?
-        .into_result()?;
-
-    let account_sk: near_crypto::SecretKey =
-        serde_json::from_str(&serde_json::to_string(&account_sk)?)?;
-
-    Ok((account_id, account_sk))
+    signer_nodes: &'a Vec<SignerNodeApi>,
 }
 
 async fn with_nodes<F>(nodes: usize, f: F) -> anyhow::Result<()>
 where
     F: for<'a> FnOnce(TestContext<'a>) -> BoxFuture<'a, anyhow::Result<()>>,
 {
-    let docker = Docker::connect_with_local_defaults()?;
-
-    let GenerateResult { pk_set, secrets } = mpc_recovery::generate(nodes);
     let worker = workspaces::sandbox().await?;
-    let social_db = worker
-        .import_contract(&"social.near".parse()?, &workspaces::mainnet().await?)
-        .transact()
-        .await?;
-    social_db
-        .call("new")
-        .max_gas()
-        .transact()
-        .await?
-        .into_result()?;
+    let social_db = sandbox::initialize_social_db(&worker).await?;
+    sandbox::initialize_linkdrop(&worker).await?;
+    let (relayer_account_id, relayer_account_sk) = sandbox::create_account(&worker).await?;
+    let (creator_account_id, creator_account_sk) = sandbox::create_account(&worker).await?;
+    let (social_account_id, social_account_sk) = sandbox::create_account(&worker).await?;
+    sandbox::up_funds_for_account(&worker, &social_account_id, parse_near!("100 N")).await?;
 
-    let near_root_account = worker.root_account()?;
-    near_root_account
-        .deploy(include_bytes!("../linkdrop.wasm"))
-        .await?
-        .into_result()?;
-    near_root_account
-        .call(near_root_account.id(), "new")
-        .max_gas()
-        .transact()
-        .await?
-        .into_result()?;
-    let (relayer_account_id, relayer_account_sk) = create_account(&worker).await?;
-    let (creator_account_id, creator_account_sk) = create_account(&worker).await?;
-    let (social_account_id, social_account_sk) = create_account(&worker).await?;
-    up_funds_for_account(&worker, &social_account_id).await?;
-
+    let docker_client = containers::DockerClient::default();
+    let datastore = containers::Datastore::run(&docker_client, NETWORK, GCP_PROJECT_ID).await?;
+    let redis = containers::Redis::run(&docker_client, NETWORK).await?;
     let near_rpc = format!("http://{HOST_MACHINE_FROM_DOCKER}:{}", worker.rpc_port());
-    let datastore = Datastore::start(&docker, NETWORK, GCP_PROJECT_ID).await?;
-    let redis = Redis::start(&docker, NETWORK).await?;
-    let relayer = Relayer::start(
-        &docker,
+    let relayer = containers::Relayer::run(
+        &docker_client,
         NETWORK,
         &near_rpc,
-        &redis.hostname,
+        &redis.address,
         &relayer_account_id,
         &relayer_account_sk,
         &creator_account_id,
-        social_db.id(),
+        &social_db.id(),
         &social_account_id,
         &social_account_sk,
     )
     .await?;
-    tokio::time::sleep(Duration::from_millis(10000)).await;
 
-    let pagoda_firebase_audience_id = "not actually used in integration tests";
-
+    let GenerateResult { pk_set, secrets } = mpc_recovery::generate(nodes);
     let mut signer_nodes = Vec::new();
     for (i, (share, cipher_key)) in secrets.iter().enumerate().take(nodes) {
-        let addr = SignNode::start(
-            &docker,
+        let signer_node = containers::SignerNode::run(
+            &docker_client,
             NETWORK,
             i as u64,
             share,
             cipher_key,
             &datastore.address,
             GCP_PROJECT_ID,
-            pagoda_firebase_audience_id,
+            FIREBASE_AUDIENCE_ID,
         )
         .await?;
-        signer_nodes.push(addr);
+        signer_nodes.push(signer_node);
     }
-
     let signer_urls: &Vec<_> = &signer_nodes.iter().map(|n| n.address.clone()).collect();
 
-    let leader_node = LeaderNode::start(
-        &docker,
+    let near_root_account = worker.root_account()?;
+    let leader_node = containers::LeaderNode::run(
+        &docker_client,
         NETWORK,
         signer_urls.clone(),
         &near_rpc,
@@ -123,42 +87,21 @@ where
         near_root_account.id(),
         &creator_account_id,
         &creator_account_sk,
-        pagoda_firebase_audience_id,
+        FIREBASE_AUDIENCE_ID,
     )
     .await?;
 
     // Wait until all nodes initialize
+    // TODO: proper wait condition
     tokio::time::sleep(Duration::from_millis(10000)).await;
 
-    let result = f(TestContext {
-        leader_node: &leader_node,
+    f(TestContext {
+        leader_node: &leader_node.api(),
         _pk_set: &pk_set,
-        signer_nodes: &signer_nodes,
+        signer_nodes: &signer_nodes.iter().map(|n| n.api()).collect(),
         worker: &worker,
     })
-    .await;
-
-    drop(datastore);
-    drop(leader_node);
-    drop(signer_nodes);
-    drop(relayer);
-    drop(redis);
-
-    // Wait until all docker containers are destroyed.
-    // See `Drop` impl for `LeaderNode` and `SignNode` for more info.
-    tokio::time::sleep(Duration::from_millis(2000)).await;
-
-    result
-}
-
-async fn up_funds_for_account(worker: &Worker<Sandbox>, id: &AccountId) -> anyhow::Result<()> {
-    const AMOUNT: u128 = 99 * 10u128.pow(24);
-    for _ in 0..10 {
-        let tmp_account = worker.dev_create_account().await?;
-        tmp_account.transfer_near(id, AMOUNT).await?.into_result()?;
-        tmp_account.delete_account(id).await?.into_result()?;
-    }
-    Ok(())
+    .await
 }
 
 mod account {
@@ -230,8 +173,8 @@ mod check {
     use crate::TestContext;
     use workspaces::AccountId;
 
-    pub async fn access_key_exists<'a>(
-        ctx: &TestContext<'a>,
+    pub async fn access_key_exists(
+        ctx: &TestContext<'_>,
         account_id: &AccountId,
         public_key: &str,
     ) -> anyhow::Result<()> {
@@ -249,10 +192,7 @@ mod check {
         }
     }
 
-    pub async fn no_account<'a>(
-        ctx: &TestContext<'a>,
-        account_id: &AccountId,
-    ) -> anyhow::Result<()> {
+    pub async fn no_account(ctx: &TestContext<'_>, account_id: &AccountId) -> anyhow::Result<()> {
         if ctx.worker.view_account(account_id).await.is_err() {
             Ok(())
         } else {
