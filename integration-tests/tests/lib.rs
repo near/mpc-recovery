@@ -8,7 +8,6 @@ use curv::elliptic::curves::{Ed25519, Point};
 use futures::future::BoxFuture;
 use mpc_recovery::GenerateResult;
 use near_units::parse_near;
-use std::time::Duration;
 use workspaces::{network::Sandbox, Worker};
 
 const NETWORK: &str = "mpc_recovery_integration_test_network";
@@ -90,10 +89,6 @@ where
         FIREBASE_AUDIENCE_ID,
     )
     .await?;
-
-    // Wait until all nodes initialize
-    // TODO: proper wait condition
-    tokio::time::sleep(Duration::from_millis(10000)).await;
 
     f(TestContext {
         leader_node: &leader_node.api(),

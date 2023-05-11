@@ -7,7 +7,7 @@ use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_crypto::SecretKey;
 use serde::{Deserialize, Serialize};
 use testcontainers::{
-    clients::Cli, images::generic::GenericImage, Container, Image, RunnableImage,
+    clients::Cli, core::WaitFor, images::generic::GenericImage, Container, Image, RunnableImage,
 };
 use workspaces::AccountId;
 
@@ -74,7 +74,8 @@ pub struct Redis<'a> {
 
 impl<'a> Redis<'a> {
     pub async fn run(docker_client: &'a DockerClient, network: &str) -> anyhow::Result<Redis<'a>> {
-        let image = GenericImage::new("redis", "latest");
+        let image = GenericImage::new("redis", "latest")
+            .with_wait_for(WaitFor::message_on_stdout("Ready to accept connections"));
         let image: RunnableImage<GenericImage> = image.into();
         let image = image.with_network(network);
         let container = docker_client.cli.run(image);
@@ -107,6 +108,7 @@ impl<'a> Relayer<'a> {
         let port = portpicker::pick_unused_port().expect("no free ports");
 
         let image = GenericImage::new("pagoda-relayer-rs-fastauth", "latest")
+            .with_wait_for(WaitFor::message_on_stdout("listening on"))
             .with_exposed_port(port)
             .with_env_var("RUST_LOG", "DEBUG")
             .with_env_var("NETWORK", "custom")
@@ -155,6 +157,7 @@ impl<'a> Datastore<'a> {
         let port = portpicker::pick_unused_port().expect("no free ports");
 
         let image = GenericImage::new("google/cloud-sdk", "latest")
+            .with_wait_for(WaitFor::message_on_stderr("Dev App Server is now running."))
             .with_exposed_port(port)
             .with_entrypoint("gcloud")
             .with_env_var("DATASTORE_EMULATOR_HOST", &format!("0.0.0.0:{port}"))
@@ -211,6 +214,7 @@ impl<'a> SignerNode<'a> {
         firebase_audience_id: &str,
     ) -> anyhow::Result<SignerNode<'a>> {
         let image: GenericImage = GenericImage::new("near/mpc-recovery", "latest")
+            .with_wait_for(WaitFor::message_on_stdout("running a sign node"))
             .with_exposed_port(Self::CONTAINER_PORT)
             .with_env_var("RUST_LOG", "mpc_recovery=DEBUG");
         let image: RunnableImage<GenericImage> = (
@@ -282,6 +286,7 @@ impl<'a> LeaderNode<'a> {
         let port = portpicker::pick_unused_port().expect("no free ports");
 
         let image = GenericImage::new("near/mpc-recovery", "latest")
+            .with_wait_for(WaitFor::message_on_stdout("running a leader node"))
             .with_exposed_port(port)
             .with_env_var("RUST_LOG", "mpc_recovery=DEBUG");
         let mut cmd = vec![
