@@ -6,7 +6,8 @@ use mpc_recovery::{
     msg::{AddKeyRequest, AddKeyResponse, NewAccountRequest, NewAccountResponse},
     oauth::get_test_claims,
     transaction::{
-        call, sign, to_dalek_combined_public_key, CreateAccountOptions, LimitedAccessKey,
+        call_all_nodes, sign_payload_with_mpc, to_dalek_combined_public_key, CreateAccountOptions,
+        LimitedAccessKey,
     },
 };
 use rand::{distributions::Alphanumeric, Rng};
@@ -31,7 +32,7 @@ async fn test_trio() -> anyhow::Result<()> {
                 .map(|s| s.local_address.clone())
                 .collect();
 
-            let signature = sign(
+            let signature = sign_payload_with_mpc(
                 &client,
                 &signer_urls,
                 "validToken:test-subject".to_string(),
@@ -40,7 +41,7 @@ async fn test_trio() -> anyhow::Result<()> {
             .await?;
 
             let account_id = get_test_claims("test-subject".to_string()).get_internal_account_id();
-            let res = call(&client, &signer_urls, "public_key", account_id).await?;
+            let res = call_all_nodes(&client, &signer_urls, "public_key", account_id).await?;
 
             let combined_pub = to_dalek_combined_public_key(&res).unwrap();
             combined_pub.verify(payload.as_bytes(), &signature)?;
