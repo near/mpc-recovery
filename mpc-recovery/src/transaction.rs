@@ -169,7 +169,8 @@ pub async fn get_mpc_signed_delegated_action(
 
     let hash = hash(&bytes);
 
-    let signature = sign(client, sign_nodes, oidc_token, hash.as_bytes().to_vec()).await?;
+    let signature =
+        sign_payload_with_mpc(client, sign_nodes, oidc_token, hash.as_bytes().to_vec()).await?;
 
     Ok(SignedDelegateAction {
         delegate_action,
@@ -177,7 +178,7 @@ pub async fn get_mpc_signed_delegated_action(
     })
 }
 
-pub async fn sign(
+pub async fn sign_payload_with_mpc(
     client: &reqwest::Client,
     sign_nodes: &[String],
     oidc_token: String,
@@ -189,12 +190,12 @@ pub async fn sign(
     };
 
     let commitments: Vec<SignedCommitment> =
-        call(client, sign_nodes, "commit", commit_request).await?;
+        call_all_nodes(client, sign_nodes, "commit", commit_request).await?;
 
-    let reveals: Vec<Reveal> = call(client, sign_nodes, "reveal", commitments).await?;
+    let reveals: Vec<Reveal> = call_all_nodes(client, sign_nodes, "reveal", commitments).await?;
 
     let signature_shares: Vec<protocols::Signature> =
-        call(client, sign_nodes, "signature_share", reveals).await?;
+        call_all_nodes(client, sign_nodes, "signature_share", reveals).await?;
 
     let raw_sig = aggsig::add_signature_parts(&signature_shares);
 
@@ -202,7 +203,7 @@ pub async fn sign(
 }
 
 /// Call every node with an identical payload and send the response
-pub async fn call<Req: Serialize, Res: DeserializeOwned>(
+pub async fn call_all_nodes<Req: Serialize, Res: DeserializeOwned>(
     client: &reqwest::Client,
     sign_nodes: &[String],
     path: &str,
