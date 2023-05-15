@@ -5657,6 +5657,7 @@ dependencies = [
 [[package]]
 name = "workspaces"
 version = "0.7.0"
+source = "git+https://github.com/near/workspaces-rs?branch=daniyar/custom-validator-key#42aaefd588c153d2abb81fa771d45c7ae6d4cdbd"
 dependencies = [
  "async-process",
  "async-trait",
