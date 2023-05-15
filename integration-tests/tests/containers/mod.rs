@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use anyhow::anyhow;
 use bollard::Docker;
 use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::GenericArray};
@@ -195,7 +197,7 @@ impl<'a> Datastore<'a> {
             .with_wait_for(WaitFor::message_on_stderr("Dev App Server is now running."))
             .with_exposed_port(port)
             .with_entrypoint("gcloud")
-            .with_env_var("DATASTORE_EMULATOR_HOST", &format!("0.0.0.0:{port}"))
+            .with_env_var("DATASTORE_EMULATOR_HOST", format!("0.0.0.0:{port}"))
             .with_env_var("DATASTORE_PROJECT_ID", project_id);
         let image: RunnableImage<GenericImage> = (
             image,

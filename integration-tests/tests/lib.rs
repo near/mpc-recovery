@@ -97,7 +97,7 @@ where
         &relayer_account_id,
         &relayer_account_sk,
         &creator_account_id,
-        &social_db.id(),
+        social_db.id(),
         &social_account_id,
         &social_account_sk,
     )
