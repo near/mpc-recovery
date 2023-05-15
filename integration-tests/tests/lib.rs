@@ -3,21 +3,22 @@ mod containers;
 mod mpc;
 mod sandbox;
 
+use bollard::exec::{CreateExecOptions, StartExecResults};
 use containers::{LeaderNodeApi, SignerNodeApi};
 use curv::elliptic::curves::{Ed25519, Point};
-use futures::future::BoxFuture;
+use futures::{future::BoxFuture, StreamExt};
 use mpc_recovery::GenerateResult;
+use near_crypto::KeyFile;
 use near_units::parse_near;
-use workspaces::{network::Sandbox, Worker};
+use workspaces::{
+    network::{Sandbox, ValidatorKeyTactic},
+    Worker,
+};
 
 const NETWORK: &str = "mpc_recovery_integration_test_network";
 const GCP_PROJECT_ID: &str = "mpc-recovery-gcp-project";
 // TODO: figure out how to instantiate an use a local firebase deployment
 const FIREBASE_AUDIENCE_ID: &str = "not actually used in integration tests";
-#[cfg(target_os = "linux")]
-const HOST_MACHINE_FROM_DOCKER: &str = "172.17.0.1";
-#[cfg(target_os = "macos")]
-const HOST_MACHINE_FROM_DOCKER: &str = "docker.for.mac.localhost";
 
 pub struct TestContext<'a> {
     leader_node: &'a LeaderNodeApi,
@@ -26,26 +27,72 @@ pub struct TestContext<'a> {
     signer_nodes: &'a Vec<SignerNodeApi>,
 }
 
+async fn fetch_validator_keys(
+    docker_client: &containers::DockerClient,
+    sandbox: &containers::Sandbox<'_>,
+) -> anyhow::Result<KeyFile> {
+    let create_result = docker_client
+        .docker
+        .create_exec(
+            sandbox.container.id(),
+            CreateExecOptions::<String> {
+                attach_stdout: Some(true),
+                attach_stderr: Some(true),
+                cmd: Some(vec![
+                    "cat".to_string(),
+                    "/root/.near/validator_key.json".to_string(),
+                ]),
+                ..Default::default()
+            },
+        )
+        .await?;
+
+    let start_result = docker_client
+        .docker
+        .start_exec(&create_result.id, None)
+        .await?;
+
+    match start_result {
+        StartExecResults::Attached { mut output, .. } => {
+            let mut stream_contents = Vec::new();
+            while let Some(chunk) = output.next().await {
+                stream_contents.extend_from_slice(&chunk?.into_bytes());
+            }
+
+            Ok(serde_json::from_slice(&stream_contents)?)
+        }
+        StartExecResults::Detached => unreachable!("unexpected detached output"),
+    }
+}
+
 async fn with_nodes<F>(nodes: usize, f: F) -> anyhow::Result<()>
 where
     F: for<'a> FnOnce(TestContext<'a>) -> BoxFuture<'a, anyhow::Result<()>>,
 {
-    let worker = workspaces::sandbox().await?;
+    let docker_client = containers::DockerClient::default();
+    let sandbox = containers::Sandbox::run(&docker_client, NETWORK).await?;
+    let validator_key = fetch_validator_keys(&docker_client, &sandbox).await?;
+
+    let worker = workspaces::sandbox()
+        .rpc_addr(&sandbox.address)
+        .validator_key(ValidatorKeyTactic::Known(
+            validator_key.account_id.to_string().parse()?,
+            validator_key.secret_key.to_string().parse()?,
+        ))
+        .await?;
     let social_db = sandbox::initialize_social_db(&worker).await?;
     sandbox::initialize_linkdrop(&worker).await?;
     let (relayer_account_id, relayer_account_sk) = sandbox::create_account(&worker).await?;
     let (creator_account_id, creator_account_sk) = sandbox::create_account(&worker).await?;
     let (social_account_id, social_account_sk) = sandbox::create_account(&worker).await?;
-    sandbox::up_funds_for_account(&worker, &social_account_id, parse_near!("100 N")).await?;
+    sandbox::up_funds_for_account(&worker, &social_account_id, parse_near!("1000 N")).await?;
 
-    let docker_client = containers::DockerClient::default();
     let datastore = containers::Datastore::run(&docker_client, NETWORK, GCP_PROJECT_ID).await?;
     let redis = containers::Redis::run(&docker_client, NETWORK).await?;
-    let near_rpc = format!("http://{HOST_MACHINE_FROM_DOCKER}:{}", worker.rpc_port());
     let relayer = containers::Relayer::run(
         &docker_client,
         NETWORK,
-        &near_rpc,
+        &sandbox.address,
         &redis.address,
         &relayer_account_id,
         &relayer_account_sk,
@@ -79,7 +126,7 @@ where
         &docker_client,
         NETWORK,
         signer_urls.clone(),
-        &near_rpc,
+        &sandbox.address,
         &relayer.address,
         &datastore.address,
         GCP_PROJECT_ID,

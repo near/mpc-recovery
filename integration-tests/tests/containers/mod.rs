@@ -87,6 +87,41 @@ impl<'a> Redis<'a> {
     }
 }
 
+pub struct Sandbox<'a> {
+    pub container: Container<'a, GenericImage>,
+    pub address: String,
+}
+
+impl<'a> Sandbox<'a> {
+    pub async fn run(
+        docker_client: &'a DockerClient,
+        network: &str,
+    ) -> anyhow::Result<Sandbox<'a>> {
+        let image =
+            GenericImage::new("ghcr.io/near/sandbox", "latest").with_wait_for(WaitFor::seconds(2));
+        let image: RunnableImage<GenericImage> = (
+            image,
+            vec![
+                "--rpc-addr".to_string(),
+                "0.0.0.0:3000".to_string(),
+                "--network-addr".to_string(),
+                "0.0.0.0:3001".to_string(),
+            ],
+        )
+            .into();
+        let image = image.with_network(network);
+        let container = docker_client.cli.run(image);
+        let address = docker_client
+            .get_network_ip_address(&container, network)
+            .await?;
+
+        Ok(Sandbox {
+            container,
+            address: format!("http://{address}:3000"),
+        })
+    }
+}
+
 pub struct Relayer<'a> {
     pub container: Container<'a, GenericImage>,
     pub address: String,
@@ -107,7 +142,7 @@ impl<'a> Relayer<'a> {
     ) -> anyhow::Result<Relayer<'a>> {
         let port = portpicker::pick_unused_port().expect("no free ports");
 
-        let image = GenericImage::new("pagoda-relayer-rs-fastauth", "latest")
+        let image = GenericImage::new("ghcr.io/near/pagoda-relayer-rs-fastauth", "latest")
             .with_wait_for(WaitFor::message_on_stdout("listening on"))
             .with_exposed_port(port)
             .with_env_var("RUST_LOG", "DEBUG")
@@ -286,7 +321,7 @@ impl<'a> LeaderNode<'a> {
         let port = portpicker::pick_unused_port().expect("no free ports");
 
         let image = GenericImage::new("near/mpc-recovery", "latest")
-            .with_wait_for(WaitFor::message_on_stdout("running a leader node"))
+            .with_wait_for(WaitFor::seconds(10))
             .with_exposed_port(port)
             .with_env_var("RUST_LOG", "mpc_recovery=DEBUG");
         let mut cmd = vec![

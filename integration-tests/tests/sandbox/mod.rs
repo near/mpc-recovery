@@ -53,16 +53,29 @@ pub async fn up_funds_for_account(
     target_account_id: &AccountId,
     target_amount: u128,
 ) -> anyhow::Result<()> {
-    while worker.view_account(target_account_id).await?.balance < target_amount {
+    // Max balance we can transfer out of a freshly created dev account
+    const DEV_ACCOUNT_AVAILABLE_BALANCE: u128 = 99 * 10u128.pow(24);
+
+    let diff: u128 = target_amount - worker.view_account(target_account_id).await?.balance;
+    // Integer ceiling division
+    let n = (diff + DEV_ACCOUNT_AVAILABLE_BALANCE - 1) / DEV_ACCOUNT_AVAILABLE_BALANCE;
+    let futures = (0..n).map(|_| async {
         let tmp_account = worker.dev_create_account().await?;
         tmp_account
-            .transfer_near(target_account_id, 99 * 10u128.pow(24))
+            .transfer_near(target_account_id, DEV_ACCOUNT_AVAILABLE_BALANCE)
             .await?
             .into_result()?;
         tmp_account
             .delete_account(target_account_id)
             .await?
             .into_result()?;
-    }
+
+        Ok::<(), anyhow::Error>(())
+    });
+    futures::future::join_all(futures)
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
+
     Ok(())
 }
