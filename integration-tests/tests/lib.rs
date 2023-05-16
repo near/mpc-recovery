@@ -5,11 +5,11 @@ use curv::elliptic::curves::{Ed25519, Point};
 use futures::{future::BoxFuture, StreamExt};
 use mpc_recovery::GenerateResult;
 use mpc_recovery_integration_tests::{containers, sandbox};
-use near_crypto::KeyFile;
+use near_crypto::{KeyFile, SecretKey};
 use near_units::parse_near;
 use workspaces::{
     network::{Sandbox, ValidatorKeyTactic},
-    Worker,
+    AccountId, Worker,
 };
 
 const NETWORK: &str = "mpc_recovery_integration_test_network";
@@ -62,11 +62,18 @@ async fn fetch_validator_keys(
     }
 }
 
-async fn with_nodes<F>(nodes: usize, f: F) -> anyhow::Result<()>
-where
-    F: for<'a> FnOnce(TestContext<'a>) -> BoxFuture<'a, anyhow::Result<()>>,
-{
-    let docker_client = containers::DockerClient::default();
+struct RelayerCtx<'a> {
+    sandbox: containers::Sandbox<'a>,
+    _redis: containers::Redis<'a>,
+    relayer: containers::Relayer<'a>,
+    worker: Worker<Sandbox>,
+    creator_account_id: AccountId,
+    creator_account_sk: SecretKey,
+}
+
+async fn initialize_relayer(
+    docker_client: &containers::DockerClient,
+) -> anyhow::Result<RelayerCtx> {
     let sandbox = containers::Sandbox::run(&docker_client, NETWORK).await?;
     let validator_key = fetch_validator_keys(&docker_client, &sandbox).await?;
 
@@ -84,7 +91,6 @@ where
     let (social_account_id, social_account_sk) = sandbox::create_account(&worker).await?;
     sandbox::up_funds_for_account(&worker, &social_account_id, parse_near!("1000 N")).await?;
 
-    let datastore = containers::Datastore::run(&docker_client, NETWORK, GCP_PROJECT_ID).await?;
     let redis = containers::Redis::run(&docker_client, NETWORK).await?;
     let relayer = containers::Relayer::run(
         &docker_client,
@@ -100,8 +106,32 @@ where
     )
     .await?;
 
+    Ok(RelayerCtx {
+        sandbox,
+        _redis: redis,
+        relayer,
+        worker,
+        creator_account_id,
+        creator_account_sk,
+    })
+}
+
+async fn with_nodes<F>(nodes: usize, f: F) -> anyhow::Result<()>
+where
+    F: for<'a> FnOnce(TestContext<'a>) -> BoxFuture<'a, anyhow::Result<()>>,
+{
+    let docker_client = containers::DockerClient::default();
+
+    let relayer_ctx_future = initialize_relayer(&docker_client);
+    let datastore_future = containers::Datastore::run(&docker_client, NETWORK, GCP_PROJECT_ID);
+
+    let (relayer_ctx, datastore) =
+        futures::future::join(relayer_ctx_future, datastore_future).await;
+    let relayer_ctx = relayer_ctx?;
+    let datastore = datastore?;
+
     let GenerateResult { pk_set, secrets } = mpc_recovery::generate(nodes);
-    let mut signer_nodes = Vec::new();
+    let mut signer_node_futures = Vec::new();
     for (i, (share, cipher_key)) in secrets.iter().enumerate().take(nodes) {
         let signer_node = containers::SignerNode::run(
             &docker_client,
@@ -112,24 +142,27 @@ where
             &datastore.address,
             GCP_PROJECT_ID,
             FIREBASE_AUDIENCE_ID,
-        )
-        .await?;
-        signer_nodes.push(signer_node);
+        );
+        signer_node_futures.push(signer_node);
     }
+    let signer_nodes = futures::future::join_all(signer_node_futures)
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
     let signer_urls: &Vec<_> = &signer_nodes.iter().map(|n| n.address.clone()).collect();
 
-    let near_root_account = worker.root_account()?;
+    let near_root_account = relayer_ctx.worker.root_account()?;
     let leader_node = containers::LeaderNode::run(
         &docker_client,
         NETWORK,
         signer_urls.clone(),
-        &sandbox.address,
-        &relayer.address,
+        &relayer_ctx.sandbox.address,
+        &relayer_ctx.relayer.address,
         &datastore.address,
         GCP_PROJECT_ID,
         near_root_account.id(),
-        &creator_account_id,
-        &creator_account_sk,
+        &relayer_ctx.creator_account_id,
+        &relayer_ctx.creator_account_sk,
         FIREBASE_AUDIENCE_ID,
     )
     .await?;
@@ -138,7 +171,7 @@ where
         leader_node: &leader_node.api(),
         _pk_set: &pk_set,
         signer_nodes: &signer_nodes.iter().map(|n| n.api()).collect(),
-        worker: &worker,
+        worker: &relayer_ctx.worker,
     })
     .await
 }
