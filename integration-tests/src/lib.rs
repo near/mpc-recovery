@@ -61,8 +61,8 @@ pub async fn initialize_relayer<'a>(
     docker_client: &'a containers::DockerClient,
     network: &str,
 ) -> anyhow::Result<RelayerCtx<'a>> {
-    let sandbox = containers::Sandbox::run(&docker_client, network).await?;
-    let validator_key = fetch_validator_keys(&docker_client, &sandbox).await?;
+    let sandbox = containers::Sandbox::run(docker_client, network).await?;
+    let validator_key = fetch_validator_keys(docker_client, &sandbox).await?;
 
     let worker = workspaces::sandbox()
         .rpc_addr(&sandbox.address)
@@ -78,9 +78,9 @@ pub async fn initialize_relayer<'a>(
     let (social_account_id, social_account_sk) = sandbox::create_account(&worker).await?;
     sandbox::up_funds_for_account(&worker, &social_account_id, parse_near!("1000 N")).await?;
 
-    let redis = containers::Redis::run(&docker_client, network).await?;
+    let redis = containers::Redis::run(docker_client, network).await?;
     let relayer = containers::Relayer::run(
-        &docker_client,
+        docker_client,
         network,
         &sandbox.address,
         &redis.address,
