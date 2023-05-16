@@ -2514,6 +2514,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bollard",
+ "clap 4.2.4",
  "curv-kzen",
  "ed25519-dalek",
  "futures",

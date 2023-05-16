@@ -98,19 +98,23 @@ pub struct Sandbox<'a> {
 }
 
 impl<'a> Sandbox<'a> {
+    pub const CONTAINER_RPC_PORT: u16 = 3000;
+    pub const CONTAINER_NETWORK_PORT: u16 = 3001;
+
     pub async fn run(
         docker_client: &'a DockerClient,
         network: &str,
     ) -> anyhow::Result<Sandbox<'a>> {
-        let image =
-            GenericImage::new("ghcr.io/near/sandbox", "latest").with_wait_for(WaitFor::seconds(2));
+        let image = GenericImage::new("ghcr.io/near/sandbox", "latest")
+            .with_wait_for(WaitFor::seconds(2))
+            .with_exposed_port(Self::CONTAINER_RPC_PORT);
         let image: RunnableImage<GenericImage> = (
             image,
             vec![
                 "--rpc-addr".to_string(),
-                "0.0.0.0:3000".to_string(),
+                format!("0.0.0.0:{}", Self::CONTAINER_RPC_PORT),
                 "--network-addr".to_string(),
-                "0.0.0.0:3001".to_string(),
+                format!("0.0.0.0:{}", Self::CONTAINER_NETWORK_PORT),
             ],
         )
             .into();
@@ -122,7 +126,7 @@ impl<'a> Sandbox<'a> {
 
         Ok(Sandbox {
             container,
-            address: format!("http://{address}:3000"),
+            address: format!("http://{}:{}", address, Self::CONTAINER_RPC_PORT),
         })
     }
 }
@@ -133,6 +137,8 @@ pub struct Relayer<'a> {
 }
 
 impl<'a> Relayer<'a> {
+    pub const CONTAINER_PORT: u16 = 3000;
+
     pub async fn run(
         docker_client: &'a DockerClient,
         network: &str,
@@ -145,14 +151,12 @@ impl<'a> Relayer<'a> {
         social_account_id: &AccountId,
         social_account_sk: &SecretKey,
     ) -> anyhow::Result<Relayer<'a>> {
-        let port = portpicker::pick_unused_port().expect("no free ports");
-
         let image = GenericImage::new("ghcr.io/near/pagoda-relayer-rs-fastauth", "latest")
             .with_wait_for(WaitFor::message_on_stdout("listening on"))
-            .with_exposed_port(port)
+            .with_exposed_port(Self::CONTAINER_PORT)
             .with_env_var("RUST_LOG", "DEBUG")
             .with_env_var("NETWORK", "custom")
-            .with_env_var("SERVER_PORT", port.to_string())
+            .with_env_var("SERVER_PORT", Self::CONTAINER_PORT.to_string())
             .with_env_var("RELAYER_RPC_URL", near_rpc)
             .with_env_var("RELAYER_ACCOUNT_ID", relayer_account_id.to_string())
             .with_env_var("REDIS_HOST", redis_hostname)
@@ -178,7 +182,7 @@ impl<'a> Relayer<'a> {
 
         Ok(Relayer {
             container,
-            address: format!("http://{ip_address}:{port}"),
+            address: format!("http://{}:{}", ip_address, Self::CONTAINER_PORT),
         })
     }
 }
@@ -189,18 +193,21 @@ pub struct Datastore<'a> {
 }
 
 impl<'a> Datastore<'a> {
+    pub const CONTAINER_PORT: u16 = 3000;
+
     pub async fn run(
         docker_client: &'a DockerClient,
         network: &str,
         project_id: &str,
     ) -> anyhow::Result<Datastore<'a>> {
-        let port = portpicker::pick_unused_port().expect("no free ports");
-
         let image = GenericImage::new("google/cloud-sdk", "latest")
             .with_wait_for(WaitFor::message_on_stderr("Dev App Server is now running."))
-            .with_exposed_port(port)
+            .with_exposed_port(Self::CONTAINER_PORT)
             .with_entrypoint("gcloud")
-            .with_env_var("DATASTORE_EMULATOR_HOST", format!("0.0.0.0:{port}"))
+            .with_env_var(
+                "DATASTORE_EMULATOR_HOST",
+                format!("0.0.0.0:{}", Self::CONTAINER_PORT),
+            )
             .with_env_var("DATASTORE_PROJECT_ID", project_id);
         let image: RunnableImage<GenericImage> = (
             image,
@@ -211,7 +218,7 @@ impl<'a> Datastore<'a> {
                 "start".to_string(),
                 format!("--project={project_id}"),
                 "--host-port".to_string(),
-                format!("0.0.0.0:{port}"),
+                format!("0.0.0.0:{}", Self::CONTAINER_PORT),
                 "--no-store-on-disk".to_string(),
             ],
         )
@@ -224,7 +231,7 @@ impl<'a> Datastore<'a> {
 
         Ok(Datastore {
             container,
-            address: format!("http://{ip_address}:{port}/"),
+            address: format!("http://{}:{}/", ip_address, Self::CONTAINER_PORT),
         })
     }
 }
