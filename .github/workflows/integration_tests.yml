@@ -20,7 +20,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Pull Relayer Docker Image
-        run: docker pull ghcr.io/near/pagoda-relayer-rs-fastauth
+        run: |
+          docker pull ghcr.io/near/pagoda-relayer-rs-fastauth
+          docker pull ghcr.io/near/sandbox
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
       - name: Install stable toolchain

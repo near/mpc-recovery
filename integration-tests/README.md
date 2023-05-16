@@ -2,10 +2,11 @@
 
 ## Basic guide
 
-Running integration tests requires you to have relayer docker image present on your machine:
+Running integration tests requires you to have relayer and sandbox docker images present on your machine:
 
 ```BASH
 docker pull ghcr.io/near/pagoda-relayer-rs-fastauth
+docker pull ghcr.io/near/sandbox
 ```
 
 Now, build mpc-recovery from the project's root:
