@@ -1,13 +1,10 @@
-mod containers;
-// mod docker;
 mod mpc;
-mod sandbox;
 
 use bollard::exec::{CreateExecOptions, StartExecResults};
-use containers::{LeaderNodeApi, SignerNodeApi};
 use curv::elliptic::curves::{Ed25519, Point};
 use futures::{future::BoxFuture, StreamExt};
 use mpc_recovery::GenerateResult;
+use mpc_recovery_integration_tests::{containers, sandbox};
 use near_crypto::KeyFile;
 use near_units::parse_near;
 use workspaces::{
@@ -21,10 +18,10 @@ const GCP_PROJECT_ID: &str = "mpc-recovery-gcp-project";
 const FIREBASE_AUDIENCE_ID: &str = "not actually used in integration tests";
 
 pub struct TestContext<'a> {
-    leader_node: &'a LeaderNodeApi,
+    leader_node: &'a containers::LeaderNodeApi,
     _pk_set: &'a Vec<Point<Ed25519>>,
     worker: &'a Worker<Sandbox>,
-    signer_nodes: &'a Vec<SignerNodeApi>,
+    signer_nodes: &'a Vec<containers::SignerNodeApi>,
 }
 
 async fn fetch_validator_keys(
