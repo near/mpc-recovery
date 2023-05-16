@@ -12,6 +12,7 @@ use crate::transaction::{
     get_add_key_delegate_action, get_create_account_delegate_action,
     get_local_signed_delegated_action, get_mpc_signed_delegated_action,
 };
+use axum::routing::get;
 use axum::{http::StatusCode, routing::post, Extension, Json, Router};
 use curv::elliptic::curves::{Ed25519, Point};
 use near_crypto::{ParseKeyError, PublicKey, SecretKey};
@@ -106,6 +107,14 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
     let cors_layer = tower_http::cors::CorsLayer::permissive();
 
     let app = Router::new()
+        // healthcheck endpoint
+        .route(
+            "/",
+            get(|| async move {
+                tracing::info!("node is ready to accept connections");
+                StatusCode::OK
+            }),
+        )
         .route("/new_account", post(new_account::<T>))
         .route("/add_key", post(add_key::<T>))
         .layer(Extension(state))

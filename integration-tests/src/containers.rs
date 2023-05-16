@@ -9,7 +9,10 @@ use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_crypto::SecretKey;
 use serde::{Deserialize, Serialize};
 use testcontainers::{
-    clients::Cli, core::WaitFor, images::generic::GenericImage, Container, Image, RunnableImage,
+    clients::Cli,
+    core::{ExecCommand, WaitFor},
+    images::generic::GenericImage,
+    Container, Image, RunnableImage,
 };
 use workspaces::AccountId;
 
@@ -251,7 +254,7 @@ impl<'a> SignerNode<'a> {
         firebase_audience_id: &str,
     ) -> anyhow::Result<SignerNode<'a>> {
         let image: GenericImage = GenericImage::new("near/mpc-recovery", "latest")
-            .with_wait_for(WaitFor::message_on_stdout("running a sign node"))
+            .with_wait_for(WaitFor::Nothing)
             .with_exposed_port(Self::CONTAINER_PORT)
             .with_env_var("RUST_LOG", "mpc_recovery=DEBUG");
         let image: RunnableImage<GenericImage> = (
@@ -282,6 +285,11 @@ impl<'a> SignerNode<'a> {
             .get_network_ip_address(&container, network)
             .await?;
         let host_port = container.get_host_port_ipv4(Self::CONTAINER_PORT);
+
+        container.exec(ExecCommand {
+            cmd: format!("bash -c 'while [[ \"$(curl -s -o /dev/null -w ''%{{http_code}}'' localhost:{})\" != \"200\" ]]; do sleep 1; done'", Self::CONTAINER_PORT),
+            ready_conditions: vec![WaitFor::message_on_stdout("node is ready to accept connections")]
+        });
 
         Ok(SignerNode {
             container,
@@ -323,7 +331,7 @@ impl<'a> LeaderNode<'a> {
         let port = portpicker::pick_unused_port().expect("no free ports");
 
         let image = GenericImage::new("near/mpc-recovery", "latest")
-            .with_wait_for(WaitFor::seconds(10))
+            .with_wait_for(WaitFor::Nothing)
             .with_exposed_port(port)
             .with_env_var("RUST_LOG", "mpc_recovery=DEBUG");
         let mut cmd = vec![
@@ -358,6 +366,11 @@ impl<'a> LeaderNode<'a> {
         let ip_address = docker_client
             .get_network_ip_address(&container, network)
             .await?;
+
+        container.exec(ExecCommand {
+            cmd: format!("bash -c 'while [[ \"$(curl -s -o /dev/null -w ''%{{http_code}}'' localhost:{})\" != \"200\" ]]; do sleep 1; done'", port),
+            ready_conditions: vec![WaitFor::message_on_stdout("node is ready to accept connections")]
+        });
 
         Ok(LeaderNode {
             container,
