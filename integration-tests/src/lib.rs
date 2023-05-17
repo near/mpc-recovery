@@ -3,7 +3,7 @@ use futures::StreamExt;
 use near_crypto::{KeyFile, SecretKey};
 use near_units::parse_near;
 use workspaces::{
-    network::{Sandbox, ValidatorKeyTactic},
+    network::{Sandbox, ValidatorKey},
     AccountId, Worker,
 };
 
@@ -66,7 +66,7 @@ pub async fn initialize_relayer<'a>(
 
     let worker = workspaces::sandbox()
         .rpc_addr(&sandbox.address)
-        .validator_key(ValidatorKeyTactic::Known(
+        .validator_key(ValidatorKey::Known(
             validator_key.account_id.to_string().parse()?,
             validator_key.secret_key.to_string().parse()?,
         ))
