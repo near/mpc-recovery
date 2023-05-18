@@ -16,7 +16,7 @@ use rand8::Rng;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use crate::transaction::{to_dalek_combined_public_key, to_dalek_public_key, to_dalek_signature};
+use crate::transaction::{to_dalek_public_key, to_dalek_signature};
 
 pub struct SigningState {
     committed: HashMap<AggrCommitment, Committed>,
@@ -292,7 +292,7 @@ impl NodePublicKeys {
         }
 
         tracing::debug!("Initializing NodePublicKeys state");
-        let signature = aggsig::sign_single(Self::MESSAGE, sk);
+        let signature = aggsig::partial_sign_hashed(Self::MESSAGE, sk);
         let _ = std::mem::replace(self, NodePublicKeys::Initializing(signature.clone()));
         Ok(signature)
     }
@@ -314,14 +314,7 @@ impl NodePublicKeys {
         }
 
         tracing::debug!("Verifying NodePublicKeys state");
-        let raw_sig = aggsig::add_signature_parts(&sigs[..]);
-        let sig = to_dalek_signature(&raw_sig)?;
-
-        let combined_pub = to_dalek_combined_public_key(&pks)?;
-        combined_pub.verify(Self::MESSAGE, &sig).map_err(|err| {
-            tracing::error!("Signature unable to be verified: {err}");
-            anyhow::anyhow!("Unable to verify signature with public keys: {err}")
-        })?;
+        protocols::Signature::verify_hashed(&sigs[..], &pks[..], Self::MESSAGE)?;
 
         let _ = std::mem::replace(self, NodePublicKeys::Initialized(pks));
         tracing::debug!("Initialized NodePublicKeys state");
@@ -404,6 +397,37 @@ mod tests {
     use curv::elliptic::curves::{Ed25519, Point};
     use ed25519_dalek::{SignatureError, Verifier};
     use multi_party_eddsa::protocols::ExpandedKeyPair;
+
+    #[test]
+    fn mitigate_rogue_attack() -> anyhow::Result<()> {
+        // Generate node keys and signing keys
+        let node1 = ExpandedKeyPair::create();
+        let node2 = ExpandedKeyPair::create();
+        let node3 = ExpandedKeyPair::create();
+        let pk_set = vec![
+            node1.public_key.clone(),
+            node2.public_key.clone(),
+            node3.public_key.clone(),
+        ];
+        let nodes = vec![node1, node2, node3];
+
+        // Generate node public keys
+        let mut node_pks = vec![];
+        let mut node_sigs = vec![];
+        for node in &nodes {
+            let mut node_pk = NodePublicKeys::Uninitialized;
+            let node_sig = node_pk.initialize(node)?;
+            node_pks.push(node_pk);
+            node_sigs.push(node_sig);
+        }
+
+        // Finalize node public keys
+        for (i, node_pk) in node_pks.iter_mut().enumerate() {
+            node_pk.finalize(i, pk_set.clone(), node_sigs.clone())?;
+        }
+
+        Ok(())
+    }
 
     #[tokio::test]
     async fn aggregate_signatures() {

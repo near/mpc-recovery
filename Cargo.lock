@@ -2458,7 +2458,7 @@ dependencies = [
 [[package]]
 name = "multi-party-eddsa"
 version = "0.3.0"
-source = "git+https://github.com/DavidM-D/multi-party-eddsa.git?rev=25ae4fdc5ff7819ae70e73ab4afacf1c24fc4da1#25ae4fdc5ff7819ae70e73ab4afacf1c24fc4da1"
+source = "git+https://github.com/ChaoticTempest/multi-party-eddsa.git?branch=feat/hashed-aggregate-signatures#70a0cb5457c685f54f0bfe02140f844ab2c31ab2"
 dependencies = [
  "curv-kzen",
  "hex 0.3.2",

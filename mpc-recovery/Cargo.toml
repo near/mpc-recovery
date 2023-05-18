@@ -41,6 +41,6 @@ near-primitives = "0.16.1"
 near-crypto = "0.16.1"
 tower-http = { version = "0.4.0", features = ["cors"] }
 yup-oauth2 = "8"
-multi-party-eddsa = { git = "https://github.com/DavidM-D/multi-party-eddsa.git", rev = "25ae4fdc5ff7819ae70e73ab4afacf1c24fc4da1" }
+multi-party-eddsa = { git = "https://github.com/ChaoticTempest/multi-party-eddsa.git", branch = "feat/hashed-aggregate-signatures" }
 curv = { package = "curv-kzen", version = "0.9", default-features = false }
 ed25519-dalek = {version = "1.0.1", features = ["serde"]}

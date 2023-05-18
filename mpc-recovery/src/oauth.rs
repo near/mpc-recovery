@@ -163,7 +163,7 @@ fn get_pagoda_firebase_public_keys() -> anyhow::Result<Vec<String>> {
     let client = reqwest::blocking::Client::new();
     let response = client.get(url).send()?;
     let json: HashMap<String, String> = response.json()?;
-    let keys: Vec<String> = json.values().cloned().collect();
+    let keys: Vec<String> = json.into_values().collect();
     Ok(keys)
 }
 
