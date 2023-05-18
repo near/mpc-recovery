@@ -12,6 +12,7 @@ use crate::transaction::{
     get_add_key_delegate_action, get_create_account_delegate_action,
     get_local_signed_delegated_action, get_mpc_signed_delegated_action,
 };
+use axum::routing::get;
 use axum::{http::StatusCode, routing::post, Extension, Json, Router};
 use curv::elliptic::curves::{Ed25519, Point};
 use multi_party_eddsa::protocols;
@@ -86,7 +87,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
     };
 
     // Get keys from all sign nodes, and broadcast them out as a set.
-    let pk_set = match gather_sign_node_pks(&state).await {
+    let pk_set = match gather_sign_node_pk_shares(&state).await {
         Ok(pk_set) => pk_set,
         Err(err) => {
             tracing::error!("Unable to gather public keys: {err}");
@@ -114,6 +115,14 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
     let cors_layer = tower_http::cors::CorsLayer::permissive();
 
     let app = Router::new()
+        // healthcheck endpoint
+        .route(
+            "/",
+            get(|| async move {
+                tracing::info!("node is ready to accept connections");
+                StatusCode::OK
+            }),
+        )
         .route("/new_account", post(new_account::<T>))
         .route("/add_key", post(add_key::<T>))
         .layer(Extension(state))
@@ -508,15 +517,16 @@ async fn add_key<T: OAuthTokenVerifier>(
     }
 }
 
-async fn gather_sign_node_pks(state: &LeaderState) -> anyhow::Result<Vec<Point<Ed25519>>> {
+async fn gather_sign_node_pk_shares(state: &LeaderState) -> anyhow::Result<Vec<Point<Ed25519>>> {
     let fut = nar::retry_every(std::time::Duration::from_secs(1), || async {
-        let results: anyhow::Result<Vec<(usize, Point<Ed25519>)>> = crate::transaction::call(
-            &state.reqwest_client,
-            &state.sign_nodes,
-            "public_key_node",
-            (),
-        )
-        .await;
+        let results: anyhow::Result<Vec<(usize, Point<Ed25519>)>> =
+            crate::transaction::call_all_nodes(
+                &state.reqwest_client,
+                &state.sign_nodes,
+                "public_key_node",
+                (),
+            )
+            .await;
         let mut results = match results {
             Ok(results) => results,
             Err(err) => {
@@ -580,7 +590,7 @@ async fn broadcast_pk_set(
         signature_shares: sigs,
     };
 
-    let messages: Vec<String> = crate::transaction::call(
+    let messages: Vec<String> = crate::transaction::call_all_nodes(
         &state.reqwest_client,
         &state.sign_nodes,
         "accept_pk_set",

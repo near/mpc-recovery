@@ -6,7 +6,8 @@ use mpc_recovery::{
     msg::{AddKeyRequest, AddKeyResponse, NewAccountRequest, NewAccountResponse},
     oauth::get_test_claims,
     transaction::{
-        call, sign, to_dalek_combined_public_key, CreateAccountOptions, LimitedAccessKey,
+        call_all_nodes, sign_payload_with_mpc, to_dalek_combined_public_key, CreateAccountOptions,
+        LimitedAccessKey,
     },
 };
 use rand::{distributions::Alphanumeric, Rng};
@@ -14,7 +15,7 @@ use std::time::Duration;
 use workspaces::types::AccessKeyPermission;
 
 #[tokio::test]
-async fn test_trio() -> anyhow::Result<()> {
+async fn test_aggregate_signatures() -> anyhow::Result<()> {
     with_nodes(3, |ctx| {
         Box::pin(async move {
             let payload: String = rand::thread_rng()
@@ -23,15 +24,10 @@ async fn test_trio() -> anyhow::Result<()> {
                 .map(char::from)
                 .collect();
 
-            // TODO integrate this better with testing
             let client = reqwest::Client::new();
-            let signer_urls: Vec<_> = ctx
-                .signer_nodes
-                .iter()
-                .map(|s| s.local_address.clone())
-                .collect();
+            let signer_urls: Vec<_> = ctx.signer_nodes.iter().map(|s| s.address.clone()).collect();
 
-            let signature = sign(
+            let signature = sign_payload_with_mpc(
                 &client,
                 &signer_urls,
                 "validToken:test-subject".to_string(),
@@ -40,7 +36,7 @@ async fn test_trio() -> anyhow::Result<()> {
             .await?;
 
             let account_id = get_test_claims("test-subject".to_string()).get_internal_account_id();
-            let res = call(&client, &signer_urls, "public_key", account_id).await?;
+            let res = call_all_nodes(&client, &signer_urls, "public_key", account_id).await?;
 
             let combined_pub = to_dalek_combined_public_key(&res).unwrap();
             combined_pub.verify(payload.as_bytes(), &signature)?;
@@ -51,7 +47,6 @@ async fn test_trio() -> anyhow::Result<()> {
     .await
 }
 
-// TODO: write a test with real token
 #[tokio::test]
 async fn test_basic_action() -> anyhow::Result<()> {
     with_nodes(3, |ctx| {
@@ -145,7 +140,7 @@ async fn test_basic_action() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_random_recovery_keys() -> anyhow::Result<()> {
-    with_nodes(4, |ctx| {
+    with_nodes(3, |ctx| {
         Box::pin(async move {
             let account_id = account::random(ctx.worker)?;
             let user_full_access_key = key::random();
