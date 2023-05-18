@@ -552,13 +552,14 @@ async fn gather_sign_node_signatures(
     state: &LeaderState,
 ) -> anyhow::Result<Vec<protocols::Signature>> {
     let fut = nar::retry_every(std::time::Duration::from_secs(1), || async {
-        let results: anyhow::Result<Vec<(usize, protocols::Signature)>> = crate::transaction::call(
-            &state.reqwest_client,
-            &state.sign_nodes,
-            "signature_share_node",
-            (),
-        )
-        .await;
+        let results: anyhow::Result<Vec<(usize, protocols::Signature)>> =
+            crate::transaction::call_all_nodes(
+                &state.reqwest_client,
+                &state.sign_nodes,
+                "signature_share_node",
+                (),
+            )
+            .await;
         let mut results = match results {
             Ok(results) => results,
             Err(err) => {
