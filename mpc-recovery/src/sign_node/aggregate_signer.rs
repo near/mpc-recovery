@@ -160,11 +160,7 @@ impl Committed {
             message,
             our_key: our_key.clone(),
         };
-        let sc = SignedCommitment::create(
-            AggrCommitment(commit.commitment),
-            node_key,
-            &our_key.public_key,
-        )?;
+        let sc = SignedCommitment::create(AggrCommitment(commit.commitment), node_key, our_key)?;
         Ok((sc, s))
     }
 
@@ -264,6 +260,9 @@ pub struct SignedCommitment {
     /// This is the public key we're currently signing with,
     /// not the node public key that generated the signature
     pub signing_public_key: Point<Ed25519>,
+    /// Signature used to verify the signing public key in case a rogue one is
+    /// inserted later on.
+    pub signing_public_key_sig: Signature,
     /// This is signed with the node public key
     pub signature: Signature,
 }
@@ -271,17 +270,21 @@ pub struct SignedCommitment {
 impl SignedCommitment {
     pub fn create(
         commitment: AggrCommitment,
-        node_private_key: &protocols::ExpandedKeyPair,
-        signing_public_key: &Point<Ed25519>,
+        node_key: &protocols::ExpandedKeyPair,
+        signing_keys: &protocols::ExpandedKeyPair,
     ) -> Result<Self, String> {
-        let to_sign = Self::serialize(&commitment, signing_public_key)?;
+        let to_sign = Self::serialize(&commitment, &signing_keys.public_key)?;
+        let signature = aggsig::sign_single(b"", signing_keys);
+        let signing_public_key_sig = to_dalek_signature(&signature).map_err(|e| e.to_string())?;
+
         // This is awkward, we should move more stuff over to dalek later on
-        let signature = aggsig::sign_single(&to_sign, node_private_key);
+        let signature = aggsig::sign_single(&to_sign, node_key);
         let signature = to_dalek_signature(&signature).map_err(|e| e.to_string())?;
         Ok(SignedCommitment {
             commitment,
-            signing_public_key: signing_public_key.clone(),
+            signing_public_key: signing_keys.public_key.clone(),
             signature,
+            signing_public_key_sig,
         })
     }
 
@@ -294,6 +297,13 @@ impl SignedCommitment {
         public_key
             .verify(&message, &self.signature)
             .map_err(|e| e.to_string())?;
+
+        let signing_public_key =
+            to_dalek_public_key(&self.signing_public_key).map_err(|e| e.to_string())?;
+        signing_public_key
+            .verify(b"", &self.signing_public_key_sig)
+            .map_err(|e| e.to_string())?;
+
         Ok((self.commitment.clone(), self.signing_public_key.clone()))
     }
 
@@ -329,28 +339,121 @@ pub fn check_commitment(
 
 #[cfg(test)]
 mod tests {
+    use crate::transaction::from_dalek_signature;
+
     use super::*;
     use curv::elliptic::curves::{Ed25519, Point};
     use ed25519_dalek::{SignatureError, Verifier};
     use multi_party_eddsa::protocols::ExpandedKeyPair;
 
+    fn verify_dalek(
+        pk: &Point<Ed25519>,
+        sig: &protocols::Signature,
+        msg: &[u8],
+    ) -> Result<(), SignatureError> {
+        let mut sig_bytes = [0u8; 64];
+        sig_bytes[..32].copy_from_slice(&sig.R.to_bytes(true));
+        sig_bytes[32..].copy_from_slice(&sig.s.to_bytes());
+
+        let dalek_pub = ed25519_dalek::PublicKey::from_bytes(&pk.to_bytes(true)).unwrap();
+        let dalek_sig = ed25519_dalek::Signature::from_bytes(&sig_bytes).unwrap();
+
+        dalek_pub.verify(msg, &dalek_sig)
+    }
+
+    fn create_rogue_commit(message: &[u8], commitments: &[SignedCommitment]) -> SignedCommitment {
+        let ks = || (ExpandedKeyPair::create(), ExpandedKeyPair::create());
+        // Also generate a public key for the rogue key
+        let (rogue_node_key, rogue_key) = ks();
+
+        // Create rogue commitments to be inserted in to the list
+        let rogue_pk = commitments
+            .iter()
+            .fold(rogue_key.public_key.clone(), |acc, c| {
+                acc - &c.signing_public_key
+            });
+
+        let rogue_sig = aggsig::sign_single(b"", &rogue_key);
+        let rogue_sig = commitments
+            .iter()
+            .map(|c| from_dalek_signature(c.signing_public_key_sig.clone()).unwrap())
+            .fold(rogue_sig, |acc, s| protocols::Signature {
+                R: acc.R - s.R,
+                s: acc.s - s.s,
+            });
+
+        let (_ephemeral_key, commit, _our_signature) =
+            aggsig::create_ephemeral_key_and_commit_rng(&rogue_key, &message, &mut OsRng);
+        let mut rogue_commit = SignedCommitment::create(
+            AggrCommitment(commit.commitment),
+            &rogue_node_key,
+            &rogue_key,
+        )
+        .unwrap();
+        rogue_commit.signing_public_key = rogue_pk;
+        rogue_commit.signing_public_key_sig = to_dalek_signature(&rogue_sig).unwrap();
+        rogue_commit
+    }
+
+    #[tokio::test]
+    async fn rogue_attack() {
+        // Generate node keys and signing keys
+        let ks = || (ExpandedKeyPair::create(), ExpandedKeyPair::create());
+        let (n1, k1) = ks();
+        let (n2, k2) = ks();
+        let (n3, k3) = ks();
+
+        let nodes_public_keys = vec![
+            n1.public_key.clone(),
+            n2.public_key.clone(),
+            n3.public_key.clone(),
+        ];
+
+        let ni = |n| NodeInfo::new(n, Some(nodes_public_keys.clone()));
+
+        // Set up nodes with that config
+        let mut s1 = SigningState::new();
+        let mut s2 = SigningState::new();
+        let mut s3 = SigningState::new();
+
+        let message = b"message in a bottle".to_vec();
+
+        let mut commitments = vec![
+            s1.get_commitment(&k1, &n1, message.clone()).unwrap(),
+            s2.get_commitment(&k2, &n2, message.clone()).unwrap(),
+            s3.get_commitment(&k3, &n3, message.clone()).unwrap(),
+        ];
+        // Insert in the rogue key to be detected later.
+        commitments.push(create_rogue_commit(&message, &commitments));
+
+        let reveals = vec![
+            s1.get_reveal(ni(0), commitments.clone()).await.unwrap(),
+            s2.get_reveal(ni(1), commitments.clone()).await.unwrap(),
+            s3.get_reveal(ni(2), commitments.clone()).await.unwrap(),
+        ];
+
+        let sig_shares = vec![
+            s1.get_signature_share(ni(0), reveals.clone()).unwrap(),
+            s2.get_signature_share(ni(1), reveals.clone()).unwrap(),
+            s3.get_signature_share(ni(2), reveals).unwrap(),
+        ];
+
+        let signing_keys: Vec<_> = commitments
+            .iter()
+            .map(|c| c.signing_public_key.clone())
+            .collect();
+        let aggrigate_key = KeyAgg::key_aggregation_n(&signing_keys, 0);
+
+        let signature = aggsig::add_signature_parts(&sig_shares);
+        let verified = verify_dalek(&aggrigate_key.apk, &signature, &message);
+        assert!(
+            verified.is_err(),
+            "Expected rogue key to be detected and create an invalid proof"
+        );
+    }
+
     #[tokio::test]
     async fn aggregate_signatures() {
-        pub fn verify_dalek(
-            pk: &Point<Ed25519>,
-            sig: &protocols::Signature,
-            msg: &[u8],
-        ) -> Result<(), SignatureError> {
-            let mut sig_bytes = [0u8; 64];
-            sig_bytes[..32].copy_from_slice(&sig.R.to_bytes(true));
-            sig_bytes[32..].copy_from_slice(&sig.s.to_bytes());
-
-            let dalek_pub = ed25519_dalek::PublicKey::from_bytes(&pk.to_bytes(true)).unwrap();
-            let dalek_sig = ed25519_dalek::Signature::from_bytes(&sig_bytes).unwrap();
-
-            dalek_pub.verify(msg, &dalek_sig)
-        }
-
         // Generate node keys and signing keys
         let ks = || (ExpandedKeyPair::create(), ExpandedKeyPair::create());
         let (n1, k1) = ks();
