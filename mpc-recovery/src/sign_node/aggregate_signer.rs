@@ -376,14 +376,14 @@ mod tests {
         let rogue_sig = aggsig::sign_single(b"", &rogue_key);
         let rogue_sig = commitments
             .iter()
-            .map(|c| from_dalek_signature(c.signing_public_key_sig.clone()).unwrap())
+            .map(|c| from_dalek_signature(c.signing_public_key_sig).unwrap())
             .fold(rogue_sig, |acc, s| protocols::Signature {
                 R: acc.R - s.R,
                 s: acc.s - s.s,
             });
 
         let (_ephemeral_key, commit, _our_signature) =
-            aggsig::create_ephemeral_key_and_commit_rng(&rogue_key, &message, &mut OsRng);
+            aggsig::create_ephemeral_key_and_commit_rng(&rogue_key, message, &mut OsRng);
         let mut rogue_commit = SignedCommitment::create(
             AggrCommitment(commit.commitment),
             &rogue_node_key,
