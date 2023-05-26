@@ -6,3 +6,4 @@
 target/
 Dockerfile
 .dockerignore
+infra/
