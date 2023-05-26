@@ -75,7 +75,11 @@ impl GcpService {
         let (_, response) = self
             .secret_manager
             .projects()
-            .secrets_versions_access(name.as_ref())
+            .secrets_versions_access(&format!(
+                "projects/{}/secrets/{}",
+                self.project_id,
+                name.as_ref()
+            ))
             .doit()
             .await?;
         let secret_payload = response
