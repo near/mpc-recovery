@@ -1,6 +1,7 @@
 use workspaces::{network::Sandbox, AccountId, Contract, Worker};
 
 pub async fn initialize_social_db(worker: &Worker<Sandbox>) -> anyhow::Result<Contract> {
+    println!("Initializing social DB contract...");
     let social_db = worker
         .import_contract(&"social.near".parse()?, &workspaces::mainnet().await?)
         .transact()
@@ -12,11 +13,13 @@ pub async fn initialize_social_db(worker: &Worker<Sandbox>) -> anyhow::Result<Co
         .await?
         .into_result()?;
 
+    println!("Social DB contract initialized");
     Ok(social_db)
 }
 
 // Linkdrop contains top-level account creation logic
 pub async fn initialize_linkdrop(worker: &Worker<Sandbox>) -> anyhow::Result<()> {
+    println!("Initializing linkdrop contract...");
     let near_root_account = worker.root_account()?;
     near_root_account
         .deploy(include_bytes!("../linkdrop.wasm"))
@@ -29,12 +32,14 @@ pub async fn initialize_linkdrop(worker: &Worker<Sandbox>) -> anyhow::Result<()>
         .await?
         .into_result()?;
 
+    println!("Linkdrop contract initialized");
     Ok(())
 }
 
 pub async fn create_account(
     worker: &Worker<Sandbox>,
 ) -> anyhow::Result<(AccountId, near_crypto::SecretKey)> {
+    println!("Creating account with random account_id...");
     let (account_id, account_sk) = worker.dev_generate().await;
     worker
         .create_tla(account_id.clone(), account_sk.clone())
@@ -44,6 +49,7 @@ pub async fn create_account(
     let account_sk: near_crypto::SecretKey =
         serde_json::from_str(&serde_json::to_string(&account_sk)?)?;
 
+    println!("Account created: {}", account_id);
     Ok((account_id, account_sk))
 }
 
@@ -53,6 +59,10 @@ pub async fn up_funds_for_account(
     target_account_id: &AccountId,
     target_amount: u128,
 ) -> anyhow::Result<()> {
+    println!(
+        "Up funds for account {} to {}...",
+        target_account_id, target_amount
+    );
     // Max balance we can transfer out of a freshly created dev account
     const DEV_ACCOUNT_AVAILABLE_BALANCE: u128 = 99 * 10u128.pow(24);
 
@@ -77,5 +87,6 @@ pub async fn up_funds_for_account(
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
 
+    println!("Account {} now has {} NEAR", target_account_id, target_amount);
     Ok(())
 }
