@@ -42,6 +42,7 @@ async fn fetch_validator_keys(
             while let Some(chunk) = output.next().await {
                 stream_contents.extend_from_slice(&chunk?.into_bytes());
             }
+            
             println!("Validator keys fetched");
             Ok(serde_json::from_slice(&stream_contents)?)
         }
