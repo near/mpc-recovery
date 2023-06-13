@@ -18,29 +18,23 @@ async fn main() -> anyhow::Result<()> {
     match Cli::parse() {
         Cli::TestLeader { nodes } => {
             println!("Setting up an environment with {} nodes", nodes);
-            println!("Creating docker client");
             let docker_client = containers::DockerClient::default();
 
-            println!("Initializing relayer...");
             let relayer_ctx_future =
                 mpc_recovery_integration_tests::initialize_relayer(&docker_client, NETWORK);
-            println!("Initializing datastore...");
             let datastore_future =
                 containers::Datastore::run(&docker_client, NETWORK, GCP_PROJECT_ID);
 
             let (relayer_ctx, datastore) =
                 futures::future::join(relayer_ctx_future, datastore_future).await;
             let relayer_ctx = relayer_ctx?;
-            println!("Relayer initialized");
             let datastore = datastore?;
-            println!("Datastore initialized");
 
             println!("Generating secrets");
             let GenerateResult { secrets, .. } = mpc_recovery::generate(nodes);
             println!("Running signer nodes...");
             let mut signer_node_futures = Vec::new();
             for (i, (share, cipher_key)) in secrets.iter().enumerate().take(nodes) {
-                println!("Running signer node {}", i);
                 let signer_node = containers::SignerNode::run(
                     &docker_client,
                     NETWORK,
@@ -60,10 +54,9 @@ async fn main() -> anyhow::Result<()> {
             println!("Signer nodes initialized");
             let signer_urls: &Vec<_> = &signer_nodes.iter().map(|n| n.address.clone()).collect();
 
-            println!("Getting root account");
             let near_root_account = relayer_ctx.worker.root_account()?;
+            println!("Root account_id: {}", near_root_account.id());
 
-            println!("Composing command to start a leader node...");
             let mut cmd = vec![
                 "start-leader".to_string(),
                 "--web-port".to_string(),

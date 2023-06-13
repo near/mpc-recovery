@@ -65,8 +65,8 @@ pub async fn initialize_relayer<'a>(
 ) -> anyhow::Result<RelayerCtx<'a>> {
     println!("Initializing relayer...");
     let sandbox = containers::Sandbox::run(docker_client, network).await?;
+
     let validator_key = fetch_validator_keys(docker_client, &sandbox).await?;
-    println!("Validator key: {:?}", validator_key);
 
     println!("Initializing sandbox worker...");
     let worker = workspaces::sandbox()
@@ -77,12 +77,8 @@ pub async fn initialize_relayer<'a>(
         ))
         .await?;
     println!("Sandbox worker initialized");
-    println!("Initializing social db...");
     let social_db = sandbox::initialize_social_db(&worker).await?;
-    println!("Social db initialized");
-    println!("Initializing linkdrop...");
     sandbox::initialize_linkdrop(&worker).await?;
-    println!("Linkdrop initialized");
     println!("Initializing relayer accounts...");
     let (relayer_account_id, relayer_account_sk) = sandbox::create_account(&worker).await?;
     let (creator_account_id, creator_account_sk) = sandbox::create_account(&worker).await?;
@@ -91,10 +87,8 @@ pub async fn initialize_relayer<'a>(
     println!("Relayer accounts initialized. Relayer account: {}, Creator account: {}, Social account: {}",
     relayer_account_id, creator_account_id, social_account_id);
 
-    println!("Starting redis...");
     let redis = containers::Redis::run(docker_client, network).await?;
-    println!("Redis started");
-    println!("Starting relayer...");
+
     let relayer = containers::Relayer::run(
         docker_client,
         network,
@@ -108,7 +102,6 @@ pub async fn initialize_relayer<'a>(
         &social_account_sk,
     )
     .await?;
-    println!("Relayer started");
 
     Ok(RelayerCtx::<'a> {
         sandbox,
