@@ -87,6 +87,9 @@ pub async fn up_funds_for_account(
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
 
-    println!("Account {} now has {} NEAR", target_account_id, target_amount);
+    println!(
+        "Account {} now has {} NEAR",
+        target_account_id, target_amount
+    );
     Ok(())
 }

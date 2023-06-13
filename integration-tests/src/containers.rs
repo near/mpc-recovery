@@ -311,7 +311,10 @@ impl<'a> SignerNode<'a> {
         });
 
         let full_address = format!("http://{ip_address}:{}", Self::CONTAINER_PORT);
-        println!("Signer node container {} is running at {}", node_id, full_address);
+        println!(
+            "Signer node container {} is running at {}",
+            node_id, full_address
+        );
         Ok(SignerNode {
             container,
             address: full_address,
