@@ -8,7 +8,7 @@ use near_crypto::{InMemorySigner, PublicKey, SecretKey};
 use near_primitives::account::{AccessKey, AccessKeyPermission, FunctionCallPermission};
 use near_primitives::borsh::BorshSerialize;
 use near_primitives::hash::hash;
-use near_primitives::transaction::{Action, AddKeyAction, FunctionCallAction};
+use near_primitives::transaction::{Action, AddKeyAction, DeleteKeyAction, FunctionCallAction};
 use near_primitives::types::{AccountId, Nonce};
 
 use near_primitives::delegate_action::{DelegateAction, NonDelegateAction, SignedDelegateAction};
@@ -132,6 +132,27 @@ pub fn get_add_key_delegate_action(
         sender_id: account_id.clone(),
         receiver_id: account_id,
         actions: [full_access_keys, limited_access_keys].concat(),
+        nonce,
+        max_block_height,
+        public_key: signer_pk,
+    };
+
+    Ok(delegate_action)
+}
+
+pub fn get_delete_key_delegate_action(
+    account_id: AccountId,
+    signer_pk: PublicKey,
+    public_key: PublicKey,
+    nonce: Nonce,
+    max_block_height: u64,
+) -> anyhow::Result<DelegateAction> {
+    let delegate_action = DelegateAction {
+        sender_id: account_id.clone(),
+        receiver_id: account_id,
+        actions: vec![NonDelegateAction::try_from(Action::DeleteKey(
+            DeleteKeyAction { public_key },
+        ))?],
         nonce,
         max_block_height,
         public_key: signer_pk,

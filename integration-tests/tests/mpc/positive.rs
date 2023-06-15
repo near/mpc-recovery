@@ -254,3 +254,89 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
     })
     .await
 }
+
+#[tokio::test]
+async fn test_exceeding_max_keys() -> anyhow::Result<()> {
+    with_nodes(3, |ctx| {
+        Box::pin(async move {
+            let account_id = account::random(ctx.worker)?;
+            let user_public_key = key::random();
+            let oidc_token = token::valid_random();
+
+            let create_account_options = CreateAccountOptions {
+                full_access_keys: Some(vec![user_public_key.clone().parse().unwrap()]),
+                limited_access_keys: None,
+                contract_bytes: None,
+            };
+
+            // Create account
+            let (status_code, new_acc_response) = ctx
+                .leader_node
+                .new_account(NewAccountRequest {
+                    near_account_id: account_id.to_string(),
+                    create_account_options,
+                    oidc_token: oidc_token.clone(),
+                })
+                .await?;
+            assert_eq!(status_code, StatusCode::OK);
+            assert!(matches!(new_acc_response, NewAccountResponse::Ok {
+                    create_account_options: _,
+                    user_recovery_public_key: _,
+                    near_account_id: acc_id,
+                } if acc_id == account_id.to_string()
+            ));
+
+            tokio::time::sleep(Duration::from_millis(2000)).await;
+
+            check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
+
+            let add_key = || async {
+                let new_user_public_key = key::random();
+
+                let (status_code, add_key_response) = ctx
+                    .leader_node
+                    .add_key(AddKeyRequest {
+                        near_account_id: Some(account_id.to_string()),
+                        oidc_token: oidc_token.clone(),
+                        create_account_options: CreateAccountOptions {
+                            full_access_keys: Some(vec![new_user_public_key.parse()?]),
+                            limited_access_keys: None,
+                            contract_bytes: None,
+                        },
+                    })
+                    .await?;
+                assert_eq!(status_code, StatusCode::OK);
+                let AddKeyResponse::Ok {
+                    full_access_keys,
+                    limited_access_keys,
+                    near_account_id,
+                } = add_key_response else {
+                    anyhow::bail!("unexpected pattern");
+                };
+                assert_eq!(full_access_keys, vec![new_user_public_key.clone()]);
+                assert_eq!(limited_access_keys, Vec::<String>::new());
+                assert_eq!(near_account_id, account_id.to_string());
+
+                tokio::time::sleep(Duration::from_millis(2000)).await;
+
+                check::access_key_exists(&ctx, &account_id, &new_user_public_key).await?;
+
+                Ok(())
+            };
+
+            // Zero-balance account can have up to 4 full access keys (including user supplied one
+            // and the recovery key). Thus adding >4 FAKs makes mpc-recovery delete a random old
+            // FAK, never exceeding the limit in the process.
+            add_key().await?;
+            add_key().await?;
+            add_key().await?;
+            add_key().await?;
+
+            let access_keys = ctx.worker.view_access_keys(&account_id).await?;
+            assert_eq!(access_keys.len(), 4);
+
+            Ok(())
+        })
+    })
+    .await
+}

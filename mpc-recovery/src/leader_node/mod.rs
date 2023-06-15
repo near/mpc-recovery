@@ -6,20 +6,23 @@ use crate::msg::{
 use crate::nar;
 use crate::oauth::OAuthTokenVerifier;
 use crate::relayer::error::RelayerError;
-use crate::relayer::msg::RegisterAccountRequest;
+use crate::relayer::msg::{RegisterAccountRequest, SendMetaTxResponse};
 use crate::relayer::NearRpcAndRelayerClient;
 use crate::transaction::{
     get_add_key_delegate_action, get_create_account_delegate_action,
-    get_local_signed_delegated_action, get_mpc_signed_delegated_action,
+    get_delete_key_delegate_action, get_local_signed_delegated_action,
+    get_mpc_signed_delegated_action, CreateAccountOptions,
 };
 use axum::routing::get;
 use axum::{http::StatusCode, routing::post, Extension, Json, Router};
 use curv::elliptic::curves::{Ed25519, Point};
 use near_crypto::{ParseKeyError, PublicKey, SecretKey};
 use near_primitives::account::id::ParseAccountError;
+use near_primitives::delegate_action::DelegateAction;
 use near_primitives::types::AccountId;
 use near_primitives::views::FinalExecutionStatus;
 use rand::{distributions::Alphanumeric, Rng};
+use rand8::seq::IteratorRandom;
 use std::net::SocketAddr;
 
 pub struct Config {
@@ -364,6 +367,103 @@ fn get_acc_id_from_pk(
     }
 }
 
+async fn send_delegate_action(
+    state: &LeaderState,
+    oidc_token: String,
+    delegate_action: DelegateAction,
+) -> Result<SendMetaTxResponse, AddKeyError> {
+    // We sign the key recovery using the signing nodes
+    let signed_delegate_action = get_mpc_signed_delegated_action(
+        &state.reqwest_client,
+        &state.sign_nodes,
+        oidc_token,
+        delegate_action,
+    )
+    .await?;
+
+    let resp = state.client.send_meta_tx(signed_delegate_action).await;
+    if let Err(err) = resp {
+        let err_str = format!("{:?}", err);
+        state
+            .client
+            .invalidate_cache_if_tx_failed(
+                &(
+                    state.account_creator_id.clone(),
+                    state.account_creator_sk.public_key(),
+                ),
+                &err_str,
+            )
+            .await;
+        return Err(err.into());
+    }
+
+    Ok(resp?)
+}
+
+async fn delete_access_key(
+    state: &LeaderState,
+    oidc_token: String,
+    user_account_id: &AccountId,
+    user_recovery_pk: &PublicKey,
+    pk_to_remove: &PublicKey,
+) -> Result<(), AddKeyError> {
+    // Get nonce and recent block hash
+    let (_hash, block_height, nonce) = state
+        .client
+        .access_key(user_account_id.clone(), user_recovery_pk.clone())
+        .await?;
+
+    // Create a transaction to delete the access key
+    let max_block_height: u64 = block_height + 100;
+    let delegate_action = get_delete_key_delegate_action(
+        user_account_id.clone(),
+        user_recovery_pk.clone(),
+        pk_to_remove.clone(),
+        nonce,
+        max_block_height,
+    )?;
+
+    let resp = send_delegate_action(&state, oidc_token, delegate_action).await?;
+    // TODO: Probably need to check more fields
+    if matches!(resp.status, FinalExecutionStatus::SuccessValue(_)) {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("transaction failed with {:?}", resp.status).into())
+    }
+}
+
+async fn add_access_key(
+    state: &LeaderState,
+    oidc_token: String,
+    create_account_options: CreateAccountOptions,
+    user_account_id: &AccountId,
+    user_recovery_pk: &PublicKey,
+) -> Result<(), AddKeyError> {
+    // Get nonce and recent block hash
+    let (_hash, block_height, nonce) = state
+        .client
+        .access_key(user_account_id.clone(), user_recovery_pk.clone())
+        .await?;
+
+    // Create a transaction to create a new account
+    let max_block_height: u64 = block_height + 100;
+    let delegate_action = get_add_key_delegate_action(
+        user_account_id.clone(),
+        user_recovery_pk.clone(),
+        create_account_options,
+        nonce,
+        max_block_height,
+    )?;
+
+    let resp = send_delegate_action(&state, oidc_token, delegate_action).await?;
+    // TODO: Probably need to check more fields
+    if matches!(resp.status, FinalExecutionStatus::SuccessValue(_)) {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("transaction failed with {:?}", resp.status).into())
+    }
+}
+
 async fn process_add_key<T: OAuthTokenVerifier>(
     state: LeaderState,
     request: AddKeyRequest,
@@ -384,81 +484,68 @@ async fn process_add_key<T: OAuthTokenVerifier>(
         Some(near_account_id) => near_account_id
             .parse()
             .map_err(|e| AddKeyError::MalformedAccountId(request.near_account_id.unwrap(), e))?,
-        None => match get_acc_id_from_pk(user_recovery_pk.clone(), state.account_lookup_url) {
-            Ok(near_account_id) => near_account_id,
-            Err(e) => {
-                tracing::error!(err = ?e);
-                return Err(AddKeyError::AccountNotFound(e.to_string()));
+        None => {
+            match get_acc_id_from_pk(user_recovery_pk.clone(), state.account_lookup_url.clone()) {
+                Ok(near_account_id) => near_account_id,
+                Err(e) => {
+                    tracing::error!(err = ?e);
+                    return Err(AddKeyError::AccountNotFound(e.to_string()));
+                }
             }
-        },
+        }
     };
 
     nar::retry(|| async {
-        // Get nonce and recent block hash
-        let (_hash, block_height, nonce) = state
+        let (_block_hash, _block_height, faks) = state
             .client
-            .access_key(user_account_id.clone(), user_recovery_pk.clone())
+            .full_access_key_list(user_account_id.clone())
             .await?;
+        if faks.len() == 4 {
+            // Reached the max amount of FAKs for zero-balance accounts. Removing a random FAK
+            // that is not the recovery key.
+            let pk_to_remove = faks
+                .into_iter()
+                .filter(|pk| pk != &user_recovery_pk)
+                .choose(&mut rand8::thread_rng())
+                .unwrap(); // Guaranteed to be non-empty
+            delete_access_key(
+                &state,
+                request.oidc_token.clone(),
+                &user_account_id,
+                &user_recovery_pk,
+                &pk_to_remove,
+            )
+            .await?;
+        }
 
-        // Create a transaction to create a new account
-        let max_block_height: u64 = block_height + 100;
-        let delegate_action = get_add_key_delegate_action(
-            user_account_id.clone(),
-            user_recovery_pk.clone(),
-            request.create_account_options.clone(),
-            nonce,
-            max_block_height,
-        )?;
-        // We sign the key recovery using the signing nodes
-        let signed_delegate_action = get_mpc_signed_delegated_action(
-            &state.reqwest_client,
-            &state.sign_nodes,
+        add_access_key(
+            &state,
             request.oidc_token.clone(),
-            delegate_action,
+            request.create_account_options.clone(),
+            &user_account_id,
+            &user_recovery_pk,
         )
         .await?;
 
-        let resp = state.client.send_meta_tx(signed_delegate_action).await;
-        if let Err(err) = resp {
-            let err_str = format!("{:?}", err);
-            state
-                .client
-                .invalidate_cache_if_tx_failed(
-                    &(
-                        state.account_creator_id.clone(),
-                        state.account_creator_sk.public_key(),
-                    ),
-                    &err_str,
-                )
-                .await;
-            return Err(err.into());
-        }
-        let resp = resp?;
-
-        // TODO: Probably need to check more fields
-        if matches!(resp.status, FinalExecutionStatus::SuccessValue(_)) {
-            Ok(AddKeyResponse::Ok {
-                full_access_keys: request
-                    .create_account_options
-                    .clone()
-                    .full_access_keys
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|pk| pk.to_string())
-                    .collect(),
-                limited_access_keys: request
-                    .create_account_options
-                    .clone()
-                    .limited_access_keys
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|lak| lak.public_key.to_string())
-                    .collect(),
-                near_account_id: user_account_id.to_string(),
-            })
-        } else {
-            Err(anyhow::anyhow!("transaction failed with {:?}", resp.status).into())
-        }
+        Ok(AddKeyResponse::Ok {
+            full_access_keys: request
+                .create_account_options
+                .clone()
+                .full_access_keys
+                .unwrap_or_default()
+                .into_iter()
+                .map(|pk| pk.to_string())
+                .collect(),
+            limited_access_keys: request
+                .create_account_options
+                .clone()
+                .limited_access_keys
+                .unwrap_or_default()
+                .into_iter()
+                .map(|lak| lak.public_key.to_string())
+                .collect(),
+            near_account_id: user_account_id.to_string(),
+        })
     })
     .await
 }

@@ -15,7 +15,7 @@ use near_jsonrpc_client::{methods, JsonRpcClient};
 use near_jsonrpc_primitives::types::query::QueryResponseKind;
 use near_primitives::hash::CryptoHash;
 use near_primitives::types::{AccountId, BlockHeight, Finality, Nonce};
-use near_primitives::views::{AccessKeyView, BlockView, QueryRequest};
+use near_primitives::views::{AccessKeyList, AccessKeyView, BlockView, QueryRequest};
 use tokio::sync::RwLock;
 use tokio_retry::strategy::{jitter, ExponentialBackoff};
 use tokio_retry::Retry;
@@ -76,6 +76,36 @@ pub(crate) async fn access_key(
         QueryResponseKind::AccessKey(access_key) => {
             Ok((access_key, query_resp.block_hash, query_resp.block_height))
         }
+        _ => Err(anyhow::anyhow!("query returned invalid data while querying access key").into()),
+    }
+}
+
+pub(crate) async fn access_key_list(
+    rpc_client: &JsonRpcClient,
+    account_id: AccountId,
+) -> Result<(AccessKeyList, CryptoHash, BlockHeight), RelayerError> {
+    let query_resp = rpc_client
+        .call(&methods::query::RpcQueryRequest {
+            block_reference: Finality::None.into(),
+            request: QueryRequest::ViewAccessKeyList { account_id },
+        })
+        .await
+        .map_err(|e| match e {
+            JsonRpcError::ServerError(JsonRpcServerError::HandlerError(
+                RpcQueryError::UnknownAccount {
+                    requested_account_id,
+                    ..
+                },
+            )) => RelayerError::UnknownAccount(requested_account_id),
+            _ => anyhow::anyhow!(e).into(),
+        })?;
+
+    match query_resp.kind {
+        QueryResponseKind::AccessKeyList(access_key_list) => Ok((
+            access_key_list,
+            query_resp.block_hash,
+            query_resp.block_height,
+        )),
         _ => Err(anyhow::anyhow!("query returned invalid data while querying access key").into()),
     }
 }
