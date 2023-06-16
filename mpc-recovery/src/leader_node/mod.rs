@@ -1,7 +1,7 @@
 use crate::key_recovery::get_user_recovery_pk;
 use crate::msg::{
-    AcceptNodePublicKeysRequest, AddKeyRequest, AddKeyResponse, NewAccountRequest,
-    NewAccountResponse, ClaimOidcResponse, ClaimOidcRequest,
+    AcceptNodePublicKeysRequest, AddKeyRequest, AddKeyResponse, ClaimOidcRequest,
+    ClaimOidcResponse, NewAccountRequest, NewAccountResponse,
 };
 use crate::nar;
 use crate::oauth::OAuthTokenVerifier;
@@ -142,7 +142,6 @@ struct LeaderState {
     account_lookup_url: String,
     pagoda_firebase_audience_id: String,
 }
-
 
 async fn claim_oidc_token(
     Extension(_state): Extension<LeaderState>,
