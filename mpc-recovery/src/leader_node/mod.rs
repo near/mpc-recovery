@@ -423,7 +423,7 @@ async fn delete_access_key(
         max_block_height,
     )?;
 
-    let resp = send_delegate_action(&state, oidc_token, delegate_action).await?;
+    let resp = send_delegate_action(state, oidc_token, delegate_action).await?;
     // TODO: Probably need to check more fields
     if matches!(resp.status, FinalExecutionStatus::SuccessValue(_)) {
         Ok(())
@@ -455,7 +455,7 @@ async fn add_access_key(
         max_block_height,
     )?;
 
-    let resp = send_delegate_action(&state, oidc_token, delegate_action).await?;
+    let resp = send_delegate_action(state, oidc_token, delegate_action).await?;
     // TODO: Probably need to check more fields
     if matches!(resp.status, FinalExecutionStatus::SuccessValue(_)) {
         Ok(())
