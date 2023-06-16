@@ -6,9 +6,10 @@ use crate::transaction::CreateAccountOptions;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NewAccountRequest {
-    pub create_account_options: CreateAccountOptions,
     pub near_account_id: String,
+    pub create_account_options: CreateAccountOptions,
     pub oidc_token: String,
+    pub signature: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

@@ -26,6 +26,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                     near_account_id: account_id.to_string(),
                     create_account_options: create_account_options.clone(),
                     oidc_token: token::invalid(),
+                    signature: None,
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::UNAUTHORIZED);
@@ -38,6 +39,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                     near_account_id: account_id.to_string(),
                     create_account_options,
                     oidc_token: oidc_token.clone(),
+                    signature: None,
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
@@ -125,6 +127,7 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
                     near_account_id: malformed_account_id.to_string(),
                     create_account_options: create_account_options.clone(),
                     oidc_token: oidc_token.clone(),
+                    signature: None,
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::BAD_REQUEST);
@@ -139,6 +142,7 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
                     near_account_id: account_id.to_string(),
                     create_account_options: create_account_options.clone(),
                     oidc_token: oidc_token.clone(),
+                    signature: None,
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::OK);

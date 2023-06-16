@@ -12,29 +12,82 @@ Currently everything is signed by a single node with a single private key.
 
 The recovery service is currently hosted at <https://mpc-recovery-7tk2cmmtcq-ue.a.run.app>.
 
+### Claim OIDC Id Token ownership (temporarily optional)
+
+    URL: /claim_oidc_token
+    Request parameters: {
+        oidc_token_hash: [u8; 32],
+        public_key: String,
+        signature: [u8; 64],
+    }
+    Response: Ok {
+        mpc_signature: String,
+        recovery_public_key: Option<String>,
+        near_account_id: Option<String>,
+    } / Err{
+        msg: String
+    }
+
+Before transmitting your IODC Id Token to the recovery service you must first claim the ownership of the token. This prevents a rogue node from taking your token and using it to sign another request.
+
+The signature you send must be an Ed22519 signature of the hash:
+
+    SALT = 3177899144
+    sha256.hash(Borsh.serialize<u32>(SALT + 0) ++ Borsh.serialize<[u8]>(oidc_token_hash))
+
+signed with your on device public key.
+
+The constant 3177899144 is a random number between 2^31 and 2^32 which as described [here](https://github.com/gutsyphilip/NEPs/blob/8b0b05c3727f0a90b70c6f88791152f54bf5b77f/neps/nep-0413.md#example) prevents collisions with legitimate on chain transactions.
+
+If you successfully claim the token you will receive a signature in return of:
+
+    sha256.hash(Borsh.serialize<u32>(SALT + 1) ++ Borsh.serialize<[u8]>(signature))
+
+This will be signed by the nodes combined Ed22519 signature. PK that you will use to check it should be hard coded in your validation code NOT fetched from the nodes themselves.
+
+If user has already used this Id Token ID to claim an account, then the response will contain the NEAR account id and the recovery public key.
+
+If this repeatedly fails, you should discard your oidc token and regenerate.
+
+Registered ID Token will be added to the persistent DB on each Signing node and saved until expiration. Regstered Id Tokens are tied to the provided PK.
+
+
 ### Create New Account
 
     URL: /new_account
     Request parameters: {
         near_account_id: String,
+        create_account_options: CreateAccountOptions,
         oidc_token: String,
-        public_key: String
+        signature: Option<String>,
     }
     Response:
     Ok {
-        user_public_key: String,
-        user_recovery_public_key: String,
+        create_account_options: CreateAccountOptions,
+        recovery_public_key: String,
         near_account_id: String,
     } /
     Err {
         msg: String
     }
 
-This creates an account with the name in `near_account_id`. If this name is already taken then this operation will fail with no action having been taken.
+This creates an account with account Id provided in `near_account_id`. If this name is already taken then this operation will fail with no action having been taken.
 
-This service will send a `create_account` message to the relayer from `tmp_acount_creator.serhii.testnet` creating from the request field `near_account_id`. If this operation is successful the near.org relayer will make an allowance for the created account.
+This service will send a `create_account` transaction to the relayer signed by `account_creator.near` account. If this operation is successful relayer will make an allowance for the created account.
 
 Newly created NEAR account will have two full access keys. One that was provided by the user, and the recovery one that is controlled by the MPC system.
+
+In the future, MPC Service will disallow creating account with ID Tokes that were not claimed first. It is expected, that PK that client wants to use for the account creation is the same as the one that was used to claim the ID Token.
+
+The signature field is a signature of:
+
+    sha256.hash(Borsh.serialize<u32>(SALT + 2) ++ Borsh.serialize({
+        near_account_id: Option<String>,
+        oidc_token: String,
+        public_key: String,
+    }))
+
+signed by the key you used to claim the oidc token. This does not have to be the same as the key in the public key field.
 
 
 ### Recover Account
