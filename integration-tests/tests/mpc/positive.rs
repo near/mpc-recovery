@@ -68,6 +68,7 @@ async fn test_basic_action() -> anyhow::Result<()> {
                     near_account_id: account_id.to_string(),
                     create_account_options,
                     oidc_token: oidc_token.clone(),
+                    signature: None,
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
@@ -164,6 +165,7 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
                     near_account_id: account_id.to_string(),
                     create_account_options,
                     oidc_token: token::valid_random(),
+                    signature: None,
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
@@ -232,6 +234,7 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
                     near_account_id: account_id.to_string(),
                     create_account_options,
                     oidc_token: token::valid_random(),
+                    signature: None,
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::OK);

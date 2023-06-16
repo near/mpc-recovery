@@ -1,7 +1,7 @@
 use crate::key_recovery::get_user_recovery_pk;
 use crate::msg::{
     AcceptNodePublicKeysRequest, AddKeyRequest, AddKeyResponse, NewAccountRequest,
-    NewAccountResponse,
+    NewAccountResponse, ClaimOidcResponse, ClaimOidcRequest,
 };
 use crate::nar;
 use crate::oauth::OAuthTokenVerifier;
@@ -115,6 +115,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
                 StatusCode::OK
             }),
         )
+        .route("/claim_oidc_token", post(claim_oidc_token))
         .route("/new_account", post(new_account::<T>))
         .route("/add_key", post(add_key::<T>))
         .layer(Extension(state))
@@ -140,6 +141,18 @@ struct LeaderState {
     account_creator_sk: SecretKey,
     account_lookup_url: String,
     pagoda_firebase_audience_id: String,
+}
+
+
+async fn claim_oidc_token(
+    Extension(_state): Extension<LeaderState>,
+    Json(_claim_oidc_request): Json<ClaimOidcRequest>,
+) -> (StatusCode, Json<ClaimOidcResponse>) {
+    // TODO:
+    // 1. Get MPC signature from sign nodes
+    // 2. Get user recovery public key from sign nodes (if registered)
+    // 3. Get user account id (if registered)
+    unimplemented!();
 }
 
 #[derive(thiserror::Error, Debug)]
