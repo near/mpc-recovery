@@ -4,7 +4,7 @@ use anyhow::anyhow;
 use bollard::Docker;
 use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::GenericArray};
 use hyper::{Body, Client, Method, Request, StatusCode, Uri};
-use mpc_recovery::msg::{AddKeyRequest, AddKeyResponse, NewAccountRequest, NewAccountResponse};
+use mpc_recovery::msg::{AddKeyRequest, AddKeyResponse, NewAccountRequest, NewAccountResponse, ClaimOidcRequest, ClaimOidcResponse};
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_crypto::SecretKey;
 use serde::{Deserialize, Serialize};
@@ -417,6 +417,14 @@ impl LeaderNodeApi {
         let response: Resp = serde_json::from_slice(&data)?;
 
         Ok((status, response))
+    }
+
+    pub async fn claim_oidc(
+        &self,
+        request: ClaimOidcRequest,
+    ) -> anyhow::Result<(StatusCode, ClaimOidcResponse)> {
+        self.post(format!("{}/claim_oidc", self.address), request)
+            .await
     }
 
     pub async fn new_account(

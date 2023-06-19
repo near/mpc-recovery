@@ -2422,6 +2422,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum 0.5.17",
+ "borsh",
  "chrono",
  "clap 4.2.4",
  "curv-kzen",

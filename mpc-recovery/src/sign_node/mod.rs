@@ -90,8 +90,11 @@ struct SignNodeState {
     node_info: NodeInfo,
 }
 
+//TODO: extend with new error types for token claiming
 #[derive(thiserror::Error, Debug)]
-enum CommitError {
+pub enum CommitError {
+    #[error("failed to verify signature: {0}")]
+    SignatureVerificationFailed(anyhow::Error),
     #[error("failed to verify oidc token: {0}")]
     OidcVerificationFailed(anyhow::Error),
     #[error("{0}")]

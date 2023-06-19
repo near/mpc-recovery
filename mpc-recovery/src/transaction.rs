@@ -169,8 +169,12 @@ pub async fn get_mpc_signed_delegated_action(
 
     let hash = hash(&bytes);
 
-    let signature =
-        sign_payload_with_mpc(client, sign_nodes, oidc_token, hash.as_bytes().to_vec()).await?;
+    let sig_share_request = SigShareRequest {
+        oidc_token: oidc_token.clone(),
+        payload: hash.as_bytes().to_vec(),
+    };
+
+    let signature = sign_payload_with_mpc(client, sign_nodes, sig_share_request).await?;
 
     Ok(SignedDelegateAction {
         delegate_action,
@@ -178,19 +182,14 @@ pub async fn get_mpc_signed_delegated_action(
     })
 }
 
+// TODO: should support old and new commit API
 pub async fn sign_payload_with_mpc(
     client: &reqwest::Client,
     sign_nodes: &[String],
-    oidc_token: String,
-    payload: Vec<u8>,
+    sig_share_request: SigShareRequest,
 ) -> anyhow::Result<Signature> {
-    let commit_request = SigShareRequest {
-        oidc_token,
-        payload,
-    };
-
     let commitments: Vec<SignedCommitment> =
-        call_all_nodes(client, sign_nodes, "commit", commit_request).await?;
+        call_all_nodes(client, sign_nodes, "commit", sig_share_request).await?;
 
     let reveals: Vec<Reveal> = call_all_nodes(client, sign_nodes, "reveal", commitments).await?;
 

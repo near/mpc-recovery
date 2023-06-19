@@ -1,7 +1,7 @@
 use crate::key_recovery::get_user_recovery_pk;
 use crate::msg::{
     AcceptNodePublicKeysRequest, AddKeyRequest, AddKeyResponse, ClaimOidcRequest,
-    ClaimOidcResponse, NewAccountRequest, NewAccountResponse,
+    ClaimOidcResponse, NewAccountRequest, NewAccountResponse, SigShareRequest,
 };
 use crate::nar;
 use crate::oauth::OAuthTokenVerifier;
@@ -10,10 +10,11 @@ use crate::relayer::msg::RegisterAccountRequest;
 use crate::relayer::NearRpcAndRelayerClient;
 use crate::transaction::{
     get_add_key_delegate_action, get_create_account_delegate_action,
-    get_local_signed_delegated_action, get_mpc_signed_delegated_action,
+    get_local_signed_delegated_action, get_mpc_signed_delegated_action, sign_payload_with_mpc,
 };
 use axum::routing::get;
 use axum::{http::StatusCode, routing::post, Extension, Json, Router};
+use borsh::BorshSerialize;
 use curv::elliptic::curves::{Ed25519, Point};
 use near_crypto::{ParseKeyError, PublicKey, SecretKey};
 use near_primitives::account::id::ParseAccountError;
@@ -115,7 +116,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
                 StatusCode::OK
             }),
         )
-        .route("/claim_oidc_token", post(claim_oidc_token))
+        .route("/claim_oidc", post(claim_oidc))
         .route("/new_account", post(new_account::<T>))
         .route("/add_key", post(add_key::<T>))
         .layer(Extension(state))
@@ -143,15 +144,36 @@ struct LeaderState {
     pagoda_firebase_audience_id: String,
 }
 
-async fn claim_oidc_token(
-    Extension(_state): Extension<LeaderState>,
+async fn claim_oidc(
+    Extension(state): Extension<LeaderState>,
     Json(_claim_oidc_request): Json<ClaimOidcRequest>,
 ) -> (StatusCode, Json<ClaimOidcResponse>) {
     // TODO:
     // 1. Get MPC signature from sign nodes
     // 2. Get user recovery public key from sign nodes (if registered)
     // 3. Get user account id (if registered)
-    unimplemented!();
+    //TODO: update SigShareRequest to support id token claiming
+    // let sig_share_request = SigShareRequest::Claim(claim_oidc_request);
+    let sig_share_request = SigShareRequest {
+        oidc_token: "".to_string(),
+        payload: "".try_to_vec().unwrap(),
+    };
+    let res =
+        sign_payload_with_mpc(&state.reqwest_client, &state.sign_nodes, sig_share_request).await;
+    match res {
+        Ok(mpc_signature) => (
+            StatusCode::OK,
+            Json(ClaimOidcResponse::Ok {
+                mpc_signature,
+                near_account_id: None,
+                recovery_public_key: None,
+            }),
+        ),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(ClaimOidcResponse::Err { msg: e.to_string() }),
+        ),
+    }
 }
 
 #[derive(thiserror::Error, Debug)]
