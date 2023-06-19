@@ -34,8 +34,7 @@ pub fn check_signature(
     request_digest: &[u8],
 ) -> Result<(), CommitError> {
     {
-        if !near_crypto::Signature::ED25519(signature.clone()).verify(&request_digest, &public_key)
-        {
+        if !near_crypto::Signature::ED25519(*signature).verify(request_digest, public_key) {
             return Err(CommitError::SignatureVerificationFailed(anyhow::anyhow!(
                 "Public key {}, digest {} and signature {} don't match",
                 &public_key,
