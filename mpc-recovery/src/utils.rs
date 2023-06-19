@@ -33,17 +33,16 @@ pub fn check_signature(
     signature: &Signature,
     request_digest: &[u8],
 ) -> Result<(), CommitError> {
-    {
-        if !near_crypto::Signature::ED25519(*signature).verify(request_digest, public_key) {
-            return Err(CommitError::SignatureVerificationFailed(anyhow::anyhow!(
-                "Public key {}, digest {} and signature {} don't match",
-                &public_key,
-                &hex::encode(request_digest),
-                &signature
-            )));
-        } else {
-            Ok(())
-        }
+    if !near_crypto::Signature::ED25519(*signature).verify(request_digest, public_key) {
+        Err(CommitError::SignatureVerificationFailed(anyhow::anyhow!(
+            "Public key {}, digest {} and signature {} don't match",
+            &public_key,
+            &hex::encode(request_digest),
+            &signature
+        )))
+        
+    } else {
+        Ok(())
     }
 }
 
