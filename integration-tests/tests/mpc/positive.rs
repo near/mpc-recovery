@@ -42,7 +42,7 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
                 _ => return Err(anyhow::anyhow!("Wrong signature type")),
             };
 
-            let mut oidc_request = ClaimOidcRequest {
+            let oidc_request = ClaimOidcRequest {
                 oidc_token_hash,
                 public_key: user_public_key.clone(),
                 signature,
@@ -58,8 +58,8 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             let res_signature = match oidc_response {
                 ClaimOidcResponse::Ok {
                     mpc_signature,
-                    recovery_public_key,
-                    near_account_id,
+                    recovery_public_key: _,
+                    near_account_id: _,
                 } => mpc_signature,
                 ClaimOidcResponse::Err { msg } => return Err(anyhow::anyhow!(msg)),
             };
@@ -98,11 +98,11 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
                 signature: None, //TODO: play with real signature
             };
 
-            let (status_code, new_acc_response) =
+            let (status_code, _new_acc_response) =
                 ctx.leader_node.new_account(new_account_request).await?;
 
             // Check account creation status
-            let expected_account_response = NewAccountResponse::Ok {
+            let _expected_account_response = NewAccountResponse::Ok {
                 create_account_options: CreateAccountOptions {
                     // TODO: proably will contain recovery key
                     full_access_keys: Some(vec![
@@ -127,7 +127,7 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             // Add new FA key
             let new_user_public_key = key::random();
 
-            let (status_code, add_key_response) = ctx
+            let (status_code, _add_key_response) = ctx
                 .leader_node
                 .add_key(AddKeyRequest {
                     create_account_options: CreateAccountOptions {
