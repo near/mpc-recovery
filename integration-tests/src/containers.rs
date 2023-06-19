@@ -4,7 +4,10 @@ use anyhow::anyhow;
 use bollard::Docker;
 use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::GenericArray};
 use hyper::{Body, Client, Method, Request, StatusCode, Uri};
-use mpc_recovery::msg::{AddKeyRequest, AddKeyResponse, NewAccountRequest, NewAccountResponse, ClaimOidcRequest, ClaimOidcResponse};
+use mpc_recovery::msg::{
+    AddKeyRequest, AddKeyResponse, ClaimOidcRequest, ClaimOidcResponse, NewAccountRequest,
+    NewAccountResponse,
+};
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_crypto::SecretKey;
 use serde::{Deserialize, Serialize};
