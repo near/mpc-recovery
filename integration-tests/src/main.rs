@@ -3,7 +3,6 @@ use mpc_recovery::GenerateResult;
 use mpc_recovery_integration_tests::containers;
 use tokio::io::{stdin, AsyncReadExt};
 
-
 const NETWORK: &str = "mpc_recovery_dev_network";
 const GCP_PROJECT_ID: &str = "mpc-recovery-dev-gcp-project";
 // TODO: figure out how to instantiate an use a local firebase deployment
