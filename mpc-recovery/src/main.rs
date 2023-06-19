@@ -25,7 +25,7 @@ enum Cli {
         #[arg(long, env("MPC_RECOVERY_WEB_PORT"))]
         web_port: u16,
         /// The compute nodes to connect to
-        #[arg(long, env("MPC_RECOVERY_SIGN_NODES"))]
+        #[arg(long, value_parser, num_args = 1.., value_delimiter = ',', env("MPC_RECOVERY_SIGN_NODES"))]
         sign_nodes: Vec<String>,
         /// NEAR RPC address
         #[arg(
@@ -48,7 +48,7 @@ enum Cli {
         #[arg(long, env("MPC_RECOVERY_NEAR_ROOT_ACCOUNT"), default_value("testnet"))]
         near_root_account: String,
         /// Account creator ID
-        #[arg(long, env("MPC_RECOVERY_ACCOUNT_ID"))]
+        #[arg(long, env("MPC_RECOVERY_ACCOUNT_CREATOR_ID"))]
         account_creator_id: AccountId,
         /// TEMPORARY - Account creator ed25519 secret key
         #[arg(long, env("MPC_RECOVERY_ACCOUNT_CREATOR_SK"))]
@@ -112,9 +112,7 @@ async fn load_sh_skare(
     match sk_share_arg {
         Some(sk_share) => Ok(sk_share),
         None => {
-            let name = format!(
-                "projects/pagoda-discovery-platform-dev/secrets/mpc-recovery-secret-share-{node_id}-{env}/versions/latest"
-            );
+            let name = format!("mpc-recovery-secret-share-{node_id}-{env}/versions/latest");
             Ok(std::str::from_utf8(&gcp_service.load_secret(name).await?)?.to_string())
         }
     }
@@ -129,9 +127,7 @@ async fn load_cipher_key(
     match cipher_key_arg {
         Some(cipher_key) => Ok(cipher_key),
         None => {
-            let name = format!(
-                "projects/pagoda-discovery-platform-dev/secrets/mpc-recovery-encryption-cipher-{node_id}-{env}/versions/latest"
-            );
+            let name = format!("mpc-recovery-encryption-cipher-{node_id}-{env}/versions/latest");
             Ok(std::str::from_utf8(&gcp_service.load_secret(name).await?)?.to_string())
         }
     }
@@ -145,9 +141,7 @@ async fn load_account_creator_sk(
     match account_creator_sk_arg {
         Some(account_creator_sk) => Ok(account_creator_sk),
         None => {
-            let name = format!(
-                "projects/pagoda-discovery-platform-dev/secrets/mpc-recovery-account-creator-sk-{env}/versions/latest"
-            );
+            let name = format!("mpc-recovery-account-creator-sk-{env}/versions/latest");
             Ok(std::str::from_utf8(&gcp_service.load_secret(name).await?)?.to_string())
         }
     }

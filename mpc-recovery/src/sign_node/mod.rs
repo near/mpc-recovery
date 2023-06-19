@@ -7,6 +7,7 @@ use crate::primitives::InternalAccountId;
 use crate::sign_node::pk_set::SignerNodePkSet;
 use crate::NodeId;
 use aes_gcm::Aes256Gcm;
+use axum::routing::get;
 use axum::{http::StatusCode, routing::post, Extension, Json, Router};
 use curv::elliptic::curves::{Ed25519, Point};
 use multi_party_eddsa::protocols::{self, ExpandedKeyPair};
@@ -55,6 +56,14 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
     };
 
     let app = Router::new()
+        // healthcheck endpoint
+        .route(
+            "/",
+            get(|| async move {
+                tracing::info!("node is ready to accept connections");
+                StatusCode::OK
+            }),
+        )
         .route("/commit", post(commit::<T>))
         .route("/reveal", post(reveal))
         .route("/signature_share", post(signature_share))

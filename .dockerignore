@@ -7,3 +7,4 @@ target/
 !target/docker-cache.tgz
 Dockerfile
 .dockerignore
+infra/

@@ -83,27 +83,3 @@ Run unit tests with:
 ```BASH
 cargo test -p mpc-recovery
 ```
-
-#### Integration tests
-
-Running integration tests requires you to have relayer docker image present on your machine:
-
-```BASH
-# TODO: upstream these changes
-git clone -b mpc/entrypoint git@github.com:near/pagoda-relayer-rs-fastauth.git
-docker build pagoda-relayer-rs-fastauth -t pagoda-relayer-rs-fastauth
-```
-
-Now, build mpc-recovery from this repository:
-
-```BASH
-docker build . -t near/mpc-recovery
-```
-
-**Note**. You will need to re-build the Docker image each time you make a code change and want to run the integration tests.
-
-Finally, run the integration tests:
-
-```BASH
-cargo test -p mpc-recovery-integration-tests
-```

@@ -5,7 +5,7 @@ use futures::{future, FutureExt};
 use multi_party_eddsa::protocols::aggsig::KeyAgg;
 use multi_party_eddsa::protocols::{self, aggsig};
 use near_crypto::{InMemorySigner, PublicKey, SecretKey};
-use near_primitives::account::{AccessKey, AccessKeyPermission};
+use near_primitives::account::{AccessKey, AccessKeyPermission, FunctionCallPermission};
 use near_primitives::borsh::BorshSerialize;
 use near_primitives::hash::hash;
 use near_primitives::transaction::{Action, AddKeyAction, FunctionCallAction};
@@ -21,10 +21,31 @@ use serde_json::json;
 use crate::msg::SigShareRequest;
 use crate::sign_node::aggregate_signer::{Reveal, SignedCommitment};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CreateAccountOptions {
-    // Note: original structure contains other unrelated fields
     pub full_access_keys: Option<Vec<PublicKey>>,
+    pub limited_access_keys: Option<Vec<LimitedAccessKey>>,
+    pub contract_bytes: Option<Vec<u8>>,
+}
+
+impl std::fmt::Display for CreateAccountOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json_string = serde_json::to_string(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{}", json_string)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+/// Information about any limited access keys that are being added to the account as part of `create_account_advanced`.
+pub struct LimitedAccessKey {
+    /// The public key of the limited access key.
+    pub public_key: PublicKey,
+    /// The amount of yoctoNEAR$ that can be spent on Gas by this key.
+    pub allowance: String,
+    /// Which contract should this key be allowed to call.
+    pub receiver_id: AccountId,
+    /// Which methods should this key be allowed to call.
+    pub method_names: String,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -32,20 +53,16 @@ pub fn get_create_account_delegate_action(
     signer_id: AccountId,
     signer_pk: PublicKey,
     new_account_id: AccountId,
-    new_account_recovery_pk: PublicKey,
-    new_account_user_pk: PublicKey,
+    new_account_options: CreateAccountOptions,
     near_root_account: AccountId,
     nonce: Nonce,
     max_block_height: u64,
 ) -> anyhow::Result<DelegateAction> {
-    let create_acc_options = CreateAccountOptions {
-        full_access_keys: Some(vec![new_account_user_pk, new_account_recovery_pk]),
-    };
     let create_acc_action = Action::FunctionCall(FunctionCallAction {
         method_name: "create_account_advanced".to_string(),
         args: json!({
             "new_account_id": new_account_id,
-            "options": create_acc_options,
+            "options": new_account_options,
         })
         .to_string()
         .into_bytes(),
@@ -70,24 +87,51 @@ pub fn get_create_account_delegate_action(
 pub fn get_add_key_delegate_action(
     account_id: AccountId,
     signer_pk: PublicKey,
-    new_public_key: PublicKey,
+    create_account_options: CreateAccountOptions,
     nonce: Nonce,
     max_block_height: u64,
 ) -> anyhow::Result<DelegateAction> {
-    let add_key_action = Action::AddKey(AddKeyAction {
-        public_key: new_public_key,
-        access_key: AccessKey {
-            nonce: 0,
-            permission: AccessKeyPermission::FullAccess,
-        },
-    });
-
-    let delegate_add_key_action = NonDelegateAction::try_from(add_key_action)?;
+    let full_access_keys: Vec<_> = create_account_options
+        .full_access_keys
+        .unwrap_or_default()
+        .into_iter()
+        .map(|pk| {
+            NonDelegateAction::try_from(Action::AddKey(AddKeyAction {
+                public_key: pk,
+                access_key: AccessKey {
+                    nonce: 0,
+                    permission: AccessKeyPermission::FullAccess,
+                },
+            }))
+        })
+        .collect::<Result<_, _>>()?;
+    let limited_access_keys: Vec<_> = create_account_options
+        .limited_access_keys
+        .unwrap_or_default()
+        .into_iter()
+        .map(|lka| {
+            NonDelegateAction::try_from(Action::AddKey(AddKeyAction {
+                public_key: lka.public_key,
+                access_key: AccessKey {
+                    nonce: 0,
+                    permission: AccessKeyPermission::FunctionCall(FunctionCallPermission {
+                        allowance: Some(lka.allowance.parse().unwrap()),
+                        receiver_id: lka.receiver_id.to_string(),
+                        method_names: if lka.method_names.is_empty() {
+                            vec![]
+                        } else {
+                            lka.method_names.split(',').map(|s| s.to_string()).collect()
+                        },
+                    }),
+                },
+            }))
+        })
+        .collect::<Result<_, _>>()?;
 
     let delegate_action = DelegateAction {
         sender_id: account_id.clone(),
         receiver_id: account_id,
-        actions: vec![delegate_add_key_action],
+        actions: [full_access_keys, limited_access_keys].concat(),
         nonce,
         max_block_height,
         public_key: signer_pk,
@@ -125,7 +169,8 @@ pub async fn get_mpc_signed_delegated_action(
 
     let hash = hash(&bytes);
 
-    let signature = sign(client, sign_nodes, oidc_token, hash.as_bytes().to_vec()).await?;
+    let signature =
+        sign_payload_with_mpc(client, sign_nodes, oidc_token, hash.as_bytes().to_vec()).await?;
 
     Ok(SignedDelegateAction {
         delegate_action,
@@ -133,7 +178,7 @@ pub async fn get_mpc_signed_delegated_action(
     })
 }
 
-pub async fn sign(
+pub async fn sign_payload_with_mpc(
     client: &reqwest::Client,
     sign_nodes: &[String],
     oidc_token: String,
@@ -145,12 +190,12 @@ pub async fn sign(
     };
 
     let commitments: Vec<SignedCommitment> =
-        call(client, sign_nodes, "commit", commit_request).await?;
+        call_all_nodes(client, sign_nodes, "commit", commit_request).await?;
 
-    let reveals: Vec<Reveal> = call(client, sign_nodes, "reveal", commitments).await?;
+    let reveals: Vec<Reveal> = call_all_nodes(client, sign_nodes, "reveal", commitments).await?;
 
     let signature_shares: Vec<protocols::Signature> =
-        call(client, sign_nodes, "signature_share", reveals).await?;
+        call_all_nodes(client, sign_nodes, "signature_share", reveals).await?;
 
     let raw_sig = aggsig::add_signature_parts(&signature_shares);
 
@@ -158,7 +203,7 @@ pub async fn sign(
 }
 
 /// Call every node with an identical payload and send the response
-pub async fn call<Req: Serialize, Res: DeserializeOwned>(
+pub async fn call_all_nodes<Req: Serialize, Res: DeserializeOwned>(
     client: &reqwest::Client,
     sign_nodes: &[String],
     path: &str,

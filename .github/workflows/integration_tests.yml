@@ -22,7 +22,7 @@ jobs:
       - name: Pull Relayer Docker Image
         run: |
           docker pull ghcr.io/near/pagoda-relayer-rs-fastauth
-          docker tag ghcr.io/near/pagoda-relayer-rs-fastauth pagoda-relayer-rs-fastauth
+          docker pull ghcr.io/near/sandbox
       - name: Install stable toolchain
         uses: actions-rs/toolchain@v1
         with:

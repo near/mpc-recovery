@@ -39,7 +39,7 @@ FROM debian:bullseye-slim as runtime
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive \
     apt-get install --no-install-recommends --assume-yes \
-    libssl-dev ca-certificates
+    libssl-dev ca-certificates curl
 RUN update-ca-certificates
 COPY --from=builder /usr/src/app/target/release/mpc-recovery /usr/local/bin/mpc-recovery
 WORKDIR /usr/local/bin
