@@ -14,6 +14,7 @@ hex = "0.4"
 hyper = { version = "0.14", features = ["full"] }
 mpc-recovery = { path = "../mpc-recovery" }
 multi-party-eddsa = { git = "https://github.com/DavidM-D/multi-party-eddsa.git", rev = "25ae4fdc5ff7819ae70e73ab4afacf1c24fc4da1" }
+tracing = "0.1"
 near-crypto = "0.16.1"
 near-units = "0.2.0"
 portpicker = "0.1"

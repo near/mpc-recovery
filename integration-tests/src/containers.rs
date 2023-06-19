@@ -14,6 +14,7 @@ use testcontainers::{
     images::generic::GenericImage,
     Container, Image, RunnableImage,
 };
+use tracing;
 use workspaces::AccountId;
 
 pub struct DockerClient {
@@ -79,7 +80,7 @@ pub struct Redis<'a> {
 
 impl<'a> Redis<'a> {
     pub async fn run(docker_client: &'a DockerClient, network: &str) -> anyhow::Result<Redis<'a>> {
-        println!("Running Redis container...");
+        tracing::info!("Running Redis container...");
         let image = GenericImage::new("redis", "latest")
             .with_wait_for(WaitFor::message_on_stdout("Ready to accept connections"));
         let image: RunnableImage<GenericImage> = image.into();
@@ -89,7 +90,7 @@ impl<'a> Redis<'a> {
             .get_network_ip_address(&container, network)
             .await?;
 
-        println!("Redis container is running at {}", address);
+        tracing::info!("Redis container is running at {}", address);
         Ok(Redis { container, address })
     }
 }
@@ -107,7 +108,7 @@ impl<'a> Sandbox<'a> {
         docker_client: &'a DockerClient,
         network: &str,
     ) -> anyhow::Result<Sandbox<'a>> {
-        println!("Running sandbox container...");
+        tracing::info!("Running sandbox container...");
         let image = GenericImage::new("ghcr.io/near/sandbox", "latest")
             .with_wait_for(WaitFor::seconds(2))
             .with_exposed_port(Self::CONTAINER_RPC_PORT);
@@ -128,7 +129,7 @@ impl<'a> Sandbox<'a> {
             .await?;
 
         let full_address = format!("http://{}:{}", address, Self::CONTAINER_RPC_PORT);
-        println!("Sandbox container is running at {}", full_address);
+        tracing::info!("Sandbox container is running at {}", full_address);
         Ok(Sandbox {
             container,
             address: full_address,
@@ -156,7 +157,7 @@ impl<'a> Relayer<'a> {
         social_account_id: &AccountId,
         social_account_sk: &SecretKey,
     ) -> anyhow::Result<Relayer<'a>> {
-        println!("Running relayer container...");
+        tracing::info!("Running relayer container...");
         let image = GenericImage::new("ghcr.io/near/pagoda-relayer-rs-fastauth", "latest")
             .with_wait_for(WaitFor::message_on_stdout("listening on"))
             .with_exposed_port(Self::CONTAINER_PORT)
@@ -187,7 +188,7 @@ impl<'a> Relayer<'a> {
             .await?;
 
         let full_address = format!("http://{}:{}", ip_address, Self::CONTAINER_PORT);
-        println!("Relayer container is running at {}", full_address);
+        tracing::info!("Relayer container is running at {}", full_address);
         Ok(Relayer {
             container,
             address: full_address,
@@ -208,7 +209,7 @@ impl<'a> Datastore<'a> {
         network: &str,
         project_id: &str,
     ) -> anyhow::Result<Datastore<'a>> {
-        println!("Running datastore container...");
+        tracing::info!("Running datastore container...");
         let image = GenericImage::new("google/cloud-sdk", "latest")
             .with_wait_for(WaitFor::message_on_stderr("Dev App Server is now running."))
             .with_exposed_port(Self::CONTAINER_PORT)
@@ -239,7 +240,7 @@ impl<'a> Datastore<'a> {
             .await?;
 
         let full_address = format!("http://{}:{}/", ip_address, Self::CONTAINER_PORT);
-        println!("Datastore container is running at {}", full_address);
+        tracing::info!("Datastore container is running at {}", full_address);
         Ok(Datastore {
             container,
             address: full_address,
@@ -271,7 +272,7 @@ impl<'a> SignerNode<'a> {
         gcp_project_id: &str,
         firebase_audience_id: &str,
     ) -> anyhow::Result<SignerNode<'a>> {
-        println!("Running signer node container {}...", node_id);
+        tracing::info!("Running signer node container {}...", node_id);
         let image: GenericImage = GenericImage::new("near/mpc-recovery", "latest")
             .with_wait_for(WaitFor::Nothing)
             .with_exposed_port(Self::CONTAINER_PORT)
@@ -311,9 +312,10 @@ impl<'a> SignerNode<'a> {
         });
 
         let full_address = format!("http://{ip_address}:{}", Self::CONTAINER_PORT);
-        println!(
+        tracing::info!(
             "Signer node container {} is running at {}",
-            node_id, full_address
+            node_id,
+            full_address
         );
         Ok(SignerNode {
             container,
@@ -352,7 +354,7 @@ impl<'a> LeaderNode<'a> {
         account_creator_sk: &SecretKey,
         firebase_audience_id: &str,
     ) -> anyhow::Result<LeaderNode<'a>> {
-        println!("Running leader node container...");
+        tracing::info!("Running leader node container...");
         let port = portpicker::pick_unused_port().expect("no free ports");
 
         let image = GenericImage::new("near/mpc-recovery", "latest")
@@ -398,7 +400,7 @@ impl<'a> LeaderNode<'a> {
         });
 
         let full_address = format!("http://{ip_address}:{port}");
-        println!("Leader node container is running at {}", full_address);
+        tracing::info!("Leader node container is running at {}", full_address);
         Ok(LeaderNode {
             container,
             address: full_address,

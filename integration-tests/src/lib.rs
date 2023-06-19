@@ -14,7 +14,7 @@ async fn fetch_validator_keys(
     docker_client: &containers::DockerClient,
     sandbox: &containers::Sandbox<'_>,
 ) -> anyhow::Result<KeyFile> {
-    println!("Fetching validator keys...");
+    tracing::info!("Fetching validator keys...");
     let create_result = docker_client
         .docker
         .create_exec(
@@ -43,7 +43,7 @@ async fn fetch_validator_keys(
                 stream_contents.extend_from_slice(&chunk?.into_bytes());
             }
 
-            println!("Validator keys fetched");
+            tracing::info!("Validator keys fetched");
             Ok(serde_json::from_slice(&stream_contents)?)
         }
         StartExecResults::Detached => unreachable!("unexpected detached output"),
@@ -63,12 +63,12 @@ pub async fn initialize_relayer<'a>(
     docker_client: &'a containers::DockerClient,
     network: &str,
 ) -> anyhow::Result<RelayerCtx<'a>> {
-    println!("Initializing relayer...");
+    tracing::info!("Initializing relayer...");
     let sandbox = containers::Sandbox::run(docker_client, network).await?;
 
     let validator_key = fetch_validator_keys(docker_client, &sandbox).await?;
 
-    println!("Initializing sandbox worker...");
+    tracing::info!("Initializing sandbox worker...");
     let worker = workspaces::sandbox()
         .rpc_addr(&sandbox.address)
         .validator_key(ValidatorKey::Known(
@@ -76,15 +76,15 @@ pub async fn initialize_relayer<'a>(
             validator_key.secret_key.to_string().parse()?,
         ))
         .await?;
-    println!("Sandbox worker initialized");
+    tracing::info!("Sandbox worker initialized");
     let social_db = sandbox::initialize_social_db(&worker).await?;
     sandbox::initialize_linkdrop(&worker).await?;
-    println!("Initializing relayer accounts...");
+    tracing::info!("Initializing relayer accounts...");
     let (relayer_account_id, relayer_account_sk) = sandbox::create_account(&worker).await?;
     let (creator_account_id, creator_account_sk) = sandbox::create_account(&worker).await?;
     let (social_account_id, social_account_sk) = sandbox::create_account(&worker).await?;
     sandbox::up_funds_for_account(&worker, &social_account_id, parse_near!("1000 N")).await?;
-    println!("Relayer accounts initialized. Relayer account: {}, Creator account: {}, Social account: {}",
+    tracing::info!("Relayer accounts initialized. Relayer account: {}, Creator account: {}, Social account: {}",
     relayer_account_id, creator_account_id, social_account_id);
 
     let redis = containers::Redis::run(docker_client, network).await?;
