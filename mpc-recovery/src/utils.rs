@@ -40,7 +40,6 @@ pub fn check_signature(
             &hex::encode(request_digest),
             &signature
         )))
-        
     } else {
         Ok(())
     }
