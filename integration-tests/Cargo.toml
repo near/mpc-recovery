@@ -28,6 +28,7 @@ workspaces = { git = "https://github.com/near/workspaces-rs", branch = "main" }
 [dev-dependencies]
 once_cell = "1"
 rand = "0.8"
+test-log = { version = "0.2.12", default-features = false, features = ["trace"] }
 tokio-util = { version = "0.7", features = ["full"] }
 curv = { package = "curv-kzen", version = "0.9", default-features = false }
 reqwest = "0.11.16"
