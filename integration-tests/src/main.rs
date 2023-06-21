@@ -2,6 +2,7 @@ use clap::Parser;
 use mpc_recovery::GenerateResult;
 use mpc_recovery_integration_tests::containers;
 use tokio::io::{stdin, AsyncReadExt};
+use tracing_subscriber::EnvFilter;
 
 const NETWORK: &str = "mpc_recovery_dev_network";
 const GCP_PROJECT_ID: &str = "mpc-recovery-dev-gcp-project";
@@ -15,6 +16,10 @@ enum Cli {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let mut subscriber = tracing_subscriber::fmt()
+        .with_thread_ids(true)
+        .with_env_filter(EnvFilter::from_default_env());
+    subscriber.init();
     match Cli::parse() {
         Cli::TestLeader { nodes } => {
             tracing::info!("Setting up an environment with {} nodes", nodes);
