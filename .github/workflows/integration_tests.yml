@@ -41,6 +41,8 @@ jobs:
       - uses: Swatinem/rust-cache@v1
       - name: Install Protoc
         uses: arduino/setup-protoc@v1.1.2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build Docker image
         uses: docker/build-push-action@v4
         with:
