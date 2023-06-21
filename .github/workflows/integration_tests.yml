@@ -9,10 +9,18 @@ env:
   RUSTFLAGS: -D warnings
 jobs:
   test:
-    runs-on: ubuntu-latest
-    name: Test
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    name: Integration tests
     steps:
       - uses: actions/checkout@v3
+      - name: Install Docker
+        if: ${{ matrix.os == 'macos-latest' }}
+        run: |
+          brew install docker
+          colima start
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v1
         with:
