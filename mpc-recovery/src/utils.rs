@@ -5,7 +5,7 @@ use near_crypto::PublicKey;
 
 use crate::{primitives::HashSalt, sign_node::CommitError};
 
-pub fn claim_oidc_request_digest(oidc_token_hash: [u8; 32]) -> Result<Vec<u8>, CommitError> {
+pub fn claim_oidc_request_digest(oidc_token_hash: [u8; 64]) -> Result<Vec<u8>, CommitError> {
     // As per the readme
     // To verify the signature of the message verify:
     // sha256.hash(Borsh.serialize<u32>(SALT + 0) ++ Borsh.serialize<[u8]>(oidc_token_hash))
@@ -45,8 +45,19 @@ pub fn check_signature(
     }
 }
 
-pub fn oidc_digest(oidc_token: &str) -> [u8; 32] {
+pub fn oidc_digest(oidc_token: &str) -> [u8; 64] {
     let hasher = Sha512::default().chain(oidc_token.as_bytes());
 
-    <[u8; 32]>::try_from(hasher.finalize().as_slice()).expect("Hash is the wrong size")
+    <[u8; 64]>::try_from(hasher.finalize().as_slice()).expect("Hash is the wrong size")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_oidc_digest() {
+        assert_eq!(oidc_digest("oidc_token_1"), oidc_digest("oidc_token_1"));
+        assert_ne!(oidc_digest("oidc_token_1"), oidc_digest("oidc_token_2"));
+    }
 }
