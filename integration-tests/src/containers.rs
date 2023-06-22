@@ -112,6 +112,7 @@ impl<'a> Sandbox<'a> {
         let image = GenericImage::new("ghcr.io/near/sandbox", "latest")
             .with_wait_for(WaitFor::seconds(2))
             .with_exposed_port(Self::CONTAINER_RPC_PORT);
+        tracing::info!("1");
         let image: RunnableImage<GenericImage> = (
             image,
             vec![
@@ -122,11 +123,15 @@ impl<'a> Sandbox<'a> {
             ],
         )
             .into();
+        tracing::info!("2");
         let image = image.with_network(network);
+        tracing::info!("3");
         let container = docker_client.cli.run(image);
+        tracing::info!("4");
         let address = docker_client
             .get_network_ip_address(&container, network)
             .await?;
+        tracing::info!("5");
 
         let full_address = format!("http://{}:{}", address, Self::CONTAINER_RPC_PORT);
         tracing::info!("Sandbox container is running at {}", full_address);
