@@ -291,13 +291,22 @@ async fn accept_pk_set(
     }
 
     let mut public_keys = state.node_info.nodes_public_keys.write().await;
-    if public_keys.is_some() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(Err(
-                "This node is already initialized with public keys".to_string()
-            )),
-        );
+    if let Some(pk_set) = public_keys.as_ref() {
+        if pk_set == &request.public_keys {
+            return (
+                StatusCode::OK,
+                Json(Ok(
+                    "This node is already initialized with provided public keys".to_string(),
+                )),
+            );
+        } else {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(Err(
+                    "This node is already initialized with different public keys".to_string(),
+                )),
+            );
+        }
     }
     tracing::debug!("Setting node public keys => {:?}", request.public_keys);
     public_keys.replace(request.public_keys.clone());

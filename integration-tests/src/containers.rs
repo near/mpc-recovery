@@ -4,7 +4,10 @@ use anyhow::anyhow;
 use bollard::Docker;
 use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::GenericArray};
 use hyper::{Body, Client, Method, Request, StatusCode, Uri};
-use mpc_recovery::msg::{AddKeyRequest, AddKeyResponse, NewAccountRequest, NewAccountResponse};
+use mpc_recovery::msg::{
+    AcceptNodePublicKeysRequest, AddKeyRequest, AddKeyResponse, NewAccountRequest,
+    NewAccountResponse,
+};
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_crypto::SecretKey;
 use serde::{Deserialize, Serialize};
@@ -331,6 +334,15 @@ impl<'a> SignerNode<'a> {
     }
 }
 
+impl SignerNodeApi {
+    pub async fn accept_pk_set(
+        &self,
+        request: AcceptNodePublicKeysRequest,
+    ) -> anyhow::Result<(StatusCode, Result<String, String>)> {
+        post(format!("{}/accept_pk_set", self.address), request).await
+    }
+}
+
 pub struct LeaderNode<'a> {
     pub container: Container<'a, GenericImage>,
     pub address: String,
@@ -415,45 +427,39 @@ impl<'a> LeaderNode<'a> {
 }
 
 impl LeaderNodeApi {
-    async fn post<U, Req: Serialize, Resp>(
-        &self,
-        uri: U,
-        request: Req,
-    ) -> anyhow::Result<(StatusCode, Resp)>
-    where
-        Uri: TryFrom<U>,
-        <Uri as TryFrom<U>>::Error: Into<hyper::http::Error>,
-        for<'de> Resp: Deserialize<'de>,
-    {
-        let req = Request::builder()
-            .method(Method::POST)
-            .uri(uri)
-            .header("content-type", "application/json")
-            .body(Body::from(serde_json::to_string(&request)?))?;
-
-        let client = Client::new();
-        let response = client.request(req).await?;
-        let status = response.status();
-
-        let data = hyper::body::to_bytes(response).await?;
-        let response: Resp = serde_json::from_slice(&data)?;
-
-        Ok((status, response))
-    }
-
     pub async fn new_account(
         &self,
         request: NewAccountRequest,
     ) -> anyhow::Result<(StatusCode, NewAccountResponse)> {
-        self.post(format!("{}/new_account", self.address), request)
-            .await
+        post(format!("{}/new_account", self.address), request).await
     }
 
     pub async fn add_key(
         &self,
         request: AddKeyRequest,
     ) -> anyhow::Result<(StatusCode, AddKeyResponse)> {
-        self.post(format!("{}/add_key", self.address), request)
-            .await
+        post(format!("{}/add_key", self.address), request).await
     }
+}
+
+async fn post<U, Req: Serialize, Resp>(uri: U, request: Req) -> anyhow::Result<(StatusCode, Resp)>
+where
+    Uri: TryFrom<U>,
+    <Uri as TryFrom<U>>::Error: Into<hyper::http::Error>,
+    for<'de> Resp: Deserialize<'de>,
+{
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(uri)
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_string(&request)?))?;
+
+    let client = Client::new();
+    let response = client.request(req).await?;
+    let status = response.status();
+
+    let data = hyper::body::to_bytes(response).await?;
+    let response: Resp = serde_json::from_slice(&data)?;
+
+    Ok((status, response))
 }

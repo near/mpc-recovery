@@ -13,7 +13,7 @@ const FIREBASE_AUDIENCE_ID: &str = "not actually used in integration tests";
 
 pub struct TestContext<'a> {
     leader_node: &'a containers::LeaderNodeApi,
-    _pk_set: &'a Vec<Point<Ed25519>>,
+    pk_set: &'a Vec<Point<Ed25519>>,
     worker: &'a Worker<Sandbox>,
     signer_nodes: &'a Vec<containers::SignerNodeApi>,
 }
@@ -72,7 +72,7 @@ where
 
     f(TestContext {
         leader_node: &leader_node.api(),
-        _pk_set: &pk_set,
+        pk_set: &pk_set,
         signer_nodes: &signer_nodes.iter().map(|n| n.api()).collect(),
         worker: &relayer_ctx.worker,
     })

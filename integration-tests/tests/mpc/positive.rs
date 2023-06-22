@@ -255,3 +255,23 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
     })
     .await
 }
+
+#[test(tokio::test)]
+async fn test_accept_existing_pk_set() -> anyhow::Result<()> {
+    with_nodes(1, |ctx| {
+        Box::pin(async move {
+            // Signer node is already initialized with the pk set, but we should be able to get a
+            // positive response by providing the same pk set as it already has.
+            let (status_code, result) = ctx.signer_nodes[0]
+                .accept_pk_set(mpc_recovery::msg::AcceptNodePublicKeysRequest {
+                    public_keys: ctx.pk_set.clone(),
+                })
+                .await?;
+            assert_eq!(status_code, StatusCode::OK);
+            assert!(matches!(result, Ok(_)));
+
+            Ok(())
+        })
+    })
+    .await
+}
