@@ -24,14 +24,9 @@ where
 {
     let docker_client = containers::DockerClient::default();
 
-    let relayer_ctx_future =
-        mpc_recovery_integration_tests::initialize_relayer(&docker_client, NETWORK);
-    let datastore_future = containers::Datastore::run(&docker_client, NETWORK, GCP_PROJECT_ID);
-
-    let (relayer_ctx, datastore) =
-        futures::future::join(relayer_ctx_future, datastore_future).await;
-    let relayer_ctx = relayer_ctx?;
-    let datastore = datastore?;
+    let relayer_ctx =
+        mpc_recovery_integration_tests::initialize_relayer(&docker_client, NETWORK).await?;
+    let datastore = containers::Datastore::run(&docker_client, NETWORK, GCP_PROJECT_ID).await?;
 
     let GenerateResult { pk_set, secrets } = mpc_recovery::generate(nodes);
     let mut signer_node_futures = Vec::new();
