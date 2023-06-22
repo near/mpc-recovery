@@ -1,7 +1,7 @@
 use self::aggregate_signer::{NodeInfo, Reveal, SignedCommitment, SigningState};
 use self::user_credentials::EncryptedUserCredentials;
 use crate::gcp::GcpService;
-use crate::msg::{AcceptNodePublicKeysRequest, SigShareRequest};
+use crate::msg::{AcceptNodePublicKeysRequest, SignNodeRequest};
 use crate::oauth::OAuthTokenVerifier;
 use crate::primitives::InternalAccountId;
 use crate::sign_node::pk_set::SignerNodePkSet;
@@ -137,34 +137,57 @@ async fn get_or_generate_user_creds(
 
 async fn process_commit<T: OAuthTokenVerifier>(
     state: SignNodeState,
-    request: SigShareRequest,
+    request: SignNodeRequest,
 ) -> Result<SignedCommitment, CommitError> {
-    let oidc_token_claims =
-        T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
-            .await
-            .map_err(CommitError::OidcVerificationFailed)?;
-    let internal_account_id = oidc_token_claims.get_internal_account_id();
+    match request {
+        SignNodeRequest::ClaimOidc(request) => {
+            // Check ID token hash signature
+            // TODO
+            // Save info about token in the database
+            // TODO
+            // Returned signed commitment (signature of the signature)
+            // TODO: check if we are getting root key pair properly
+            let response = state
+                .signing_state
+                .write()
+                .await
+                .get_commitment(
+                    &state.node_key,
+                    &state.node_key,
+                    request.signature.to_bytes().to_vec(),
+                )
+                .map_err(|e| anyhow::anyhow!(e))?;
+            Ok(response)
+        }
+        SignNodeRequest::SignShare(request) => {
+            let oidc_token_claims =
+                T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
+                    .await
+                    .map_err(CommitError::OidcVerificationFailed)?;
+            let internal_account_id = oidc_token_claims.get_internal_account_id();
 
-    let user_credentials = get_or_generate_user_creds(&state, internal_account_id).await?;
+            let user_credentials = get_or_generate_user_creds(&state, internal_account_id).await?;
 
-    let response = state
-        .signing_state
-        .write()
-        .await
-        .get_commitment(
-            &user_credentials.decrypt_key_pair(&state.cipher)?,
-            &state.node_key,
-            // TODO Restrict this payload
-            request.payload,
-        )
-        .map_err(|e| anyhow::anyhow!(e))?;
-    Ok(response)
+            let response = state
+                .signing_state
+                .write()
+                .await
+                .get_commitment(
+                    &user_credentials.decrypt_key_pair(&state.cipher)?,
+                    &state.node_key,
+                    // TODO Restrict this payload
+                    request.payload,
+                )
+                .map_err(|e| anyhow::anyhow!(e))?;
+            Ok(response)
+        }
+    }
 }
 
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn commit<T: OAuthTokenVerifier>(
     Extension(state): Extension<SignNodeState>,
-    Json(request): Json<SigShareRequest>,
+    Json(request): Json<SignNodeRequest>,
 ) -> (StatusCode, Json<Result<SignedCommitment, String>>) {
     if let Err(msg) = check_if_ready(&state).await {
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(Err(msg)));

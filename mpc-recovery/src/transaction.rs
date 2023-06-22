@@ -18,7 +18,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::msg::SigShareRequest;
+use crate::msg::{SignNodeRequest, SignShareNodeRequest};
 use crate::sign_node::aggregate_signer::{Reveal, SignedCommitment};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -169,10 +169,10 @@ pub async fn get_mpc_signed_delegated_action(
 
     let hash = hash(&bytes);
 
-    let sig_share_request = SigShareRequest {
+    let sig_share_request = SignNodeRequest::SignShare(SignShareNodeRequest {
         oidc_token: oidc_token.clone(),
         payload: hash.as_bytes().to_vec(),
-    };
+    });
 
     let signature = sign_payload_with_mpc(client, sign_nodes, sig_share_request).await?;
 
@@ -186,7 +186,7 @@ pub async fn get_mpc_signed_delegated_action(
 pub async fn sign_payload_with_mpc(
     client: &reqwest::Client,
     sign_nodes: &[String],
-    sig_share_request: SigShareRequest,
+    sig_share_request: SignNodeRequest,
 ) -> anyhow::Result<Signature> {
     let commitments: Vec<SignedCommitment> =
         call_all_nodes(client, sign_nodes, "commit", sig_share_request).await?;

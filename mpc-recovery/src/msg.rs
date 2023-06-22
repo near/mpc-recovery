@@ -55,7 +55,7 @@ impl NewAccountResponse {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AddKeyRequest {
     pub create_account_options: CreateAccountOptions,
     pub near_account_id: Option<String>,
@@ -99,10 +99,26 @@ pub enum LeaderResponse {
     Err,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SigShareRequest {
+/// The set of actions that a user can request us to sign
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum SignNodeRequest {
+    ClaimOidc(ClaimOidcNodeRequest),
+    SignShare(SignShareNodeRequest),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SignShareNodeRequest {
     pub oidc_token: String,
     pub payload: Vec<u8>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ClaimOidcNodeRequest {
+    #[serde(with = "hex::serde")]
+    pub oidc_token_hash: [u8; 64],
+    pub public_key: String,
+    #[serde(with = "hex_sig_share")]
+    pub signature: Signature,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

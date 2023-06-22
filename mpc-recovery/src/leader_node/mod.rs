@@ -1,7 +1,7 @@
 use crate::key_recovery::get_user_recovery_pk;
 use crate::msg::{
-    AcceptNodePublicKeysRequest, AddKeyRequest, AddKeyResponse, ClaimOidcRequest,
-    ClaimOidcResponse, NewAccountRequest, NewAccountResponse, SigShareRequest,
+    AcceptNodePublicKeysRequest, AddKeyRequest, AddKeyResponse, ClaimOidcNodeRequest,
+    ClaimOidcRequest, ClaimOidcResponse, NewAccountRequest, NewAccountResponse, SignNodeRequest,
 };
 use crate::nar;
 use crate::oauth::OAuthTokenVerifier;
@@ -14,7 +14,6 @@ use crate::transaction::{
 };
 use axum::routing::get;
 use axum::{http::StatusCode, routing::post, Extension, Json, Router};
-use borsh::BorshSerialize;
 use curv::elliptic::curves::{Ed25519, Point};
 use near_crypto::{ParseKeyError, PublicKey, SecretKey};
 use near_primitives::account::id::ParseAccountError;
@@ -146,20 +145,21 @@ struct LeaderState {
 
 async fn claim_oidc(
     Extension(state): Extension<LeaderState>,
-    Json(_claim_oidc_request): Json<ClaimOidcRequest>,
+    Json(claim_oidc_request): Json<ClaimOidcRequest>,
 ) -> (StatusCode, Json<ClaimOidcResponse>) {
-    // TODO:
-    // 1. Get MPC signature from sign nodes
-    // 2. Get user recovery public key from sign nodes (if registered)
-    // 3. Get user account id (if registered)
-    //TODO: update SigShareRequest to support id token claiming
-    // let sig_share_request = SigShareRequest::Claim(claim_oidc_request);
-    let sig_share_request = SigShareRequest {
-        oidc_token: "".to_string(),
-        payload: "".try_to_vec().unwrap(),
-    };
+    // Calim OIDC ID Token and get MPC signature from sign nodes
+    // let sig_share_request = SigShareRequest::Claim(claim_oidc_request); // TODO: this is what we need
+    let sig_share_request = SignNodeRequest::ClaimOidc(ClaimOidcNodeRequest {
+        oidc_token_hash: claim_oidc_request.oidc_token_hash,
+        public_key: claim_oidc_request.public_key,
+        signature: claim_oidc_request.signature,
+    });
     let res =
         sign_payload_with_mpc(&state.reqwest_client, &state.sign_nodes, sig_share_request).await;
+    // Get user recovery public key from sign nodes (if registered)
+    // TODO
+    // Get user account id (if registered)
+    // TODO
     match res {
         Ok(mpc_signature) => (
             StatusCode::OK,
