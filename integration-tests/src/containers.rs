@@ -28,12 +28,14 @@ impl DockerClient {
         container: &Container<'_, I>,
         network: &str,
     ) -> anyhow::Result<String> {
+        println!("IP 1");
         let network_settings = self
             .docker
             .inspect_container(container.id(), None)
             .await?
             .network_settings
             .ok_or_else(|| anyhow!("missing NetworkSettings on container '{}'", container.id()))?;
+        println!("IP 2");
         let ip_address = network_settings
             .networks
             .ok_or_else(|| {
@@ -59,6 +61,7 @@ impl DockerClient {
                     network
                 )
             })?;
+        println!("IP 3");
 
         Ok(ip_address)
     }
