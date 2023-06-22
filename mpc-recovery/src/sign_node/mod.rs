@@ -5,6 +5,7 @@ use crate::msg::{AcceptNodePublicKeysRequest, SignNodeRequest};
 use crate::oauth::OAuthTokenVerifier;
 use crate::primitives::InternalAccountId;
 use crate::sign_node::pk_set::SignerNodePkSet;
+use crate::utils::claim_oidc_response_digest;
 use crate::NodeId;
 use aes_gcm::Aes256Gcm;
 use axum::routing::get;
@@ -147,15 +148,15 @@ async fn process_commit<T: OAuthTokenVerifier>(
             // TODO
             // Returned signed commitment (signature of the signature)
             // TODO: check if we are getting root key pair properly
+            let payload = match claim_oidc_response_digest(request.signature) {
+                Ok(payload) => payload,
+                Err(e) => return Err(e),
+            };
             let response = state
                 .signing_state
                 .write()
                 .await
-                .get_commitment(
-                    &state.node_key,
-                    &state.node_key,
-                    request.signature.to_bytes().to_vec(),
-                )
+                .get_commitment(&state.node_key, &state.node_key, payload)
                 .map_err(|e| anyhow::anyhow!(e))?;
             Ok(response)
         }

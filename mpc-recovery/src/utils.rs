@@ -53,11 +53,51 @@ pub fn oidc_digest(oidc_token: &str) -> [u8; 64] {
 
 #[cfg(test)]
 mod tests {
+    use aes_gcm::aead::OsRng;
+    use ed25519_dalek::SecretKey;
+
     use super::*;
 
     #[test]
-    fn test_oidc_digest() {
+    fn test_oidc_digest_test() {
         assert_eq!(oidc_digest("oidc_token_1"), oidc_digest("oidc_token_1"));
         assert_ne!(oidc_digest("oidc_token_1"), oidc_digest("oidc_token_2"));
+    }
+
+    #[test]
+    fn claim_oidc_response_digest_test() {
+        // prepare digest
+        let token_hash = oidc_digest("oidc_token_1");
+
+        let digest = match claim_oidc_request_digest(token_hash) {
+            Ok(digest) => digest,
+            Err(e) => panic!("Failed to generate digest: {}", e),
+        };
+        // geneate a key pair
+        let privkey = [0u8; 32];
+        let dalek_secret = ed25519_dalek::ExpandedSecretKey::from(
+            &ed25519_dalek::SecretKey::from_bytes(&privkey)
+                .expect("Can only fail if bytes.len()<32"),
+        );
+        let dalek_pub = ed25519_dalek::PublicKey::from(&dalek_secret);
+
+        // sign the digest
+        let dalek_sig = dalek_secret.sign(&digest, &dalek_pub);
+
+        // check the signature
+        match dalek_pub.verify_strict(&digest, &dalek_sig) {
+            Ok(_) => (),
+            Err(e) => panic!("Failed to verify signature: {}", e),
+        };
+
+        // check signature with different digest
+        let digest2 = match claim_oidc_request_digest(oidc_digest("oidc_token_2")) {
+            Ok(digest) => digest,
+            Err(e) => panic!("Failed to generate digest: {}", e),
+        };
+        match dalek_pub.verify_strict(&digest2, &dalek_sig) {
+            Ok(_) => panic!("Signature should not match"),
+            Err(_) => (),
+        };
     }
 }
