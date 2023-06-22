@@ -4,7 +4,6 @@ use curv::elliptic::curves::{Ed25519, Point};
 use futures::future::BoxFuture;
 use mpc_recovery::GenerateResult;
 use mpc_recovery_integration_tests::containers;
-use tracing_log::LogTracer;
 use workspaces::{network::Sandbox, Worker};
 
 const NETWORK: &str = "mpc_recovery_integration_test_network";
@@ -23,9 +22,6 @@ async fn with_nodes<F>(nodes: usize, f: F) -> anyhow::Result<()>
 where
     F: for<'a> FnOnce(TestContext<'a>) -> BoxFuture<'a, anyhow::Result<()>>,
 {
-    // Convert `log` crate facade to tracing events
-    LogTracer::init()?;
-
     let docker_client = containers::DockerClient::default();
 
     let relayer_ctx =
