@@ -292,7 +292,8 @@ async fn test_exceeding_max_keys() -> anyhow::Result<()> {
             check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
 
             let add_key = || async {
-                let new_user_public_key = key::random();
+                let new_fak = key::random();
+                let new_lak = key::random();
 
                 let (status_code, add_key_response) = ctx
                     .leader_node
@@ -300,8 +301,13 @@ async fn test_exceeding_max_keys() -> anyhow::Result<()> {
                         near_account_id: Some(account_id.to_string()),
                         oidc_token: oidc_token.clone(),
                         create_account_options: CreateAccountOptions {
-                            full_access_keys: Some(vec![new_user_public_key.parse()?]),
-                            limited_access_keys: None,
+                            full_access_keys: Some(vec![new_fak.parse()?]),
+                            limited_access_keys: Some(vec![LimitedAccessKey {
+                                public_key: new_lak.parse()?,
+                                allowance: "0".to_string(),
+                                receiver_id: "social.near".parse()?,
+                                method_names: "".to_string(),
+                            }]),
                             contract_bytes: None,
                         },
                     })
@@ -314,13 +320,14 @@ async fn test_exceeding_max_keys() -> anyhow::Result<()> {
                 } = add_key_response else {
                     anyhow::bail!("unexpected pattern");
                 };
-                assert_eq!(full_access_keys, vec![new_user_public_key.clone()]);
-                assert_eq!(limited_access_keys, Vec::<String>::new());
+                assert_eq!(full_access_keys, vec![new_fak.clone()]);
+                assert_eq!(limited_access_keys, vec![new_lak.clone()]);
                 assert_eq!(near_account_id, account_id.to_string());
 
                 tokio::time::sleep(Duration::from_millis(2000)).await;
 
-                check::access_key_exists(&ctx, &account_id, &new_user_public_key).await?;
+                check::access_key_exists(&ctx, &account_id, &new_fak).await?;
+                check::access_key_exists(&ctx, &account_id, &new_lak).await?;
 
                 Ok(())
             };
@@ -334,7 +341,7 @@ async fn test_exceeding_max_keys() -> anyhow::Result<()> {
             add_key().await?;
 
             let access_keys = ctx.worker.view_access_keys(&account_id).await?;
-            assert_eq!(access_keys.len(), 4);
+            assert_eq!(access_keys.len(), 6); // 4 FAKs + 2 LAKs
 
             Ok(())
         })

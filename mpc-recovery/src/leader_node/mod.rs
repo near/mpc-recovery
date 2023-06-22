@@ -10,7 +10,7 @@ use crate::relayer::msg::{RegisterAccountRequest, SendMetaTxResponse};
 use crate::relayer::NearRpcAndRelayerClient;
 use crate::transaction::{
     get_add_key_delegate_action, get_create_account_delegate_action,
-    get_delete_key_delegate_action, get_local_signed_delegated_action,
+    get_delete_keys_delegate_action, get_local_signed_delegated_action,
     get_mpc_signed_delegated_action, CreateAccountOptions,
 };
 use axum::routing::get;
@@ -20,9 +20,9 @@ use near_crypto::{ParseKeyError, PublicKey, SecretKey};
 use near_primitives::account::id::ParseAccountError;
 use near_primitives::delegate_action::DelegateAction;
 use near_primitives::types::AccountId;
-use near_primitives::views::FinalExecutionStatus;
+use near_primitives::views::{AccessKeyPermissionView, FinalExecutionStatus};
 use rand::{distributions::Alphanumeric, Rng};
-use rand8::seq::IteratorRandom;
+use rand8::seq::SliceRandom;
 use std::net::SocketAddr;
 
 pub struct Config {
@@ -334,6 +334,10 @@ enum AddKeyError {
     RelayerError(#[from] RelayerError),
     #[error("failed to find associated account id for pk: {0}")]
     AccountNotFound(String),
+    #[error("trying to add to many full access keys (limit is 3): {0}")]
+    TooManyFullAccessKeys(usize),
+    #[error("trying to add to many limited access keys (limit is 2): {0}")]
+    TooManyLimitedAccessKeys(usize),
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }
@@ -405,7 +409,7 @@ async fn delete_access_key(
     oidc_token: String,
     user_account_id: &AccountId,
     user_recovery_pk: &PublicKey,
-    pk_to_remove: &PublicKey,
+    pks_to_remove: Vec<PublicKey>,
 ) -> Result<(), AddKeyError> {
     // Get nonce and recent block hash
     let (_hash, block_height, nonce) = state
@@ -415,10 +419,10 @@ async fn delete_access_key(
 
     // Create a transaction to delete the access key
     let max_block_height: u64 = block_height + 100;
-    let delegate_action = get_delete_key_delegate_action(
+    let delegate_action = get_delete_keys_delegate_action(
         user_account_id.clone(),
         user_recovery_pk.clone(),
-        pk_to_remove.clone(),
+        pks_to_remove,
         nonce,
         max_block_height,
     )?;
@@ -494,26 +498,59 @@ async fn process_add_key<T: OAuthTokenVerifier>(
             }
         }
     };
+    let new_faks = request
+        .create_account_options
+        .full_access_keys
+        .clone()
+        .unwrap_or_default();
+    let new_laks = request
+        .create_account_options
+        .limited_access_keys
+        .clone()
+        .unwrap_or_default();
+    if new_faks.len() > 3 {
+        return Err(AddKeyError::TooManyFullAccessKeys(new_faks.len()));
+    }
+    if new_laks.len() > 2 {
+        return Err(AddKeyError::TooManyLimitedAccessKeys(new_laks.len()));
+    }
 
     nar::retry(|| async {
-        let (_block_hash, _block_height, faks) = state
+        let (_block_hash, _block_height, access_key_list) = state
             .client
-            .full_access_key_list(user_account_id.clone())
+            .access_key_list(user_account_id.clone())
             .await?;
-        if faks.len() == 4 {
-            // Reached the max amount of FAKs for zero-balance accounts. Removing a random FAK
-            // that is not the recovery key.
-            let pk_to_remove = faks
-                .into_iter()
-                .filter(|pk| pk != &user_recovery_pk)
-                .choose(&mut rand8::thread_rng())
-                .unwrap(); // Guaranteed to be non-empty
+        let (mut faks, mut laks): (Vec<_>, Vec<_>) = access_key_list
+            .keys
+            .into_iter()
+            .partition(|k| k.access_key.permission == AccessKeyPermissionView::FullAccess);
+
+        let mut keys_to_remove = Vec::new();
+        if faks.len() + new_faks.len() > 4 {
+            // Reached the max amount of FAKs for zero-balance accounts. Removing random FAKs
+            // that are not the recovery key.
+            faks.shuffle(&mut rand8::thread_rng());
+            let to_remove = faks.len() + new_faks.len() - 4;
+            keys_to_remove.extend(
+                faks.into_iter()
+                    .filter(|fak| fak.public_key != user_recovery_pk)
+                    .take(to_remove)
+                    .map(|fak| fak.public_key),
+            );
+        }
+        if laks.len() + new_laks.len() > 2 {
+            // Reached the max amount of LAKs for zero-balance accounts. Removing random LAKs.
+            laks.shuffle(&mut rand8::thread_rng());
+            let to_remove = laks.len() + new_laks.len() - 2;
+            keys_to_remove.extend(laks.into_iter().take(to_remove).map(|fak| fak.public_key));
+        }
+        if !keys_to_remove.is_empty() {
             delete_access_key(
                 &state,
                 request.oidc_token.clone(),
                 &user_account_id,
                 &user_recovery_pk,
-                &pk_to_remove,
+                keys_to_remove,
             )
             .await?;
         }
@@ -528,20 +565,9 @@ async fn process_add_key<T: OAuthTokenVerifier>(
         .await?;
 
         Ok(AddKeyResponse::Ok {
-            full_access_keys: request
-                .create_account_options
-                .clone()
-                .full_access_keys
-                .unwrap_or_default()
-                .into_iter()
-                .map(|pk| pk.to_string())
-                .collect(),
-            limited_access_keys: request
-                .create_account_options
-                .clone()
-                .limited_access_keys
-                .unwrap_or_default()
-                .into_iter()
+            full_access_keys: new_faks.iter().map(|pk| pk.to_string()).collect(),
+            limited_access_keys: new_laks
+                .iter()
                 .map(|lak| lak.public_key.to_string())
                 .collect(),
             near_account_id: user_account_id.to_string(),

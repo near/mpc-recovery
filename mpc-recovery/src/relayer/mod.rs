@@ -6,7 +6,7 @@ use near_crypto::PublicKey;
 use near_jsonrpc_client::JsonRpcClient;
 use near_primitives::hash::CryptoHash;
 use near_primitives::types::{AccountId, BlockHeight, Nonce};
-use near_primitives::views::AccessKeyPermissionView;
+use near_primitives::views::AccessKeyList;
 
 use self::error::RelayerError;
 use self::msg::{RegisterAccountRequest, SendMetaTxRequest, SendMetaTxResponse};
@@ -42,21 +42,14 @@ impl NearRpcAndRelayerClient {
         }
     }
 
-    pub async fn full_access_key_list(
+    pub async fn access_key_list(
         &self,
         account_id: AccountId,
-    ) -> Result<(CryptoHash, BlockHeight, Vec<PublicKey>), RelayerError> {
-        let (list, block_hash, block_height) =
+    ) -> Result<(CryptoHash, BlockHeight, AccessKeyList), RelayerError> {
+        let (access_key_list, block_hash, block_height) =
             nar::access_key_list(&self.rpc_client, account_id).await?;
 
-        let full_access_keys = list
-            .keys
-            .into_iter()
-            .filter(|k| k.access_key.permission == AccessKeyPermissionView::FullAccess)
-            .map(|k| k.public_key)
-            .collect::<Vec<_>>();
-
-        Ok((block_hash, block_height, full_access_keys))
+        Ok((block_hash, block_height, access_key_list))
     }
 
     pub async fn access_key(

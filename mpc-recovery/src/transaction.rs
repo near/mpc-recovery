@@ -140,19 +140,22 @@ pub fn get_add_key_delegate_action(
     Ok(delegate_action)
 }
 
-pub fn get_delete_key_delegate_action(
+pub fn get_delete_keys_delegate_action(
     account_id: AccountId,
     signer_pk: PublicKey,
-    public_key: PublicKey,
+    public_keys: Vec<PublicKey>,
     nonce: Nonce,
     max_block_height: u64,
 ) -> anyhow::Result<DelegateAction> {
     let delegate_action = DelegateAction {
         sender_id: account_id.clone(),
         receiver_id: account_id,
-        actions: vec![NonDelegateAction::try_from(Action::DeleteKey(
-            DeleteKeyAction { public_key },
-        ))?],
+        actions: public_keys
+            .into_iter()
+            .map(|public_key| {
+                NonDelegateAction::try_from(Action::DeleteKey(DeleteKeyAction { public_key }))
+            })
+            .collect::<Result<Vec<_>, _>>()?,
         nonce,
         max_block_height,
         public_key: signer_pk,
