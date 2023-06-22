@@ -12,9 +12,10 @@ use mpc_recovery::{
 };
 use rand::{distributions::Alphanumeric, Rng};
 use std::time::Duration;
+use test_log::test;
 use workspaces::types::AccessKeyPermission;
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_aggregate_signatures() -> anyhow::Result<()> {
     with_nodes(3, |ctx| {
         Box::pin(async move {
@@ -47,7 +48,7 @@ async fn test_aggregate_signatures() -> anyhow::Result<()> {
     .await
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_basic_action() -> anyhow::Result<()> {
     with_nodes(3, |ctx| {
         Box::pin(async move {
@@ -138,7 +139,7 @@ async fn test_basic_action() -> anyhow::Result<()> {
     .await
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_random_recovery_keys() -> anyhow::Result<()> {
     with_nodes(3, |ctx| {
         Box::pin(async move {

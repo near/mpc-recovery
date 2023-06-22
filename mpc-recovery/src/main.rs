@@ -164,14 +164,14 @@ async fn main() -> anyhow::Result<()> {
     match Cli::parse() {
         Cli::Generate { n } => {
             let GenerateResult { pk_set, secrets } = mpc_recovery::generate(n);
-            println!("Public key set: {}", serde_json::to_string(&pk_set)?);
+            tracing::info!("Public key set: {}", serde_json::to_string(&pk_set)?);
             for (i, (sk_share, cipher_key)) in secrets.iter().enumerate() {
-                println!(
+                tracing::info!(
                     "Secret key share {}: {}",
                     i,
                     serde_json::to_string(sk_share)?
                 );
-                println!("Cipher {}: {}", i, hex::encode(cipher_key));
+                tracing::info!("Cipher {}: {}", i, hex::encode(cipher_key));
             }
         }
         Cli::StartLeader {

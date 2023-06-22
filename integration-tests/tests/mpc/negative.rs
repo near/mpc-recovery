@@ -5,8 +5,9 @@ use mpc_recovery::{
     transaction::CreateAccountOptions,
 };
 use std::time::Duration;
+use test_log::test;
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_invalid_token() -> anyhow::Result<()> {
     with_nodes(1, |ctx| {
         Box::pin(async move {
@@ -105,7 +106,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
     .await
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_malformed_account_id() -> anyhow::Result<()> {
     with_nodes(1, |ctx| {
         Box::pin(async move {
@@ -291,7 +292,7 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
 //     .await
 // }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_add_key_to_non_existing_account() -> anyhow::Result<()> {
     with_nodes(1, |ctx| {
         Box::pin(async move {

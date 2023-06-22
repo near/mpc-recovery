@@ -251,6 +251,14 @@ pub async fn call_all_nodes<Req: Serialize, Res: DeserializeOwned>(
     future::join_all(responses).await.into_iter().collect()
 }
 
+pub fn from_dalek_signature(sig: ed25519_dalek::Signature) -> anyhow::Result<protocols::Signature> {
+    let bytes = sig.to_bytes();
+    Ok(protocols::Signature {
+        R: Point::from_bytes(&bytes[..32])?,
+        s: curv::elliptic::curves::Scalar::from_bytes(&bytes[32..])?,
+    })
+}
+
 pub fn to_dalek_signature(sig: &protocols::Signature) -> anyhow::Result<ed25519_dalek::Signature> {
     let mut sig_bytes = [0u8; 64];
     sig_bytes[..32].copy_from_slice(&sig.R.to_bytes(true));
