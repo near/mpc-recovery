@@ -112,6 +112,11 @@ impl<'a> Sandbox<'a> {
         network: &str,
     ) -> anyhow::Result<Sandbox<'a>> {
         tracing::info!("Running sandbox container...");
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        let image = GenericImage::new("ghcr.io/near/sandbox", "latest-aarch64")
+            .with_wait_for(WaitFor::seconds(2))
+            .with_exposed_port(Self::CONTAINER_RPC_PORT);
+        #[cfg(target_arch = "x86_64")]
         let image = GenericImage::new("ghcr.io/near/sandbox", "latest")
             .with_wait_for(WaitFor::seconds(2))
             .with_exposed_port(Self::CONTAINER_RPC_PORT);
@@ -218,15 +223,18 @@ impl<'a> Datastore<'a> {
         project_id: &str,
     ) -> anyhow::Result<Datastore<'a>> {
         tracing::info!("Running datastore container...");
-        let image = GenericImage::new("google/cloud-sdk", "latest")
-            .with_wait_for(WaitFor::message_on_stderr("Dev App Server is now running."))
-            .with_exposed_port(Self::CONTAINER_PORT)
-            .with_entrypoint("gcloud")
-            .with_env_var(
-                "DATASTORE_EMULATOR_HOST",
-                format!("0.0.0.0:{}", Self::CONTAINER_PORT),
-            )
-            .with_env_var("DATASTORE_PROJECT_ID", project_id);
+        let image = GenericImage::new(
+            "gcr.io/google.com/cloudsdktool/google-cloud-cli",
+            "436.0.0-emulators",
+        )
+        .with_wait_for(WaitFor::message_on_stderr("Dev App Server is now running."))
+        .with_exposed_port(Self::CONTAINER_PORT)
+        .with_entrypoint("gcloud")
+        .with_env_var(
+            "DATASTORE_EMULATOR_HOST",
+            format!("0.0.0.0:{}", Self::CONTAINER_PORT),
+        )
+        .with_env_var("DATASTORE_PROJECT_ID", project_id);
         let image: RunnableImage<GenericImage> = (
             image,
             vec![
@@ -342,6 +350,7 @@ impl<'a> SignerNode<'a> {
 pub struct LeaderNode<'a> {
     pub container: Container<'a, GenericImage>,
     pub address: String,
+    local_address: String,
 }
 
 pub struct LeaderNodeApi {
@@ -349,6 +358,9 @@ pub struct LeaderNodeApi {
 }
 
 impl<'a> LeaderNode<'a> {
+    // Container port used for the docker network, does not have to be unique
+    const CONTAINER_PORT: u16 = 3000;
+
     pub async fn run(
         docker_client: &'a DockerClient,
         network: &str,
@@ -363,16 +375,15 @@ impl<'a> LeaderNode<'a> {
         firebase_audience_id: &str,
     ) -> anyhow::Result<LeaderNode<'a>> {
         tracing::info!("Running leader node container...");
-        let port = portpicker::pick_unused_port().expect("no free ports");
 
         let image = GenericImage::new("near/mpc-recovery", "latest")
             .with_wait_for(WaitFor::Nothing)
-            .with_exposed_port(port)
+            .with_exposed_port(Self::CONTAINER_PORT)
             .with_env_var("RUST_LOG", "mpc_recovery=DEBUG");
         let mut cmd = vec![
             "start-leader".to_string(),
             "--web-port".to_string(),
-            port.to_string(),
+            Self::CONTAINER_PORT.to_string(),
             "--near-rpc".to_string(),
             near_rpc.to_string(),
             "--relayer-url".to_string(),
@@ -401,23 +412,25 @@ impl<'a> LeaderNode<'a> {
         let ip_address = docker_client
             .get_network_ip_address(&container, network)
             .await?;
+        let host_port = container.get_host_port_ipv4(Self::CONTAINER_PORT);
 
         container.exec(ExecCommand {
-            cmd: format!("bash -c 'while [[ \"$(curl -s -o /dev/null -w ''%{{http_code}}'' localhost:{})\" != \"200\" ]]; do sleep 1; done'", port),
+            cmd: format!("bash -c 'while [[ \"$(curl -s -o /dev/null -w ''%{{http_code}}'' localhost:{})\" != \"200\" ]]; do sleep 1; done'", Self::CONTAINER_PORT),
             ready_conditions: vec![WaitFor::message_on_stdout("node is ready to accept connections")]
         });
 
-        let full_address = format!("http://{ip_address}:{port}");
+        let full_address = format!("http://{ip_address}:{}", Self::CONTAINER_PORT);
         tracing::info!("Leader node container is running at {}", full_address);
         Ok(LeaderNode {
             container,
             address: full_address,
+            local_address: format!("http://localhost:{host_port}"),
         })
     }
 
     pub fn api(&self) -> LeaderNodeApi {
         LeaderNodeApi {
-            address: self.address.clone(),
+            address: self.local_address.clone(),
         }
     }
 }

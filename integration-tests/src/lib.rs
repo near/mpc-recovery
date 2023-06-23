@@ -70,7 +70,12 @@ pub async fn initialize_relayer<'a>(
 
     tracing::info!("Initializing sandbox worker...");
     let worker = workspaces::sandbox()
-        .rpc_addr(&sandbox.address)
+        .rpc_addr(&format!(
+            "http://localhost:{}",
+            sandbox
+                .container
+                .get_host_port_ipv4(crate::containers::Sandbox::CONTAINER_RPC_PORT)
+        ))
         .validator_key(ValidatorKey::Known(
             validator_key.account_id.to_string().parse()?,
             validator_key.secret_key.to_string().parse()?,
