@@ -4,6 +4,7 @@ use mpc_recovery::{
     msg::{AddKeyRequest, AddKeyResponse, NewAccountRequest, NewAccountResponse},
     transaction::CreateAccountOptions,
 };
+use multi_party_eddsa::protocols::ExpandedKeyPair;
 use std::time::Duration;
 use test_log::test;
 
@@ -318,6 +319,27 @@ async fn test_add_key_to_non_existing_account() -> anyhow::Result<()> {
             tokio::time::sleep(Duration::from_millis(2000)).await;
 
             check::no_account(&ctx, &account_id).await?;
+
+            Ok(())
+        })
+    })
+    .await
+}
+
+#[test(tokio::test)]
+async fn test_reject_new_pk_set() -> anyhow::Result<()> {
+    with_nodes(2, |ctx| {
+        Box::pin(async move {
+            let mut new_pk_set = ctx.pk_set.clone();
+            new_pk_set[1] = ExpandedKeyPair::create().public_key;
+            // Signer node is already initialized with a pk set, so it should reject different pk set
+            let (status_code, result) = ctx.signer_nodes[0]
+                .accept_pk_set(mpc_recovery::msg::AcceptNodePublicKeysRequest {
+                    public_keys: new_pk_set,
+                })
+                .await?;
+            assert_eq!(status_code, StatusCode::BAD_REQUEST);
+            assert!(matches!(result, Err(_)));
 
             Ok(())
         })
