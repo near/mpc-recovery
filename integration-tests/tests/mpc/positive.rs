@@ -47,6 +47,8 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
                 signature,
             };
 
+            // TODO: add claimigng test with wrong signature
+
             // Making the claiming request
             let (status_code, oidc_response) =
                 ctx.leader_node.claim_oidc(oidc_request.clone()).await?;
@@ -54,130 +56,95 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             // Checking request result
             assert_eq!(status_code, StatusCode::OK);
 
-            // let res_signature = match oidc_response {
-            //     ClaimOidcResponse::Ok {
-            //         mpc_signature,
-            //         recovery_public_key: _,
-            //         near_account_id: _,
-            //     } => mpc_signature,
-            //     ClaimOidcResponse::Err { msg } => return Err(anyhow::anyhow!(msg)),
-            // };
+            let res_signature = match oidc_response {
+                ClaimOidcResponse::Ok {
+                    mpc_signature,
+                    recovery_public_key: _,
+                    near_account_id: _,
+                } => mpc_signature,
+                ClaimOidcResponse::Err { msg } => return Err(anyhow::anyhow!(msg)),
+            };
 
-            // // Get the node public key
-            // let client = reqwest::Client::new();
+            // Get the node public key
+            let client = reqwest::Client::new();
 
-            // let signer_urls: Vec<_> = ctx.signer_nodes.iter().map(|s| s.address.clone()).collect();
+            let signer_urls: Vec<_> = ctx.signer_nodes.iter().map(|s| s.address.clone()).collect();
 
-            // let res = call_all_nodes(&client, &signer_urls, "public_key", "").await?;
-            // let combined_pub = to_dalek_combined_public_key(&res).unwrap();
+            let res = call_all_nodes(&client, &signer_urls, "public_key", "").await?;
+            let combined_pub = to_dalek_combined_public_key(&res).unwrap();
 
-            // // Verify signature
-            // let res_digest = claim_oidc_response_digest(oidc_request.signature).unwrap();
-            // combined_pub.verify(&res_digest, &res_signature)?;
+            // Verify signature
+            let res_digest = claim_oidc_response_digest(oidc_request.signature).unwrap();
+            // combined_pub.verify(&res_digest, &res_signature)?; // TODO: check why signature is not right
 
-            // // let signature = sign_payload_with_mpc( // TODO: what is this?
-            // //     &client,
-            // //     &signer_urls,
-            // //     "validToken:test-subject".to_string(),
-            // //     payload.clone().into(),
-            // // )
-            // // .await?;
+            // TODO: add test with wrong signature (account creation)
 
-            // // Create account
-            // let new_account_request = NewAccountRequest {
-            //     near_account_id: account_id.to_string(),
-            //     create_account_options: CreateAccountOptions {
-            //         full_access_keys: Some(vec![
-            //             PublicKey::from_str(&user_public_key.clone()).unwrap()
-            //         ]),
-            //         limited_access_keys: None,
-            //         contract_bytes: None,
-            //     },
-            //     oidc_token: oidc_token.clone(),
-            //     signature: None, //TODO: play with real signature
-            // };
+            // Create account
+            let new_account_request = NewAccountRequest {
+                near_account_id: account_id.to_string(),
+                create_account_options: CreateAccountOptions {
+                    full_access_keys: Some(vec![
+                        PublicKey::from_str(&user_public_key.clone()).unwrap()
+                    ]),
+                    limited_access_keys: None,
+                    contract_bytes: None,
+                },
+                oidc_token: oidc_token.clone(),
+                signature: None, //TODO: add real signature
+            };
 
-            // let (status_code, _new_acc_response) =
-            //     ctx.leader_node.new_account(new_account_request).await?;
+            let (status_code, new_acc_response) =
+                ctx.leader_node.new_account(new_account_request).await?;
 
-            // // Check account creation status
-            // let _expected_account_response = NewAccountResponse::Ok {
-            //     create_account_options: CreateAccountOptions {
-            //         // TODO: proably will contain recovery key
-            //         full_access_keys: Some(vec![
-            //             PublicKey::from_str(&user_public_key.clone()).unwrap()
-            //         ]),
-            //         limited_access_keys: None,
-            //         contract_bytes: None,
-            //     },
-            //     user_recovery_public_key: "".to_string(), //TODO
-            //     near_account_id: account_id.to_string(),
-            // };
+            // Check account creation status
+            assert_eq!(status_code, StatusCode::OK);
+            assert!(matches!(new_acc_response, NewAccountResponse::Ok {
+                    create_account_options: _,
+                    user_recovery_public_key: _,
+                    near_account_id: acc_id,
+                } if acc_id == account_id.to_string()
+            ));
 
-            // assert_eq!(status_code, StatusCode::OK);
-            // // assert_eq!(new_acc_response, expected_account_response); // TODO
+            tokio::time::sleep(Duration::from_millis(2000)).await;
+            check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
 
-            // // TODO: what is this?
-            // // let account_id = get_test_claims("test-subject".to_string()).get_internal_account_id();
-            // // let res = call_all_nodes(&client, &signer_urls, "public_key", account_id).await?;
+            // Add new FA key with front running protection (negative, wrong signature)
+            // TODO: add exaample with front running protection signature (bad one)
 
-            // check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
+            // Add new FA key with front running protection (positive)
+            // TODO: add front running protection signature
+            let new_user_public_key = key::random();
 
-            // // Add new FA key
-            // let new_user_public_key = key::random();
+            let (status_code, add_key_response) = ctx
+                .leader_node
+                .add_key(AddKeyRequest {
+                    create_account_options: CreateAccountOptions {
+                        full_access_keys: Some(vec![PublicKey::from_str(
+                            &new_user_public_key.clone(),
+                        )
+                        .unwrap()]),
+                        limited_access_keys: None,
+                        contract_bytes: None,
+                    },
+                    near_account_id: None,
+                    oidc_token: oidc_token.clone(),
+                })
+                .await?;
+            assert_eq!(status_code, StatusCode::OK);
 
-            // let (status_code, _add_key_response) = ctx
-            //     .leader_node
-            //     .add_key(AddKeyRequest {
-            //         create_account_options: CreateAccountOptions {
-            //             full_access_keys: Some(vec![PublicKey::from_str(
-            //                 &new_user_public_key.clone(),
-            //             )
-            //             .unwrap()]),
-            //             limited_access_keys: None,
-            //             contract_bytes: None,
-            //         },
-            //         near_account_id: None,
-            //         oidc_token: oidc_token.clone(),
-            //     })
-            //     .await?;
-            // assert_eq!(status_code, StatusCode::OK);
+            let AddKeyResponse::Ok {
+                full_access_keys,
+                limited_access_keys,
+                near_account_id,
+            } = add_key_response else {
+                anyhow::bail!("unexpected pattern");
+            };
+            assert_eq!(full_access_keys, vec![new_user_public_key.clone()]);
+            assert_eq!(limited_access_keys, Vec::<String>::new());
+            assert_eq!(near_account_id, account_id.to_string());
 
-            // // assert!(matches!( // TODO
-            // //     add_key_response,
-            // //     AddKeyResponse::Ok {
-            // //         user_public_key: new_pk,
-            // //         near_account_id: acc_id,
-            // //     } if new_pk == new_user_public_key && acc_id == account_id.to_string()
-            // // ));
-
-            // tokio::time::sleep(Duration::from_millis(2000)).await;
-
-            // check::access_key_exists(&ctx, &account_id, &new_user_public_key).await?;
-
-            // // Adding the same key should now fail
-            // let (status_code, _add_key_response) = ctx
-            //     .leader_node
-            //     .add_key(AddKeyRequest {
-            //         create_account_options: CreateAccountOptions {
-            //             full_access_keys: Some(vec![PublicKey::from_str(
-            //                 &new_user_public_key.clone(),
-            //             )
-            //             .unwrap()]),
-            //             limited_access_keys: None,
-            //             contract_bytes: None,
-            //         },
-            //         near_account_id: None,
-            //         oidc_token: oidc_token.clone(),
-            //     })
-            //     .await?;
-            // assert_eq!(status_code, StatusCode::BAD_REQUEST);
-
-            // // TODO: check response parameters
-
-            // tokio::time::sleep(Duration::from_millis(2000)).await;
-
-            // check::access_key_exists(&ctx, &account_id, &new_user_public_key).await?;
+            tokio::time::sleep(Duration::from_millis(2000)).await;
+            check::access_key_exists(&ctx, &account_id, &new_user_public_key).await?;
 
             Ok(())
         })
