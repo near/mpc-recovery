@@ -127,16 +127,16 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
                         limited_access_keys: None,
                         contract_bytes: None,
                     },
-                    near_account_id: None,
+                    near_account_id: Some(account_id.to_string()),
                     oidc_token: oidc_token.clone(),
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
 
             let AddKeyResponse::Ok {
-                    full_access_keys,
-                    limited_access_keys,
-                    near_account_id,
+                            full_access_keys,
+                            limited_access_keys,
+                            near_account_id,
             } = add_key_response else {
                 anyhow::bail!("unexpected pattern");
             };
