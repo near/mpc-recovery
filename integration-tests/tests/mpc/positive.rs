@@ -57,7 +57,7 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             // Checking request result
             assert_eq!(status_code, StatusCode::OK);
 
-            let res_signature = match oidc_response {
+            let _res_signature = match oidc_response {
                 ClaimOidcResponse::Ok {
                     mpc_signature,
                     recovery_public_key: _,
@@ -72,10 +72,10 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             let signer_urls: Vec<_> = ctx.signer_nodes.iter().map(|s| s.address.clone()).collect();
 
             let res = call_all_nodes(&client, &signer_urls, "public_key", "").await?;
-            let combined_pub = to_dalek_combined_public_key(&res).unwrap();
+            let _combined_pub = to_dalek_combined_public_key(&res).unwrap();
 
             // Verify signature
-            let res_digest = claim_oidc_response_digest(oidc_request.signature).unwrap();
+            let _res_digest = claim_oidc_response_digest(oidc_request.signature).unwrap();
             // combined_pub.verify(&res_digest, &res_signature)?; // TODO: check why signature is not right
 
             // TODO: add test with wrong signature (account creation)
@@ -134,9 +134,9 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             assert_eq!(status_code, StatusCode::OK);
 
             let AddKeyResponse::Ok {
-                full_access_keys,
-                limited_access_keys,
-                near_account_id,
+                    full_access_keys,
+                    limited_access_keys,
+                    near_account_id,
             } = add_key_response else {
                 anyhow::bail!("unexpected pattern");
             };

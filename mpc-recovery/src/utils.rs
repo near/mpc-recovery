@@ -53,9 +53,6 @@ pub fn oidc_digest(oidc_token: &str) -> [u8; 64] {
 
 #[cfg(test)]
 mod tests {
-    use aes_gcm::aead::OsRng;
-    use ed25519_dalek::SecretKey;
-
     use super::*;
 
     #[test]
