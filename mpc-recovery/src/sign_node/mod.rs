@@ -5,13 +5,15 @@ use crate::msg::{AcceptNodePublicKeysRequest, SignNodeRequest};
 use crate::oauth::OAuthTokenVerifier;
 use crate::primitives::InternalAccountId;
 use crate::sign_node::pk_set::SignerNodePkSet;
-use crate::utils::claim_oidc_response_digest;
+use crate::utils::{check_signature, claim_oidc_request_digest, claim_oidc_response_digest};
 use crate::NodeId;
 use aes_gcm::Aes256Gcm;
 use axum::routing::get;
 use axum::{http::StatusCode, routing::post, Extension, Json, Router};
 use curv::elliptic::curves::{Ed25519, Point};
 use multi_party_eddsa::protocols::{self, ExpandedKeyPair};
+use near_crypto::{ParseKeyError, PublicKey};
+use near_primitives::account::id::ParseAccountError;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -94,10 +96,16 @@ struct SignNodeState {
 //TODO: extend with new error types for token claiming
 #[derive(thiserror::Error, Debug)]
 pub enum CommitError {
-    #[error("failed to verify signature: {0}")]
-    SignatureVerificationFailed(anyhow::Error),
+    #[error("malformed account id: {0}")]
+    MalformedAccountId(String, ParseAccountError),
+    #[error("malformed public key {0}: {1}")]
+    MalformedPublicKey(String, ParseKeyError),
     #[error("failed to verify oidc token: {0}")]
     OidcVerificationFailed(anyhow::Error),
+    #[error("failed to verify signature: {0}")]
+    SignatureVerificationFailed(anyhow::Error),
+    #[error("oidc token already claimed by another public key: {0}")]
+    OidcTokenAlreadyClaimed(PublicKey),
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }
@@ -143,11 +151,16 @@ async fn process_commit<T: OAuthTokenVerifier>(
     match request {
         SignNodeRequest::ClaimOidc(request) => {
             // Check ID token hash signature
-            // TODO
+            let digest = claim_oidc_request_digest(request.oidc_token_hash)?;
+            let public_key: PublicKey = request
+                .public_key
+                .parse()
+                .map_err(|e| CommitError::MalformedPublicKey(request.public_key.clone(), e))?;
+
+            check_signature(&public_key, &request.signature, &digest)?;
             // Save info about token in the database
             // TODO
             // Returned signed commitment (signature of the signature)
-            // TODO: check if we are getting root key pair properly
             let payload = match claim_oidc_response_digest(request.signature) {
                 Ok(payload) => payload,
                 Err(e) => return Err(e),

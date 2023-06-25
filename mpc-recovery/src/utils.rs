@@ -28,6 +28,7 @@ pub fn claim_oidc_response_digest(users_signature: Signature) -> Result<Vec<u8>,
     Ok(hasher.finalize().to_vec())
 }
 
+// TODO: is this function necessary? Is there en existing way to do this?
 pub fn check_signature(
     public_key: &PublicKey,
     signature: &Signature,

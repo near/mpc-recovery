@@ -31,13 +31,21 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
                 near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519);
             let user_public_key = user_private_key.public_key().to_string();
             let oidc_token = token::valid_random();
+            let wrong_oidc_token = token::valid_random();
 
             // Prepare the oidc claiming request
             let oidc_token_hash = oidc_digest(&oidc_token);
+            let wrong_oidc_token_hash = oidc_digest(&wrong_oidc_token);
 
             let digest = claim_oidc_request_digest(oidc_token_hash).unwrap();
+            let wrong_digest = claim_oidc_request_digest(wrong_oidc_token_hash).unwrap();
 
             let signature = match user_private_key.sign(&digest) {
+                near_crypto::Signature::ED25519(k) => k,
+                _ => return Err(anyhow::anyhow!("Wrong signature type")),
+            };
+
+            let wrong_signature = match user_private_key.sign(&wrong_digest) {
                 near_crypto::Signature::ED25519(k) => k,
                 _ => return Err(anyhow::anyhow!("Wrong signature type")),
             };
@@ -48,13 +56,35 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
                 signature,
             };
 
-            // TODO: add claimigng test with wrong signature
+            let bad_oidc_request = ClaimOidcRequest {
+                oidc_token_hash,
+                public_key: user_public_key.clone(),
+                signature: wrong_signature,
+            };
 
-            // Making the claiming request
+            // Make the claiming request with wrong signature
+            let (status_code, oidc_response) =
+                ctx.leader_node.claim_oidc(bad_oidc_request.clone()).await?;
+
+            assert_eq!(status_code, StatusCode::BAD_REQUEST);
+            match oidc_response {
+                ClaimOidcResponse::Ok { .. } => {
+                    return Err(anyhow::anyhow!(
+                        "Response should be Err when signature is wrong"
+                    ))
+                }
+                ClaimOidcResponse::Err { msg } => {
+                    assert!(
+                        msg.contains("failed to verify signature"),
+                        "Error message does not contain 'failed to verify signature'"
+                    );
+                }
+            }
+
+            // Making the claiming request with correct signature
             let (status_code, oidc_response) =
                 ctx.leader_node.claim_oidc(oidc_request.clone()).await?;
 
-            // Checking request result
             assert_eq!(status_code, StatusCode::OK);
 
             let _res_signature = match oidc_response {
