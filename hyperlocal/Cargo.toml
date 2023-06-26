@@ -1,0 +1,30 @@
+[package]
+name = "hyperlocal"
+version = "0.8.0"
+authors = ["softprops <d.tangren@gmail.com>"]
+description = "Hyper bindings for Unix domain sockets"
+homepage = "https://github.com/softprops/hyperlocal"
+repository = "https://github.com/softprops/hyperlocal"
+keywords = ["hyper", "unix", "sockets", "http"]
+license = "MIT"
+readme = "README.md"
+edition = "2018"
+
+[dependencies]
+hex = "0.4"
+hyper = { version = "0.14", features = ["server", "client", "http1", "runtime"] }
+tokio = { version = "1.0", features = ["rt-multi-thread", "net"] }
+pin-project = "1.0"
+futures-util = "0.3"
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["rt-multi-thread", "net", "macros", "io-std", "io-util"] }
+
+[features]
+client = []
+server = []
+default = ["client", "server"]
+
+[patch.crates-io]
+hyper = { path = "../hyper" }

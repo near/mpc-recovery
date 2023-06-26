@@ -68,3 +68,4 @@ features = ["ssl"]
 
 [patch.crates-io]
 hyper = { path = "../hyper" }
+hyperlocal = { path = "../hyperlocal" }

@@ -7,3 +7,4 @@ members = [
 [patch.crates-io]
 bollard = { path = "bollard" }
 hyper = { path = "hyper" }
+hyperlocal = { path = "hyperlocal" }
