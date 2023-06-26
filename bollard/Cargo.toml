@@ -1,0 +1,67 @@
+[package]
+name = "bollard"
+description = "An asynchronous Docker daemon API"
+version = "0.11.1"
+authors = [ "Bollard contributors" ]
+license = "Apache-2.0"
+homepage = "https://github.com/fussybeaver/bollard"
+repository = "https://github.com/fussybeaver/bollard"
+documentation = "https://docs.rs/bollard"
+readme = "README.md"
+keywords = ["docker"]
+edition = "2018"
+
+[features]
+# Enable tests specifically for the http connector
+test_http = []
+# Enable tests specifically for rustls
+test_ssl = ["ssl"]
+# Enable tests specifically for macos
+test_macos = []
+# Enable rustls / ssl
+ssl = ["hyper-rustls", "rustls", "rustls-native-certs", "webpki-roots", "ct-logs"]
+
+[dependencies]
+base64 = "0.13"
+bollard-stubs = { version = "1.41.0" }
+bytes = "1"
+chrono = { version = "0.4", features = ["serde"] }
+ct-logs = { version = "0.8.0", optional = true }
+dirs-next = "2.0"
+futures-core = "0.3"
+futures-util = "0.3"
+hex = "0.4.2"
+http = "0.2"
+hyper = { version = "0.14", features = ["client", "tcp", "http1", "http2", "stream"] }
+hyper-rustls = { version = "0.22", optional = true }
+log = "0.4"
+pin-project = "1.0.2"
+rustls = { version = "0.19", optional = true }
+rustls-native-certs = { version = "0.5.0", optional = true }
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0"
+serde_urlencoded = "0.7"
+tokio = { version = "1.7", features = ["time", "fs", "net", "rt", "rt-multi-thread", "io-util"] }
+thiserror = "1.0"
+tokio-util = { version = "0.6", features = ["codec"] }
+url = "2.2"
+webpki-roots = { version = "0.21", optional = true }
+
+[dev-dependencies]
+env_logger = "0.8"
+flate2 = "1.0"
+tar = "0.4"
+tokio = { version = "1.7", features = ["time", "fs", "net", "rt", "rt-multi-thread", "macros", "io-std"] }
+
+[target.'cfg(unix)'.dependencies]
+hyperlocal =  { version = "0.8.0" }
+
+[target.'cfg(unix)'.dev-dependencies]
+termion = "1.5"
+
+[target.'cfg(windows)'.dependencies]
+winapi = "0.3.9"
+
+[package.metadata.docs.rs]
+features = ["ssl"]

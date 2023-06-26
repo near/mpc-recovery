@@ -1,0 +1,13 @@
+[package]
+name = "{{packageName}}"
+version = "{{appVersion}}"
+authors = [ "Bollard contributors" ]
+description = "Stubs used for the Bollard rust async Docker client API"
+license = "Apache-2.0"
+edition = "2018"
+
+[dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+
+serde_with = "1.4"

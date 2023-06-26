@@ -3,3 +3,6 @@ members = [
     "mpc-recovery",
     "integration-tests",
 ]
+
+[patch.crates-io]
+bollard = { path = "bollard" }
