@@ -148,7 +148,6 @@ async fn claim_oidc(
     Json(claim_oidc_request): Json<ClaimOidcRequest>,
 ) -> (StatusCode, Json<ClaimOidcResponse>) {
     // Calim OIDC ID Token and get MPC signature from sign nodes
-    // let sig_share_request = SigShareRequest::Claim(claim_oidc_request); // TODO: this is what we need
     let sig_share_request = SignNodeRequest::ClaimOidc(ClaimOidcNodeRequest {
         oidc_token_hash: claim_oidc_request.oidc_token_hash,
         public_key: claim_oidc_request.public_key,

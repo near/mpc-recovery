@@ -31,6 +31,10 @@ pub struct NewAccountRequest {
     pub near_account_id: String,
     pub create_account_options: CreateAccountOptions,
     pub oidc_token: String,
+    // TODO: does it make any scence to send this signature here?
+    // To make it work, we will need to keep track of registered
+    // tokens on the leader node.
+    // What kind of harm can be done if we don't enforce this in new_acc call?
     #[serde(with = "hex_option_sig_share")]
     pub signature: Option<Signature>,
 }

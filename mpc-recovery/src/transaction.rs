@@ -182,7 +182,6 @@ pub async fn get_mpc_signed_delegated_action(
     })
 }
 
-// TODO: should support old and new commit API
 pub async fn sign_payload_with_mpc(
     client: &reqwest::Client,
     sign_nodes: &[String],
