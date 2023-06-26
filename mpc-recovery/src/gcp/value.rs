@@ -113,8 +113,7 @@ impl IntoValue for Key {
     }
 }
 
-#[cfg(feature = "bytes")]
-impl IntoValue for Bytes {
+impl IntoValue for Vec<u8> {
     fn into_value(self) -> Value {
         Value::BlobValue(self.to_vec())
     }
@@ -262,11 +261,10 @@ impl FromValue for Key {
     }
 }
 
-#[cfg(feature = "bytes")]
-impl FromValue for Bytes {
-    fn from_value(value: Value) -> Result<Bytes, ConvertError> {
+impl FromValue for Vec<u8> {
+    fn from_value(value: Value) -> Result<Vec<u8>, ConvertError> {
         match value {
-            Value::BlobValue(value) => Ok(Bytes::from(value)),
+            Value::BlobValue(value) => Ok(value),
             _ => Err(ConvertError::UnexpectedPropertyType {
                 expected: String::from("blob"),
                 got: String::from(value.type_name()),

@@ -3,7 +3,7 @@ use self::user_credentials::EncryptedUserCredentials;
 use crate::gcp::GcpService;
 use crate::msg::{AcceptNodePublicKeysRequest, SignNodeRequest};
 use crate::oauth::OAuthTokenVerifier;
-use crate::primitives::InternalAccountId;
+use crate::primitives::{InternalAccountId, OidcDigest};
 use crate::sign_node::pk_set::SignerNodePkSet;
 use crate::utils::{check_signature, claim_oidc_request_digest, claim_oidc_response_digest};
 use crate::NodeId;
@@ -93,7 +93,6 @@ struct SignNodeState {
     node_info: NodeInfo,
 }
 
-//TODO: extend with new error types for token claiming
 #[derive(thiserror::Error, Debug)]
 pub enum CommitError {
     #[error("malformed account id: {0}")]
@@ -104,8 +103,8 @@ pub enum CommitError {
     OidcVerificationFailed(anyhow::Error),
     #[error("failed to verify signature: {0}")]
     SignatureVerificationFailed(anyhow::Error),
-    #[error("oidc token already claimed by another public key: {0}")]
-    OidcTokenAlreadyClaimed(PublicKey),
+    #[error("oidc token {0:?} already claimed")]
+    OidcTokenAlreadyClaimed(OidcDigest),
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }
@@ -158,8 +157,31 @@ async fn process_commit<T: OAuthTokenVerifier>(
                 .map_err(|e| CommitError::MalformedPublicKey(request.public_key.clone(), e))?;
 
             check_signature(&public_key, &request.signature, &digest)?;
-            // Save info about token in the database
+
             // TODO
+            // Save info about token in the database, if it's present, throw an error
+            // let oidc_digest = OidcDigest {
+            //     node_id: state.node_info.our_index,
+            //     digest: <[u8; 32]>::try_from(digest).expect("Hash was wrong size"),
+            //     public_key,
+            // };
+
+            // match state
+            //     .gcp_service
+            //     .get::<_, OidcDigest>(oidc_digest.to_name())
+            //     .await
+            // {
+            //     Ok(Some(_stored_digest)) => {
+            //         // TODO: Should we throw this error in case we use the same token but different public key?
+            //         // TODO: should we throw this error at all?
+            //         return Err(CommitError::OidcTokenAlreadyClaimed(oidc_digest));
+            //     }
+            //     Ok(None) => {
+            //         state.gcp_service.insert(oidc_digest).await?;
+            //     }
+            //     Err(e) => return Err(CommitError::Other(e)),
+            // };
+
             // Returned signed commitment (signature of the signature)
             let payload = match claim_oidc_response_digest(request.signature) {
                 Ok(payload) => payload,
