@@ -244,6 +244,7 @@ where
         mut req: Request<B>,
         pool_key: PoolKey,
     ) -> Result<Response<Body>, ClientError<B>> {
+        debug!("hyper send_request before connection_for");
         let mut pooled = match self.connection_for(pool_key).await {
             Ok(pooled) => pooled,
             Err(ClientConnectError::Normal(err)) => return Err(ClientError::Normal(err)),
@@ -255,9 +256,13 @@ where
                 })
             }
         };
+        debug!("hyper send_request after connection_for");
+        debug!("hyper send_request before extensions_mut");
         req.extensions_mut()
             .get_mut::<CaptureConnectionExtension>()
             .map(|conn| conn.set(&pooled.conn_info));
+        debug!("hyper send_request after extensions_mut");
+        debug!("hyper send_request before is_http1");
         if pooled.is_http1() {
             if req.version() == Version::HTTP_2 {
                 warn!("Connection is HTTP/1, but request requires HTTP/2");
@@ -291,11 +296,15 @@ where
         } else if req.method() == Method::CONNECT {
             authority_form(req.uri_mut());
         }
+        debug!("hyper send_request after is_http1");
 
+        debug!("hyper send_request before fut");
         let fut = pooled
             .send_request_retryable(req)
             .map_err(ClientError::map_with_reused(pooled.is_reused()));
+        debug!("hyper send_request after fut");
 
+        debug!("hyper send_request before extra info");
         // If the Connector included 'extra' info, add to Response...
         let extra_info = pooled.conn_info.extra.clone();
         let fut = fut.map_ok(move |mut res| {
@@ -304,6 +313,7 @@ where
             }
             res
         });
+        debug!("hyper send_request after extra info");
 
         // As of futures@0.1.21, there is a race condition in the mpsc
         // channel, such that sending when the receiver is closing can
@@ -312,11 +322,15 @@ where
         //
         // To counteract this, we must check if our senders 'want' channel
         // has been closed after having tried to send. If so, error out...
+        debug!("hyper send_request before is_closed");
         if pooled.is_closed() {
             return fut.await;
         }
+        debug!("hyper send_request after is_closed");
 
+        debug!("hyper send_request before waiting for fut");
         let mut res = fut.await?;
+        debug!("hyper send_request after waiting for fut");
 
         // If pooled is HTTP/2, we can toss this reference immediately.
         //
@@ -328,6 +342,7 @@ where
         // for a new request to start.
         //
         // It won't be ready if there is a body to stream.
+        debug!("hyper send_request before is_http2");
         if pooled.is_http2() || !pooled.is_pool_enabled() || pooled.is_ready() {
             drop(pooled);
         } else if !res.body().is_end_stream() {
@@ -349,6 +364,7 @@ where
             #[cfg_attr(feature = "deprecated", allow(deprecated))]
             self.conn_builder.exec.execute(on_idle);
         }
+        debug!("hyper send_request after is_http2");
 
         Ok(res)
     }
