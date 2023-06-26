@@ -441,8 +441,10 @@ where
             Either::Left((Err(err), connecting)) => {
                 debug!("hyper connection_for 3");
                 if err.is_canceled() {
+                    debug!("hyper connection_for cancelled?");
                     connecting.await.map_err(ClientConnectError::Normal)
                 } else {
+                    debug!("hyper connection_for normal?");
                     Err(ClientConnectError::Normal(err))
                 }
             }
@@ -487,6 +489,7 @@ where
             // If the pool_key is for HTTP/2, and there is already a
             // connection being established, then this can't take a
             // second lock. The "connect_to" future is Canceled.
+            debug!("hyper connect_to before connecting");
             let connecting = match pool.connecting(&pool_key, ver) {
                 Some(lock) => lock,
                 None => {
@@ -495,12 +498,15 @@ where
                     return Either::Right(future::err(canceled));
                 }
             };
+            debug!("hyper connect_to before connector.connect");
             Either::Left(
                 connector
                     .connect(connect::sealed::Internal, dst)
                     .map_err(crate::Error::new_connect)
                     .and_then(move |io| {
+                        debug!("hyper connect_to after connector.connect");
                         let connected = io.connected();
+                        debug!("hyper connect_to is connected!");
                         // If ALPN is h2 and we aren't http2_only already,
                         // then we need to convert our pool checkout into
                         // a single HTTP2 one.
@@ -522,6 +528,7 @@ where
                             connecting
                         };
 
+                        debug!("hyper connect_to after connecting");
                         #[cfg_attr(not(feature = "http2"), allow(unused))]
                         let is_h2 = is_ver_h2 || connected.alpn == Alpn::H2;
                         #[cfg(feature = "http2")]
@@ -529,6 +536,7 @@ where
                             conn_builder.http2_only(is_h2);
                         }
 
+                        debug!("hyper connect_to before big thingy");
                         Either::Left(Box::pin(async move {
                             let (tx, conn) = conn_builder.handshake(io).await?;
 
