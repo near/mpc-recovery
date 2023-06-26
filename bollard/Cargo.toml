@@ -65,3 +65,6 @@ winapi = "0.3.9"
 
 [package.metadata.docs.rs]
 features = ["ssl"]
+
+[patch.crates-io]
+hyper = { path = "../hyper" }

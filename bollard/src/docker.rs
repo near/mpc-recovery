@@ -794,6 +794,7 @@ impl Docker {
         let fut = self.process_request(req);
         async move {
             let response = fut.await?;
+            debug!("after process_request");
             Docker::decode_response(response).await
         }
     }
@@ -1026,7 +1027,7 @@ impl Docker {
         timeout: u64,
     ) -> Result<Response<Body>, Error> {
         // This is where we determine to which transport we issue the request.
-        debug!("before match *transport");
+        debug!("before match *transport: {:?}", &transport);
         let request = match *transport {
             Transport::Http { ref client } => client.request(req),
             #[cfg(feature = "ssl")]
