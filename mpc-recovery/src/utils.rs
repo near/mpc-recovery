@@ -93,9 +93,9 @@ mod tests {
             Ok(digest) => digest,
             Err(e) => panic!("Failed to generate digest: {}", e),
         };
-        match dalek_pub.verify_strict(&digest2, &dalek_sig) {
-            Ok(_) => panic!("Signature should not match"),
-            Err(_) => (),
-        };
+
+        if let Ok(_) = dalek_pub.verify_strict(&digest2, &dalek_sig) {
+            panic!("Signature should not match")
+        }
     }
 }
