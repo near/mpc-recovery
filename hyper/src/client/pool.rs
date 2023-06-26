@@ -605,9 +605,13 @@ impl<T: Poolable> Checkout<T> {
     }
 
     fn checkout(&mut self, cx: &mut task::Context<'_>) -> Option<Pooled<T>> {
+        debug!("checkout before entry");
         let entry = {
+            debug!("checkout before lcok");
             let mut inner = self.pool.inner.as_ref()?.lock().unwrap();
+            debug!("checkout before exp");
             let expiration = Expiration::new(inner.timeout);
+            debug!("checkout before maybe_entry");
             let maybe_entry = inner.idle.get_mut(&self.key).and_then(|list| {
                 trace!("take? {:?}: expiration = {:?}", self.key, expiration.0);
                 // A block to end the mutable borrow on list,
@@ -622,6 +626,7 @@ impl<T: Poolable> Checkout<T> {
                 .map(|e| (e, list.is_empty()))
             });
 
+            debug!("checkout before entry found?");
             let (entry, empty) = if let Some((e, empty)) = maybe_entry {
                 (Some(e), empty)
             } else {
@@ -633,6 +638,7 @@ impl<T: Poolable> Checkout<T> {
                 inner.idle.remove(&self.key);
             }
 
+            debug!("checkout before entry is_none");
             if entry.is_none() && self.waiter.is_none() {
                 let (tx, mut rx) = oneshot::channel();
                 trace!("checkout waiting for idle connection: {:?}", self.key);
@@ -658,15 +664,20 @@ impl<T: Poolable> Future for Checkout<T> {
     type Output = crate::Result<Pooled<T>>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
+        debug!("checkout poll before ready check");
         if let Some(pooled) = ready!(self.poll_waiter(cx)?) {
             return Poll::Ready(Ok(pooled));
         }
 
+        debug!("checkout poll before checkout");
         if let Some(pooled) = self.checkout(cx) {
+            debug!("checkout poll after ready check 1");
             Poll::Ready(Ok(pooled))
         } else if !self.pool.is_enabled() {
+            debug!("checkout poll after ready check 2");
             Poll::Ready(Err(crate::Error::new_canceled().with("pool is disabled")))
         } else {
+            debug!("checkout poll after ready check 3");
             // There's a new waiter, already registered in self.checkout()
             debug_assert!(self.waiter.is_some());
             Poll::Pending
