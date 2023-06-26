@@ -2,6 +2,7 @@
 
 use pin_project_lite::pin_project;
 use tower_service::Service;
+use tracing::debug;
 
 use crate::common::{task, Future, Pin, Poll};
 
@@ -50,24 +51,30 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
         let mut me = self.project();
 
+        debug!("oneshot poll start");
         loop {
+            debug!("oneshot polling...");
             match me.state.as_mut().project() {
                 StateProj::NotReady { ref mut svc, .. } => {
+                    debug!("oneshot not ready");
                     ready!(svc.poll_ready(cx))?;
                     // fallthrough out of the match's borrow
                 }
                 StateProj::Called { fut } => {
+                    debug!("oneshot called");
                     return fut.poll(cx);
                 }
                 StateProj::Tmp => unreachable!(),
             }
 
+            debug!("oneshot replacing...");
             match me.state.as_mut().project_replace(State::Tmp) {
                 StateProjOwn::NotReady { mut svc, req } => {
                     me.state.set(State::Called { fut: svc.call(req) });
                 }
                 _ => unreachable!(),
             }
+            debug!("oneshot done loop");
         }
     }
 }
