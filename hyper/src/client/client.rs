@@ -386,18 +386,22 @@ where
         //   (an idle connection became available first), the started
         //   connection future is spawned into the runtime to complete,
         //   and then be inserted into the pool as an idle connection.
+        debug!("hyper connection_for before checkout");
         let checkout = self.pool.checkout(pool_key.clone());
+        debug!("hyper connection_for before connect_to");
         let connect = self.connect_to(pool_key);
         let is_ver_h2 = self.config.ver == Ver::Http2;
 
         // The order of the `select` is depended on below...
 
+        debug!("hyper connection_for before select");
         match future::select(checkout, connect).await {
             // Checkout won, connect future may have been started or not.
             //
             // If it has, let it finish and insert back into the pool,
             // so as to not waste the socket...
             Either::Left((Ok(checked_out), connecting)) => {
+                debug!("hyper connection_for 1");
                 // This depends on the `select` above having the correct
                 // order, such that if the checkout future were ready
                 // immediately, the connect future will never have been
@@ -422,7 +426,10 @@ where
                 Ok(checked_out)
             }
             // Connect won, checkout can just be dropped.
-            Either::Right((Ok(connected), _checkout)) => Ok(connected),
+            Either::Right((Ok(connected), _checkout)) => {
+                debug!("hyper connection_for 2");
+                Ok(connected)
+            }
             // Either checkout or connect could get canceled:
             //
             // 1. Connect is canceled if this is HTTP/2 and there is
@@ -432,6 +439,7 @@ where
             //
             // In both cases, we should just wait for the other future.
             Either::Left((Err(err), connecting)) => {
+                debug!("hyper connection_for 3");
                 if err.is_canceled() {
                     connecting.await.map_err(ClientConnectError::Normal)
                 } else {
@@ -439,6 +447,7 @@ where
                 }
             }
             Either::Right((Err(err), checkout)) => {
+                debug!("hyper connection_for 4");
                 if err.is_canceled() {
                     checkout.await.map_err(move |err| {
                         if is_ver_h2
