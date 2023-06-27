@@ -2,6 +2,8 @@ use std::io;
 use std::mem::size_of;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
+use log::debug;
+
 pub(crate) fn new_ip_socket(addr: SocketAddr, socket_type: libc::c_int) -> io::Result<libc::c_int> {
     let domain = match addr {
         SocketAddr::V4(..) => libc::AF_INET,
@@ -24,7 +26,9 @@ pub(crate) fn new_socket(domain: libc::c_int, socket_type: libc::c_int) -> io::R
     ))]
     let socket_type = socket_type | libc::SOCK_NONBLOCK | libc::SOCK_CLOEXEC;
 
+    debug!("mio unix new_socket start");
     let socket = syscall!(socket(domain, socket_type, 0))?;
+    debug!("mio unix new_socket socket finished");
 
     // Mimick `libstd` and set `SO_NOSIGPIPE` on apple systems.
     #[cfg(any(
@@ -40,6 +44,7 @@ pub(crate) fn new_socket(domain: libc::c_int, socket_type: libc::c_int) -> io::R
         &1 as *const libc::c_int as *const libc::c_void,
         size_of::<libc::c_int>() as libc::socklen_t
     )) {
+        debug!("mio unix new_socket SO_NOSIGPIPE error");
         let _ = syscall!(close(socket));
         return Err(err);
     }
@@ -52,11 +57,14 @@ pub(crate) fn new_socket(domain: libc::c_int, socket_type: libc::c_int) -> io::R
         target_os = "watchos",
     ))]
     {
+        debug!("mio unix new_socket SOCK_NONBLOCK or SOCK_CLOEXEC error");
         if let Err(err) = syscall!(fcntl(socket, libc::F_SETFL, libc::O_NONBLOCK)) {
+            debug!("mio unix new_socket SOCK_NONBLOCK error: {:?}", err);
             let _ = syscall!(close(socket));
             return Err(err);
         }
         if let Err(err) = syscall!(fcntl(socket, libc::F_SETFD, libc::FD_CLOEXEC)) {
+            debug!("mio unix new_socket SOCK_CLOEXEC error: {:?}", err);
             let _ = syscall!(close(socket));
             return Err(err);
         }
