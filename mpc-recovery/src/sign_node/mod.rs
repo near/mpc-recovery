@@ -147,8 +147,10 @@ async fn process_commit<T: OAuthTokenVerifier>(
     state: SignNodeState,
     request: SignNodeRequest,
 ) -> Result<SignedCommitment, CommitError> {
+    tracing::info!(?request, "processing commit request");
     match request {
         SignNodeRequest::ClaimOidc(request) => {
+            tracing::debug!(?request, "processing oidc claim request");
             // Check ID token hash signature
             let digest = claim_oidc_request_digest(request.oidc_token_hash)?;
             let public_key: PublicKey = request
@@ -157,8 +159,9 @@ async fn process_commit<T: OAuthTokenVerifier>(
                 .map_err(|e| CommitError::MalformedPublicKey(request.public_key.clone(), e))?;
 
             check_signature(&public_key, &request.signature, &digest)?;
+            tracing::debug!("oidc token hash signature verified");
 
-            // TODO
+            //TODO
             // Save info about token in the database, if it's present, throw an error
             // let oidc_digest = OidcDigest {
             //     node_id: state.node_info.our_index,
@@ -174,12 +177,17 @@ async fn process_commit<T: OAuthTokenVerifier>(
             //     Ok(Some(_stored_digest)) => {
             //         // TODO: Should we throw this error in case we use the same token but different public key?
             //         // TODO: should we throw this error at all?
+            //         tracing::info!(?oidc_digest, "oidc token already claimed");
             //         return Err(CommitError::OidcTokenAlreadyClaimed(oidc_digest));
             //     }
             //     Ok(None) => {
+            //         tracing::info!(?oidc_digest, "adding oidc token digest to the database");
             //         state.gcp_service.insert(oidc_digest).await?;
             //     }
-            //     Err(e) => return Err(CommitError::Other(e)),
+            //     Err(e) => {
+            //         tracing::error!(?oidc_digest, "failed to get oidc token digest from the database");
+            //         return Err(CommitError::Other(e));
+            //     }
             // };
 
             // Returned signed commitment (signature of the signature)
@@ -193,16 +201,20 @@ async fn process_commit<T: OAuthTokenVerifier>(
                 .await
                 .get_commitment(&state.node_key, &state.node_key, payload)
                 .map_err(|e| anyhow::anyhow!(e))?;
+            tracing::info!("returning signed commitment");
             Ok(response)
         }
         SignNodeRequest::SignShare(request) => {
+            tracing::debug!(?request, "processing sign share request");
             let oidc_token_claims =
                 T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
                     .await
                     .map_err(CommitError::OidcVerificationFailed)?;
+            tracing::debug!(?oidc_token_claims, "oidc token verified");
             let internal_account_id = oidc_token_claims.get_internal_account_id();
 
             let user_credentials = get_or_generate_user_creds(&state, internal_account_id).await?;
+            tracing::debug!("user credentials retrieved");
 
             let response = state
                 .signing_state
@@ -215,6 +227,7 @@ async fn process_commit<T: OAuthTokenVerifier>(
                     request.payload,
                 )
                 .map_err(|e| anyhow::anyhow!(e))?;
+            tracing::info!("returning signed commitment");
             Ok(response)
         }
     }
