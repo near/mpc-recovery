@@ -7,7 +7,7 @@ use crate::transaction::CreateAccountOptions;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ClaimOidcRequest {
     #[serde(with = "hex::serde")]
-    pub oidc_token_hash: [u8; 64],
+    pub oidc_token_hash: [u8; 32],
     pub public_key: String,
     #[serde(with = "hex_sig_share")]
     pub signature: Signature,
@@ -119,7 +119,7 @@ pub struct SignShareNodeRequest {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ClaimOidcNodeRequest {
     #[serde(with = "hex::serde")]
-    pub oidc_token_hash: [u8; 64],
+    pub oidc_token_hash: [u8; 32],
     pub public_key: String,
     #[serde(with = "hex_sig_share")]
     pub signature: Signature,
