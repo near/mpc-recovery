@@ -161,34 +161,36 @@ async fn process_commit<T: OAuthTokenVerifier>(
             check_signature(&public_key, &request.signature, &digest)?;
             tracing::debug!("oidc token hash signature verified");
 
-            //TODO
             // Save info about token in the database, if it's present, throw an error
-            // let oidc_digest = OidcDigest {
-            //     node_id: state.node_info.our_index,
-            //     digest: <[u8; 32]>::try_from(digest).expect("Hash was wrong size"),
-            //     public_key,
-            // };
+            let oidc_digest = OidcDigest {
+                node_id: state.node_info.our_index,
+                digest: <[u8; 32]>::try_from(digest).expect("Hash was wrong size"),
+                public_key,
+            };
 
-            // match state
-            //     .gcp_service
-            //     .get::<_, OidcDigest>(oidc_digest.to_name())
-            //     .await
-            // {
-            //     Ok(Some(_stored_digest)) => {
-            //         // TODO: Should we throw this error in case we use the same token but different public key?
-            //         // TODO: should we throw this error at all?
-            //         tracing::info!(?oidc_digest, "oidc token already claimed");
-            //         return Err(CommitError::OidcTokenAlreadyClaimed(oidc_digest));
-            //     }
-            //     Ok(None) => {
-            //         tracing::info!(?oidc_digest, "adding oidc token digest to the database");
-            //         state.gcp_service.insert(oidc_digest).await?;
-            //     }
-            //     Err(e) => {
-            //         tracing::error!(?oidc_digest, "failed to get oidc token digest from the database");
-            //         return Err(CommitError::Other(e));
-            //     }
-            // };
+            match state
+                .gcp_service
+                .get::<_, OidcDigest>(oidc_digest.to_name())
+                .await
+            {
+                Ok(Some(_stored_digest)) => {
+                    // TODO: Should we throw this error in case we use the same token but different public key?
+                    // TODO: should we throw this error at all?
+                    tracing::info!(?oidc_digest, "oidc token already claimed");
+                    return Err(CommitError::OidcTokenAlreadyClaimed(oidc_digest));
+                }
+                Ok(None) => {
+                    tracing::info!(?oidc_digest, "adding oidc token digest to the database");
+                    state.gcp_service.insert(oidc_digest).await?;
+                }
+                Err(e) => {
+                    tracing::error!(
+                        ?oidc_digest,
+                        "failed to get oidc token digest from the database"
+                    );
+                    return Err(CommitError::Other(e));
+                }
+            };
 
             // Returned signed commitment (signature of the signature)
             let payload = match claim_oidc_response_digest(request.signature) {

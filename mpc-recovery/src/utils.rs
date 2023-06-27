@@ -1,8 +1,8 @@
 use anyhow::Context;
 use borsh::BorshSerialize;
 use ed25519_dalek::Signature;
-use sha2::{Sha256, Digest};
 use near_crypto::PublicKey;
+use sha2::{Digest, Sha256};
 
 use crate::{primitives::HashSalt, sign_node::CommitError};
 

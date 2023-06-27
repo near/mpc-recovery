@@ -96,26 +96,25 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
                 ClaimOidcResponse::Err { msg } => return Err(anyhow::anyhow!(msg)),
             };
 
-            // TODO: hangs for some reason
             // Making the same claiming request should fail
-            // let (status_code, oidc_response) =
-            //     ctx.leader_node.claim_oidc(oidc_request.clone()).await?;
+            let (status_code, oidc_response) =
+                ctx.leader_node.claim_oidc(oidc_request.clone()).await?;
 
-            // assert_eq!(status_code, StatusCode::BAD_REQUEST);
+            assert_eq!(status_code, StatusCode::BAD_REQUEST);
 
-            // match oidc_response {
-            //     ClaimOidcResponse::Ok { .. } => {
-            //         return Err(anyhow::anyhow!(
-            //             "Response should be Err when claiming registered token"
-            //         ))
-            //     }
-            //     ClaimOidcResponse::Err { msg } => {
-            //         assert!(
-            //             msg.contains("already claimed"),
-            //             "Error message does not contain 'oidc token already claimed by another public key'"
-            //         );
-            //     }
-            // }
+            match oidc_response {
+                ClaimOidcResponse::Ok { .. } => {
+                    return Err(anyhow::anyhow!(
+                        "Response should be Err when claiming registered token"
+                    ))
+                }
+                ClaimOidcResponse::Err { msg } => {
+                    assert!(
+                        msg.contains("already claimed"),
+                        "Error message does not contain 'already claimed'"
+                    );
+                }
+            }
 
             // Get the node public key
             let client = reqwest::Client::new();
