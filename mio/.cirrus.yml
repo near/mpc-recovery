@@ -1,0 +1,26 @@
+freebsd_instance:
+  image: freebsd-12-4-release-amd64
+
+env:
+  RUST_BACKTRACE: full
+
+task:
+  name: FreeBSD
+  setup_script:
+    - fetch https://sh.rustup.rs -o rustup.sh
+    - sh rustup.sh -y --profile minimal
+  cargo_cache:
+    folder: $HOME/.cargo/registry
+  build_script:
+    - . $HOME/.cargo/env
+    - cargo build
+    - cargo build --no-default-features
+  amd64_test_script:
+    - . $HOME/.cargo/env
+    - cargo test --all-features
+  i386_test_script:
+    - . $HOME/.cargo/env
+    - rustup target add i686-unknown-freebsd
+    - cargo test --target i686-unknown-freebsd --all-features
+  before_cache_script:
+    - rm -rf $HOME/.cargo/registry/index
