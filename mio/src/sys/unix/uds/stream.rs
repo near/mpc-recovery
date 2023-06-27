@@ -9,7 +9,7 @@ use std::os::unix::net;
 use std::path::Path;
 
 pub(crate) fn connect(path: &Path) -> io::Result<net::UnixStream> {
-    debug!("mio uds connect start");
+    debug!("mio uds connect start: {}", path.display());
     let (sockaddr, socklen) = socket_addr(path)?;
     debug!("mio uds connect addr 1: {:?} {}", sockaddr, socklen);
     let sockaddr = &sockaddr as *const libc::sockaddr_un as *const libc::sockaddr;
