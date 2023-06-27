@@ -55,6 +55,8 @@ pub fn oidc_digest(oidc_token: &str) -> [u8; 32] {
 
 #[cfg(test)]
 mod tests {
+    use crate::msg::ClaimOidcResponse;
+
     use super::*;
 
     #[test]
@@ -64,39 +66,65 @@ mod tests {
     }
 
     #[test]
-    fn claim_oidc_response_digest_test() {
+    fn test_claim_oidc_request_digest_and_claim_oidc_response_digest() {
         // prepare digest
         let token_hash = oidc_digest("oidc_token_1");
 
-        let digest = match claim_oidc_request_digest(token_hash) {
+        let request_digest = match claim_oidc_request_digest(token_hash) {
             Ok(digest) => digest,
             Err(e) => panic!("Failed to generate digest: {}", e),
         };
-        // geneate a key pair
-        let privkey = [0u8; 32];
-        let dalek_secret = ed25519_dalek::ExpandedSecretKey::from(
-            &ed25519_dalek::SecretKey::from_bytes(&privkey)
+        // geneate a user key pair
+        let user_private_key = [0u8; 32];
+        let user_secret_key = ed25519_dalek::ExpandedSecretKey::from(
+            &ed25519_dalek::SecretKey::from_bytes(&user_private_key)
                 .expect("Can only fail if bytes.len()<32"),
         );
-        let dalek_pub = ed25519_dalek::PublicKey::from(&dalek_secret);
+        let user_public_key = ed25519_dalek::PublicKey::from(&user_secret_key);
 
         // sign the digest
-        let dalek_sig = dalek_secret.sign(&digest, &dalek_pub);
+        let request_digest_signature = user_secret_key.sign(&request_digest, &user_public_key);
 
         // check the signature
-        match dalek_pub.verify_strict(&digest, &dalek_sig) {
+        match user_public_key.verify_strict(&request_digest, &request_digest_signature) {
             Ok(_) => (),
             Err(e) => panic!("Failed to verify signature: {}", e),
         };
 
         // check signature with different digest
-        let digest2 = match claim_oidc_request_digest(oidc_digest("oidc_token_2")) {
+        let request_digest_2 = match claim_oidc_request_digest(oidc_digest("oidc_token_2")) {
             Ok(digest) => digest,
             Err(e) => panic!("Failed to generate digest: {}", e),
         };
 
-        if dalek_pub.verify_strict(&digest2, &dalek_sig).is_ok() {
+        if user_public_key
+            .verify_strict(&request_digest_2, &request_digest_signature)
+            .is_ok()
+        {
             panic!("Signature should not match");
         }
+
+        // create and check response digest
+        let mpc_private_key = [0u8; 32];
+        let mpc_secret_key = ed25519_dalek::ExpandedSecretKey::from(
+            &ed25519_dalek::SecretKey::from_bytes(&mpc_private_key)
+                .expect("Can only fail if bytes.len()<32"),
+        );
+        let mpc_public_key = ed25519_dalek::PublicKey::from(&mpc_secret_key);
+
+        let responce_digest = claim_oidc_response_digest(request_digest_signature)
+            .expect("Failed to generate responce digest");
+
+        let mpc_response_digest_signature = mpc_secret_key.sign(&responce_digest, &mpc_public_key);
+
+        let _claim_oidc_response = ClaimOidcResponse::Ok {
+            mpc_signature: mpc_response_digest_signature,
+            recovery_public_key: None,
+            near_account_id: None,
+        };
+
+        mpc_public_key
+            .verify_strict(&responce_digest, &mpc_response_digest_signature)
+            .expect("Failed to verify responce signature");
     }
 }
