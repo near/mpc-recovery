@@ -126,9 +126,19 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
 
             // Verify signature
             let response_digest = claim_oidc_response_digest(oidc_request.signature).unwrap();
-            mpc_pk.verify(&response_digest, &mpc_signature)?; // TODO: convert to ed25519_dalek and verify
+            mpc_pk.verify(&response_digest, &mpc_signature)?;
 
-            // TODO: add test with wrong signature (account creation)
+            // Verify signature with wrong digest
+            let wrong_response_digest =
+                claim_oidc_response_digest(bad_oidc_request.signature).unwrap();
+            if mpc_pk
+                .verify(&wrong_response_digest, &mpc_signature)
+                .is_ok()
+            {
+                return Err(anyhow::anyhow!(
+                    "Signature verification should fail with wrong digest"
+                ));
+            }
 
             // Create account
             let new_account_request = NewAccountRequest {
