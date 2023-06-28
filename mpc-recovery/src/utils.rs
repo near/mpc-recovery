@@ -55,8 +55,6 @@ pub fn oidc_digest(oidc_token: &str) -> [u8; 32] {
 
 #[cfg(test)]
 mod tests {
-    use crate::msg::ClaimOidcResponse;
-
     use super::*;
 
     #[test]
@@ -116,12 +114,6 @@ mod tests {
             .expect("Failed to generate responce digest");
 
         let mpc_response_digest_signature = mpc_secret_key.sign(&responce_digest, &mpc_public_key);
-
-        let _claim_oidc_response = ClaimOidcResponse::Ok {
-            mpc_signature: mpc_response_digest_signature,
-            recovery_public_key: None,
-            near_account_id: None,
-        };
 
         mpc_public_key
             .verify_strict(&responce_digest, &mpc_response_digest_signature)

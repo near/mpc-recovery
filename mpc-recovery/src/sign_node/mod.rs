@@ -260,7 +260,7 @@ async fn commit<T: OAuthTokenVerifier>(
             tracing::error!(err = ?e);
             (
                 StatusCode::BAD_REQUEST,
-                Json(Err(format!("failed to process new account: {}", e))),
+                Json(Err(format!("failed to process commit call: {}", e))),
             )
         }
     }

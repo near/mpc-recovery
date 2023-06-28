@@ -18,6 +18,7 @@ pub enum ClaimOidcResponse {
     Ok {
         #[serde(with = "hex_sig_share")]
         mpc_signature: Signature,
+        mpc_pk: String,
         recovery_public_key: Option<String>,
         near_account_id: Option<String>,
     },

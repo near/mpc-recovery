@@ -37,15 +37,15 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             let oidc_token_hash = oidc_digest(&oidc_token);
             let wrong_oidc_token_hash = oidc_digest(&wrong_oidc_token);
 
-            let digest = claim_oidc_request_digest(oidc_token_hash).unwrap();
+            let request_digest = claim_oidc_request_digest(oidc_token_hash).unwrap();
             let wrong_digest = claim_oidc_request_digest(wrong_oidc_token_hash).unwrap();
 
-            let signature = match user_private_key.sign(&digest) {
+            let request_digest_signature = match user_private_key.sign(&request_digest) {
                 near_crypto::Signature::ED25519(k) => k,
                 _ => return Err(anyhow::anyhow!("Wrong signature type")),
             };
 
-            let wrong_signature = match user_private_key.sign(&wrong_digest) {
+            let request_digest_wrong_signature = match user_private_key.sign(&wrong_digest) {
                 near_crypto::Signature::ED25519(k) => k,
                 _ => return Err(anyhow::anyhow!("Wrong signature type")),
             };
@@ -53,13 +53,13 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             let oidc_request = ClaimOidcRequest {
                 oidc_token_hash,
                 public_key: user_public_key.clone(),
-                signature,
+                signature: request_digest_signature,
             };
 
             let bad_oidc_request = ClaimOidcRequest {
                 oidc_token_hash,
                 public_key: user_public_key.clone(),
-                signature: wrong_signature,
+                signature: request_digest_wrong_signature,
             };
 
             // Make the claiming request with wrong signature
@@ -87,14 +87,22 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
 
             assert_eq!(status_code, StatusCode::OK);
 
-            let _res_signature = match oidc_response {
+            let (mpc_signature, mpc_pk) = match oidc_response {
                 ClaimOidcResponse::Ok {
                     mpc_signature,
+                    mpc_pk,
                     recovery_public_key: _,
                     near_account_id: _,
-                } => mpc_signature,
+                } => (mpc_signature, mpc_pk),
                 ClaimOidcResponse::Err { msg } => return Err(anyhow::anyhow!(msg)),
             };
+
+            let decoded_mpc_pk = match hex::decode(mpc_pk.clone()) {
+                Ok(v) => v,
+                Err(e) => return Err(anyhow::anyhow!("Failed to decode mpc pk. {}", e)),
+            };
+
+            let mpc_pk = ed25519_dalek::PublicKey::from_bytes(&decoded_mpc_pk).unwrap();
 
             // Making the same claiming request should fail
             let (status_code, oidc_response) =
@@ -111,22 +119,14 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
                 ClaimOidcResponse::Err { msg } => {
                     assert!(
                         msg.contains("already claimed"),
-                        "Error message does not contain 'already claimed'"
+                        "Wrong error message when claiming registered token",
                     );
                 }
             }
 
-            // Get the node public key
-            let client = reqwest::Client::new();
-
-            let signer_urls: Vec<_> = ctx.signer_nodes.iter().map(|s| s.address.clone()).collect();
-
-            let res = call_all_nodes(&client, &signer_urls, "public_key", "").await?;
-            let _combined_pub = to_dalek_combined_public_key(&res).unwrap();
-
             // Verify signature
-            let _res_digest = claim_oidc_response_digest(oidc_request.signature).unwrap();
-            // combined_pub.verify(&res_digest, &res_signature)?; // TODO: check why signature is not right
+            let response_digest = claim_oidc_response_digest(oidc_request.signature).unwrap();
+            mpc_pk.verify(&response_digest, &mpc_signature)?; // TODO: convert to ed25519_dalek and verify
 
             // TODO: add test with wrong signature (account creation)
 
