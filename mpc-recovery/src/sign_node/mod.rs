@@ -1,9 +1,10 @@
 use self::aggregate_signer::{NodeInfo, Reveal, SignedCommitment, SigningState};
+use self::oidc::OidcDigest;
 use self::user_credentials::EncryptedUserCredentials;
 use crate::gcp::GcpService;
 use crate::msg::{AcceptNodePublicKeysRequest, SignNodeRequest};
 use crate::oauth::OAuthTokenVerifier;
-use crate::primitives::{InternalAccountId, OidcDigest};
+use crate::primitives::InternalAccountId;
 use crate::sign_node::pk_set::SignerNodePkSet;
 use crate::utils::{check_signature, claim_oidc_request_digest, claim_oidc_response_digest};
 use crate::NodeId;
@@ -21,6 +22,7 @@ use tokio::sync::RwLock;
 pub mod aggregate_signer;
 pub mod pk_set;
 pub mod user_credentials;
+pub mod oidc;
 
 pub struct Config {
     pub gcp_service: GcpService,
