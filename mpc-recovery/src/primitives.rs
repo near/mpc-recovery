@@ -7,7 +7,7 @@ pub enum HashSalt {
     AddKeyRequest = 2,
 }
 
-/// Mentioned in the readme, here to avoid collisions with legitimate transactions
+// Mentioned in the readme, here to avoid collisions with legitimate transactions
 // chosen by a fair dice roll.
 // guaranteed to be random.
 const SALT_BASE: u32 = 3177899144;
