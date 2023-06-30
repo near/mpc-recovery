@@ -355,7 +355,7 @@ async fn new_account<T: OAuthTokenVerifier>(
     tracing::info!(
         near_account_id = request.near_account_id.clone(),
         create_account_options = request.create_account_options.to_string(),
-        iodc_token = format!("{:.5}...", request.oidc_token),
+        oidc_token = format!("{:.5}...", request.oidc_token),
         "new_account request"
     );
 
@@ -535,7 +535,7 @@ async fn add_key<T: OAuthTokenVerifier>(
             None => "not specified",
         },
         create_account_options = request.create_account_options.to_string(),
-        iodc_token = format!("{:.5}...", request.oidc_token),
+        oidc_token = format!("{:.5}...", request.oidc_token),
         "add_key request"
     );
 

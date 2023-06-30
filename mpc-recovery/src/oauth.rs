@@ -19,7 +19,7 @@ pub trait OAuthTokenVerifier {
         audience: &str,
     ) -> anyhow::Result<IdTokenClaims> {
         tracing::info!(
-            iodc_token = format!("{:.5}...", token),
+            oidc_token = format!("{:.5}...", token),
             public_key = String::from_utf8(public_key.to_vec()).unwrap_or_default(),
             issuer = issuer,
             audience = audience,
