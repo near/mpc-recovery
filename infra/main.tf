@@ -1,8 +1,13 @@
 terraform {
+  backend "gcs" {
+    bucket = "terraform-mpc-recovery"
+    prefix = "state/mpc-recovery"
+  }
+
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = "4.66.0"
+      version = "4.71.0"
     }
     docker = {
       source  = "kreuzwerker/docker"
