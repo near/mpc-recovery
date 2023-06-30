@@ -30,7 +30,10 @@ impl IntoValue for OidcDigest {
             "node_id".to_string(),
             Value::IntegerValue(self.node_id as i64),
         );
-        properties.insert("digest".to_string(), Value::BlobValue(self.digest.into()));
+        properties.insert(
+            "digest".to_string(),
+            Value::StringValue(hex::encode(self.digest)),
+        );
         properties.insert(
             "public_key".to_string(),
             Value::StringValue(serde_json::to_string(&self.public_key).unwrap()),
@@ -61,9 +64,8 @@ impl FromValue for OidcDigest {
                 let (_, digest) = properties
                     .remove_entry("digest")
                     .ok_or_else(|| ConvertError::MissingProperty("digest".to_string()))?;
-                let digest = <Vec<u8>>::from_value(digest)
+                let digest = hex::decode(String::from_value(digest)?)
                     .map_err(|_| ConvertError::MalformedProperty("digest".to_string()))?;
-
                 let digest = <[u8; 32]>::try_from(digest)
                     .map_err(|_| ConvertError::MalformedProperty("digest".to_string()))?;
 
