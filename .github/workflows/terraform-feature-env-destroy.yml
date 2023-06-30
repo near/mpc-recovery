@@ -1,0 +1,78 @@
+name: Terraform Feature Env (Destroy)
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  terraform_destroy:
+    name: Destroy
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./infra
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: 1.4.6
+
+      # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
+      - name: Terraform Init
+        id: init
+        run: terraform init -backend-config backend-config-dev.tfvars
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
+
+      # Select the relevant Terraform workspace.
+      - name: Terraform Select Workspace
+        id: select
+        run: terraform workspace select -or-create dev-$PR_NUMBER
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
+          PR_NUMBER: ${{ env.PR_NUMBER }}
+
+      # Destroy Terraform configuration in the temporary environment. Wait up to 1 hour for the lock (other workflows might still be executing).
+      - name: Terraform Destroy
+        id: destroy
+        run: terraform destroy -auto-approve -input=false -no-color -lock-timeout=1h -var-file terraform-dev.tfvars -var "credentials=$GOOGLE_CREDENTIALS" -var "env=dev-$PR_NUMBER"
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
+          PR_NUMBER: ${{ env.PR_NUMBER }}
+
+      - uses: actions/github-script@v6
+        if: github.event_name == 'pull_request'
+        env:
+          DESTROY_PLAN: "${{ steps.destroy.outputs.stdout }}"
+          PR_NUMBER: ${{ env.PR_NUMBER }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // 1. Prepare format of the comment
+            const output = `### Terraform Feature Environment Destroy (**dev-${process.env.PR_NUMBER}**)
+            #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+
+            #### Terraform Destroy \`${{ steps.destroy.outcome }}\`
+
+            <details><summary>Show Destroy Plan</summary>
+
+            \`\`\`\n
+            ${process.env.DESTROY_PLAN}
+            \`\`\`
+
+            </details>
+
+            *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Working Directory: \`${{ env.tf_actions_working_dir }}\`, Workflow: \`${{ github.workflow }}\`*`;
+
+            // 3. Create the comment
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
