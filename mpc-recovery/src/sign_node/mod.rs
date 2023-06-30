@@ -20,9 +20,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub mod aggregate_signer;
+pub mod oidc;
 pub mod pk_set;
 pub mod user_credentials;
-pub mod oidc;
 
 pub struct Config {
     pub gcp_service: GcpService,
