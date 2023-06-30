@@ -6,7 +6,7 @@ use mpc_recovery::GenerateResult;
 use mpc_recovery_integration_tests::containers;
 use workspaces::{network::Sandbox, Worker};
 
-const NETWORK: &str = "mpc_recovery_dev_network";
+const NETWORK: &str = "mpc_it_network";
 const GCP_PROJECT_ID: &str = "mpc-recovery-gcp-project";
 // TODO: figure out how to instantiate an use a local firebase deployment
 const FIREBASE_AUDIENCE_ID: &str = "not actually used in integration tests";

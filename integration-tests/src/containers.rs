@@ -462,10 +462,7 @@ impl LeaderNodeApi {
     }
 }
 
-pub async fn post<U, Req: Serialize, Resp>(
-    uri: U,
-    request: Req,
-) -> anyhow::Result<(StatusCode, Resp)>
+async fn post<U, Req: Serialize, Resp>(uri: U, request: Req) -> anyhow::Result<(StatusCode, Resp)>
 where
     Uri: TryFrom<U>,
     <Uri as TryFrom<U>>::Error: Into<hyper::http::Error>,
