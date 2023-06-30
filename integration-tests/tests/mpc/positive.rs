@@ -167,7 +167,7 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             ));
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
-            // check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
+            check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
 
             // Add new FA key with front running protection (negative, wrong signature)
             // TODO: add exaample with front running protection signature (bad one)
@@ -205,7 +205,7 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             assert_eq!(near_account_id, account_id.to_string());
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
-            // check::access_key_exists(&ctx, &account_id, &new_user_public_key).await?;
+            check::access_key_exists(&ctx, &account_id, &new_user_public_key).await?;
 
             Ok(())
         })
