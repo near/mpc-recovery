@@ -4,7 +4,7 @@ pub type InternalAccountId = String; // format: "iss:sub" from the ID token
 pub enum HashSalt {
     ClaimOidcRequest = 0,
     ClaimOidcResponse = 1,
-    AddKeyRequest = 2,
+    SignRequest = 2,
 }
 
 // Mentioned in the readme, here to avoid collisions with legitimate transactions

@@ -5,10 +5,9 @@ use futures::{future, FutureExt};
 use multi_party_eddsa::protocols::aggsig::KeyAgg;
 use multi_party_eddsa::protocols::{self, aggsig};
 use near_crypto::{InMemorySigner, PublicKey, SecretKey};
-use near_primitives::account::{AccessKey, AccessKeyPermission, FunctionCallPermission};
 use near_primitives::borsh::BorshSerialize;
 use near_primitives::hash::hash;
-use near_primitives::transaction::{Action, AddKeyAction, FunctionCallAction};
+use near_primitives::transaction::{Action, FunctionCallAction};
 use near_primitives::types::{AccountId, Nonce};
 
 use near_primitives::delegate_action::{DelegateAction, NonDelegateAction, SignedDelegateAction};
@@ -84,62 +83,6 @@ pub fn get_create_account_delegate_action(
     Ok(delegate_action)
 }
 
-pub fn get_add_key_delegate_action(
-    account_id: AccountId,
-    signer_pk: PublicKey,
-    create_account_options: CreateAccountOptions,
-    nonce: Nonce,
-    max_block_height: u64,
-) -> anyhow::Result<DelegateAction> {
-    let full_access_keys: Vec<_> = create_account_options
-        .full_access_keys
-        .unwrap_or_default()
-        .into_iter()
-        .map(|pk| {
-            NonDelegateAction::try_from(Action::AddKey(AddKeyAction {
-                public_key: pk,
-                access_key: AccessKey {
-                    nonce: 0,
-                    permission: AccessKeyPermission::FullAccess,
-                },
-            }))
-        })
-        .collect::<Result<_, _>>()?;
-    let limited_access_keys: Vec<_> = create_account_options
-        .limited_access_keys
-        .unwrap_or_default()
-        .into_iter()
-        .map(|lka| {
-            NonDelegateAction::try_from(Action::AddKey(AddKeyAction {
-                public_key: lka.public_key,
-                access_key: AccessKey {
-                    nonce: 0,
-                    permission: AccessKeyPermission::FunctionCall(FunctionCallPermission {
-                        allowance: Some(lka.allowance.parse().unwrap()),
-                        receiver_id: lka.receiver_id.to_string(),
-                        method_names: if lka.method_names.is_empty() {
-                            vec![]
-                        } else {
-                            lka.method_names.split(',').map(|s| s.to_string()).collect()
-                        },
-                    }),
-                },
-            }))
-        })
-        .collect::<Result<_, _>>()?;
-
-    let delegate_action = DelegateAction {
-        sender_id: account_id.clone(),
-        receiver_id: account_id,
-        actions: [full_access_keys, limited_access_keys].concat(),
-        nonce,
-        max_block_height,
-        public_key: signer_pk,
-    };
-
-    Ok(delegate_action)
-}
-
 pub fn get_local_signed_delegated_action(
     delegate_action: DelegateAction,
     signer_id: AccountId,
@@ -156,12 +99,12 @@ pub fn get_local_signed_delegated_action(
     }
 }
 
-pub async fn get_mpc_signed_delegated_action(
+pub async fn get_mpc_signature(
     client: &reqwest::Client,
     sign_nodes: &[String],
     oidc_token: String,
     delegate_action: DelegateAction,
-) -> anyhow::Result<SignedDelegateAction> {
+) -> anyhow::Result<Signature> {
     let signable_message =
         SignableMessage::new(&delegate_action, SignableMessageType::DelegateAction);
 
@@ -175,11 +118,7 @@ pub async fn get_mpc_signed_delegated_action(
     });
 
     let signature = sign_payload_with_mpc(client, sign_nodes, sig_share_request).await?;
-
-    Ok(SignedDelegateAction {
-        delegate_action,
-        signature: near_crypto::Signature::ED25519(signature),
-    })
+    Ok(signature)
 }
 
 pub async fn sign_payload_with_mpc(

@@ -53,12 +53,6 @@ enum Cli {
         /// TEMPORARY - Account creator ed25519 secret key
         #[arg(long, env("MPC_RECOVERY_ACCOUNT_CREATOR_SK"))]
         account_creator_sk: Option<String>,
-        #[arg(
-            long,
-            env("MPC_RECOVERY_ACCOUNT_LOOKUP_URL"),
-            default_value("https://api.kitwallet.app")
-        )]
-        account_lookup_url: String,
         /// Firebase Audience ID
         #[arg(long, env("PAGODA_FIREBASE_AUDIENCE_ID"))]
         pagoda_firebase_audience_id: String,
@@ -184,7 +178,6 @@ async fn main() -> anyhow::Result<()> {
             near_root_account,
             account_creator_id,
             account_creator_sk,
-            account_lookup_url,
             pagoda_firebase_audience_id,
             gcp_project_id,
             gcp_datastore_url,
@@ -208,7 +201,6 @@ async fn main() -> anyhow::Result<()> {
                 // TODO: Create such an account for testnet and mainnet in a secure way
                 account_creator_id,
                 account_creator_sk,
-                account_lookup_url,
                 pagoda_firebase_audience_id,
             };
 

@@ -59,7 +59,7 @@ Registered ID Token will be added to the persistent DB on each Signing node and 
         near_account_id: String,
         create_account_options: CreateAccountOptions,
         oidc_token: String,
-        signature: Option<String>,
+        signature: Option<Signature>,
     }
     Response:
     Ok {
@@ -90,20 +90,16 @@ The signature field is a signature of:
 signed by the key you used to claim the oidc token. This does not have to be the same as the key in the public key field.
 
 
-### Recover Account
+### Sign
 
-    URL: /add_key
+    URL: /sign
     Request parameters: {
-        // In case NEAR AccountId is not provided,
-        // it will be determined using recovery PK and NEAR Wallet APIs
-        near_account_id: Option(String),
-        public_key: String,
+        transaction: String,
         oidc_token: String
     }
     Response:
     Ok {
-        user_public_key: String,
-        near_account_id: String,
+        signature: Signature,
     } /
     Err{
         msg: String
