@@ -94,7 +94,7 @@ signed by the key you used to claim the oidc token. This does not have to be the
 
     URL: /sign
     Request parameters: {
-        transaction: String,
+        delegate_action: DelegateAction,
         oidc_token: String
     }
     Response:
