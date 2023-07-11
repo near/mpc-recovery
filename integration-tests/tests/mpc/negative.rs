@@ -1,10 +1,12 @@
 use crate::{account, check, key, token, with_nodes};
 use hyper::StatusCode;
 use mpc_recovery::{
-    msg::{AddKeyRequest, AddKeyResponse, NewAccountRequest, NewAccountResponse},
+    msg::{NewAccountRequest, NewAccountResponse, SignResponse},
     transaction::CreateAccountOptions,
 };
+use mpc_recovery_integration_tests::util;
 use multi_party_eddsa::protocols::ExpandedKeyPair;
+use serde_json::json;
 use std::time::Duration;
 use test_log::test;
 
@@ -58,46 +60,27 @@ async fn test_invalid_token() -> anyhow::Result<()> {
 
             let new_user_public_key = key::random();
 
-            let (status_code, add_key_response) = ctx
+            let (status_code, sign_response) = ctx
                 .leader_node
-                .add_key(AddKeyRequest {
-                    near_account_id: Some(account_id.to_string()),
-                    oidc_token: token::invalid(),
-                    create_account_options: CreateAccountOptions {
-                        full_access_keys: Some(vec![new_user_public_key.clone().parse()?]),
-                        limited_access_keys: None,
-                        contract_bytes: None,
-                    },
-                })
+                .add_key(
+                    account_id.clone(),
+                    token::invalid(),
+                    new_user_public_key.parse()?,
+                )
                 .await?;
             assert_eq!(status_code, StatusCode::UNAUTHORIZED);
-            assert!(matches!(add_key_response, AddKeyResponse::Err { .. }));
+            assert!(matches!(sign_response, SignResponse::Err { .. }));
 
             // Check that the service is still available
-            let (status_code, add_key_response) = ctx
+            let (status_code, sign_response) = ctx
                 .leader_node
-                .add_key(AddKeyRequest {
-                    near_account_id: Some(account_id.to_string()),
-                    oidc_token,
-                    create_account_options: CreateAccountOptions {
-                        full_access_keys: Some(vec![new_user_public_key.clone().parse()?]),
-                        limited_access_keys: None,
-                        contract_bytes: None,
-                    },
-                })
+                .add_key(account_id.clone(), oidc_token, new_user_public_key.parse()?)
                 .await?;
 
             assert_eq!(status_code, StatusCode::OK);
-            let AddKeyResponse::Ok {
-                full_access_keys,
-                limited_access_keys,
-                near_account_id,
-            } = add_key_response else {
-                anyhow::bail!("unexpected pattern");
+            let SignResponse::Ok { .. } = sign_response else {
+                anyhow::bail!("failed to get a signature from mpc-recovery");
             };
-            assert_eq!(full_access_keys, vec![new_user_public_key.clone()]);
-            assert_eq!(limited_access_keys, Vec::<String>::new());
-            assert_eq!(near_account_id, account_id.to_string());
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
 
@@ -161,45 +144,33 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
 
             let new_user_public_key = key::random();
 
-            let (status_code, add_key_response) = ctx
-                .leader_node
-                .add_key(AddKeyRequest {
-                    near_account_id: Some(malformed_account_id.to_string()),
-                    oidc_token: oidc_token.clone(),
-                    create_account_options: CreateAccountOptions {
-                        full_access_keys: Some(vec![new_user_public_key.parse()?]),
-                        limited_access_keys: None,
-                        contract_bytes: None,
+            let (status_code, sign_response) = util::post(
+                format!("{}/sign", ctx.leader_node.address),
+                json!({
+                    "delegate_action": {
+                        "sender_id": malformed_account_id.clone(),
+                        "receiver_id": malformed_account_id,
+                        "actions": [],
+                        "nonce": 1,
+                        "max_block_height": 100,
+                        "public_key": new_user_public_key,
                     },
-                })
-                .await?;
+                    "oidc_token": oidc_token.clone()
+                }),
+            )
+            .await?;
             assert_eq!(status_code, StatusCode::BAD_REQUEST);
-            assert!(matches!(add_key_response, AddKeyResponse::Err { .. }));
+            assert!(matches!(sign_response, SignResponse::Err { .. }));
 
             // Check that the service is still available
-            let (status_code, add_key_response) = ctx
+            let (status_code, sign_response) = ctx
                 .leader_node
-                .add_key(AddKeyRequest {
-                    near_account_id: Some(account_id.to_string()),
-                    oidc_token,
-                    create_account_options: CreateAccountOptions {
-                        full_access_keys: Some(vec![new_user_public_key.parse()?]),
-                        limited_access_keys: None,
-                        contract_bytes: None,
-                    },
-                })
+                .add_key(account_id.clone(), oidc_token, new_user_public_key.parse()?)
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
-            let AddKeyResponse::Ok {
-                full_access_keys,
-                limited_access_keys,
-                near_account_id,
-            } = add_key_response else {
-                anyhow::bail!("unexpected pattern");
+            let SignResponse::Ok { .. } = sign_response else {
+                anyhow::bail!("failed to get a signature from mpc-recovery");
             };
-            assert_eq!(full_access_keys, vec![new_user_public_key.clone()]);
-            assert_eq!(limited_access_keys, Vec::<String>::new());
-            assert_eq!(near_account_id, account_id.to_string());
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
 
@@ -304,21 +275,17 @@ async fn test_add_key_to_non_existing_account() -> anyhow::Result<()> {
             let account_id = account::random(ctx.worker)?;
             let user_public_key = key::random();
 
-            let (status_code, add_key_response) = ctx
+            let (status_code, sign_response) = ctx
                 .leader_node
-                .add_key(AddKeyRequest {
-                    near_account_id: Some(account_id.to_string()),
-                    oidc_token: token::valid_random(),
-                    create_account_options: CreateAccountOptions {
-                        full_access_keys: Some(vec![user_public_key.parse()?]),
-                        limited_access_keys: None,
-                        contract_bytes: None,
-                    },
-                })
+                .add_key(
+                    account_id.clone(),
+                    token::valid_random(),
+                    user_public_key.parse()?,
+                )
                 .await?;
 
             assert_eq!(status_code, StatusCode::INTERNAL_SERVER_ERROR);
-            assert!(matches!(add_key_response, AddKeyResponse::Err { .. }));
+            assert!(matches!(sign_response, SignResponse::Err { .. }));
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
 

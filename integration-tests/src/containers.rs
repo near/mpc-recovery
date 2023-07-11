@@ -1,16 +1,24 @@
 #![allow(clippy::too_many_arguments)]
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Ok};
 use bollard::Docker;
 use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::GenericArray};
-use hyper::{Body, Client, Method, Request, StatusCode, Uri};
-use mpc_recovery::msg::{
-    AcceptNodePublicKeysRequest, AddKeyRequest, AddKeyResponse, ClaimOidcRequest,
-    ClaimOidcResponse, NewAccountRequest, NewAccountResponse,
+use hyper::StatusCode;
+use mpc_recovery::{
+    msg::{
+        AcceptNodePublicKeysRequest, ClaimOidcRequest, ClaimOidcResponse, NewAccountRequest,
+        NewAccountResponse, SignRequest, SignResponse,
+    },
+    relayer::NearRpcAndRelayerClient,
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
-use near_crypto::SecretKey;
-use serde::{Deserialize, Serialize};
+use near_crypto::{PublicKey, SecretKey};
+use near_primitives::{
+    account::{AccessKey, AccessKeyPermission},
+    delegate_action::{DelegateAction, SignedDelegateAction},
+    transaction::{Action, AddKeyAction},
+    views::FinalExecutionStatus,
+};
 use testcontainers::{
     clients::Cli,
     core::{ExecCommand, WaitFor},
@@ -19,6 +27,8 @@ use testcontainers::{
 };
 use tracing;
 use workspaces::AccountId;
+
+use crate::util;
 
 pub struct DockerClient {
     pub docker: Docker,
@@ -347,7 +357,7 @@ impl SignerNodeApi {
         &self,
         request: AcceptNodePublicKeysRequest,
     ) -> anyhow::Result<(StatusCode, Result<String, String>)> {
-        post(format!("{}/accept_pk_set", self.address), request).await
+        util::post(format!("{}/accept_pk_set", self.address), request).await
     }
 }
 
@@ -358,7 +368,8 @@ pub struct LeaderNode<'a> {
 }
 
 pub struct LeaderNodeApi {
-    address: String,
+    pub address: String,
+    client: NearRpcAndRelayerClient,
 }
 
 impl<'a> LeaderNode<'a> {
@@ -432,9 +443,10 @@ impl<'a> LeaderNode<'a> {
         })
     }
 
-    pub fn api(&self) -> LeaderNodeApi {
+    pub fn api(&self, near_rpc: &str, relayer_url: &str) -> LeaderNodeApi {
         LeaderNodeApi {
             address: self.local_address.clone(),
+            client: NearRpcAndRelayerClient::connect(near_rpc, relayer_url.to_string(), None),
         }
     }
 }
@@ -444,42 +456,63 @@ impl LeaderNodeApi {
         &self,
         request: ClaimOidcRequest,
     ) -> anyhow::Result<(StatusCode, ClaimOidcResponse)> {
-        post(format!("{}/claim_oidc", self.address), request).await
+        util::post(format!("{}/claim_oidc", self.address), request).await
     }
 
     pub async fn new_account(
         &self,
         request: NewAccountRequest,
     ) -> anyhow::Result<(StatusCode, NewAccountResponse)> {
-        post(format!("{}/new_account", self.address), request).await
+        util::post(format!("{}/new_account", self.address), request).await
     }
 
     pub async fn add_key(
         &self,
-        request: AddKeyRequest,
-    ) -> anyhow::Result<(StatusCode, AddKeyResponse)> {
-        post(format!("{}/add_key", self.address), request).await
+        account_id: AccountId,
+        oidc_token: String,
+        public_key: PublicKey,
+    ) -> anyhow::Result<(StatusCode, SignResponse)> {
+        let (_, block_height, nonce) = self
+            .client
+            .access_key(account_id.clone(), public_key.clone())
+            .await?;
+
+        let delegate_action = DelegateAction {
+            sender_id: account_id.clone(),
+            receiver_id: account_id,
+            actions: vec![Action::AddKey(AddKeyAction {
+                public_key: public_key.clone(),
+                access_key: AccessKey {
+                    nonce: 0,
+                    permission: AccessKeyPermission::FullAccess,
+                },
+            })
+            .try_into()?],
+            nonce,
+            max_block_height: block_height + 100,
+            public_key,
+        };
+        let sign_request = SignRequest {
+            delegate_action: delegate_action.clone(),
+            oidc_token,
+        };
+        let (status_code, sign_response): (_, SignResponse) =
+            util::post(format!("{}/sign", self.address), sign_request).await?;
+        let signature = match &sign_response {
+            SignResponse::Ok { signature } => signature,
+            SignResponse::Err { .. } => return Ok((status_code, sign_response)),
+        };
+        let response = self
+            .client
+            .send_meta_tx(SignedDelegateAction {
+                delegate_action,
+                signature: near_crypto::Signature::ED25519(*signature),
+            })
+            .await?;
+        if matches!(response.status, FinalExecutionStatus::SuccessValue(_)) {
+            Ok((status_code, sign_response))
+        } else {
+            Err(anyhow::anyhow!("add_key failed with {:?}", response.status).into())
+        }
     }
-}
-
-async fn post<U, Req: Serialize, Resp>(uri: U, request: Req) -> anyhow::Result<(StatusCode, Resp)>
-where
-    Uri: TryFrom<U>,
-    <Uri as TryFrom<U>>::Error: Into<hyper::http::Error>,
-    for<'de> Resp: Deserialize<'de>,
-{
-    let req = Request::builder()
-        .method(Method::POST)
-        .uri(uri)
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_string(&request)?))?;
-
-    let client = Client::new();
-    let response = client.request(req).await?;
-    let status = response.status();
-
-    let data = hyper::body::to_bytes(response).await?;
-    let response: Resp = serde_json::from_slice(&data)?;
-
-    Ok((status, response))
 }

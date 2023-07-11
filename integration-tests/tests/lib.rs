@@ -71,7 +71,7 @@ where
     .await?;
 
     f(TestContext {
-        leader_node: &leader_node.api(),
+        leader_node: &leader_node.api(&relayer_ctx.sandbox.address, &relayer_ctx.relayer.address),
         pk_set: &pk_set,
         signer_nodes: &signer_nodes.iter().map(|n| n.api()).collect(),
         worker: &relayer_ctx.worker,
