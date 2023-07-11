@@ -2,7 +2,7 @@
 The aim of this project is to offer NEAR users the opportunity to create and restore their accounts by utilizing OIDC protocol. By linking their NEAR account to `near.org` or other authentication provider, they can then add a new Full Access key, which will be managed by the trusted network of servers. Should they lose all the keys they possess, they can reauthorize themselves, create a new key, and add it into their NEAR account using a transaction that will be signed by MPC servers through their recovery key. All the transaction cost will be covered by a relayer server and metatransactions.
 
 ## How the MPC system will work
-- The system consists of 3 trusted nodes
+- The system consists of 3 trusted signing nodes and a leader node
 - Each node holds a unique secret key
 - Each action must be signed by all 3 nodes
 - Nodes signatures are then combined into a single signature on the leader node
