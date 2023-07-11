@@ -15,6 +15,7 @@ use curv::elliptic::curves::{Ed25519, Point};
 use multi_party_eddsa::protocols::{self, ExpandedKeyPair};
 use near_crypto::{ParseKeyError, PublicKey};
 use near_primitives::account::id::ParseAccountError;
+use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -72,8 +73,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         .route("/commit", post(commit::<T>))
         .route("/reveal", post(reveal))
         .route("/signature_share", post(signature_share))
-        .route("/public_key", post(public_key))
-        .route("/public_key_node", post(public_key_node))
+        .route("/credentials", post(credentials::<T>))
         .route("/accept_pk_set", post(accept_pk_set))
         .layer(Extension(state));
 
@@ -323,40 +323,89 @@ async fn signature_share(
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct NodeCredentialsRequest {
+    pub oidc_token: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct NodeCredentialsResponse {
+    pub user_pk_point: Option<Point<Ed25519>>,
+    pub mpc_pk_point: Point<Ed25519>,
+    pub mpc_node_index: usize,
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum CredentialsError {
+    #[error("failed to verify oidc token: {0}")]
+    OidcVerificationFailed(anyhow::Error),
+    #[error("failed to verify signature: {0}")]
+    SignatureVerificationFailed(anyhow::Error),
+    #[error("{0}")]
+    Other(#[from] anyhow::Error),
+}
+
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
-async fn public_key(
+async fn credentials<T: OAuthTokenVerifier>(
     Extension(state): Extension<SignNodeState>,
-    Json(request): Json<InternalAccountId>,
-) -> (StatusCode, Json<Result<Point<Ed25519>, String>>) {
-    match get_or_generate_user_creds(&state, request).await {
-        Ok(user_credentials) => (
-            StatusCode::OK,
-            Json(Ok(user_credentials.public_key().clone())),
-        ),
-        Err(err) => {
-            tracing::error!(?err);
+    Json(request): Json<NodeCredentialsRequest>,
+) -> (StatusCode, Json<Result<NodeCredentialsResponse, String>>) {
+    match process_credentials::<T>(state, request).await {
+        Ok(credentials) => (StatusCode::OK, Json(Ok(credentials))),
+        Err(ref e @ CredentialsError::OidcVerificationFailed(ref err_msg)) => {
+            tracing::error!(err = ?e);
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::BAD_REQUEST,
                 Json(Err(format!(
-                    "failed to fetch/generate a public key for given account: {}",
-                    err,
+                    "signer failed to verify oidc token: {}",
+                    err_msg
                 ))),
+            )
+        }
+        Err(e) => {
+            tracing::error!(err = ?e);
+            (
+                StatusCode::BAD_REQUEST,
+                Json(Err(format!("failed to process credentials call: {}", e))),
             )
         }
     }
 }
 
-// TODO: remove type complexity
-#[allow(clippy::type_complexity)]
-#[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
-async fn public_key_node(
-    Extension(state): Extension<SignNodeState>,
-    Json(_): Json<()>,
-) -> (StatusCode, Json<Result<(usize, Point<Ed25519>), String>>) {
-    (
-        StatusCode::OK,
-        Json(Ok((state.node_info.our_index, state.node_key.public_key))),
-    )
+async fn process_credentials<T: OAuthTokenVerifier>(
+    state: SignNodeState,
+    request: NodeCredentialsRequest,
+) -> Result<NodeCredentialsResponse, CredentialsError> {
+    tracing::debug!(?request, "processing credentials request");
+    match request.oidc_token {
+        Some(oidc_token) => {
+            let oidc_token_claims =
+                T::verify_token(&oidc_token, &state.pagoda_firebase_audience_id)
+                    .await
+                    .map_err(CredentialsError::OidcVerificationFailed)?;
+            tracing::debug!(?oidc_token_claims, "oidc token verified");
+            let internal_account_id = oidc_token_claims.get_internal_account_id();
+            match get_or_generate_user_creds(&state, internal_account_id).await {
+                Ok(user_credentials) => Ok(NodeCredentialsResponse {
+                    user_pk_point: Some(user_credentials.public_key().clone()),
+                    mpc_pk_point: state.node_key.public_key.clone(),
+                    mpc_node_index: state.node_info.our_index,
+                }),
+                Err(err) => Err(CredentialsError::Other(anyhow::Error::msg(format!(
+                    "failed to fetch/generate a public key for given account: {}",
+                    err
+                )))),
+            }
+        }
+        None => {
+            tracing::debug!("processing credentials request without internal_account_id");
+            Ok(NodeCredentialsResponse {
+                user_pk_point: None,
+                mpc_pk_point: state.node_key.public_key.clone(),
+                mpc_node_index: state.node_info.our_index,
+            })
+        }
+    }
 }
 
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]

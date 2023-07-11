@@ -19,6 +19,21 @@ pub enum ClaimOidcResponse {
     Ok {
         #[serde(with = "hex_sig_share")]
         mpc_signature: Signature,
+    },
+    Err {
+        msg: String,
+    },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CredentialsRequest {
+    // In case OIDC token is not provided, only MPC signature is returned
+    pub oidc_token: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum CredentialsResponse {
+    Ok {
         mpc_pk: String,
         recovery_public_key: Option<String>,
         near_account_id: Option<String>,

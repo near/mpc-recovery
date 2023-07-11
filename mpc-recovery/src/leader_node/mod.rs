@@ -1,13 +1,15 @@
 use crate::key_recovery::get_user_recovery_pk;
 use crate::msg::{
     AcceptNodePublicKeysRequest, ClaimOidcNodeRequest, ClaimOidcRequest, ClaimOidcResponse,
-    NewAccountRequest, NewAccountResponse, SignNodeRequest, SignRequest, SignResponse,
+    CredentialsRequest, CredentialsResponse, NewAccountRequest, NewAccountResponse,
+    SignNodeRequest, SignRequest, SignResponse,
 };
 use crate::nar;
 use crate::oauth::OAuthTokenVerifier;
 use crate::relayer::error::RelayerError;
 use crate::relayer::msg::RegisterAccountRequest;
 use crate::relayer::NearRpcAndRelayerClient;
+use crate::sign_node::{NodeCredentialsRequest, NodeCredentialsResponse};
 use crate::transaction::{
     get_create_account_delegate_action, get_local_signed_delegated_action, get_mpc_signature,
     sign_payload_with_mpc, to_dalek_combined_public_key,
@@ -83,13 +85,19 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
     };
 
     // Get keys from all sign nodes, and broadcast them out as a set.
-    let pk_set = match gather_sign_node_pk_shares(&state).await {
-        Ok(pk_set) => pk_set,
+    let credentials_vec = match gather_sign_node_credentials(&state, None).await {
+        Ok(credentials_vec) => credentials_vec,
         Err(err) => {
             tracing::error!("Unable to gather public keys: {err}");
             return;
         }
     };
+
+    let pk_set = credentials_vec
+        .iter()
+        .map(|credentials| credentials.mpc_pk_point.clone())
+        .collect();
+
     tracing::debug!(?pk_set, "Gathered public keys");
     let messages = match broadcast_pk_set(&state, pk_set).await {
         Ok(messages) => messages,
@@ -113,6 +121,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
             }),
         )
         .route("/claim_oidc", post(claim_oidc))
+        .route("/credentials", post(credentials))
         .route("/new_account", post(new_account::<T>))
         .route("/sign", post(sign::<T>))
         .layer(Extension(state))
@@ -150,52 +159,63 @@ async fn claim_oidc(
         signature: claim_oidc_request.signature,
     });
 
-    // Getting MPC PK from sign nodes
-    let pk_set = match gather_sign_node_pk_shares(&state).await {
-        Ok(pk_set) => pk_set,
-        Err(err) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ClaimOidcResponse::Err {
-                    msg: err.to_string(),
-                }),
-            )
-        }
-    };
-
-    let mpc_pk = match to_dalek_combined_public_key(&pk_set) {
-        Ok(mpc_pk) => hex::encode(mpc_pk.to_bytes()),
-        Err(err) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ClaimOidcResponse::Err {
-                    msg: err.to_string(),
-                }),
-            )
-        }
-    };
-
     let res =
         sign_payload_with_mpc(&state.reqwest_client, &state.sign_nodes, sig_share_request).await;
-    // Get user recovery public key from sign nodes (if registered)
-    // TODO
-    // Get user account id (if registered)
-    // TODO
+
     match res {
         Ok(mpc_signature) => (
             StatusCode::OK,
-            Json(ClaimOidcResponse::Ok {
-                mpc_signature,
-                mpc_pk,
-                near_account_id: None,
-                recovery_public_key: None,
-            }),
+            Json(ClaimOidcResponse::Ok { mpc_signature }),
         ),
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ClaimOidcResponse::Err { msg: e.to_string() }),
         ),
     }
+}
+
+async fn credentials(
+    Extension(state): Extension<LeaderState>,
+    Json(credentials_request): Json<CredentialsRequest>,
+) -> (StatusCode, Json<CredentialsResponse>) {
+    // Getting MPC PK from sign nodes
+    let credentials_vec =
+        match gather_sign_node_credentials(&state, credentials_request.oidc_token).await {
+            Ok(credentials_vec) => credentials_vec,
+            Err(err) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(CredentialsResponse::Err {
+                        msg: err.to_string(),
+                    }),
+                )
+            }
+        };
+
+    let pk_set: Vec<Point<Ed25519>> = credentials_vec
+        .iter()
+        .map(|credentials| credentials.mpc_pk_point.clone())
+        .collect();
+
+    let mpc_pk = match to_dalek_combined_public_key(&pk_set) {
+        Ok(mpc_pk) => hex::encode(mpc_pk.to_bytes()),
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(CredentialsResponse::Err {
+                    msg: err.to_string(),
+                }),
+            )
+        }
+    };
+    (
+        StatusCode::OK,
+        Json(CredentialsResponse::Ok {
+            mpc_pk,
+            recovery_public_key: Some("user_recovery_pk".to_string()), // TODO
+            near_account_id: Some("user_account_id".to_string()),      // TODO
+        }),
+    )
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -429,27 +449,33 @@ async fn sign<T: OAuthTokenVerifier>(
     }
 }
 
-async fn gather_sign_node_pk_shares(state: &LeaderState) -> anyhow::Result<Vec<Point<Ed25519>>> {
+async fn gather_sign_node_credentials(
+    state: &LeaderState,
+    oidc_token: Option<String>,
+) -> anyhow::Result<Vec<NodeCredentialsResponse>> {
     let fut = nar::retry_every(std::time::Duration::from_secs(1), || async {
-        let results: anyhow::Result<Vec<(usize, Point<Ed25519>)>> =
+        let results: anyhow::Result<Vec<NodeCredentialsResponse>> =
             crate::transaction::call_all_nodes(
                 &state.reqwest_client,
                 &state.sign_nodes,
-                "public_key_node",
-                (),
+                "credentials",
+                NodeCredentialsRequest {
+                    oidc_token: oidc_token.clone(),
+                },
             )
             .await;
-        let mut results = match results {
+        let results = match results {
             Ok(results) => results,
             Err(err) => {
-                tracing::debug!("failed to gather pk: {err}");
+                tracing::debug!("failed to gather nodes credentials: {err}");
                 return Err(err);
             }
         };
 
-        results.sort_by_key(|(index, _)| *index);
-        let results: Vec<Point<Ed25519>> =
-            results.into_iter().map(|(_index, point)| point).collect();
+        // TODO: why do we need to sort here?
+        // results.sort_by_key(|(index, _)| *index);
+        // let results: Vec<Point<Ed25519>> =
+        //     results.into_iter().map(|(_index, point)| point).collect();
 
         anyhow::Result::Ok(results)
     });
