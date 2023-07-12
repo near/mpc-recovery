@@ -4,8 +4,8 @@ use ed25519_dalek::Verifier;
 use hyper::StatusCode;
 use mpc_recovery::{
     msg::{
-        ClaimOidcRequest, ClaimOidcResponse, NewAccountRequest, NewAccountResponse,
-        SignNodeRequest, SignResponse, SignShareNodeRequest,
+        ClaimOidcRequest, ClaimOidcResponse, MpcPkRequest, MpcPkResponse, NewAccountRequest,
+        NewAccountResponse, SignNodeRequest, SignResponse, SignShareNodeRequest,
     },
     oauth::get_test_claims,
     transaction::{
@@ -32,6 +32,24 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             let user_public_key = user_private_key.public_key().to_string();
             let oidc_token = token::valid_random();
             let wrong_oidc_token = token::valid_random();
+
+            // Get MPC public key
+            let (status_code, mpc_pk_response) =
+                ctx.leader_node.get_mpc_pk(MpcPkRequest {}).await?;
+
+            assert_eq!(status_code, StatusCode::OK);
+
+            let mpc_pk = match mpc_pk_response {
+                MpcPkResponse::Ok { mpc_pk } => mpc_pk,
+                MpcPkResponse::Err { msg } => return Err(anyhow::anyhow!(msg)),
+            };
+
+            let decoded_mpc_pk = match hex::decode(mpc_pk.clone()) {
+                Ok(v) => v,
+                Err(e) => return Err(anyhow::anyhow!("Failed to decode mpc pk. {}", e)),
+            };
+
+            let mpc_pk = ed25519_dalek::PublicKey::from_bytes(&decoded_mpc_pk).unwrap();
 
             // Prepare the oidc claiming request
             let oidc_token_hash = oidc_digest(&oidc_token);
@@ -87,22 +105,10 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
 
             assert_eq!(status_code, StatusCode::OK);
 
-            let (mpc_signature, mpc_pk) = match oidc_response {
-                ClaimOidcResponse::Ok {
-                    mpc_signature,
-                    mpc_pk,
-                    recovery_public_key: _,
-                    near_account_id: _,
-                } => (mpc_signature, mpc_pk),
+            let mpc_signature = match oidc_response {
+                ClaimOidcResponse::Ok { mpc_signature } => mpc_signature,
                 ClaimOidcResponse::Err { msg } => return Err(anyhow::anyhow!(msg)),
             };
-
-            let decoded_mpc_pk = match hex::decode(mpc_pk.clone()) {
-                Ok(v) => v,
-                Err(e) => return Err(anyhow::anyhow!("Failed to decode mpc pk. {}", e)),
-            };
-
-            let mpc_pk = ed25519_dalek::PublicKey::from_bytes(&decoded_mpc_pk).unwrap();
 
             // Making the same claiming request should fail
             let (status_code, oidc_response) =

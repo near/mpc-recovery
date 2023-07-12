@@ -6,8 +6,8 @@ use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::Gene
 use hyper::StatusCode;
 use mpc_recovery::{
     msg::{
-        AcceptNodePublicKeysRequest, ClaimOidcRequest, ClaimOidcResponse, NewAccountRequest,
-        NewAccountResponse, SignRequest, SignResponse,
+        AcceptNodePublicKeysRequest, ClaimOidcRequest, ClaimOidcResponse, MpcPkRequest,
+        MpcPkResponse, NewAccountRequest, NewAccountResponse, SignRequest, SignResponse,
     },
     relayer::NearRpcAndRelayerClient,
 };
@@ -457,6 +457,13 @@ impl LeaderNodeApi {
         request: ClaimOidcRequest,
     ) -> anyhow::Result<(StatusCode, ClaimOidcResponse)> {
         util::post(format!("{}/claim_oidc", self.address), request).await
+    }
+
+    pub async fn get_mpc_pk(
+        &self,
+        request: MpcPkRequest,
+    ) -> anyhow::Result<(StatusCode, MpcPkResponse)> {
+        util::post(format!("{}/mpc_public_key", self.address), request).await
     }
 
     pub async fn new_account(

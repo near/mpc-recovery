@@ -28,7 +28,6 @@ pub enum ClaimOidcResponse {
     Ok {
         #[serde(with = "hex_sig_share")]
         mpc_signature: Signature,
-        mpc_pk: String,
     },
     Err {
         msg: String,

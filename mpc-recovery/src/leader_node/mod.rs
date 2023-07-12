@@ -185,41 +185,13 @@ async fn claim_oidc(
         signature: claim_oidc_request.signature,
     });
 
-    // Getting MPC PK from sign nodes
-    let pk_set = match gather_sign_node_pk_shares(&state).await {
-        Ok(pk_set) => pk_set,
-        Err(err) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ClaimOidcResponse::Err {
-                    msg: err.to_string(),
-                }),
-            )
-        }
-    };
-
-    let mpc_pk = match to_dalek_combined_public_key(&pk_set) {
-        Ok(mpc_pk) => hex::encode(mpc_pk.to_bytes()),
-        Err(err) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ClaimOidcResponse::Err {
-                    msg: err.to_string(),
-                }),
-            )
-        }
-    };
-
     let res =
         sign_payload_with_mpc(&state.reqwest_client, &state.sign_nodes, sig_share_request).await;
 
     match res {
         Ok(mpc_signature) => (
             StatusCode::OK,
-            Json(ClaimOidcResponse::Ok {
-                mpc_signature,
-                mpc_pk,
-            }),
+            Json(ClaimOidcResponse::Ok { mpc_signature }),
         ),
         Err(e) => (
             StatusCode::BAD_REQUEST,
