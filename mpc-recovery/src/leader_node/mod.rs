@@ -1,7 +1,8 @@
 use crate::key_recovery::get_user_recovery_pk;
 use crate::msg::{
     AcceptNodePublicKeysRequest, ClaimOidcNodeRequest, ClaimOidcRequest, ClaimOidcResponse,
-    NewAccountRequest, NewAccountResponse, SignNodeRequest, SignRequest, SignResponse,
+    MpcPkRequest, MpcPkResponse, NewAccountRequest, NewAccountResponse, SignNodeRequest,
+    SignRequest, SignResponse, UserCredentialsRequest, UserCredentialsResponse,
 };
 use crate::nar;
 use crate::oauth::OAuthTokenVerifier;
@@ -112,7 +113,9 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
                 StatusCode::OK
             }),
         )
+        .route("/mpc_public_key", post(mpc_public_key))
         .route("/claim_oidc", post(claim_oidc))
+        .route("/user_credentials", post(user_credentials::<T>))
         .route("/new_account", post(new_account::<T>))
         .route("/sign", post(sign::<T>))
         .layer(Extension(state))
@@ -137,6 +140,38 @@ struct LeaderState {
     // TODO: temporary solution
     account_creator_sk: SecretKey,
     pagoda_firebase_audience_id: String,
+}
+
+async fn mpc_public_key(
+    Extension(state): Extension<LeaderState>,
+    Json(_request): Json<MpcPkRequest>,
+) -> (StatusCode, Json<MpcPkResponse>) {
+    // Getting MPC PK from sign nodes
+    let pk_set = match gather_sign_node_pk_shares(&state).await {
+        Ok(pk_set) => pk_set,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(MpcPkResponse::Err {
+                    msg: err.to_string(),
+                }),
+            )
+        }
+    };
+
+    let mpc_pk = match to_dalek_combined_public_key(&pk_set) {
+        Ok(mpc_pk) => hex::encode(mpc_pk.to_bytes()),
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(MpcPkResponse::Err {
+                    msg: err.to_string(),
+                }),
+            )
+        }
+    };
+
+    (StatusCode::OK, Json(MpcPkResponse::Ok { mpc_pk }))
 }
 
 async fn claim_oidc(
@@ -177,18 +212,13 @@ async fn claim_oidc(
 
     let res =
         sign_payload_with_mpc(&state.reqwest_client, &state.sign_nodes, sig_share_request).await;
-    // Get user recovery public key from sign nodes (if registered)
-    // TODO
-    // Get user account id (if registered)
-    // TODO
+
     match res {
         Ok(mpc_signature) => (
             StatusCode::OK,
             Json(ClaimOidcResponse::Ok {
                 mpc_signature,
                 mpc_pk,
-                near_account_id: None,
-                recovery_public_key: None,
             }),
         ),
         Err(e) => (
@@ -196,6 +226,76 @@ async fn claim_oidc(
             Json(ClaimOidcResponse::Err { msg: e.to_string() }),
         ),
     }
+}
+
+#[tracing::instrument(level = "info", skip_all, fields(env = state.env))]
+async fn user_credentials<T: OAuthTokenVerifier>(
+    Extension(state): Extension<LeaderState>,
+    Json(request): Json<UserCredentialsRequest>,
+) -> (StatusCode, Json<UserCredentialsResponse>) {
+    tracing::info!(
+        oidc_token = format!("{:.5}...", request.oidc_token),
+        "user_credentials request"
+    );
+
+    match process_user_credentials::<T>(state, request).await {
+        Ok(response) => {
+            tracing::debug!("responding with OK");
+            (StatusCode::OK, Json(response))
+        }
+        Err(ref e @ UserCredentialsError::OidcVerificationFailed(ref err_msg)) => {
+            tracing::error!(err = ?e);
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(UserCredentialsResponse::Err {
+                    msg: format!("failed to verify oidc token: {}", err_msg),
+                }),
+            )
+        }
+        Err(e) => {
+            tracing::error!(err = ?e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(UserCredentialsResponse::Err {
+                    msg: format!("failed to process user credentials request: {}", e),
+                }),
+            )
+        }
+    }
+}
+
+#[derive(thiserror::Error, Debug)]
+enum UserCredentialsError {
+    #[error("failed to verify oidc token: {0}")]
+    OidcVerificationFailed(anyhow::Error),
+    #[error("{0}")]
+    Other(#[from] anyhow::Error),
+}
+
+async fn process_user_credentials<T: OAuthTokenVerifier>(
+    state: LeaderState,
+    request: UserCredentialsRequest,
+) -> Result<UserCredentialsResponse, UserCredentialsError> {
+    let oidc_token_claims =
+        T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
+            .await
+            .map_err(UserCredentialsError::OidcVerificationFailed)?;
+
+    let internal_acc_id = oidc_token_claims.get_internal_account_id();
+
+    nar::retry(|| async {
+        let mpc_user_recovery_pk = get_user_recovery_pk(
+            &state.reqwest_client,
+            &state.sign_nodes,
+            internal_acc_id.clone(),
+        )
+        .await?;
+
+        Ok(UserCredentialsResponse::Ok {
+            recovery_pk: mpc_user_recovery_pk.to_string(),
+        })
+    })
+    .await
 }
 
 #[derive(thiserror::Error, Debug)]

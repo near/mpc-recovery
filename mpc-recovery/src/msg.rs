@@ -6,6 +6,15 @@ use serde::{Deserialize, Serialize};
 use crate::transaction::CreateAccountOptions;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MpcPkRequest {}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum MpcPkResponse {
+    Ok { mpc_pk: String },
+    Err { msg: String },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ClaimOidcRequest {
     #[serde(with = "hex::serde")]
     pub oidc_token_hash: [u8; 32],
@@ -20,12 +29,21 @@ pub enum ClaimOidcResponse {
         #[serde(with = "hex_sig_share")]
         mpc_signature: Signature,
         mpc_pk: String,
-        recovery_public_key: Option<String>,
-        near_account_id: Option<String>,
     },
     Err {
         msg: String,
     },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct UserCredentialsRequest {
+    pub oidc_token: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum UserCredentialsResponse {
+    Ok { recovery_pk: String },
+    Err { msg: String },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
