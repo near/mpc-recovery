@@ -23,16 +23,16 @@ jobs:
       # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
       - name: Terraform Init
         id: init
-        run: terraform init
+        run: terraform init -backend-config backend-config-dev.tfvars
         env:
-          GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_PROD }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
 
       # Checks that all Terraform configuration files adhere to a canonical format
       - name: Terraform Format
         id: fmt
         run: terraform fmt -check -diff -recursive
         env:
-          GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_PROD }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
 
       # Validates the TF configuration files, referring only to the configuration and not accessing any remote services such as remote state.
       # Runs checks that verify whether a configuration is syntactically valid and internally consistent, regardless of any provided variables or existing state.
@@ -40,12 +40,19 @@ jobs:
         id: validate
         run: terraform validate -no-color
 
+      # Select the relevant Terraform workspace.
+      - name: Terraform Select Workspace
+        id: select
+        run: terraform workspace select dev
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
+
       # Generates an execution plan for Terraform
       - name: Terraform Plan
         id: plan
-        run: terraform plan -input=false -no-color
+        run: terraform plan -input=false -no-color -var-file terraform-dev.tfvars -var "credentials=$GOOGLE_CREDENTIALS"
         env:
-          GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_PROD }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
 
       - uses: actions/github-script@v6
         if: github.event_name == 'pull_request'

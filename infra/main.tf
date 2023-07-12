@@ -1,13 +1,12 @@
 terraform {
   backend "gcs" {
-    bucket = "terraform-mpc-recovery"
     prefix = "state/mpc-recovery"
   }
 
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = "4.71.0"
+      version = "4.73.0"
     }
     docker = {
       source  = "kreuzwerker/docker"
@@ -17,7 +16,7 @@ terraform {
 }
 
 locals {
-  credentials  = file(var.credentials_file)
+  credentials  = var.credentials != null ? var.credentials : file(var.credentials_file)
   client_email = jsondecode(local.credentials).client_email
   client_id    = jsondecode(local.credentials).client_id
 
@@ -74,17 +73,14 @@ resource "google_service_account_iam_binding" "serivce-account-iam" {
   ]
 }
 
-resource "google_project_iam_binding" "service-account-datastore-user" {
+resource "google_project_iam_member" "service-account-datastore-user" {
   project = var.project
   role    = "roles/datastore.user"
-
-  members = [
-    "serviceAccount:${google_service_account.service_account.email}",
-  ]
+  member  = "serviceAccount:${google_service_account.service_account.email}"
 }
 
 resource "google_artifact_registry_repository" "mpc_recovery" {
-  repository_id = "mpc-recovery"
+  repository_id = "mpc-recovery-${var.env}"
   format        = "DOCKER"
 }
 
