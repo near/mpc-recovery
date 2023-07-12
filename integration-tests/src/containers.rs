@@ -8,6 +8,7 @@ use mpc_recovery::{
     msg::{
         AcceptNodePublicKeysRequest, ClaimOidcRequest, ClaimOidcResponse, MpcPkRequest,
         MpcPkResponse, NewAccountRequest, NewAccountResponse, SignRequest, SignResponse,
+        UserCredentialsRequest, UserCredentialsResponse,
     },
     relayer::NearRpcAndRelayerClient,
 };
@@ -466,6 +467,13 @@ impl LeaderNodeApi {
         util::post(format!("{}/mpc_public_key", self.address), request).await
     }
 
+    pub async fn user_credentials(
+        &self,
+        request: UserCredentialsRequest,
+    ) -> anyhow::Result<(StatusCode, UserCredentialsResponse)> {
+        util::post(format!("{}/user_credentials", self.address), request).await
+    }
+
     pub async fn new_account(
         &self,
         request: NewAccountRequest,
@@ -478,10 +486,11 @@ impl LeaderNodeApi {
         account_id: AccountId,
         oidc_token: String,
         public_key: PublicKey,
+        mpc_pk: PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         let (_, block_height, nonce) = self
             .client
-            .access_key(account_id.clone(), public_key.clone())
+            .access_key(account_id.clone(), mpc_pk.clone())
             .await?;
 
         let delegate_action = DelegateAction {
