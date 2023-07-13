@@ -43,6 +43,8 @@ jobs:
         uses: arduino/setup-protoc@v1.1.2
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create Docker Network
+        run: docker network create mpc_it_network
       - name: Build Docker image
         uses: docker/build-push-action@v4
         with:
