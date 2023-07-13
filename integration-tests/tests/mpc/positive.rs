@@ -180,11 +180,19 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
 
             // Add new FA key with front running protection (positive)
             // TODO: add front running protection signature
+
+            let recovery_pk = ctx.leader_node.recovery_pk(oidc_token.clone()).await?;
+
             let new_user_public_key = key::random();
 
             let (status_code, sign_response) = ctx
                 .leader_node
-                .add_key(account_id.clone(), oidc_token, new_user_public_key.parse()?)
+                .add_key(
+                    account_id.clone(),
+                    oidc_token.clone(),
+                    new_user_public_key.parse()?,
+                    recovery_pk,
+                )
                 .await?;
 
             assert_eq!(status_code, StatusCode::OK);
@@ -271,6 +279,8 @@ async fn test_basic_action() -> anyhow::Result<()> {
             check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
 
             // Add key
+            let recovery_pk = ctx.leader_node.recovery_pk(oidc_token.clone()).await?;
+
             let new_user_public_key = key::random();
 
             let (status_code, sign_response) = ctx
@@ -279,6 +289,7 @@ async fn test_basic_action() -> anyhow::Result<()> {
                     account_id.clone(),
                     oidc_token.clone(),
                     new_user_public_key.parse()?,
+                    recovery_pk.clone(),
                 )
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
@@ -294,7 +305,12 @@ async fn test_basic_action() -> anyhow::Result<()> {
             // Adding the same key should now fail
             let (status_code, sign_response) = ctx
                 .leader_node
-                .add_key(account_id.clone(), oidc_token, new_user_public_key.parse()?)
+                .add_key(
+                    account_id.clone(),
+                    oidc_token,
+                    new_user_public_key.parse()?,
+                    recovery_pk.clone(),
+                )
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
 

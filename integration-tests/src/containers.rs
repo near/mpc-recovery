@@ -493,8 +493,47 @@ impl LeaderNodeApi {
         account_id: AccountId,
         oidc_token: String,
         public_key: PublicKey,
+        recovery_pk: PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
-        // Get user recovery pk
+        // Prepare SignRequest with add key delegate action
+        let (_, block_height, nonce) = self
+            .client
+            .access_key(account_id.clone(), recovery_pk.clone())
+            .await?;
+
+        let add_key_delegate_action = self.get_add_key_delegate_action(
+            account_id.clone(),
+            public_key.clone(),
+            recovery_pk.clone(),
+            nonce,
+            block_height,
+        )?;
+
+        let sign_request = SignRequest {
+            delegate_action: add_key_delegate_action.clone(),
+            oidc_token,
+        };
+        // Send SignRequest to leader node
+        let (status_code, sign_response): (_, SignResponse) = self.sign(sign_request).await?;
+        let signature = match &sign_response {
+            SignResponse::Ok { signature } => signature,
+            SignResponse::Err { .. } => return Ok((status_code, sign_response)),
+        };
+        let response = self
+            .client
+            .send_meta_tx(SignedDelegateAction {
+                delegate_action: add_key_delegate_action,
+                signature: near_crypto::Signature::ED25519(*signature),
+            })
+            .await?;
+        if matches!(response.status, FinalExecutionStatus::SuccessValue(_)) {
+            Ok((status_code, sign_response))
+        } else {
+            Err(anyhow::anyhow!("add_key failed with {:?}", response.status).into())
+        }
+    }
+
+    pub async fn recovery_pk(&self, oidc_token: String) -> anyhow::Result<PublicKey> {
         let (status_code, user_credentials) = self
             .user_credentials(UserCredentialsRequest {
                 oidc_token: oidc_token.clone(),
@@ -502,20 +541,26 @@ impl LeaderNodeApi {
             .await?;
 
         assert_eq!(status_code, StatusCode::OK);
-        let recovery_pk = match user_credentials {
+
+        let recovery_pk: PublicKey = match user_credentials {
             UserCredentialsResponse::Ok { recovery_pk } => PublicKey::from_str(&recovery_pk)?,
             UserCredentialsResponse::Err { msg } => {
                 return Err(anyhow::anyhow!(msg));
             }
         };
 
-        // Prepare SignRequest with add key delegate action
-        let (_, block_height, nonce) = self
-            .client
-            .access_key(account_id.clone(), recovery_pk.clone())
-            .await?;
+        Ok(recovery_pk)
+    }
 
-        let delegate_action = DelegateAction {
+    pub fn get_add_key_delegate_action(
+        &self,
+        account_id: AccountId,
+        public_key: PublicKey,
+        recovery_pk: PublicKey,
+        nonce: u64,
+        block_height: u64,
+    ) -> anyhow::Result<DelegateAction> {
+        Ok(DelegateAction {
             sender_id: account_id.clone(),
             receiver_id: account_id,
             actions: vec![Action::AddKey(AddKeyAction {
@@ -529,28 +574,6 @@ impl LeaderNodeApi {
             nonce,
             max_block_height: block_height + 100,
             public_key: recovery_pk,
-        };
-        let sign_request = SignRequest {
-            delegate_action: delegate_action.clone(),
-            oidc_token,
-        };
-        // Send SignRequest to leader node
-        let (status_code, sign_response): (_, SignResponse) = self.sign(sign_request).await?;
-        let signature = match &sign_response {
-            SignResponse::Ok { signature } => signature,
-            SignResponse::Err { .. } => return Ok((status_code, sign_response)),
-        };
-        let response = self
-            .client
-            .send_meta_tx(SignedDelegateAction {
-                delegate_action,
-                signature: near_crypto::Signature::ED25519(*signature),
-            })
-            .await?;
-        if matches!(response.status, FinalExecutionStatus::SuccessValue(_)) {
-            Ok((status_code, sign_response))
-        } else {
-            Err(anyhow::anyhow!("add_key failed with {:?}", response.status).into())
-        }
+        })
     }
 }
