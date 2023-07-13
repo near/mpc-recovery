@@ -483,6 +483,11 @@ impl LeaderNodeApi {
         util::post(format!("{}/new_account", self.address), request).await
     }
 
+    pub async fn sign(&self, request: SignRequest) -> anyhow::Result<(StatusCode, SignResponse)> {
+        util::post(format!("{}/sign", self.address), request).await
+    }
+
+    // TODO: add_key should me moved to utils in the future, it is not a part of the API
     pub async fn add_key(
         &self,
         account_id: AccountId,
@@ -504,7 +509,7 @@ impl LeaderNodeApi {
             }
         };
 
-        // Create delegate action
+        // Prepare SignRequest with add key delegate action
         let (_, block_height, nonce) = self
             .client
             .access_key(account_id.clone(), recovery_pk.clone())
@@ -523,14 +528,14 @@ impl LeaderNodeApi {
             .try_into()?],
             nonce,
             max_block_height: block_height + 100,
-            public_key,
+            public_key: recovery_pk,
         };
         let sign_request = SignRequest {
             delegate_action: delegate_action.clone(),
             oidc_token,
         };
-        let (status_code, sign_response): (_, SignResponse) =
-            util::post(format!("{}/sign", self.address), sign_request).await?;
+        // Send SignRequest to leader node
+        let (status_code, sign_response): (_, SignResponse) = self.sign(sign_request).await?;
         let signature = match &sign_response {
             SignResponse::Ok { signature } => signature,
             SignResponse::Err { .. } => return Ok((status_code, sign_response)),
