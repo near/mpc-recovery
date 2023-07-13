@@ -108,16 +108,21 @@ mod account {
 }
 
 mod key {
+    use near_crypto::SecretKey;
     use rand::{distributions::Alphanumeric, Rng};
 
-    pub fn random() -> String {
+    pub fn random_sk() -> SecretKey {
+        near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519)
+    }
+
+    pub fn random_pk() -> String {
         near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519)
             .public_key()
             .to_string()
     }
 
     #[allow(dead_code)]
-    pub fn malformed() -> String {
+    pub fn malformed_pk() -> String {
         let random: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)
             .take(10)

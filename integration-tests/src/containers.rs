@@ -13,6 +13,7 @@ use mpc_recovery::{
         UserCredentialsRequest, UserCredentialsResponse,
     },
     relayer::NearRpcAndRelayerClient,
+    utils::{sign_request_digest, user_credentials_request_digest},
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_crypto::{PublicKey, SecretKey};
@@ -494,6 +495,7 @@ impl LeaderNodeApi {
         oidc_token: String,
         public_key: PublicKey,
         recovery_pk: PublicKey,
+        client_sk: SecretKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
         let (_, block_height, nonce) = self
@@ -509,9 +511,18 @@ impl LeaderNodeApi {
             block_height,
         )?;
 
+        let sign_request_digest =
+            sign_request_digest(add_key_delegate_action.clone(), oidc_token.clone())?;
+
+        let digest_signature = match client_sk.sign(&sign_request_digest) {
+            near_crypto::Signature::ED25519(k) => k,
+            _ => return Err(anyhow::anyhow!("Wrong signature type")),
+        };
+
         let sign_request = SignRequest {
             delegate_action: add_key_delegate_action.clone(),
             oidc_token,
+            frp_signature: digest_signature,
         };
         // Send SignRequest to leader node
         let (status_code, sign_response): (_, SignResponse) = self.sign(sign_request).await?;
@@ -533,10 +544,22 @@ impl LeaderNodeApi {
         }
     }
 
-    pub async fn recovery_pk(&self, oidc_token: String) -> anyhow::Result<PublicKey> {
+    pub async fn recovery_pk(
+        &self,
+        oidc_token: String,
+        client_sk: SecretKey,
+    ) -> anyhow::Result<PublicKey> {
+        let user_credentials_request_digest = user_credentials_request_digest(oidc_token.clone())?;
+
+        let frp_signature = match client_sk.sign(&user_credentials_request_digest) {
+            near_crypto::Signature::ED25519(k) => k,
+            _ => return Err(anyhow::anyhow!("Wrong signature type")),
+        };
+
         let (status_code, user_credentials) = self
             .user_credentials(UserCredentialsRequest {
                 oidc_token: oidc_token.clone(),
+                frp_signature,
             })
             .await?;
 

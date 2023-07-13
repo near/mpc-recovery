@@ -20,7 +20,7 @@ pub struct ClaimOidcRequest {
     pub oidc_token_hash: [u8; 32],
     pub public_key: String,
     #[serde(with = "hex_sig_share")]
-    pub signature: Signature,
+    pub frp_signature: Signature,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -37,6 +37,7 @@ pub enum ClaimOidcResponse {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UserCredentialsRequest {
     pub oidc_token: String,
+    pub frp_signature: Signature,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -82,6 +83,7 @@ impl NewAccountResponse {
 pub struct SignRequest {
     pub delegate_action: DelegateAction,
     pub oidc_token: String,
+    pub frp_signature: Signature,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -96,23 +98,6 @@ impl SignResponse {
     pub fn err(msg: String) -> Self {
         SignResponse::Err { msg }
     }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct LeaderRequest {
-    pub payload: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
-#[allow(clippy::large_enum_variant)]
-pub enum LeaderResponse {
-    Ok {
-        #[serde(with = "hex_sig_share")]
-        signature: Signature,
-    },
-    Err,
 }
 
 /// The set of actions that a user can request us to sign

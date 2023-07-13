@@ -182,7 +182,7 @@ async fn claim_oidc(
     let sig_share_request = SignNodeRequest::ClaimOidc(ClaimOidcNodeRequest {
         oidc_token_hash: claim_oidc_request.oidc_token_hash,
         public_key: claim_oidc_request.public_key,
-        signature: claim_oidc_request.signature,
+        signature: claim_oidc_request.frp_signature,
     });
 
     let res =

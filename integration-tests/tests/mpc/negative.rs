@@ -3,6 +3,7 @@ use hyper::StatusCode;
 use mpc_recovery::{
     msg::{NewAccountRequest, NewAccountResponse, SignRequest, SignResponse},
     transaction::CreateAccountOptions,
+    utils::sign_request_digest,
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_crypto::PublicKey;
@@ -14,7 +15,8 @@ async fn test_invalid_token() -> anyhow::Result<()> {
     with_nodes(1, |ctx| {
         Box::pin(async move {
             let account_id = account::random(ctx.worker)?;
-            let user_public_key = key::random();
+            let user_secret_key = key::random_sk();
+            let user_public_key = user_secret_key.public_key().to_string();
             let oidc_token = token::valid_random();
 
             let create_account_options = CreateAccountOptions {
@@ -57,9 +59,12 @@ async fn test_invalid_token() -> anyhow::Result<()> {
 
             check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
 
-            let recovery_pk = ctx.leader_node.recovery_pk(oidc_token.clone()).await?;
+            let recovery_pk = ctx
+                .leader_node
+                .recovery_pk(oidc_token.clone(), user_secret_key.clone())
+                .await?;
 
-            let new_user_public_key = key::random();
+            let new_user_public_key = key::random_pk();
 
             let (status_code, sign_response) = ctx
                 .leader_node
@@ -68,6 +73,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                     token::invalid(),
                     new_user_public_key.parse()?,
                     recovery_pk.clone(),
+                    user_secret_key.clone(),
                 )
                 .await?;
             assert_eq!(status_code, StatusCode::UNAUTHORIZED);
@@ -81,6 +87,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                     oidc_token,
                     new_user_public_key.parse()?,
                     recovery_pk.clone(),
+                    user_secret_key.clone(),
                 )
                 .await?;
 
@@ -104,7 +111,7 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
     with_nodes(1, |ctx| {
         Box::pin(async move {
             let malformed_account_id = account::malformed();
-            let user_public_key = key::random();
+            let user_public_key = key::random_pk();
             let oidc_token = token::valid_random();
 
             let create_account_options = CreateAccountOptions {
@@ -247,8 +254,9 @@ async fn test_add_key_to_non_existing_account() -> anyhow::Result<()> {
         Box::pin(async move {
             let account_id = account::random(ctx.worker)?;
             let oidc_token = token::valid_random();
-            let user_public_key = key::random();
-            let recovery_pk = key::random();
+            let user_secret_key = key::random_sk();
+            let user_public_key = user_secret_key.public_key().to_string();
+            let recovery_pk = key::random_pk();
 
             let add_key_delegate_action = ctx.leader_node.get_add_key_delegate_action(
                 account_id.clone(),
@@ -258,9 +266,16 @@ async fn test_add_key_to_non_existing_account() -> anyhow::Result<()> {
                 1, // random number
             )?;
 
+            let digest = sign_request_digest(add_key_delegate_action.clone(), oidc_token.clone())?;
+            let frp_signature = match user_secret_key.sign(&digest) {
+                near_crypto::Signature::ED25519(k) => k,
+                _ => return Err(anyhow::anyhow!("Wrong signature type")),
+            };
+
             let sign_request = SignRequest {
                 delegate_action: add_key_delegate_action.clone(),
                 oidc_token: oidc_token.clone(),
+                frp_signature,
             };
 
             let (status_code, sign_response) = ctx.leader_node.sign(sign_request).await?;

@@ -71,13 +71,13 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             let oidc_request = ClaimOidcRequest {
                 oidc_token_hash,
                 public_key: user_public_key.clone(),
-                signature: request_digest_signature,
+                frp_signature: request_digest_signature,
             };
 
             let bad_oidc_request = ClaimOidcRequest {
                 oidc_token_hash,
                 public_key: user_public_key.clone(),
-                signature: request_digest_wrong_signature,
+                frp_signature: request_digest_wrong_signature,
             };
 
             // Make the claiming request with wrong signature
@@ -131,12 +131,12 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             }
 
             // Verify signature
-            let response_digest = claim_oidc_response_digest(oidc_request.signature).unwrap();
+            let response_digest = claim_oidc_response_digest(oidc_request.frp_signature).unwrap();
             mpc_pk.verify(&response_digest, &mpc_signature)?;
 
             // Verify signature with wrong digest
             let wrong_response_digest =
-                claim_oidc_response_digest(bad_oidc_request.signature).unwrap();
+                claim_oidc_response_digest(bad_oidc_request.frp_signature).unwrap();
             if mpc_pk
                 .verify(&wrong_response_digest, &mpc_signature)
                 .is_ok()
@@ -181,9 +181,12 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             // Add new FA key with front running protection (positive)
             // TODO: add front running protection signature
 
-            let recovery_pk = ctx.leader_node.recovery_pk(oidc_token.clone()).await?;
+            let recovery_pk = ctx
+                .leader_node
+                .recovery_pk(oidc_token.clone(), user_private_key.clone())
+                .await?;
 
-            let new_user_public_key = key::random();
+            let new_user_public_key = key::random_pk();
 
             let (status_code, sign_response) = ctx
                 .leader_node
@@ -192,6 +195,7 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
                     oidc_token.clone(),
                     new_user_public_key.parse()?,
                     recovery_pk,
+                    user_private_key,
                 )
                 .await?;
 
@@ -247,7 +251,8 @@ async fn test_basic_action() -> anyhow::Result<()> {
     with_nodes(3, |ctx| {
         Box::pin(async move {
             let account_id = account::random(ctx.worker)?;
-            let user_public_key = key::random();
+            let user_secret_key = key::random_sk();
+            let user_public_key = user_secret_key.public_key().to_string();
             let oidc_token = token::valid_random();
 
             let create_account_options = CreateAccountOptions {
@@ -279,9 +284,12 @@ async fn test_basic_action() -> anyhow::Result<()> {
             check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
 
             // Add key
-            let recovery_pk = ctx.leader_node.recovery_pk(oidc_token.clone()).await?;
+            let recovery_pk = ctx
+                .leader_node
+                .recovery_pk(oidc_token.clone(), user_secret_key.clone())
+                .await?;
 
-            let new_user_public_key = key::random();
+            let new_user_public_key = key::random_pk();
 
             let (status_code, sign_response) = ctx
                 .leader_node
@@ -290,6 +298,7 @@ async fn test_basic_action() -> anyhow::Result<()> {
                     oidc_token.clone(),
                     new_user_public_key.parse()?,
                     recovery_pk.clone(),
+                    user_secret_key.clone(),
                 )
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
@@ -310,6 +319,7 @@ async fn test_basic_action() -> anyhow::Result<()> {
                     oidc_token,
                     new_user_public_key.parse()?,
                     recovery_pk.clone(),
+                    user_secret_key.clone(),
                 )
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
@@ -333,10 +343,10 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
     with_nodes(3, |ctx| {
         Box::pin(async move {
             let account_id = account::random(ctx.worker)?;
-            let user_full_access_key = key::random();
+            let user_full_access_key = key::random_pk();
 
             let user_limited_access_key = LimitedAccessKey {
-                public_key: key::random().parse().unwrap(),
+                public_key: key::random_pk().parse().unwrap(),
                 allowance: "100".to_string(),
                 receiver_id: account::random(ctx.worker)?.to_string().parse().unwrap(), // TODO: type issues here
                 method_names: "method_names".to_string(),
@@ -409,7 +419,7 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
 
             // Generate another user
             let account_id = account::random(ctx.worker)?;
-            let user_public_key = key::random();
+            let user_public_key = key::random_pk();
 
             let create_account_options = CreateAccountOptions {
                 full_access_keys: Some(vec![user_public_key.clone().parse().unwrap()]),
