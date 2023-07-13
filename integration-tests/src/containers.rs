@@ -529,7 +529,7 @@ impl LeaderNodeApi {
         if matches!(response.status, FinalExecutionStatus::SuccessValue(_)) {
             Ok((status_code, sign_response))
         } else {
-            Err(anyhow::anyhow!("add_key failed with {:?}", response.status).into())
+            Err(anyhow::anyhow!("add_key failed with {:?}", response.status))
         }
     }
 
@@ -564,7 +564,7 @@ impl LeaderNodeApi {
             sender_id: account_id.clone(),
             receiver_id: account_id,
             actions: vec![Action::AddKey(AddKeyAction {
-                public_key: public_key.clone(),
+                public_key,
                 access_key: AccessKey {
                     nonce: 0,
                     permission: AccessKeyPermission::FullAccess,
