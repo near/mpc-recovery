@@ -11,13 +11,13 @@ jobs:
   test:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-12-xl]
+        os: [ubuntu-latest, macos-12]
     runs-on: ${{ matrix.os }}
     name: Integration tests
     steps:
       - uses: actions/checkout@v3
       - name: Install Docker
-        if: ${{ matrix.os == 'macos-12-xl' }}
+        if: ${{ matrix.os == 'macos-12' }}
         run: |
           brew install docker
           colima start
@@ -58,3 +58,9 @@ jobs:
         env:
           RUST_LOG: trace
           RUST_BACKTRACE: 1
+      - name: Setup upterm session
+        if: always()
+        uses: lhotari/action-upterm@v1
+        with:
+          ## limits ssh access and adds the ssh public key for the user which triggered the workflow
+          limit-access-to-actor: true
