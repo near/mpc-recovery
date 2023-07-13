@@ -1,0 +1,106 @@
+name: Terraform Feature Env
+
+on:
+  pull_request:
+    types: [reopened, opened, synchronize, edited]
+
+jobs:
+  terraform_apply:
+    name: Apply
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./infra
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: 1.4.6
+
+      # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
+      - name: Terraform Init
+        id: init
+        run: terraform init -backend-config backend-config-dev.tfvars
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
+
+      # Select the relevant Terraform workspace.
+      - name: Terraform Select Workspace
+        id: select
+        run: terraform workspace select -or-create dev-$PR_NUMBER
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
+          PR_NUMBER: ${{ env.PR_NUMBER }}
+
+      # Applies Terraform configuration to the temporary environment
+      - name: Terraform Apply
+        id: apply
+        run: terraform apply -auto-approve -input=false -no-color -var-file terraform-dev.tfvars -var "credentials=$GOOGLE_CREDENTIALS" -var "env=dev-$PR_NUMBER"
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
+          PR_NUMBER: ${{ env.PR_NUMBER }}
+
+      - name: Terraform Output
+        id: output
+        run: terraform output -raw leader_node
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
+
+      - uses: actions/github-script@v6
+        if: github.event_name == 'pull_request'
+        env:
+          APPLY_PLAN: "${{ steps.apply.outputs.stdout }}"
+          LEADER_NODE: ${{ steps.output.outputs.stdout }}
+          PR_NUMBER: ${{ env.PR_NUMBER }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // 1. Retrieve existing bot comments for the PR
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            })
+            const botComment = comments.find(comment => {
+              return comment.user.type === 'Bot' && comment.body.includes('Terraform Feature Environment')
+            })
+
+            // 2. Prepare format of the comment
+            const output = `### Terraform Feature Environment (**dev-${process.env.PR_NUMBER}**)
+            #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+
+            #### Terraform Apply \`${{ steps.apply.outcome }}\`
+
+            <details><summary>Show Apply Plan</summary>
+
+            \`\`\`\n
+            ${process.env.APPLY_PLAN}
+            \`\`\`
+
+            </details>
+
+            *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Working Directory: \`${{ env.tf_actions_working_dir }}\`, Workflow: \`${{ github.workflow }}\`*
+
+            **URL**: \`${process.env.LEADER_NODE}\``;
+
+            // 3. If we have a comment, update it, otherwise create a new one
+            if (botComment) {
+              github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: output
+              })
+            } else {
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: output
+              })
+            }

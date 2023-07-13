@@ -1,11 +1,13 @@
-name: Terraform
+name: Terraform Dev
 
 on:
+  push:
+    branches:
+      - "develop"
   pull_request:
-    types: [reopened, opened, synchronize, edited]
 
 jobs:
-  terraform:
+  terraform_dev:
     name: Checks & Plan
     runs-on: ubuntu-latest
     defaults:
@@ -72,7 +74,8 @@ jobs:
             })
 
             // 2. Prepare format of the comment
-            const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
+            const output = `### Terraform Dev Environment
+            #### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
             <details><summary>Format Check Output</summary>
 
             \`\`\`\n
@@ -119,3 +122,10 @@ jobs:
                 body: output
               })
             }
+
+        # On push to "develop", build or change infrastructure according to Terraform configuration files
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+        run: terraform apply -auto-approve -input=false -var-file terraform-dev.tfvars -var "credentials=$GOOGLE_CREDENTIALS"
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
