@@ -1,13 +1,16 @@
 #![allow(clippy::too_many_arguments)]
 
+use std::str::FromStr;
+
 use anyhow::{anyhow, Ok};
 use bollard::Docker;
 use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::GenericArray};
 use hyper::StatusCode;
 use mpc_recovery::{
     msg::{
-        AcceptNodePublicKeysRequest, ClaimOidcRequest, ClaimOidcResponse, NewAccountRequest,
-        NewAccountResponse, SignRequest, SignResponse,
+        AcceptNodePublicKeysRequest, ClaimOidcRequest, ClaimOidcResponse, MpcPkRequest,
+        MpcPkResponse, NewAccountRequest, NewAccountResponse, SignRequest, SignResponse,
+        UserCredentialsRequest, UserCredentialsResponse,
     },
     relayer::NearRpcAndRelayerClient,
 };
@@ -459,6 +462,20 @@ impl LeaderNodeApi {
         util::post(format!("{}/claim_oidc", self.address), request).await
     }
 
+    pub async fn get_mpc_pk(
+        &self,
+        request: MpcPkRequest,
+    ) -> anyhow::Result<(StatusCode, MpcPkResponse)> {
+        util::post(format!("{}/mpc_public_key", self.address), request).await
+    }
+
+    pub async fn user_credentials(
+        &self,
+        request: UserCredentialsRequest,
+    ) -> anyhow::Result<(StatusCode, UserCredentialsResponse)> {
+        util::post(format!("{}/user_credentials", self.address), request).await
+    }
+
     pub async fn new_account(
         &self,
         request: NewAccountRequest,
@@ -466,22 +483,88 @@ impl LeaderNodeApi {
         util::post(format!("{}/new_account", self.address), request).await
     }
 
+    pub async fn sign(&self, request: SignRequest) -> anyhow::Result<(StatusCode, SignResponse)> {
+        util::post(format!("{}/sign", self.address), request).await
+    }
+
+    // TODO: add_key should me moved to utils in the future, it is not a part of the API
     pub async fn add_key(
         &self,
         account_id: AccountId,
         oidc_token: String,
         public_key: PublicKey,
+        recovery_pk: PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
+        // Prepare SignRequest with add key delegate action
         let (_, block_height, nonce) = self
             .client
-            .access_key(account_id.clone(), public_key.clone())
+            .access_key(account_id.clone(), recovery_pk.clone())
             .await?;
 
-        let delegate_action = DelegateAction {
+        let add_key_delegate_action = self.get_add_key_delegate_action(
+            account_id.clone(),
+            public_key.clone(),
+            recovery_pk.clone(),
+            nonce,
+            block_height,
+        )?;
+
+        let sign_request = SignRequest {
+            delegate_action: add_key_delegate_action.clone(),
+            oidc_token,
+        };
+        // Send SignRequest to leader node
+        let (status_code, sign_response): (_, SignResponse) = self.sign(sign_request).await?;
+        let signature = match &sign_response {
+            SignResponse::Ok { signature } => signature,
+            SignResponse::Err { .. } => return Ok((status_code, sign_response)),
+        };
+        let response = self
+            .client
+            .send_meta_tx(SignedDelegateAction {
+                delegate_action: add_key_delegate_action,
+                signature: near_crypto::Signature::ED25519(*signature),
+            })
+            .await?;
+        if matches!(response.status, FinalExecutionStatus::SuccessValue(_)) {
+            Ok((status_code, sign_response))
+        } else {
+            Err(anyhow::anyhow!("add_key failed with {:?}", response.status))
+        }
+    }
+
+    pub async fn recovery_pk(&self, oidc_token: String) -> anyhow::Result<PublicKey> {
+        let (status_code, user_credentials) = self
+            .user_credentials(UserCredentialsRequest {
+                oidc_token: oidc_token.clone(),
+            })
+            .await?;
+
+        assert_eq!(status_code, StatusCode::OK);
+
+        let recovery_pk: PublicKey = match user_credentials {
+            UserCredentialsResponse::Ok { recovery_pk } => PublicKey::from_str(&recovery_pk)?,
+            UserCredentialsResponse::Err { msg } => {
+                return Err(anyhow::anyhow!(msg));
+            }
+        };
+
+        Ok(recovery_pk)
+    }
+
+    pub fn get_add_key_delegate_action(
+        &self,
+        account_id: AccountId,
+        public_key: PublicKey,
+        recovery_pk: PublicKey,
+        nonce: u64,
+        block_height: u64,
+    ) -> anyhow::Result<DelegateAction> {
+        Ok(DelegateAction {
             sender_id: account_id.clone(),
             receiver_id: account_id,
             actions: vec![Action::AddKey(AddKeyAction {
-                public_key: public_key.clone(),
+                public_key,
                 access_key: AccessKey {
                     nonce: 0,
                     permission: AccessKeyPermission::FullAccess,
@@ -490,29 +573,7 @@ impl LeaderNodeApi {
             .try_into()?],
             nonce,
             max_block_height: block_height + 100,
-            public_key,
-        };
-        let sign_request = SignRequest {
-            delegate_action: delegate_action.clone(),
-            oidc_token,
-        };
-        let (status_code, sign_response): (_, SignResponse) =
-            util::post(format!("{}/sign", self.address), sign_request).await?;
-        let signature = match &sign_response {
-            SignResponse::Ok { signature } => signature,
-            SignResponse::Err { .. } => return Ok((status_code, sign_response)),
-        };
-        let response = self
-            .client
-            .send_meta_tx(SignedDelegateAction {
-                delegate_action,
-                signature: near_crypto::Signature::ED25519(*signature),
-            })
-            .await?;
-        if matches!(response.status, FinalExecutionStatus::SuccessValue(_)) {
-            Ok((status_code, sign_response))
-        } else {
-            Err(anyhow::anyhow!("add_key failed with {:?}", response.status).into())
-        }
+            public_key: recovery_pk,
+        })
     }
 }

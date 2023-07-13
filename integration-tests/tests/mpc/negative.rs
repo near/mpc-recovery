@@ -1,13 +1,12 @@
 use crate::{account, check, key, token, with_nodes};
 use hyper::StatusCode;
 use mpc_recovery::{
-    msg::{NewAccountRequest, NewAccountResponse, SignResponse},
+    msg::{NewAccountRequest, NewAccountResponse, SignRequest, SignResponse},
     transaction::CreateAccountOptions,
 };
-use mpc_recovery_integration_tests::util;
 use multi_party_eddsa::protocols::ExpandedKeyPair;
-use serde_json::json;
-use std::time::Duration;
+use near_crypto::PublicKey;
+use std::{str::FromStr, time::Duration};
 use test_log::test;
 
 #[test(tokio::test)]
@@ -58,6 +57,8 @@ async fn test_invalid_token() -> anyhow::Result<()> {
 
             check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
 
+            let recovery_pk = ctx.leader_node.recovery_pk(oidc_token.clone()).await?;
+
             let new_user_public_key = key::random();
 
             let (status_code, sign_response) = ctx
@@ -66,6 +67,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                     account_id.clone(),
                     token::invalid(),
                     new_user_public_key.parse()?,
+                    recovery_pk.clone(),
                 )
                 .await?;
             assert_eq!(status_code, StatusCode::UNAUTHORIZED);
@@ -74,7 +76,12 @@ async fn test_invalid_token() -> anyhow::Result<()> {
             // Check that the service is still available
             let (status_code, sign_response) = ctx
                 .leader_node
-                .add_key(account_id.clone(), oidc_token, new_user_public_key.parse()?)
+                .add_key(
+                    account_id.clone(),
+                    oidc_token,
+                    new_user_public_key.parse()?,
+                    recovery_pk.clone(),
+                )
                 .await?;
 
             assert_eq!(status_code, StatusCode::OK);
@@ -141,40 +148,6 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
             tokio::time::sleep(Duration::from_millis(2000)).await;
 
             check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
-
-            let new_user_public_key = key::random();
-
-            let (status_code, sign_response) = util::post(
-                format!("{}/sign", ctx.leader_node.address),
-                json!({
-                    "delegate_action": {
-                        "sender_id": malformed_account_id.clone(),
-                        "receiver_id": malformed_account_id,
-                        "actions": [],
-                        "nonce": 1,
-                        "max_block_height": 100,
-                        "public_key": new_user_public_key,
-                    },
-                    "oidc_token": oidc_token.clone()
-                }),
-            )
-            .await?;
-            assert_eq!(status_code, StatusCode::BAD_REQUEST);
-            assert!(matches!(sign_response, SignResponse::Err { .. }));
-
-            // Check that the service is still available
-            let (status_code, sign_response) = ctx
-                .leader_node
-                .add_key(account_id.clone(), oidc_token, new_user_public_key.parse()?)
-                .await?;
-            assert_eq!(status_code, StatusCode::OK);
-            let SignResponse::Ok { .. } = sign_response else {
-                anyhow::bail!("failed to get a signature from mpc-recovery");
-            };
-
-            tokio::time::sleep(Duration::from_millis(2000)).await;
-
-            check::access_key_exists(&ctx, &account_id, &new_user_public_key).await?;
 
             Ok(())
         })
@@ -273,19 +246,35 @@ async fn test_add_key_to_non_existing_account() -> anyhow::Result<()> {
     with_nodes(1, |ctx| {
         Box::pin(async move {
             let account_id = account::random(ctx.worker)?;
+            let oidc_token = token::valid_random();
             let user_public_key = key::random();
+            let recovery_pk = key::random();
 
-            let (status_code, sign_response) = ctx
-                .leader_node
-                .add_key(
-                    account_id.clone(),
-                    token::valid_random(),
-                    user_public_key.parse()?,
-                )
-                .await?;
+            let add_key_delegate_action = ctx.leader_node.get_add_key_delegate_action(
+                account_id.clone(),
+                PublicKey::from_str(&user_public_key)?,
+                PublicKey::from_str(&recovery_pk)?,
+                1, // random number
+                1, // random number
+            )?;
 
-            assert_eq!(status_code, StatusCode::INTERNAL_SERVER_ERROR);
-            assert!(matches!(sign_response, SignResponse::Err { .. }));
+            let sign_request = SignRequest {
+                delegate_action: add_key_delegate_action.clone(),
+                oidc_token: oidc_token.clone(),
+            };
+
+            let (status_code, sign_response) = ctx.leader_node.sign(sign_request).await?;
+
+            // Sign responce should now fail, since MPC recovery service is no aware if the account exist
+            match sign_response {
+                SignResponse::Ok { .. } => {}
+                _ => anyhow::bail!(
+                    "Unexpected error returned during sign call {:?}",
+                    sign_response
+                ),
+            }
+
+            assert_eq!(status_code, StatusCode::OK);
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
 
