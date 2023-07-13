@@ -6,7 +6,6 @@ use mpc_recovery::{
     msg::{
         ClaimOidcRequest, ClaimOidcResponse, MpcPkRequest, MpcPkResponse, NewAccountRequest,
         NewAccountResponse, SignNodeRequest, SignResponse, SignShareNodeRequest,
-        UserCredentialsRequest, UserCredentialsResponse,
     },
     oauth::get_test_claims,
     transaction::{
@@ -176,21 +175,6 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             tokio::time::sleep(Duration::from_millis(2000)).await;
             check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
 
-            // Get user recovery pk
-            let (status_code, user_credentials) = ctx
-                .leader_node
-                .user_credentials(UserCredentialsRequest {
-                    oidc_token: oidc_token.clone(),
-                })
-                .await?;
-
-            assert_eq!(status_code, StatusCode::OK);
-            let recovery_pk = match user_credentials {
-                UserCredentialsResponse::Ok { recovery_pk } => PublicKey::from_str(&recovery_pk)?,
-                UserCredentialsResponse::Err { msg } => {
-                    return Err(anyhow::anyhow!(msg));
-                }
-            };
             // Add new FA key with front running protection (negative, wrong signature)
             // TODO: add exaample with front running protection signature (bad one)
 
@@ -200,12 +184,7 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
 
             let (status_code, sign_response) = ctx
                 .leader_node
-                .add_key(
-                    account_id.clone(),
-                    oidc_token,
-                    new_user_public_key.parse()?,
-                    recovery_pk,
-                )
+                .add_key(account_id.clone(), oidc_token, new_user_public_key.parse()?)
                 .await?;
 
             assert_eq!(status_code, StatusCode::OK);
@@ -291,22 +270,6 @@ async fn test_basic_action() -> anyhow::Result<()> {
 
             check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
 
-            // Get user recovery pk
-            let (status_code, user_credentials) = ctx
-                .leader_node
-                .user_credentials(UserCredentialsRequest {
-                    oidc_token: oidc_token.clone(),
-                })
-                .await?;
-
-            assert_eq!(status_code, StatusCode::OK);
-            let recovery_pk = match user_credentials {
-                UserCredentialsResponse::Ok { recovery_pk } => PublicKey::from_str(&recovery_pk)?,
-                UserCredentialsResponse::Err { msg } => {
-                    return Err(anyhow::anyhow!(msg));
-                }
-            };
-
             // Add key
             let new_user_public_key = key::random();
 
@@ -316,7 +279,6 @@ async fn test_basic_action() -> anyhow::Result<()> {
                     account_id.clone(),
                     oidc_token.clone(),
                     new_user_public_key.parse()?,
-                    recovery_pk.clone(),
                 )
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
@@ -332,12 +294,7 @@ async fn test_basic_action() -> anyhow::Result<()> {
             // Adding the same key should now fail
             let (status_code, sign_response) = ctx
                 .leader_node
-                .add_key(
-                    account_id.clone(),
-                    oidc_token,
-                    new_user_public_key.parse()?,
-                    recovery_pk.clone(),
-                )
+                .add_key(account_id.clone(), oidc_token, new_user_public_key.parse()?)
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
 

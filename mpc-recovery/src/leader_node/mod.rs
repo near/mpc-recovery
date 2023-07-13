@@ -496,7 +496,7 @@ async fn sign<T: OAuthTokenVerifier>(
         }
         Err(e) => {
             tracing::error!(err = ?e);
-            response::sign_internal_error(format!("failed to process new account: {}", e))
+            response::sign_internal_error(format!("failed to process sign: {}", e))
         }
     }
 }

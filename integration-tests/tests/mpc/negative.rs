@@ -1,17 +1,13 @@
 use crate::{account, check, key, token, with_nodes};
 use hyper::StatusCode;
 use mpc_recovery::{
-    msg::{
-        NewAccountRequest, NewAccountResponse, SignResponse, UserCredentialsRequest,
-        UserCredentialsResponse,
-    },
+    msg::{NewAccountRequest, NewAccountResponse, SignResponse},
     transaction::CreateAccountOptions,
 };
 use mpc_recovery_integration_tests::util;
 use multi_party_eddsa::protocols::ExpandedKeyPair;
-use near_crypto::PublicKey;
 use serde_json::json;
-use std::{str::FromStr, time::Duration};
+use std::time::Duration;
 use test_log::test;
 
 #[test(tokio::test)]
@@ -62,22 +58,6 @@ async fn test_invalid_token() -> anyhow::Result<()> {
 
             check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
 
-            // Get user recovery pk
-            let (status_code, user_credentials) = ctx
-                .leader_node
-                .user_credentials(UserCredentialsRequest {
-                    oidc_token: oidc_token.clone(),
-                })
-                .await?;
-
-            assert_eq!(status_code, StatusCode::OK);
-            let recovery_pk = match user_credentials {
-                UserCredentialsResponse::Ok { recovery_pk } => PublicKey::from_str(&recovery_pk)?,
-                UserCredentialsResponse::Err { msg } => {
-                    return Err(anyhow::anyhow!(msg));
-                }
-            };
-
             let new_user_public_key = key::random();
 
             let (status_code, sign_response) = ctx
@@ -86,7 +66,6 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                     account_id.clone(),
                     token::invalid(),
                     new_user_public_key.parse()?,
-                    recovery_pk.clone(),
                 )
                 .await?;
             assert_eq!(status_code, StatusCode::UNAUTHORIZED);
@@ -95,12 +74,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
             // Check that the service is still available
             let (status_code, sign_response) = ctx
                 .leader_node
-                .add_key(
-                    account_id.clone(),
-                    oidc_token,
-                    new_user_public_key.parse()?,
-                    recovery_pk.clone(),
-                )
+                .add_key(account_id.clone(), oidc_token, new_user_public_key.parse()?)
                 .await?;
 
             assert_eq!(status_code, StatusCode::OK);
@@ -188,31 +162,10 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
             assert_eq!(status_code, StatusCode::BAD_REQUEST);
             assert!(matches!(sign_response, SignResponse::Err { .. }));
 
-            // Get user recovery pk
-            let (status_code, user_credentials) = ctx
-                .leader_node
-                .user_credentials(UserCredentialsRequest {
-                    oidc_token: oidc_token.clone(),
-                })
-                .await?;
-
-            assert_eq!(status_code, StatusCode::OK);
-            let recovery_pk = match user_credentials {
-                UserCredentialsResponse::Ok { recovery_pk } => PublicKey::from_str(&recovery_pk)?,
-                UserCredentialsResponse::Err { msg } => {
-                    return Err(anyhow::anyhow!(msg));
-                }
-            };
-
             // Check that the service is still available
             let (status_code, sign_response) = ctx
                 .leader_node
-                .add_key(
-                    account_id.clone(),
-                    oidc_token,
-                    new_user_public_key.parse()?,
-                    recovery_pk.clone(),
-                )
+                .add_key(account_id.clone(), oidc_token, new_user_public_key.parse()?)
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
             let SignResponse::Ok { .. } = sign_response else {
@@ -321,23 +274,6 @@ async fn test_add_key_to_non_existing_account() -> anyhow::Result<()> {
         Box::pin(async move {
             // TODO: looks like this test should be reconsidered, since we can not get a valid oidc token for non-existing account
             let oidc_token = token::valid_random();
-
-            // Get user recovery pk
-            let (status_code, user_credentials) = ctx
-                .leader_node
-                .user_credentials(UserCredentialsRequest {
-                    oidc_token: oidc_token.clone(),
-                })
-                .await?;
-
-            assert_eq!(status_code, StatusCode::OK);
-            let recovery_pk = match user_credentials {
-                UserCredentialsResponse::Ok { recovery_pk } => PublicKey::from_str(&recovery_pk)?,
-                UserCredentialsResponse::Err { msg } => {
-                    return Err(anyhow::anyhow!(msg));
-                }
-            };
-
             let account_id = account::random(ctx.worker)?;
             let user_public_key = key::random();
 
@@ -345,9 +281,8 @@ async fn test_add_key_to_non_existing_account() -> anyhow::Result<()> {
                 .leader_node
                 .add_key(
                     account_id.clone(),
-                    token::valid_random(),
+                    oidc_token.clone(),
                     user_public_key.parse()?,
-                    recovery_pk.clone(),
                 )
                 .await?;
 

@@ -1,5 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 
+use std::str::FromStr;
+
 use anyhow::{anyhow, Ok};
 use bollard::Docker;
 use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::GenericArray};
@@ -486,11 +488,26 @@ impl LeaderNodeApi {
         account_id: AccountId,
         oidc_token: String,
         public_key: PublicKey,
-        mpc_pk: PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
+        // Get user recovery pk
+        let (status_code, user_credentials) = self
+            .user_credentials(UserCredentialsRequest {
+                oidc_token: oidc_token.clone(),
+            })
+            .await?;
+
+        assert_eq!(status_code, StatusCode::OK);
+        let recovery_pk = match user_credentials {
+            UserCredentialsResponse::Ok { recovery_pk } => PublicKey::from_str(&recovery_pk)?,
+            UserCredentialsResponse::Err { msg } => {
+                return Err(anyhow::anyhow!(msg));
+            }
+        };
+
+        // Create delegate action
         let (_, block_height, nonce) = self
             .client
-            .access_key(account_id.clone(), mpc_pk.clone())
+            .access_key(account_id.clone(), recovery_pk.clone())
             .await?;
 
         let delegate_action = DelegateAction {
