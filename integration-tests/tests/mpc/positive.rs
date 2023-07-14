@@ -198,7 +198,6 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
                     user_private_key,
                 )
                 .await?;
-
             assert_eq!(status_code, StatusCode::OK);
 
             let SignResponse::Ok { .. } = sign_response else {

@@ -288,7 +288,6 @@ async fn test_add_key_to_non_existing_account() -> anyhow::Result<()> {
                     sign_response
                 ),
             }
-
             assert_eq!(status_code, StatusCode::OK);
 
             tokio::time::sleep(Duration::from_millis(2000)).await;

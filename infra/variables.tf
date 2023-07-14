@@ -4,7 +4,13 @@ variable "env" {
 variable "project" {
 }
 
-variable "credentials_file" {}
+variable "credentials_file" {
+  default = null
+}
+
+variable "credentials" {
+  default = null
+}
 
 variable "region" {
   default = "us-east1"

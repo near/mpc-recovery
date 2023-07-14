@@ -7,3 +7,4 @@ target/
 Dockerfile
 .dockerignore
 infra/
+integration-tests/

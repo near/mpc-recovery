@@ -1,8 +1,12 @@
 terraform {
+  backend "gcs" {
+    prefix = "state/mpc-recovery"
+  }
+
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = "4.66.0"
+      version = "4.73.0"
     }
     docker = {
       source  = "kreuzwerker/docker"
@@ -12,27 +16,25 @@ terraform {
 }
 
 locals {
-  credentials  = file(var.credentials_file)
+  credentials  = var.credentials != null ? var.credentials : file(var.credentials_file)
   client_email = jsondecode(local.credentials).client_email
   client_id    = jsondecode(local.credentials).client_id
 
   env = {
     defaults = {
-      near_rpc           = "https://rpc.testnet.near.org"
-      relayer_api_key    = null
-      relayer_url        = "http://34.70.226.83:3030"
-      near_root_account  = "testnet"
-      account_lookup_url = "https://testnet-api.kitwallet.app"
+      near_rpc          = "https://rpc.testnet.near.org"
+      relayer_api_key   = null
+      relayer_url       = "http://34.70.226.83:3030"
+      near_root_account = "testnet"
     }
     testnet = {
     }
     mainnet = {
       near_rpc = "https://rpc.mainnet.near.org"
       // TODO: move relayer API key to secrets
-      relayer_api_key    = "dfadcb16-2293-4649-896b-4bc4224adea0"
-      relayer_url        = "http://near-relayer-mainnet.api.pagoda.co"
-      near_root_account  = "near"
-      account_lookup_url = "https://api.kitwallet.app"
+      relayer_api_key   = "dfadcb16-2293-4649-896b-4bc4224adea0"
+      relayer_url       = "http://near-relayer-mainnet.api.pagoda.co"
+      near_root_account = "near"
     }
   }
 
@@ -69,17 +71,14 @@ resource "google_service_account_iam_binding" "serivce-account-iam" {
   ]
 }
 
-resource "google_project_iam_binding" "service-account-datastore-user" {
+resource "google_project_iam_member" "service-account-datastore-user" {
   project = var.project
   role    = "roles/datastore.user"
-
-  members = [
-    "serviceAccount:${google_service_account.service_account.email}",
-  ]
+  member  = "serviceAccount:${google_service_account.service_account.email}"
 }
 
 resource "google_artifact_registry_repository" "mpc_recovery" {
-  repository_id = "mpc-recovery"
+  repository_id = "mpc-recovery-${var.env}"
   format        = "DOCKER"
 }
 
@@ -131,7 +130,6 @@ module "leader" {
   relayer_url          = local.workspace.relayer_url
   near_root_account    = local.workspace.near_root_account
   account_creator_id   = var.account_creator_id
-  account_lookup_url   = local.workspace.account_lookup_url
   firebase_audience_id = var.firebase_audience_id
 
   account_creator_sk = var.account_creator_sk
