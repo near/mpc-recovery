@@ -503,10 +503,7 @@ impl LeaderNodeApi {
         user_secret_key: SecretKey,
         oidc_token: String,
     ) -> anyhow::Result<(StatusCode, NewAccountResponse)> {
-        let limited_access_keys = match user_la_public_key {
-            Some(pk) => Some(vec![pk]),
-            None => None,
-        };
+        let limited_access_keys = user_la_public_key.map(|pk| vec![pk]);
 
         let create_account_options = CreateAccountOptions {
             full_access_keys: Some(vec![user_fa_public_key.clone()]),
