@@ -22,7 +22,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
             let (status_code, new_acc_response) = ctx
                 .leader_node
                 .new_account_with_helper(
-                    account_id.clone(),
+                    account_id.clone().to_string(),
                     PublicKey::from_str(&user_public_key.clone())?,
                     None,
                     user_secret_key.clone(),
@@ -36,7 +36,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
             let (status_code, new_acc_response) = ctx
                 .leader_node
                 .new_account_with_helper(
-                    account_id.clone(),
+                    account_id.clone().to_string(),
                     PublicKey::from_str(&user_public_key.clone())?,
                     None,
                     user_secret_key.clone(),
@@ -130,7 +130,7 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
             let (status_code, new_acc_response) = ctx
                 .leader_node
                 .new_account_with_helper(
-                    account_id.clone(),
+                    account_id.clone().to_string(),
                     PublicKey::from_str(&user_public_key.clone())?,
                     None,
                     user_secret_key.clone(),

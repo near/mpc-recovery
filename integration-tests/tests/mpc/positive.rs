@@ -149,7 +149,7 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             let (status_code, new_acc_response) = ctx
                 .leader_node
                 .new_account_with_helper(
-                    account_id.clone(),
+                    account_id.clone().to_string(),
                     PublicKey::from_str(&user_public_key.clone())?,
                     None,
                     user_secret_key.clone(),
@@ -252,7 +252,7 @@ async fn test_basic_action() -> anyhow::Result<()> {
             let (status_code, new_acc_response) = ctx
                 .leader_node
                 .new_account_with_helper(
-                    account_id.clone(),
+                    account_id.clone().to_string(),
                     PublicKey::from_str(&user_public_key.clone())?,
                     None,
                     user_secret_key.clone(),
@@ -344,7 +344,7 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
             let (status_code, _) = ctx
                 .leader_node
                 .new_account_with_helper(
-                    account_id.clone(),
+                    account_id.clone().to_string(),
                     PublicKey::from_str(&user_full_access_pk.clone())?,
                     Some(user_limited_access_key.clone()),
                     key::random_sk(),
@@ -409,7 +409,7 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
             let (status_code, _) = ctx
                 .leader_node
                 .new_account_with_helper(
-                    account_id.clone(),
+                    account_id.clone().to_string(),
                     user_public_key.clone(),
                     None,
                     user_secret_key.clone(),
