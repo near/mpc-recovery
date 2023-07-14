@@ -9,6 +9,7 @@ COPY mpc-recovery/Cargo.toml Cargo.toml
 RUN sed -i 's#src/main.rs#dummy.rs#' Cargo.toml
 RUN cargo build --release
 COPY . .
+RUN sed -i 's#"integration-tests",##' Cargo.toml
 RUN cargo build --release --package mpc-recovery
 
 FROM debian:bullseye-slim as runtime

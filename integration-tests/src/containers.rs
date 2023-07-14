@@ -127,11 +127,11 @@ impl<'a> Sandbox<'a> {
         tracing::info!("Running sandbox container...");
         #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
         let image = GenericImage::new("ghcr.io/near/sandbox", "latest-aarch64")
-            .with_wait_for(WaitFor::seconds(2))
+            .with_wait_for(WaitFor::Nothing)
             .with_exposed_port(Self::CONTAINER_RPC_PORT);
         #[cfg(target_arch = "x86_64")]
         let image = GenericImage::new("ghcr.io/near/sandbox", "latest")
-            .with_wait_for(WaitFor::seconds(2))
+            .with_wait_for(WaitFor::Nothing)
             .with_exposed_port(Self::CONTAINER_RPC_PORT);
         let image: RunnableImage<GenericImage> = (
             image,
@@ -148,6 +148,11 @@ impl<'a> Sandbox<'a> {
         let address = docker_client
             .get_network_ip_address(&container, network)
             .await?;
+
+        container.exec(ExecCommand {
+            cmd: format!("bash -c 'while [[ \"$(curl -s -o /dev/null -w ''%{{http_code}}'' localhost:{})\" != \"200\" ]]; do sleep 1; done'", Self::CONTAINER_RPC_PORT),
+            ready_conditions: vec![]
+        });
 
         let full_address = format!("http://{}:{}", address, Self::CONTAINER_RPC_PORT);
         tracing::info!("Sandbox container is running at {}", full_address);
