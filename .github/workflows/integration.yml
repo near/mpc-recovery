@@ -56,5 +56,5 @@ jobs:
       - name: Test
         run: cargo test -p mpc-recovery-integration-tests --jobs 1 -- --test-threads 1
         env:
-          RUST_LOG: trace
+          RUST_LOG: INFO
           RUST_BACKTRACE: 1
