@@ -405,6 +405,7 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
             let account_id = account::random(ctx.worker)?;
             let user_secret_key = key::random_sk();
             let user_public_key = user_secret_key.public_key();
+            let oidc_token = token::valid_random();
 
             let (status_code, _) = ctx
                 .leader_node
