@@ -5,7 +5,7 @@ use near_crypto::PublicKey;
 use near_primitives::delegate_action::DelegateAction;
 use sha2::{Digest, Sha256};
 
-use crate::{primitives::HashSalt, sign_node::CommitError};
+use crate::{primitives::HashSalt, sign_node::CommitError, transaction::CreateAccountOptions};
 
 pub fn claim_oidc_request_digest(oidc_token_hash: [u8; 32]) -> Result<Vec<u8>, CommitError> {
     // As per the readme
@@ -46,6 +46,21 @@ pub fn user_credentials_request_digest(oidc_token: String) -> Result<Vec<u8>, Co
     let mut hasher = Sha256::default();
     BorshSerialize::serialize(&HashSalt::UserCredentialsRequest.get_salt(), &mut hasher)
         .context("Serialization failed")?;
+    BorshSerialize::serialize(&oidc_token, &mut hasher).context("Serialization failed")?;
+    Ok(hasher.finalize().to_vec())
+}
+
+pub fn new_account_request_digest(
+    account_id: String,
+    _create_account_options: CreateAccountOptions,
+    oidc_token: String,
+) -> Result<Vec<u8>, CommitError> {
+    let mut hasher = Sha256::default();
+    BorshSerialize::serialize(&HashSalt::NewAccountRequest.get_salt(), &mut hasher)
+        .context("Serialization failed")?;
+    BorshSerialize::serialize(&account_id, &mut hasher).context("Serialization failed")?;
+    // BorshSerialize::serialize(&create_account_options, &mut hasher) // TODO: add borsh serialization for CreateAccountOptions
+    //     .context("Serialization failed")?;
     BorshSerialize::serialize(&oidc_token, &mut hasher).context("Serialization failed")?;
     Ok(hasher.finalize().to_vec())
 }

@@ -13,7 +13,8 @@ use mpc_recovery::{
         UserCredentialsRequest, UserCredentialsResponse,
     },
     relayer::NearRpcAndRelayerClient,
-    utils::{sign_request_digest, user_credentials_request_digest},
+    transaction::{CreateAccountOptions, LimitedAccessKey},
+    utils::{new_account_request_digest, sign_request_digest, user_credentials_request_digest},
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_crypto::{PublicKey, SecretKey};
@@ -482,6 +483,10 @@ impl LeaderNodeApi {
         util::post(format!("{}/user_credentials", self.address), request).await
     }
 
+    pub async fn sign(&self, request: SignRequest) -> anyhow::Result<(StatusCode, SignResponse)> {
+        util::post(format!("{}/sign", self.address), request).await
+    }
+
     pub async fn new_account(
         &self,
         request: NewAccountRequest,
@@ -489,8 +494,45 @@ impl LeaderNodeApi {
         util::post(format!("{}/new_account", self.address), request).await
     }
 
-    pub async fn sign(&self, request: SignRequest) -> anyhow::Result<(StatusCode, SignResponse)> {
-        util::post(format!("{}/sign", self.address), request).await
+    // TODO: move to utils
+    pub async fn new_account_with_helper(
+        &self,
+        account_id: String,
+        user_fa_public_key: PublicKey,
+        user_la_public_key: Option<LimitedAccessKey>,
+        user_secret_key: SecretKey,
+        oidc_token: String,
+    ) -> anyhow::Result<(StatusCode, NewAccountResponse)> {
+        let limited_access_keys = match user_la_public_key {
+            Some(pk) => Some(vec![pk]),
+            None => None,
+        };
+
+        let create_account_options = CreateAccountOptions {
+            full_access_keys: Some(vec![user_fa_public_key.clone()]),
+            limited_access_keys,
+            contract_bytes: None,
+        };
+
+        let new_account_digest = new_account_request_digest(
+            account_id.clone(),
+            create_account_options.clone(),
+            oidc_token.clone(),
+        )?;
+
+        let frp_signature = match user_secret_key.sign(&new_account_digest) {
+            near_crypto::Signature::ED25519(k) => k,
+            _ => return Err(anyhow::anyhow!("Wrong signature type")),
+        };
+
+        let new_account_request = NewAccountRequest {
+            near_account_id: account_id.to_string(),
+            create_account_options,
+            oidc_token: oidc_token.clone(),
+            frp_signature,
+        };
+
+        self.new_account(new_account_request).await
     }
 
     // TODO: add_key should me moved to utils in the future, it is not a part of the API

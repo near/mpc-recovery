@@ -1,8 +1,7 @@
 use crate::{account, check, key, token, with_nodes};
 use hyper::StatusCode;
 use mpc_recovery::{
-    msg::{NewAccountRequest, NewAccountResponse, SignRequest, SignResponse},
-    transaction::CreateAccountOptions,
+    msg::{NewAccountResponse, SignRequest, SignResponse},
     utils::sign_request_digest,
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
@@ -18,21 +17,17 @@ async fn test_invalid_token() -> anyhow::Result<()> {
             let user_secret_key = key::random_sk();
             let user_public_key = user_secret_key.public_key().to_string();
             let oidc_token = token::valid_random();
-
-            let create_account_options = CreateAccountOptions {
-                full_access_keys: Some(vec![user_public_key.clone().parse().unwrap()]),
-                limited_access_keys: None,
-                contract_bytes: None,
-            };
+            let invalid_oidc_token = token::invalid();
 
             let (status_code, new_acc_response) = ctx
                 .leader_node
-                .new_account(NewAccountRequest {
-                    near_account_id: account_id.to_string(),
-                    create_account_options: create_account_options.clone(),
-                    oidc_token: token::invalid(),
-                    signature: None,
-                })
+                .new_account_with_helper(
+                    account_id.clone(),
+                    PublicKey::from_str(&user_public_key.clone())?,
+                    None,
+                    user_secret_key.clone(),
+                    invalid_oidc_token.clone(),
+                )
                 .await?;
             assert_eq!(status_code, StatusCode::UNAUTHORIZED);
             assert!(matches!(new_acc_response, NewAccountResponse::Err { .. }));
@@ -40,12 +35,13 @@ async fn test_invalid_token() -> anyhow::Result<()> {
             // Check that the service is still available
             let (status_code, new_acc_response) = ctx
                 .leader_node
-                .new_account(NewAccountRequest {
-                    near_account_id: account_id.to_string(),
-                    create_account_options,
-                    oidc_token: oidc_token.clone(),
-                    signature: None,
-                })
+                .new_account_with_helper(
+                    account_id.clone(),
+                    PublicKey::from_str(&user_public_key.clone())?,
+                    None,
+                    user_secret_key.clone(),
+                    oidc_token.clone(),
+                )
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
             assert!(matches!(new_acc_response, NewAccountResponse::Ok {
@@ -111,23 +107,19 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
     with_nodes(1, |ctx| {
         Box::pin(async move {
             let malformed_account_id = account::malformed();
-            let user_public_key = key::random_pk();
+            let user_secret_key = key::random_sk();
+            let user_public_key = user_secret_key.public_key().to_string();
             let oidc_token = token::valid_random();
-
-            let create_account_options = CreateAccountOptions {
-                full_access_keys: Some(vec![user_public_key.clone().parse().unwrap()]),
-                limited_access_keys: None,
-                contract_bytes: None,
-            };
 
             let (status_code, new_acc_response) = ctx
                 .leader_node
-                .new_account(NewAccountRequest {
-                    near_account_id: malformed_account_id.to_string(),
-                    create_account_options: create_account_options.clone(),
-                    oidc_token: oidc_token.clone(),
-                    signature: None,
-                })
+                .new_account_with_helper(
+                    malformed_account_id.clone(),
+                    PublicKey::from_str(&user_public_key.clone())?,
+                    None,
+                    user_secret_key.clone(),
+                    oidc_token.clone(),
+                )
                 .await?;
             assert_eq!(status_code, StatusCode::BAD_REQUEST);
             assert!(matches!(new_acc_response, NewAccountResponse::Err { .. }));
@@ -137,12 +129,13 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
             // Check that the service is still available
             let (status_code, new_acc_response) = ctx
                 .leader_node
-                .new_account(NewAccountRequest {
-                    near_account_id: account_id.to_string(),
-                    create_account_options: create_account_options.clone(),
-                    oidc_token: oidc_token.clone(),
-                    signature: None,
-                })
+                .new_account_with_helper(
+                    account_id.clone(),
+                    PublicKey::from_str(&user_public_key.clone())?,
+                    None,
+                    user_secret_key.clone(),
+                    oidc_token.clone(),
+                )
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
             assert!(matches!(new_acc_response, NewAccountResponse::Ok {

@@ -4,13 +4,12 @@ use ed25519_dalek::Verifier;
 use hyper::StatusCode;
 use mpc_recovery::{
     msg::{
-        ClaimOidcRequest, ClaimOidcResponse, MpcPkRequest, MpcPkResponse, NewAccountRequest,
-        NewAccountResponse, SignNodeRequest, SignResponse, SignShareNodeRequest,
+        ClaimOidcRequest, ClaimOidcResponse, MpcPkRequest, MpcPkResponse, NewAccountResponse,
+        SignNodeRequest, SignResponse, SignShareNodeRequest,
     },
     oauth::get_test_claims,
     transaction::{
-        call_all_nodes, sign_payload_with_mpc, to_dalek_combined_public_key, CreateAccountOptions,
-        LimitedAccessKey,
+        call_all_nodes, sign_payload_with_mpc, to_dalek_combined_public_key, LimitedAccessKey,
     },
     utils::{claim_oidc_request_digest, claim_oidc_response_digest, oidc_digest},
 };
@@ -27,9 +26,9 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             // Preparing user credentials
             let account_id = account::random(ctx.worker)?;
 
-            let user_private_key =
+            let user_secret_key =
                 near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519);
-            let user_public_key = user_private_key.public_key().to_string();
+            let user_public_key = user_secret_key.public_key().to_string();
             let oidc_token = token::valid_random();
             let wrong_oidc_token = token::valid_random();
 
@@ -58,12 +57,12 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             let request_digest = claim_oidc_request_digest(oidc_token_hash).unwrap();
             let wrong_digest = claim_oidc_request_digest(wrong_oidc_token_hash).unwrap();
 
-            let request_digest_signature = match user_private_key.sign(&request_digest) {
+            let request_digest_signature = match user_secret_key.sign(&request_digest) {
                 near_crypto::Signature::ED25519(k) => k,
                 _ => return Err(anyhow::anyhow!("Wrong signature type")),
             };
 
-            let request_digest_wrong_signature = match user_private_key.sign(&wrong_digest) {
+            let request_digest_wrong_signature = match user_secret_key.sign(&wrong_digest) {
                 near_crypto::Signature::ED25519(k) => k,
                 _ => return Err(anyhow::anyhow!("Wrong signature type")),
             };
@@ -147,21 +146,16 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             }
 
             // Create account
-            let new_account_request = NewAccountRequest {
-                near_account_id: account_id.to_string(),
-                create_account_options: CreateAccountOptions {
-                    full_access_keys: Some(vec![
-                        PublicKey::from_str(&user_public_key.clone()).unwrap()
-                    ]),
-                    limited_access_keys: None,
-                    contract_bytes: None,
-                },
-                oidc_token: oidc_token.clone(),
-                signature: None, //TODO: add real signature
-            };
-
-            let (status_code, new_acc_response) =
-                ctx.leader_node.new_account(new_account_request).await?;
+            let (status_code, new_acc_response) = ctx
+                .leader_node
+                .new_account_with_helper(
+                    account_id.clone(),
+                    PublicKey::from_str(&user_public_key.clone())?,
+                    None,
+                    user_secret_key.clone(),
+                    oidc_token.clone(),
+                )
+                .await?;
 
             // Check account creation status
             assert_eq!(status_code, StatusCode::OK);
@@ -183,7 +177,7 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
 
             let recovery_pk = ctx
                 .leader_node
-                .recovery_pk(oidc_token.clone(), user_private_key.clone())
+                .recovery_pk(oidc_token.clone(), user_secret_key.clone())
                 .await?;
 
             let new_user_public_key = key::random_pk();
@@ -195,7 +189,7 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
                     oidc_token.clone(),
                     new_user_public_key.parse()?,
                     recovery_pk,
-                    user_private_key,
+                    user_secret_key,
                 )
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
@@ -254,21 +248,16 @@ async fn test_basic_action() -> anyhow::Result<()> {
             let user_public_key = user_secret_key.public_key().to_string();
             let oidc_token = token::valid_random();
 
-            let create_account_options = CreateAccountOptions {
-                full_access_keys: Some(vec![user_public_key.clone().parse().unwrap()]),
-                limited_access_keys: None,
-                contract_bytes: None,
-            };
-
             // Create account
             let (status_code, new_acc_response) = ctx
                 .leader_node
-                .new_account(NewAccountRequest {
-                    near_account_id: account_id.to_string(),
-                    create_account_options,
-                    oidc_token: oidc_token.clone(),
-                    signature: None,
-                })
+                .new_account_with_helper(
+                    account_id.clone(),
+                    PublicKey::from_str(&user_public_key.clone())?,
+                    None,
+                    user_secret_key.clone(),
+                    oidc_token.clone(),
+                )
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
             assert!(matches!(new_acc_response, NewAccountResponse::Ok {
@@ -342,7 +331,8 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
     with_nodes(3, |ctx| {
         Box::pin(async move {
             let account_id = account::random(ctx.worker)?;
-            let user_full_access_key = key::random_pk();
+            let user_full_access_pk = key::random_pk();
+            let oidc_token = token::valid_random();
 
             let user_limited_access_key = LimitedAccessKey {
                 public_key: key::random_pk().parse().unwrap(),
@@ -351,20 +341,15 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
                 method_names: "method_names".to_string(),
             };
 
-            let create_account_options = CreateAccountOptions {
-                full_access_keys: Some(vec![user_full_access_key.clone().parse().unwrap()]),
-                limited_access_keys: Some(vec![user_limited_access_key.clone()]),
-                contract_bytes: None,
-            };
-
             let (status_code, _) = ctx
                 .leader_node
-                .new_account(NewAccountRequest {
-                    near_account_id: account_id.to_string(),
-                    create_account_options,
-                    oidc_token: token::valid_random(),
-                    signature: None,
-                })
+                .new_account_with_helper(
+                    account_id.clone(),
+                    PublicKey::from_str(&user_full_access_pk.clone())?,
+                    Some(user_limited_access_key.clone()),
+                    key::random_sk(),
+                    oidc_token.clone(),
+                )
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
 
@@ -376,7 +361,7 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
                 .clone()
                 .into_iter()
                 .find(|ak| {
-                    ak.public_key.to_string() != user_full_access_key
+                    ak.public_key.to_string() != user_full_access_pk
                         && ak.public_key.to_string()
                             != user_limited_access_key.public_key.to_string()
                 })
@@ -418,22 +403,18 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
 
             // Generate another user
             let account_id = account::random(ctx.worker)?;
-            let user_public_key = key::random_pk();
-
-            let create_account_options = CreateAccountOptions {
-                full_access_keys: Some(vec![user_public_key.clone().parse().unwrap()]),
-                limited_access_keys: None,
-                contract_bytes: None,
-            };
+            let user_secret_key = key::random_sk();
+            let user_public_key = user_secret_key.public_key();
 
             let (status_code, _) = ctx
                 .leader_node
-                .new_account(NewAccountRequest {
-                    near_account_id: account_id.to_string(),
-                    create_account_options,
-                    oidc_token: token::valid_random(),
-                    signature: None,
-                })
+                .new_account_with_helper(
+                    account_id.clone(),
+                    user_public_key.clone(),
+                    None,
+                    user_secret_key.clone(),
+                    oidc_token.clone(),
+                )
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
 
@@ -442,7 +423,7 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
             let access_keys = ctx.worker.view_access_keys(&account_id).await?;
             let recovery_full_access_key2 = access_keys
                 .into_iter()
-                .find(|ak| ak.public_key.to_string() != user_public_key)
+                .find(|ak| ak.public_key.to_string() != user_public_key.to_string())
                 .ok_or_else(|| anyhow::anyhow!("missing recovery access key"))?;
 
             assert_ne!(

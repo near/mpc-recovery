@@ -51,12 +51,7 @@ pub struct NewAccountRequest {
     pub near_account_id: String,
     pub create_account_options: CreateAccountOptions,
     pub oidc_token: String,
-    // TODO: does it make any scence to send this signature here?
-    // To make it work, we will need to keep track of registered
-    // tokens on the leader node.
-    // What kind of harm can be done if we don't enforce this in new_acc call?
-    #[serde(with = "hex_option_sig_share")]
-    pub signature: Option<Signature>,
+    pub frp_signature: Signature,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -165,7 +160,7 @@ mod hex_option_sig_share {
     use ed25519_dalek::Signature;
     use serde::{Deserialize, Deserializer, Serializer};
 
-    pub fn serialize<S>(sig_share: &Option<Signature>, serializer: S) -> Result<S::Ok, S::Error>
+    pub fn _serialize<S>(sig_share: &Option<Signature>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -176,7 +171,7 @@ mod hex_option_sig_share {
         serializer.serialize_str(&s)
     }
 
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Signature>, D::Error>
+    pub fn _deserialize<'de, D>(deserializer: D) -> Result<Option<Signature>, D::Error>
     where
         D: Deserializer<'de>,
     {
