@@ -36,9 +36,6 @@ variable "near_root_account" {
 variable "account_creator_id" {
 }
 
-variable "account_lookup_url" {
-}
-
 variable "firebase_audience_id" {
 }
 

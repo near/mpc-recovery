@@ -61,10 +61,6 @@ resource "google_cloud_run_v2_service" "leader" {
         value = var.near_root_account
       }
       env {
-        name  = "MPC_RECOVERY_ACCOUNT_LOOKUP_URL"
-        value = var.account_lookup_url
-      }
-      env {
         name  = "MPC_RECOVERY_ACCOUNT_CREATOR_ID"
         value = var.account_creator_id
       }
