@@ -150,7 +150,15 @@ impl<'a> Sandbox<'a> {
             .await?;
 
         container.exec(ExecCommand {
-            cmd: format!("bash -c 'while [[ \"$(curl -s -o /dev/null -w ''%{{http_code}}'' localhost:{})\" != \"200\" ]]; do sleep 1; done'", Self::CONTAINER_RPC_PORT),
+            cmd: format!(
+                "bash -c 'while [[ \"$(curl -H \"Content-type: application/json\" -X POST -s -o /dev/null -w ''%{{http_code}}'' -d ''{{
+                \"jsonrpc\": \"2.0\",
+                \"id\": \"dontcare\",
+                \"method\": \"status\",
+                \"params\": []
+              }}'' localhost:{})\" != \"200\" ]]; do sleep 1; done; echo \"sandbox is ready to accept connections\"'",
+                Self::CONTAINER_RPC_PORT
+            ),
             ready_conditions: vec![]
         });
 
