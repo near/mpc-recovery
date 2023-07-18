@@ -220,7 +220,7 @@ impl<'a> Sandbox<'a> {
               }}'' localhost:{})\" != \"200\" ]]; do sleep 1; done; echo \"sandbox is ready to accept connections\"'",
                 Self::CONTAINER_RPC_PORT
             ),
-            ready_conditions: vec![]
+            ready_conditions: vec![WaitFor::StdErrMessage { message: "ready".to_string() }]
         });
 
         let full_address = format!("http://{}:{}", address, Self::CONTAINER_RPC_PORT);
