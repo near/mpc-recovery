@@ -16,7 +16,7 @@ use mpc_recovery::{
     relayer::NearRpcAndRelayerClient,
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
-use near_crypto::{PublicKey, SecretKey};
+use near_crypto::PublicKey;
 use near_primitives::{
     account::{AccessKey, AccessKeyPermission},
     delegate_action::{DelegateAction, SignedDelegateAction},
@@ -32,7 +32,7 @@ use testcontainers::{
 };
 use tokio::io::AsyncWriteExt;
 use tracing;
-use workspaces::AccountId;
+use workspaces::{types::SecretKey, AccountId};
 
 use crate::util;
 

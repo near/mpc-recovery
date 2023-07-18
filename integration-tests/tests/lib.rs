@@ -69,8 +69,8 @@ where
         &datastore.address,
         GCP_PROJECT_ID,
         near_root_account.id(),
-        &relayer_ctx.creator_account_id,
-        &relayer_ctx.creator_account_sk,
+        relayer_ctx.creator_account.id(),
+        relayer_ctx.creator_account.secret_key(),
         FIREBASE_AUDIENCE_ID,
     )
     .await?;
