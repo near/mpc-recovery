@@ -5,7 +5,7 @@ use hyper::StatusCode;
 use mpc_recovery::{
     msg::{
         ClaimOidcRequest, ClaimOidcResponse, MpcPkRequest, MpcPkResponse, NewAccountRequest,
-        NewAccountResponse, SignNodeRequest, SignResponse, SignShareNodeRequest,
+        NewAccountResponse, SignNodeRequest, SignShareNodeRequest,
     },
     oauth::get_test_claims,
     transaction::{
