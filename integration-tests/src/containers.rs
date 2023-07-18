@@ -3,8 +3,9 @@
 use std::str::FromStr;
 
 use anyhow::{anyhow, Ok};
-use bollard::Docker;
+use bollard::{network::CreateNetworkOptions, service::Ipam, Docker};
 use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::GenericArray};
+use futures::lock::Mutex;
 use hyper::StatusCode;
 use mpc_recovery::{
     msg::{
@@ -22,6 +23,7 @@ use near_primitives::{
     transaction::{Action, AddKeyAction},
     views::FinalExecutionStatus,
 };
+use once_cell::sync::Lazy;
 use testcontainers::{
     clients::Cli,
     core::{ExecCommand, WaitFor},
@@ -32,6 +34,8 @@ use tracing;
 use workspaces::AccountId;
 
 use crate::util;
+
+static NETWORK_MUTEX: Lazy<Mutex<i32>> = Lazy::new(|| Mutex::new(0));
 
 pub struct DockerClient {
     pub docker: Docker,
@@ -77,6 +81,32 @@ impl DockerClient {
             })?;
 
         Ok(ip_address)
+    }
+
+    pub async fn create_network(&self, network: &str) -> anyhow::Result<()> {
+        let _lock = &NETWORK_MUTEX.lock().await;
+        let list = self.docker.list_networks::<&str>(None).await?;
+        if list.iter().any(|n| n.name == Some(network.to_string())) {
+            return Ok(());
+        }
+
+        let create_network_options = CreateNetworkOptions {
+            name: network,
+            check_duplicate: true,
+            driver: if cfg!(windows) {
+                "transparent"
+            } else {
+                "bridge"
+            },
+            ipam: Ipam {
+                config: None,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let _response = &self.docker.create_network(create_network_options).await?;
+
+        Ok(())
     }
 }
 

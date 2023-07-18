@@ -23,6 +23,7 @@ where
     F: for<'a> FnOnce(TestContext<'a>) -> BoxFuture<'a, anyhow::Result<()>>,
 {
     let docker_client = containers::DockerClient::default();
+    docker_client.create_network(NETWORK).await?;
 
     let relayer_ctx_future =
         mpc_recovery_integration_tests::initialize_relayer(&docker_client, NETWORK);
