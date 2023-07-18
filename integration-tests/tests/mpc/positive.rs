@@ -1,4 +1,4 @@
-use crate::{account, check, key, token, with_nodes};
+use crate::{account, check, key, token, with_nodes, MpcCheck};
 use anyhow::anyhow;
 use ed25519_dalek::Verifier;
 use hyper::StatusCode;
@@ -34,19 +34,20 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             let wrong_oidc_token = token::valid_random();
 
             // Get MPC public key
-            let (status_code, mpc_pk_response) =
-                ctx.leader_node.get_mpc_pk(MpcPkRequest {}).await?;
-
-            assert_eq!(status_code, StatusCode::OK);
+            let mpc_pk_response = ctx
+                .leader_node
+                .get_mpc_pk(MpcPkRequest {})
+                .await?
+                .assert_ok()?;
 
             let mpc_pk = match mpc_pk_response {
                 MpcPkResponse::Ok { mpc_pk } => mpc_pk,
-                MpcPkResponse::Err { msg } => return Err(anyhow::anyhow!(msg)),
+                MpcPkResponse::Err { msg } => anyhow::bail!(msg),
             };
 
             let decoded_mpc_pk = match hex::decode(mpc_pk.clone()) {
                 Ok(v) => v,
-                Err(e) => return Err(anyhow::anyhow!("Failed to decode mpc pk. {}", e)),
+                Err(e) => anyhow::bail!("Failed to decode mpc pk. {}", e),
             };
 
             let mpc_pk = ed25519_dalek::PublicKey::from_bytes(&decoded_mpc_pk).unwrap();
@@ -60,12 +61,12 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
 
             let request_digest_signature = match user_private_key.sign(&request_digest) {
                 near_crypto::Signature::ED25519(k) => k,
-                _ => return Err(anyhow::anyhow!("Wrong signature type")),
+                _ => anyhow::bail!("Wrong signature type"),
             };
 
             let request_digest_wrong_signature = match user_private_key.sign(&wrong_digest) {
                 near_crypto::Signature::ED25519(k) => k,
-                _ => return Err(anyhow::anyhow!("Wrong signature type")),
+                _ => anyhow::bail!("Wrong signature type"),
             };
 
             let oidc_request = ClaimOidcRequest {
@@ -81,10 +82,12 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             };
 
             // Make the claiming request with wrong signature
-            let (status_code, oidc_response) =
-                ctx.leader_node.claim_oidc(bad_oidc_request.clone()).await?;
+            let oidc_response = ctx
+                .leader_node
+                .claim_oidc(bad_oidc_request.clone())
+                .await?
+                .assert_bad_request()?;
 
-            assert_eq!(status_code, StatusCode::BAD_REQUEST);
             match oidc_response {
                 ClaimOidcResponse::Ok { .. } => {
                     return Err(anyhow::anyhow!(
@@ -100,10 +103,11 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             }
 
             // Making the claiming request with correct signature
-            let (status_code, oidc_response) =
-                ctx.leader_node.claim_oidc(oidc_request.clone()).await?;
-
-            assert_eq!(status_code, StatusCode::OK);
+            let oidc_response = ctx
+                .leader_node
+                .claim_oidc(oidc_request.clone())
+                .await?
+                .assert_ok()?;
 
             let mpc_signature = match oidc_response {
                 ClaimOidcResponse::Ok { mpc_signature } => mpc_signature,
@@ -111,10 +115,11 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             };
 
             // Making the same claiming request should fail
-            let (status_code, oidc_response) =
-                ctx.leader_node.claim_oidc(oidc_request.clone()).await?;
-
-            assert_eq!(status_code, StatusCode::BAD_REQUEST);
+            let oidc_response = ctx
+                .leader_node
+                .claim_oidc(oidc_request.clone())
+                .await?
+                .assert_bad_request()?;
 
             match oidc_response {
                 ClaimOidcResponse::Ok { .. } => {
@@ -160,11 +165,13 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
                 signature: None, //TODO: add real signature
             };
 
-            let (status_code, new_acc_response) =
-                ctx.leader_node.new_account(new_account_request).await?;
+            let new_acc_response = ctx
+                .leader_node
+                .new_account(new_account_request)
+                .await?
+                .assert_ok()?;
 
             // Check account creation status
-            assert_eq!(status_code, StatusCode::OK);
             assert!(matches!(new_acc_response, NewAccountResponse::Ok {
                     create_account_options: _,
                     user_recovery_public_key: _,
@@ -185,21 +192,15 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
 
             let new_user_public_key = key::random();
 
-            let (status_code, sign_response) = ctx
-                .leader_node
+            ctx.leader_node
                 .add_key(
                     account_id.clone(),
                     oidc_token.clone(),
                     new_user_public_key.parse()?,
                     recovery_pk,
                 )
-                .await?;
-
-            assert_eq!(status_code, StatusCode::OK);
-
-            let SignResponse::Ok { .. } = sign_response else {
-                anyhow::bail!("failed to get a signature from mpc-recovery");
-            };
+                .await?
+                .assert_ok()?;
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
             check::access_key_exists(&ctx, &account_id, &new_user_public_key).await?;
@@ -257,7 +258,7 @@ async fn test_basic_action() -> anyhow::Result<()> {
             };
 
             // Create account
-            let (status_code, new_acc_response) = ctx
+            let new_acc_response = ctx
                 .leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
@@ -265,8 +266,8 @@ async fn test_basic_action() -> anyhow::Result<()> {
                     oidc_token: oidc_token.clone(),
                     signature: None,
                 })
-                .await?;
-            assert_eq!(status_code, StatusCode::OK);
+                .await?
+                .assert_ok()?;
             assert!(matches!(new_acc_response, NewAccountResponse::Ok {
                     create_account_options: _,
                     user_recovery_public_key: _,
@@ -283,40 +284,30 @@ async fn test_basic_action() -> anyhow::Result<()> {
 
             let new_user_public_key = key::random();
 
-            let (status_code, sign_response) = ctx
-                .leader_node
+            ctx.leader_node
                 .add_key(
                     account_id.clone(),
                     oidc_token.clone(),
                     new_user_public_key.parse()?,
                     recovery_pk.clone(),
                 )
-                .await?;
-            assert_eq!(status_code, StatusCode::OK);
-
-            let SignResponse::Ok { .. } = sign_response else {
-                anyhow::bail!("failed to get a signature from mpc-recovery");
-            };
+                .await?
+                .assert_ok()?;
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
 
             check::access_key_exists(&ctx, &account_id, &new_user_public_key).await?;
 
             // Adding the same key should now fail
-            let (status_code, sign_response) = ctx
-                .leader_node
+            ctx.leader_node
                 .add_key(
                     account_id.clone(),
                     oidc_token,
                     new_user_public_key.parse()?,
                     recovery_pk.clone(),
                 )
-                .await?;
-            assert_eq!(status_code, StatusCode::OK);
-
-            let SignResponse::Ok { .. } = sign_response else {
-                anyhow::bail!("failed to get a signature from mpc-recovery");
-            };
+                .await?
+                .assert_ok()?;
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
 
@@ -348,16 +339,15 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
                 contract_bytes: None,
             };
 
-            let (status_code, _) = ctx
-                .leader_node
+            ctx.leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
                     create_account_options,
                     oidc_token: token::valid_random(),
                     signature: None,
                 })
-                .await?;
-            assert_eq!(status_code, StatusCode::OK);
+                .await?
+                .assert_ok()?;
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
 
@@ -417,16 +407,15 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
                 contract_bytes: None,
             };
 
-            let (status_code, _) = ctx
-                .leader_node
+            ctx.leader_node
                 .new_account(NewAccountRequest {
                     near_account_id: account_id.to_string(),
                     create_account_options,
                     oidc_token: token::valid_random(),
                     signature: None,
                 })
-                .await?;
-            assert_eq!(status_code, StatusCode::OK);
+                .await?
+                .assert_ok()?;
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
 

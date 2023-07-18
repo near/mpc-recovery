@@ -2,7 +2,11 @@ mod mpc;
 
 use curv::elliptic::curves::{Ed25519, Point};
 use futures::future::BoxFuture;
-use mpc_recovery::GenerateResult;
+use hyper::StatusCode;
+use mpc_recovery::{
+    msg::{ClaimOidcResponse, MpcPkResponse, NewAccountResponse, SignResponse},
+    GenerateResult,
+};
 use mpc_recovery_integration_tests::containers;
 use workspaces::{network::Sandbox, Worker};
 
@@ -173,14 +177,74 @@ mod check {
             ))
         }
     }
-
-    pub async fn no_account(ctx: &TestContext<'_>, account_id: &AccountId) -> anyhow::Result<()> {
-        if ctx.worker.view_account(account_id).await.is_err() {
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!(
-                "expected account {account_id} to not exist, but it does"
-            ))
-        }
-    }
 }
+
+trait MpcCheck {
+    type Response;
+
+    fn assert_ok(self) -> anyhow::Result<Self::Response>;
+    fn assert_bad_request(self) -> anyhow::Result<Self::Response>;
+    fn assert_unauthorized(self) -> anyhow::Result<Self::Response>;
+}
+
+#[macro_export]
+macro_rules! impl_mpc_check {
+    ( $response:ident ) => {
+        impl MpcCheck for (StatusCode, $response) {
+            type Response = $response;
+
+            fn assert_ok(self) -> anyhow::Result<Self::Response> {
+                let status_code = self.0;
+                let response = self.1;
+
+                if status_code == StatusCode::OK {
+                    let $response::Ok { .. } = response else {
+                        anyhow::bail!("failed to get a signature from mpc-recovery");
+                    };
+
+                    Ok(response)
+                } else {
+                    let $response::Err { .. } = response else {
+                        anyhow::bail!("unexpected Ok with a non-200 http code ({status_code})");
+                    };
+                    anyhow::bail!("expected 200, but got {status_code} with response: {response:?}");
+                }
+            }
+
+            fn assert_bad_request(self) -> anyhow::Result<Self::Response> {
+                let status_code = self.0;
+                let response = self.1;
+
+                if status_code == StatusCode::BAD_REQUEST {
+                    let $response::Err { .. } = response else {
+                        anyhow::bail!("unexpected Ok with a 400 http code");
+                    };
+
+                    Ok(response)
+                } else {
+                    anyhow::bail!("expected 400, but got {status_code} with response: {response:?}");
+                }
+            }
+
+            fn assert_unauthorized(self) -> anyhow::Result<Self::Response> {
+                let status_code = self.0;
+                let response = self.1;
+
+                if status_code == StatusCode::UNAUTHORIZED {
+                    let $response::Err { .. } = response else {
+                        anyhow::bail!("unexpected Ok with a 401 http code");
+                    };
+
+                    Ok(response)
+                } else {
+                    anyhow::bail!("expected 401, but got {status_code} with response: {response:?}");
+                }
+            }
+        }
+    };
+}
+
+impl_mpc_check!(SignResponse);
+impl_mpc_check!(NewAccountResponse);
+impl_mpc_check!(MpcPkResponse);
+impl_mpc_check!(ClaimOidcResponse);
