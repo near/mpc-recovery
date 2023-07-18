@@ -144,6 +144,7 @@ impl<'a> Redis<'a> {
 pub struct Sandbox<'a> {
     pub container: Container<'a, GenericImage>,
     pub address: String,
+    pub local_address: String,
 }
 
 impl<'a> Sandbox<'a> {
@@ -178,6 +179,7 @@ impl<'a> Sandbox<'a> {
         let address = docker_client
             .get_network_ip_address(&container, network)
             .await?;
+        let host_port = container.get_host_port_ipv4(Self::CONTAINER_RPC_PORT);
 
         container.exec(ExecCommand {
             cmd: format!(
@@ -197,6 +199,7 @@ impl<'a> Sandbox<'a> {
         Ok(Sandbox {
             container,
             address: full_address,
+            local_address: format!("http://localhost:{host_port}"),
         })
     }
 }
@@ -204,6 +207,7 @@ impl<'a> Sandbox<'a> {
 pub struct Relayer<'a> {
     pub container: Container<'a, GenericImage>,
     pub address: String,
+    pub local_address: String,
 }
 
 impl<'a> Relayer<'a> {
@@ -250,12 +254,14 @@ impl<'a> Relayer<'a> {
         let ip_address = docker_client
             .get_network_ip_address(&container, network)
             .await?;
+        let host_port = container.get_host_port_ipv4(Self::CONTAINER_PORT);
 
         let full_address = format!("http://{}:{}", ip_address, Self::CONTAINER_PORT);
         tracing::info!("Relayer container is running at {}", full_address);
         Ok(Relayer {
             container,
             address: full_address,
+            local_address: format!("http://localhost:{host_port}"),
         })
     }
 }
