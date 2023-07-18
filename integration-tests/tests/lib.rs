@@ -70,6 +70,9 @@ where
         FIREBASE_AUDIENCE_ID,
     )
     .await?;
+    docker_client
+        .continuously_print_logs(leader_node.container.id())
+        .await?;
 
     f(TestContext {
         leader_node: &leader_node.api(

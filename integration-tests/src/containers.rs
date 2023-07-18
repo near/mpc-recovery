@@ -3,9 +3,9 @@
 use std::str::FromStr;
 
 use anyhow::{anyhow, Ok};
-use bollard::{network::CreateNetworkOptions, service::Ipam, Docker};
+use bollard::{container::LogsOptions, network::CreateNetworkOptions, service::Ipam, Docker};
 use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::GenericArray};
-use futures::lock::Mutex;
+use futures::{lock::Mutex, StreamExt};
 use hyper::StatusCode;
 use mpc_recovery::{
     msg::{
@@ -30,6 +30,7 @@ use testcontainers::{
     images::generic::GenericImage,
     Container, Image, RunnableImage,
 };
+use tokio::io::AsyncWriteExt;
 use tracing;
 use workspaces::AccountId;
 
@@ -105,6 +106,34 @@ impl DockerClient {
             ..Default::default()
         };
         let _response = &self.docker.create_network(create_network_options).await?;
+
+        Ok(())
+    }
+
+    pub async fn continuously_print_logs(&self, id: &str) -> anyhow::Result<()> {
+        let mut output = self.docker.logs::<String>(
+            id,
+            Some(LogsOptions {
+                follow: true,
+                stdout: true,
+                stderr: true,
+                ..Default::default()
+            }),
+        );
+
+        // Asynchronous process that pipes docker attach output into stdout.
+        // Will die automatically once Docker container output is closed.
+        tokio::spawn(async move {
+            let mut stdout = tokio::io::stdout();
+
+            while let Some(Result::Ok(output)) = output.next().await {
+                stdout
+                    .write_all(output.into_bytes().as_ref())
+                    .await
+                    .unwrap();
+                stdout.flush().await.unwrap();
+            }
+        });
 
         Ok(())
     }
