@@ -2,7 +2,10 @@ pub mod error;
 pub mod value;
 
 use self::value::{FromValue, IntoValue};
-use google_datastore1::api::{CommitRequest, Entity, Key, LookupRequest, Mutation, PathElement};
+use google_datastore1::api::{
+    CommitRequest, Entity, Key, KindExpression, LookupRequest, Mutation, PathElement, Query,
+    RunQueryRequest,
+};
 use google_datastore1::oauth2::AccessTokenAuthenticator;
 use google_datastore1::Datastore;
 use google_secretmanager1::oauth2::authenticator::ApplicationDefaultCredentialsTypes;
@@ -166,6 +169,91 @@ impl GcpService {
             .doit()
             .await?;
         tracing::debug!(?response, "received response");
+
+        Ok(())
+    }
+
+    #[tracing::instrument(level = "debug", skip_all)]
+    pub async fn update<T: IntoValue + KeyKind>(&self, value: T) -> anyhow::Result<()> {
+        let mut entity = Entity::from_value(value.into_value())?;
+        let path_element = entity
+            .key
+            .as_mut()
+            .and_then(|k| k.path.as_mut())
+            .and_then(|p| p.first_mut());
+        if let Some(path_element) = path_element {
+            // We can't create multiple datastore databases in GCP, so we have to suffix
+            // type kinds with env (`dev`, `prod`).
+            path_element.kind = Some(format!("{}-{}", T::kind(), self.env))
+        }
+
+        let request = CommitRequest {
+            database_id: Some("".to_string()),
+            mode: Some(String::from("NON_TRANSACTIONAL")),
+            mutations: Some(vec![Mutation {
+                insert: None,
+                delete: None,
+                update: Some(entity),
+                base_version: None,
+                upsert: None,
+                update_time: None,
+            }]),
+            single_use_transaction: None,
+            transaction: None,
+        };
+        tracing::debug!(?request);
+        let (_, response) = self
+            .datastore
+            .projects()
+            .commit(request, &self.project_id)
+            .doit()
+            .await?;
+        tracing::debug!(?response, "received response");
+
+        Ok(())
+    }
+
+    pub async fn fetch_entities<T: KeyKind>(&self) -> anyhow::Result<()> {
+        let kind: String = format!("{}-{}", T::kind(), self.env);
+        let req = RunQueryRequest {
+            database_id: Some("".to_string()),
+            partition_id: Default::default(),
+            read_options: Default::default(),
+            query: Some(Query {
+                projection: None,
+                kind: Some(vec![KindExpression { name: Some(kind) }]),
+                filter: None,
+                order: None,
+                distinct_on: Some(vec![]),
+                start_cursor: None,
+                end_cursor: None,
+                offset: None,
+                limit: None,
+            }),
+            gql_query: None,
+        };
+
+        let query = self
+            .datastore
+            .projects()
+            .run_query(req, &self.project_id)
+            .doit()
+            .await;
+        match query {
+            Err(e) => eprintln!("Error executing query: {:?}", e),
+            Ok((hyper_resp, query_resp)) => {
+                println!("Hyper resp: {:?}", hyper_resp);
+                println!(
+                    "Query results: {:?}",
+                    query_resp.batch.unwrap().entity_results
+                );
+                //     for entity_result in response.entity_results.unwrap_or_else(Vec::new) {
+                //         if let Some(entity) = entity_result.entity {
+                //             println!("Entity: {:?}", entity);
+                //         }
+                // }
+            }
+        }
 
         Ok(())
     }

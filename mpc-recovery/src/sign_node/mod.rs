@@ -1,8 +1,9 @@
 use self::aggregate_signer::{NodeInfo, Reveal, SignedCommitment, SigningState};
+use self::migration::Vault;
 use self::oidc::OidcDigest;
 use self::user_credentials::EncryptedUserCredentials;
 use crate::gcp::GcpService;
-use crate::msg::{AcceptNodePublicKeysRequest, SignNodeRequest};
+use crate::msg::{AcceptNodePublicKeysRequest, RotateKeyRequest, SignNodeRequest};
 use crate::oauth::OAuthTokenVerifier;
 use crate::primitives::InternalAccountId;
 use crate::sign_node::pk_set::SignerNodePkSet;
@@ -20,6 +21,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub mod aggregate_signer;
+pub mod migration;
 pub mod oidc;
 pub mod pk_set;
 pub mod user_credentials;
@@ -29,6 +31,7 @@ pub struct Config {
     pub our_index: NodeId,
     pub node_key: ExpandedKeyPair,
     pub cipher: Aes256Gcm,
+    pub vault: Vault,
     pub port: u16,
     pub pagoda_firebase_audience_id: String,
 }
@@ -40,6 +43,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         our_index,
         node_key,
         cipher,
+        vault,
         port,
         pagoda_firebase_audience_id,
     } = config;
@@ -54,6 +58,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
     let state = SignNodeState {
         gcp_service,
         node_key,
+        vault,
         cipher,
         signing_state,
         pagoda_firebase_audience_id,
@@ -91,6 +96,7 @@ struct SignNodeState {
     pagoda_firebase_audience_id: String,
     node_key: ExpandedKeyPair,
     cipher: Aes256Gcm,
+    vault: Vault,
     signing_state: Arc<RwLock<SigningState>>,
     node_info: NodeInfo,
 }
@@ -408,6 +414,13 @@ async fn accept_pk_set(
             Json(Ok("failed to save the keys".to_string())),
         ),
     }
+}
+
+#[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
+async fn rotate_key(
+    Extension(state): Extension<SignNodeState>,
+    Json(request): Json<RotateKeyRequest>,
+) {
 }
 
 /// Validate whether the current state of the sign node is useable or not.

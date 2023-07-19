@@ -2,7 +2,9 @@ mod mpc;
 
 use curv::elliptic::curves::{Ed25519, Point};
 use futures::future::BoxFuture;
+use mpc_recovery::gcp::GcpService;
 use mpc_recovery::GenerateResult;
+use mpc_recovery::sign_node::user_credentials::EncryptedUserCredentials;
 use mpc_recovery_integration_tests::containers;
 use workspaces::{network::Sandbox, Worker};
 
@@ -76,7 +78,38 @@ where
         signer_nodes: &signer_nodes.iter().map(|n| n.api()).collect(),
         worker: &relayer_ctx.worker,
     })
-    .await
+    .await?;
+
+    // let gcp_service =
+    //     GcpService::new("dev".into(), GCP_PROJECT_ID.into(), Some(datastore.address)).await?;
+
+    // gcp_service.fetch_entities::<EncryptedUserCredentials>().await?;
+
+
+    // use google_datastore1::api::{KindExpression, Query, RunQueryRequest};
+
+    // let kind: String = "EncryptedUserCredentials-dev".to_string();
+    // let req = RunQueryRequest {
+    //     database_id: Some("".to_string()),
+    //     partition_id: Default::default(),
+    //     read_options: Default::default(),
+    //     query: Some(Query {
+    //         projection: None,
+    //         kind: Some(vec![KindExpression { name: Some(kind) }]),
+    //         filter: None,
+    //         order: None,
+    //         distinct_on: Some(vec![]),
+    //         start_cursor: None,
+    //         end_cursor: None,
+    //         offset: None,
+    //         limit: None,
+    //     }),
+    //     gql_query: None,
+    // };
+
+    // let query = datastore.projects().run_query(req, GCP_PROJECT_ID);
+
+    Ok(())
 }
 
 mod account {

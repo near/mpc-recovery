@@ -234,6 +234,10 @@ async fn main() -> anyhow::Result<()> {
             let sk_share: ExpandedKeyPair = serde_json::from_str(&sk_share).unwrap();
 
             let config = SignerConfig {
+                vault: mpc_recovery::sign_node::migration::Vault::Stable {
+                    cipher: cipher.clone(),
+                    node_key: sk_share.clone(),
+                },
                 gcp_service,
                 our_index: node_id,
                 node_key: sk_share,
