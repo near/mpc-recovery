@@ -467,6 +467,8 @@ async fn process_sign<T: OAuthTokenVerifier>(
             &state.sign_nodes,
             request.oidc_token.clone(),
             request.delegate_action.clone(),
+            request.frp_signature.clone(),
+            request.frp_public_key.clone(),
         )
         .await?;
 

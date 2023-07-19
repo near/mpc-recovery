@@ -5,8 +5,6 @@ use futures::{future, FutureExt};
 use multi_party_eddsa::protocols::aggsig::KeyAgg;
 use multi_party_eddsa::protocols::{self, aggsig};
 use near_crypto::{InMemorySigner, PublicKey, SecretKey};
-use near_primitives::borsh::BorshSerialize;
-use near_primitives::hash::hash;
 use near_primitives::transaction::{Action, FunctionCallAction};
 use near_primitives::types::{AccountId, Nonce};
 
@@ -104,17 +102,14 @@ pub async fn get_mpc_signature(
     sign_nodes: &[String],
     oidc_token: String,
     delegate_action: DelegateAction,
+    frp_signature: Signature,
+    frp_public_key: String,
 ) -> anyhow::Result<Signature> {
-    let signable_message =
-        SignableMessage::new(&delegate_action, SignableMessageType::DelegateAction);
-
-    let bytes = signable_message.try_to_vec()?;
-
-    let hash = hash(&bytes);
-
     let sig_share_request = SignNodeRequest::SignShare(SignShareNodeRequest {
         oidc_token: oidc_token.clone(),
-        payload: hash.as_bytes().to_vec(),
+        delegate_action,
+        frp_signature,
+        frp_public_key,
     });
 
     let signature = sign_payload_with_mpc(client, sign_nodes, sig_share_request).await?;

@@ -1,3 +1,5 @@
+use std::{str::FromStr, time::Duration};
+
 use crate::{account, check, key, token, with_nodes};
 use anyhow::anyhow;
 use ed25519_dalek::Verifier;
@@ -5,17 +7,12 @@ use hyper::StatusCode;
 use mpc_recovery::{
     msg::{
         ClaimOidcRequest, ClaimOidcResponse, MpcPkRequest, MpcPkResponse, NewAccountResponse,
-        SignNodeRequest, SignResponse, SignShareNodeRequest,
+        SignResponse,
     },
-    oauth::get_test_claims,
-    transaction::{
-        call_all_nodes, sign_payload_with_mpc, to_dalek_combined_public_key, LimitedAccessKey,
-    },
+    transaction::LimitedAccessKey,
     utils::{claim_oidc_request_digest, claim_oidc_response_digest, oidc_digest},
 };
 use near_crypto::PublicKey;
-use rand::{distributions::Alphanumeric, Rng};
-use std::{str::FromStr, time::Duration};
 use workspaces::types::AccessKeyPermission;
 
 use test_log::test;
@@ -208,38 +205,6 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
 }
 
 #[test(tokio::test)]
-async fn test_aggregate_signatures() -> anyhow::Result<()> {
-    with_nodes(3, |ctx| {
-        Box::pin(async move {
-            let payload: String = rand::thread_rng()
-                .sample_iter(&Alphanumeric)
-                .take(10)
-                .map(char::from)
-                .collect();
-
-            let client = reqwest::Client::new();
-            let signer_urls: Vec<_> = ctx.signer_nodes.iter().map(|s| s.address.clone()).collect();
-
-            let request = SignNodeRequest::SignShare(SignShareNodeRequest {
-                oidc_token: "validToken:test-subject".to_string(),
-                payload: payload.clone().into_bytes(),
-            });
-
-            let signature = sign_payload_with_mpc(&client, &signer_urls, request).await?;
-
-            let account_id = get_test_claims("test-subject".to_string()).get_internal_account_id();
-            let res = call_all_nodes(&client, &signer_urls, "public_key", account_id).await?;
-
-            let combined_pub = to_dalek_combined_public_key(&res).unwrap();
-            combined_pub.verify(payload.as_bytes(), &signature)?;
-
-            Ok(())
-        })
-    })
-    .await
-}
-
-#[test(tokio::test)]
 async fn test_basic_action() -> anyhow::Result<()> {
     with_nodes(3, |ctx| {
         Box::pin(async move {
@@ -289,11 +254,18 @@ async fn test_basic_action() -> anyhow::Result<()> {
                     user_secret_key.clone(),
                 )
                 .await?;
-            assert_eq!(status_code, StatusCode::OK);
 
-            let SignResponse::Ok { .. } = sign_response else {
-                anyhow::bail!("failed to get a signature from mpc-recovery");
+            match sign_response {
+                SignResponse::Ok { .. } => (),
+                SignResponse::Err { msg } => {
+                    return Err(anyhow::anyhow!(
+                        "failed to get a signature from mpc-recovery: {}",
+                        msg
+                    ));
+                }
             };
+
+            assert_eq!(status_code, StatusCode::OK);
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
 

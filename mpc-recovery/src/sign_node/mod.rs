@@ -6,16 +6,22 @@ use crate::msg::{AcceptNodePublicKeysRequest, SignNodeRequest};
 use crate::oauth::OAuthTokenVerifier;
 use crate::primitives::InternalAccountId;
 use crate::sign_node::pk_set::SignerNodePkSet;
-use crate::utils::{check_signature, claim_oidc_request_digest, claim_oidc_response_digest};
+use crate::utils::{
+    check_signature, claim_oidc_request_digest, claim_oidc_response_digest, sign_request_digest,
+};
 use crate::NodeId;
 use aes_gcm::Aes256Gcm;
 use axum::routing::get;
 use axum::{http::StatusCode, routing::post, Extension, Json, Router};
+use borsh::BorshSerialize;
 use curv::elliptic::curves::{Ed25519, Point};
 use multi_party_eddsa::protocols::{self, ExpandedKeyPair};
 use near_crypto::{ParseKeyError, PublicKey};
 use near_primitives::account::id::ParseAccountError;
+use near_primitives::hash::hash;
+use near_primitives::signable_message::{SignableMessage, SignableMessageType};
 use std::net::SocketAddr;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -210,15 +216,47 @@ async fn process_commit<T: OAuthTokenVerifier>(
         }
         SignNodeRequest::SignShare(request) => {
             tracing::debug!(?request, "processing sign share request");
+
+            // Check OIDC Token
             let oidc_token_claims =
                 T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
                     .await
                     .map_err(CommitError::OidcVerificationFailed)?;
             tracing::debug!(?oidc_token_claims, "oidc token verified");
-            let internal_account_id = oidc_token_claims.get_internal_account_id();
 
+            // Check if this OIDC token was claimed
+            // TODO:
+
+            // Restrict certain types of DelegateActions
+            // TODO
+
+            // Check request FRP signature
+            let digest =
+                sign_request_digest(request.delegate_action.clone(), request.oidc_token.clone())?;
+
+            let frp_pk = PublicKey::from_str(&request.frp_public_key)
+                .map_err(|e| CommitError::MalformedPublicKey(request.frp_public_key.clone(), e))?;
+
+            match check_signature(&frp_pk, &request.frp_signature, &digest) {
+                Ok(_) => tracing::debug!("FRP signature verified"),
+                Err(e) => return Err(CommitError::SignatureVerificationFailed(e.into())),
+            };
+
+            // Get user credentials
+            let internal_account_id = oidc_token_claims.get_internal_account_id();
             let user_credentials = get_or_generate_user_creds(&state, internal_account_id).await?;
             tracing::debug!("user credentials retrieved");
+
+            // Get commitment
+            let signable_message = SignableMessage::new(
+                &request.delegate_action,
+                SignableMessageType::DelegateAction,
+            );
+            let bytes = match signable_message.try_to_vec() {
+                Ok(bytes) => bytes,
+                Err(e) => return Err(CommitError::Other(e.into())),
+            };
+            let hash = hash(&bytes).as_bytes().to_vec();
 
             let response = state
                 .signing_state
@@ -227,8 +265,7 @@ async fn process_commit<T: OAuthTokenVerifier>(
                 .get_commitment(
                     &user_credentials.decrypt_key_pair(&state.cipher)?,
                     &state.node_key,
-                    // TODO Restrict this payload
-                    request.payload,
+                    hash,
                 )
                 .map_err(|e| anyhow::anyhow!(e))?;
             tracing::info!("returning signed commitment");

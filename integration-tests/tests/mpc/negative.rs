@@ -269,6 +269,7 @@ async fn test_add_key_to_non_existing_account() -> anyhow::Result<()> {
                 delegate_action: add_key_delegate_action.clone(),
                 oidc_token: oidc_token.clone(),
                 frp_signature,
+                frp_public_key: user_public_key,
             };
 
             let (status_code, sign_response) = ctx.leader_node.sign(sign_request).await?;

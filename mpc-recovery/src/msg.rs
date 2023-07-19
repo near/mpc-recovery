@@ -79,6 +79,7 @@ pub struct SignRequest {
     pub delegate_action: DelegateAction,
     pub oidc_token: String,
     pub frp_signature: Signature,
+    pub frp_public_key: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -105,7 +106,9 @@ pub enum SignNodeRequest {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SignShareNodeRequest {
     pub oidc_token: String,
-    pub payload: Vec<u8>,
+    pub delegate_action: DelegateAction,
+    pub frp_signature: Signature,
+    pub frp_public_key: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

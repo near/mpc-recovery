@@ -567,6 +567,7 @@ impl LeaderNodeApi {
             delegate_action: add_key_delegate_action.clone(),
             oidc_token,
             frp_signature: digest_signature,
+            frp_public_key: client_sk.public_key().to_string(),
         };
         // Send SignRequest to leader node
         let (status_code, sign_response): (_, SignResponse) = self.sign(sign_request).await?;
