@@ -142,7 +142,13 @@ impl DockerClient {
 impl Default for DockerClient {
     fn default() -> Self {
         Self {
-            docker: Docker::connect_with_local_defaults().unwrap(),
+            docker: Docker::connect_with_local(
+                "unix:///var/run/docker.sock",
+                // 10 minutes timeout for all requests in case a lot of tests are being ran in parallel.
+                600,
+                bollard::API_DEFAULT_VERSION,
+            )
+            .unwrap(),
             cli: Default::default(),
         }
     }
