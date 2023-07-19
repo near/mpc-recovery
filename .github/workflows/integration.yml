@@ -11,13 +11,13 @@ jobs:
   test:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest-xl]
     runs-on: ${{ matrix.os }}
     name: Test
     steps:
       - uses: actions/checkout@v3
       - name: Install Docker
-        if: ${{ matrix.os == 'macos-latest' }}
+        if: ${{ matrix.os == 'macos-latest-xl' }}
         run: |
           brew install docker
           colima start
