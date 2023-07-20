@@ -53,7 +53,11 @@ async fn test_invalid_token() -> anyhow::Result<()> {
 
             let recovery_pk = ctx
                 .leader_node
-                .recovery_pk(oidc_token.clone(), user_secret_key.clone())
+                .recovery_pk(
+                    oidc_token.clone(),
+                    user_secret_key.clone(),
+                    user_secret_key.clone().public_key(),
+                )
                 .await?;
 
             let new_user_public_key = key::random_pk();

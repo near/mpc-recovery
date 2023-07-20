@@ -681,8 +681,8 @@ impl LeaderNodeApi {
         &self,
         oidc_token: String,
         client_sk: SecretKey,
+        client_pk: PublicKey,
     ) -> anyhow::Result<PublicKey> {
-        let client_pk = client_sk.public_key();
         let user_credentials_request_digest =
             user_credentials_request_digest(oidc_token.clone(), client_pk.clone())?;
 

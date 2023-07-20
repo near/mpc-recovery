@@ -175,9 +175,38 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             // Add new FA key with front running protection (positive)
             // TODO: add front running protection signature
 
+            // Get recovery PK with bad FRP signature should fail
+            let wrong_user_sk = key::random_sk();
+            match ctx
+                .leader_node
+                .recovery_pk(
+                    oidc_token.clone(),
+                    wrong_user_sk,
+                    user_secret_key.clone().public_key(),
+                )
+                .await
+            {
+                Ok(_) => {
+                    return Err(anyhow::anyhow!(
+                        "Response should be Err when signature is wrong"
+                    ))
+                }
+                Err(e) => {
+                    assert!(
+                        e.to_string().contains("failed to verify signature"),
+                        "Error message does not contain 'failed to verify signature'"
+                    );
+                }
+            }
+
+            // Get recovery PK with proper FRP signature
             let recovery_pk = ctx
                 .leader_node
-                .recovery_pk(oidc_token.clone(), user_secret_key.clone())
+                .recovery_pk(
+                    oidc_token.clone(),
+                    user_secret_key.clone(),
+                    user_secret_key.clone().public_key(),
+                )
                 .await?;
 
             let new_user_public_key = key::random_pk();
@@ -238,7 +267,11 @@ async fn test_basic_action() -> anyhow::Result<()> {
             // Add key
             let recovery_pk = ctx
                 .leader_node
-                .recovery_pk(oidc_token.clone(), user_secret_key.clone())
+                .recovery_pk(
+                    oidc_token.clone(),
+                    user_secret_key.clone(),
+                    user_secret_key.clone().public_key(),
+                )
                 .await?;
 
             let new_user_public_key = key::random_pk();
