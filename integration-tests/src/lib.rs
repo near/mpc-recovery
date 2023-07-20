@@ -1,10 +1,10 @@
 use bollard::exec::{CreateExecOptions, StartExecResults};
 use futures::StreamExt;
-use near_crypto::{KeyFile, SecretKey};
+use near_crypto::KeyFile;
 use near_units::parse_near;
 use workspaces::{
     network::{Sandbox, ValidatorKey},
-    AccountId, Worker,
+    Account, Worker,
 };
 
 pub mod containers;
@@ -56,8 +56,7 @@ pub struct RelayerCtx<'a> {
     pub redis: containers::Redis<'a>,
     pub relayer: containers::Relayer<'a>,
     pub worker: Worker<Sandbox>,
-    pub creator_account_id: AccountId,
-    pub creator_account_sk: SecretKey,
+    pub creator_account: Account,
 }
 
 pub async fn initialize_relayer<'a>(
@@ -86,12 +85,16 @@ pub async fn initialize_relayer<'a>(
     let social_db = sandbox::initialize_social_db(&worker).await?;
     sandbox::initialize_linkdrop(&worker).await?;
     tracing::info!("Initializing relayer accounts...");
-    let (relayer_account_id, relayer_account_sk) = sandbox::create_account(&worker).await?;
-    let (creator_account_id, creator_account_sk) = sandbox::create_account(&worker).await?;
-    let (social_account_id, social_account_sk) = sandbox::create_account(&worker).await?;
-    sandbox::up_funds_for_account(&worker, &social_account_id, parse_near!("1000 N")).await?;
-    tracing::info!("Relayer accounts initialized. Relayer account: {}, Creator account: {}, Social account: {}",
-    relayer_account_id, creator_account_id, social_account_id);
+    let relayer_account =
+        sandbox::create_account(&worker, "relayer", parse_near!("1000 N")).await?;
+    let creator_account = sandbox::create_account(&worker, "creator", parse_near!("200 N")).await?;
+    let social_account = sandbox::create_account(&worker, "social", parse_near!("1000 N")).await?;
+    tracing::info!(
+        "Relayer accounts initialized. Relayer account: {}, Creator account: {}, Social account: {}",
+        relayer_account.id(),
+        creator_account.id(),
+        social_account.id()
+    );
 
     let redis = containers::Redis::run(docker_client, network).await?;
 
@@ -100,12 +103,12 @@ pub async fn initialize_relayer<'a>(
         network,
         &sandbox.address,
         &redis.address,
-        &relayer_account_id,
-        &relayer_account_sk,
-        &creator_account_id,
+        relayer_account.id(),
+        relayer_account.secret_key(),
+        creator_account.id(),
         social_db.id(),
-        &social_account_id,
-        &social_account_sk,
+        social_account.id(),
+        social_account.secret_key(),
     )
     .await?;
 
@@ -114,7 +117,6 @@ pub async fn initialize_relayer<'a>(
         redis,
         relayer,
         worker,
-        creator_account_id,
-        creator_account_sk,
+        creator_account,
     })
 }

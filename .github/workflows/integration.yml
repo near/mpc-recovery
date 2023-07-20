@@ -11,17 +11,18 @@ jobs:
   test:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest-xl]
     runs-on: ${{ matrix.os }}
     name: Test
     steps:
       - uses: actions/checkout@v3
       - name: Install Docker
-        if: ${{ matrix.os == 'macos-latest' }}
+        if: ${{ matrix.os == 'macos-latest-xl' }}
         run: |
           brew install docker
           colima start
-          # 
+          # Colima does not expose the Docker socket by default, we have to symlink it
+          # https://github.com/abiosoft/colima/blob/main/docs/FAQ.md#cannot-connect-to-the-docker-daemon-at-unixvarrundockersock-is-the-docker-daemon-running
           sudo ln -sf $HOME/.colima/default/docker.sock /var/run/docker.sock
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v1

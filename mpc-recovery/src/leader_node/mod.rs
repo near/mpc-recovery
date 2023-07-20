@@ -174,10 +174,18 @@ async fn mpc_public_key(
     (StatusCode::OK, Json(MpcPkResponse::Ok { mpc_pk }))
 }
 
+#[tracing::instrument(level = "info", skip_all, fields(env = state.env))]
 async fn claim_oidc(
     Extension(state): Extension<LeaderState>,
     Json(claim_oidc_request): Json<ClaimOidcRequest>,
 ) -> (StatusCode, Json<ClaimOidcResponse>) {
+    tracing::info!(
+        oidc_hash = hex::encode(claim_oidc_request.oidc_token_hash),
+        pk = claim_oidc_request.public_key,
+        sig = claim_oidc_request.frp_signature.to_string(),
+        "claim_oidc request"
+    );
+
     // Calim OIDC ID Token and get MPC signature from sign nodes
     let sig_share_request = SignNodeRequest::ClaimOidc(ClaimOidcNodeRequest {
         oidc_token_hash: claim_oidc_request.oidc_token_hash,
@@ -467,7 +475,7 @@ async fn process_sign<T: OAuthTokenVerifier>(
             &state.sign_nodes,
             request.oidc_token.clone(),
             request.delegate_action.clone(),
-            request.frp_signature.clone(),
+            request.frp_signature,
             request.frp_public_key.clone(),
         )
         .await?;

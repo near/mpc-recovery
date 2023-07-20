@@ -1,4 +1,4 @@
-use workspaces::{network::Sandbox, AccountId, Contract, Worker};
+use workspaces::{network::Sandbox, Account, Contract, Worker};
 
 pub async fn initialize_social_db(worker: &Worker<Sandbox>) -> anyhow::Result<Contract> {
     tracing::info!("Initializing social DB contract...");
@@ -38,60 +38,18 @@ pub async fn initialize_linkdrop(worker: &Worker<Sandbox>) -> anyhow::Result<()>
 
 pub async fn create_account(
     worker: &Worker<Sandbox>,
-) -> anyhow::Result<(AccountId, near_crypto::SecretKey)> {
+    prefix: &str,
+    initial_balance: u128,
+) -> anyhow::Result<Account> {
     tracing::info!("Creating account with random account_id...");
-    let (account_id, account_sk) = worker.dev_generate().await;
-    worker
-        .create_tla(account_id.clone(), account_sk.clone())
+    let new_account = worker
+        .root_account()?
+        .create_subaccount(prefix)
+        .initial_balance(initial_balance)
+        .transact()
         .await?
         .into_result()?;
 
-    let account_sk: near_crypto::SecretKey =
-        serde_json::from_str(&serde_json::to_string(&account_sk)?)?;
-
-    tracing::info!("Account created: {}", account_id);
-    Ok((account_id, account_sk))
-}
-
-// Makes sure that the target account has at least target amount of NEAR
-pub async fn up_funds_for_account(
-    worker: &Worker<Sandbox>,
-    target_account_id: &AccountId,
-    target_amount: u128,
-) -> anyhow::Result<()> {
-    tracing::info!(
-        "Up funds for account {} to {}...",
-        target_account_id,
-        target_amount
-    );
-    // Max balance we can transfer out of a freshly created dev account
-    const DEV_ACCOUNT_AVAILABLE_BALANCE: u128 = 99 * 10u128.pow(24);
-
-    let diff: u128 = target_amount - worker.view_account(target_account_id).await?.balance;
-    // Integer ceiling division
-    let n = (diff + DEV_ACCOUNT_AVAILABLE_BALANCE - 1) / DEV_ACCOUNT_AVAILABLE_BALANCE;
-    let futures = (0..n).map(|_| async {
-        let tmp_account = worker.dev_create_account().await?;
-        tmp_account
-            .transfer_near(target_account_id, DEV_ACCOUNT_AVAILABLE_BALANCE)
-            .await?
-            .into_result()?;
-        tmp_account
-            .delete_account(target_account_id)
-            .await?
-            .into_result()?;
-
-        Ok::<(), anyhow::Error>(())
-    });
-    futures::future::join_all(futures)
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()?;
-
-    tracing::info!(
-        "Account {} now has {} NEAR",
-        target_account_id,
-        target_amount
-    );
-    Ok(())
+    tracing::info!("Account created: {}", new_account.id());
+    Ok(new_account)
 }
