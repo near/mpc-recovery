@@ -64,6 +64,7 @@ Returns the MPC public key that is used to sign the OIDC claiming response. Shou
     Request parameters: {
         oidc_token: String,
         frp_signature: Signature,
+        frp_public_key: String,
     }
     Response: Ok {
         public_key: String,
@@ -74,7 +75,7 @@ Returns the MPC public key that is used to sign the OIDC claiming response. Shou
 Returns the recovery public key associated with the provided OIDC token.
 The frp_signature you send must be an Ed22519 signature of the hash:
 
-    sha256.hash(Borsh.serialize<u32>(SALT + 3) ++ Borsh.serialize<[u8]>(oidc_token_hash))
+    sha256.hash(Borsh.serialize<u32>(SALT + 3) ++ Borsh.serialize<[u8]>(oidc_token_hash, frp_public_key))
 
 ### Create New Account
 
@@ -84,6 +85,7 @@ The frp_signature you send must be an Ed22519 signature of the hash:
         create_account_options: CreateAccountOptions,
         oidc_token: String,
         frp_signature: Signature,
+        frp_public_key: String,
     }
     Response:
     Ok {
@@ -106,9 +108,10 @@ In the future, MPC Service will disallow creating account with ID Tokes that wer
 The mpc_signature field is a signature of:
 
     sha256.hash(Borsh.serialize<u32>(SALT + 2) ++ Borsh.serialize({
-        near_account_id: String,
-        create_account_options: CrateAccountOptions,
-        oidc_token: String,
+        near_account_id,
+        create_account_options,
+        oidc_token,
+        frp_public_key,
     }))
 
 signed by the key you used to claim the oidc token. This does not have to be the same as the key in the public key field.
@@ -121,6 +124,7 @@ signed by the key you used to claim the oidc token. This does not have to be the
         delegate_action: DelegateAction,
         oidc_token: String,
         frp_signature: Signature,
+        frp_public_key: String,
     }
     Response:
     Ok {
@@ -137,6 +141,7 @@ The frp_signature you send must be an Ed22519 signature of the hash:
     sha256.hash(Borsh.serialize<u32>(SALT + 4) ++ Borsh.serialize<[u8]>(
         delegate_action,
         oidc_token_hash,
+        frp_public_key,
     ))
 
 ## OIDC (OAuth 2.0) authentication

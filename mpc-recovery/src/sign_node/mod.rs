@@ -160,11 +160,11 @@ async fn process_commit<T: OAuthTokenVerifier>(
         SignNodeRequest::ClaimOidc(request) => {
             tracing::debug!(?request, "processing oidc claim request");
             // Check ID token hash signature
-            let digest = claim_oidc_request_digest(request.oidc_token_hash)?;
             let public_key: PublicKey = request
                 .public_key
                 .parse()
                 .map_err(|e| CommitError::MalformedPublicKey(request.public_key.clone(), e))?;
+            let digest = claim_oidc_request_digest(request.oidc_token_hash, public_key.clone())?;
 
             check_signature(&public_key, &request.signature, &digest)?;
             tracing::debug!("oidc token hash signature verified");
@@ -231,8 +231,14 @@ async fn process_commit<T: OAuthTokenVerifier>(
             // TODO
 
             // Check request FRP signature
-            let digest =
-                sign_request_digest(request.delegate_action.clone(), request.oidc_token.clone())?;
+            let frp_pk = PublicKey::from_str(&request.frp_public_key)
+                .map_err(|e| CommitError::MalformedPublicKey(request.frp_public_key.clone(), e))?;
+
+            let digest = sign_request_digest(
+                request.delegate_action.clone(),
+                request.oidc_token.clone(),
+                frp_pk,
+            )?;
 
             let frp_pk = PublicKey::from_str(&request.frp_public_key)
                 .map_err(|e| CommitError::MalformedPublicKey(request.frp_public_key.clone(), e))?;

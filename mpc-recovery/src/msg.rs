@@ -38,6 +38,7 @@ pub enum ClaimOidcResponse {
 pub struct UserCredentialsRequest {
     pub oidc_token: String,
     pub frp_signature: Signature,
+    pub frp_public_key: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -52,6 +53,7 @@ pub struct NewAccountRequest {
     pub create_account_options: CreateAccountOptions,
     pub oidc_token: String,
     pub frp_signature: Signature,
+    pub frp_public_key: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

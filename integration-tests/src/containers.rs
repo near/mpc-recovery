@@ -582,6 +582,8 @@ impl LeaderNodeApi {
         user_secret_key: SecretKey,
         oidc_token: String,
     ) -> anyhow::Result<(StatusCode, NewAccountResponse)> {
+        let user_pk = user_secret_key.public_key();
+
         let limited_access_keys = user_la_public_key.map(|pk| vec![pk]);
 
         let create_account_options = CreateAccountOptions {
@@ -594,6 +596,7 @@ impl LeaderNodeApi {
             account_id.clone(),
             create_account_options.clone(),
             oidc_token.clone(),
+            user_pk.clone(),
         )?;
 
         let frp_signature = match user_secret_key.sign(&new_account_digest) {
@@ -606,6 +609,7 @@ impl LeaderNodeApi {
             create_account_options,
             oidc_token: oidc_token.clone(),
             frp_signature,
+            frp_public_key: user_pk.clone().to_string(),
         };
 
         self.new_account(new_account_request).await
@@ -621,6 +625,8 @@ impl LeaderNodeApi {
         client_sk: SecretKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
+        let client_pk = client_sk.public_key();
+
         let (_, block_height, nonce) = self
             .client
             .access_key(account_id.clone(), recovery_pk.clone())
@@ -634,8 +640,11 @@ impl LeaderNodeApi {
             block_height,
         )?;
 
-        let sign_request_digest =
-            sign_request_digest(add_key_delegate_action.clone(), oidc_token.clone())?;
+        let sign_request_digest = sign_request_digest(
+            add_key_delegate_action.clone(),
+            oidc_token.clone(),
+            client_pk.clone(),
+        )?;
 
         let digest_signature = match client_sk.sign(&sign_request_digest) {
             near_crypto::Signature::ED25519(k) => k,
@@ -673,7 +682,9 @@ impl LeaderNodeApi {
         oidc_token: String,
         client_sk: SecretKey,
     ) -> anyhow::Result<PublicKey> {
-        let user_credentials_request_digest = user_credentials_request_digest(oidc_token.clone())?;
+        let client_pk = client_sk.public_key();
+        let user_credentials_request_digest =
+            user_credentials_request_digest(oidc_token.clone(), client_pk.clone())?;
 
         let frp_signature = match client_sk.sign(&user_credentials_request_digest) {
             near_crypto::Signature::ED25519(k) => k,
@@ -684,6 +695,7 @@ impl LeaderNodeApi {
             .user_credentials(UserCredentialsRequest {
                 oidc_token: oidc_token.clone(),
                 frp_signature,
+                frp_public_key: client_pk.clone().to_string(),
             })
             .await?;
 

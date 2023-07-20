@@ -21,7 +21,7 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
 
             let user_secret_key =
                 near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519);
-            let user_public_key = user_secret_key.public_key().to_string();
+            let user_public_key = user_secret_key.public_key();
             let oidc_token = token::valid_random();
             let wrong_oidc_token = token::valid_random();
 
@@ -48,8 +48,10 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             let oidc_token_hash = oidc_digest(&oidc_token);
             let wrong_oidc_token_hash = oidc_digest(&wrong_oidc_token);
 
-            let request_digest = claim_oidc_request_digest(oidc_token_hash).unwrap();
-            let wrong_digest = claim_oidc_request_digest(wrong_oidc_token_hash).unwrap();
+            let request_digest =
+                claim_oidc_request_digest(oidc_token_hash, user_public_key.clone()).unwrap();
+            let wrong_digest =
+                claim_oidc_request_digest(wrong_oidc_token_hash, user_public_key.clone()).unwrap();
 
             let request_digest_signature = match user_secret_key.sign(&request_digest) {
                 near_crypto::Signature::ED25519(k) => k,
@@ -63,13 +65,13 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
 
             let oidc_request = ClaimOidcRequest {
                 oidc_token_hash,
-                public_key: user_public_key.clone(),
+                public_key: user_public_key.clone().to_string(),
                 frp_signature: request_digest_signature,
             };
 
             let bad_oidc_request = ClaimOidcRequest {
                 oidc_token_hash,
-                public_key: user_public_key.clone(),
+                public_key: user_public_key.clone().to_string(),
                 frp_signature: request_digest_wrong_signature,
             };
 
@@ -148,7 +150,7 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
                 .leader_node
                 .new_account_with_helper(
                     account_id.clone().to_string(),
-                    PublicKey::from_str(&user_public_key.clone())?,
+                    PublicKey::from_str(&user_public_key.clone().to_string())?,
                     None,
                     user_secret_key.clone(),
                     oidc_token.clone(),
@@ -165,7 +167,7 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             ));
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
-            check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
+            check::access_key_exists(&ctx, &account_id, &user_public_key.to_string()).await?;
 
             // Add new FA key with front running protection (negative, wrong signature)
             // TODO: add exaample with front running protection signature (bad one)
