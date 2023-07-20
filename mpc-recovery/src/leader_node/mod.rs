@@ -4,7 +4,6 @@ use crate::msg::{
     MpcPkRequest, MpcPkResponse, NewAccountRequest, NewAccountResponse, SignNodeRequest,
     SignRequest, SignResponse, UserCredentialsRequest, UserCredentialsResponse,
 };
-use crate::nar;
 use crate::oauth::OAuthTokenVerifier;
 use crate::relayer::error::RelayerError;
 use crate::relayer::msg::RegisterAccountRequest;
@@ -13,15 +12,26 @@ use crate::transaction::{
     get_create_account_delegate_action, get_local_signed_delegated_action, get_mpc_signature,
     sign_payload_with_mpc, to_dalek_combined_public_key,
 };
+use crate::{metrics, nar};
+use anyhow::Context;
+use axum::extract::MatchedPath;
+use axum::middleware::{self, Next};
+use axum::response::IntoResponse;
 use axum::routing::get;
-use axum::{http::StatusCode, routing::post, Extension, Json, Router};
+use axum::{
+    http::{Request, StatusCode},
+    routing::post,
+    Extension, Json, Router,
+};
 use curv::elliptic::curves::{Ed25519, Point};
 use near_crypto::SecretKey;
 use near_primitives::account::id::ParseAccountError;
 use near_primitives::types::AccountId;
 use near_primitives::views::FinalExecutionStatus;
+use prometheus::{Encoder, TextEncoder};
 use rand::{distributions::Alphanumeric, Rng};
 use std::net::SocketAddr;
+use std::time::Instant;
 
 pub struct Config {
     pub env: String,
@@ -118,6 +128,8 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         .route("/user_credentials", post(user_credentials::<T>))
         .route("/new_account", post(new_account::<T>))
         .route("/sign", post(sign::<T>))
+        .route("/metrics", get(metrics))
+        .route_layer(middleware::from_fn(track_metrics))
         .layer(Extension(state))
         .layer(cors_layer);
 
@@ -127,6 +139,63 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         .serve(app.into_make_service())
         .await
         .unwrap();
+}
+
+async fn track_metrics<B>(req: Request<B>, next: Next<B>) -> impl IntoResponse {
+    let timer = Instant::now();
+    let path = if let Some(matched_path) = req.extensions().get::<MatchedPath>() {
+        matched_path.as_str().to_owned()
+    } else {
+        req.uri().path().to_owned()
+    };
+    let method = req.method().clone();
+
+    let response = next.run(req).await;
+    let processing_time = timer.elapsed().as_secs_f64();
+
+    metrics::HTTP_REQUEST_COUNT
+        .with_label_values(&[method.as_str(), &path])
+        .inc();
+    metrics::HTTP_PROCESSING_TIME
+        .with_label_values(&[method.as_str(), &path])
+        .observe(processing_time);
+
+    if response.status().is_client_error() {
+        metrics::HTTP_CLIENT_ERROR_COUNT
+            .with_label_values(&[method.as_str(), &path])
+            .inc();
+    }
+    if response.status().is_server_error() {
+        metrics::HTTP_SERVER_ERROR_COUNT
+            .with_label_values(&[method.as_str(), &path])
+            .inc();
+    }
+
+    response
+}
+
+async fn metrics() -> (StatusCode, String) {
+    let grab_metrics = || {
+        let encoder = TextEncoder::new();
+        let mut buffer = vec![];
+        encoder
+            .encode(&prometheus::gather(), &mut buffer)
+            .with_context(|| "failed to encode metrics")?;
+
+        let response = String::from_utf8(buffer.clone())
+            .with_context(|| "failed to convert bytes to string")?;
+        buffer.clear();
+
+        Ok::<String, anyhow::Error>(response)
+    };
+
+    match grab_metrics() {
+        Ok(response) => (StatusCode::OK, response),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "failed to generate prometheus metrics".to_string(),
+        ),
+    }
 }
 
 #[derive(Clone)]
