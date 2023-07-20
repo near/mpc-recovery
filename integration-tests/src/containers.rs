@@ -622,11 +622,10 @@ impl LeaderNodeApi {
         oidc_token: String,
         public_key: PublicKey,
         recovery_pk: PublicKey,
-        client_sk: SecretKey,
+        frp_sk: SecretKey,
+        frp_pk: PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
-        let client_pk = client_sk.public_key();
-
         let (_, block_height, nonce) = self
             .client
             .access_key(account_id.clone(), recovery_pk.clone())
@@ -643,10 +642,10 @@ impl LeaderNodeApi {
         let sign_request_digest = sign_request_digest(
             add_key_delegate_action.clone(),
             oidc_token.clone(),
-            client_pk.clone(),
+            frp_pk.clone(),
         )?;
 
-        let digest_signature = match client_sk.sign(&sign_request_digest) {
+        let frp_signature = match frp_sk.sign(&sign_request_digest) {
             near_crypto::Signature::ED25519(k) => k,
             _ => return Err(anyhow::anyhow!("Wrong signature type")),
         };
@@ -654,8 +653,8 @@ impl LeaderNodeApi {
         let sign_request = SignRequest {
             delegate_action: add_key_delegate_action.clone(),
             oidc_token,
-            frp_signature: digest_signature,
-            frp_public_key: client_sk.public_key().to_string(),
+            frp_signature,
+            frp_public_key: frp_sk.public_key().to_string(),
         };
         // Send SignRequest to leader node
         let (status_code, sign_response): (_, SignResponse) = self.sign(sign_request).await?;

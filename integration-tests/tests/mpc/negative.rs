@@ -12,14 +12,14 @@ async fn test_invalid_token() -> anyhow::Result<()> {
         Box::pin(async move {
             let account_id = account::random(ctx.worker)?;
             let user_secret_key = key::random_sk();
-            let user_public_key = user_secret_key.public_key().to_string();
+            let user_public_key = user_secret_key.public_key();
             let oidc_token = token::valid_random();
             let invalid_oidc_token = token::invalid();
 
             ctx.leader_node
                 .new_account_with_helper(
                     account_id.clone().to_string(),
-                    PublicKey::from_str(&user_public_key.clone())?,
+                    user_public_key.clone(),
                     None,
                     user_secret_key.clone(),
                     invalid_oidc_token.clone(),
@@ -32,7 +32,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                 .leader_node
                 .new_account_with_helper(
                     account_id.clone().to_string(),
-                    PublicKey::from_str(&user_public_key.clone())?,
+                    user_public_key.clone(),
                     None,
                     user_secret_key.clone(),
                     oidc_token.clone(),
@@ -49,7 +49,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
 
-            check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
+            check::access_key_exists(&ctx, &account_id, &user_public_key.to_string()).await?;
 
             let recovery_pk = ctx
                 .leader_node
@@ -69,6 +69,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                     new_user_public_key.parse()?,
                     recovery_pk.clone(),
                     user_secret_key.clone(),
+                    user_public_key.clone(),
                 )
                 .await?
                 .assert_unauthorized()?;
@@ -81,6 +82,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                     new_user_public_key.parse()?,
                     recovery_pk.clone(),
                     user_secret_key.clone(),
+                    user_public_key.clone(),
                 )
                 .await?
                 .assert_ok()?;

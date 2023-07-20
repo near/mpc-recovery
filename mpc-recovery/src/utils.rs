@@ -77,17 +77,16 @@ pub fn new_account_request_digest(
     Ok(hasher.finalize().to_vec())
 }
 
-// TODO: is this function necessary? Is there en existing way to do this?
-pub fn check_signature(
+pub fn check_digest_signature(
     public_key: &PublicKey,
     signature: &Signature,
-    request_digest: &[u8],
+    digest: &[u8],
 ) -> Result<(), CommitError> {
-    if !near_crypto::Signature::ED25519(*signature).verify(request_digest, public_key) {
+    if !near_crypto::Signature::ED25519(*signature).verify(digest, public_key) {
         Err(CommitError::SignatureVerificationFailed(anyhow::anyhow!(
             "Public key {}, digest {} and signature {} don't match",
             &public_key,
-            &hex::encode(request_digest),
+            &hex::encode(digest),
             &signature
         )))
     } else {

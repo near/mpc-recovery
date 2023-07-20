@@ -7,7 +7,8 @@ use crate::oauth::OAuthTokenVerifier;
 use crate::primitives::InternalAccountId;
 use crate::sign_node::pk_set::SignerNodePkSet;
 use crate::utils::{
-    check_signature, claim_oidc_request_digest, claim_oidc_response_digest, sign_request_digest,
+    check_digest_signature, claim_oidc_request_digest, claim_oidc_response_digest,
+    sign_request_digest,
 };
 use crate::NodeId;
 use aes_gcm::Aes256Gcm;
@@ -166,7 +167,7 @@ async fn process_commit<T: OAuthTokenVerifier>(
                 .map_err(|e| CommitError::MalformedPublicKey(request.public_key.clone(), e))?;
             let digest = claim_oidc_request_digest(request.oidc_token_hash, public_key.clone())?;
 
-            check_signature(&public_key, &request.signature, &digest)?;
+            check_digest_signature(&public_key, &request.signature, &digest)?;
             tracing::debug!("oidc token hash signature verified");
 
             // Save info about token in the database, if it's present, throw an error
@@ -237,16 +238,10 @@ async fn process_commit<T: OAuthTokenVerifier>(
             let digest = sign_request_digest(
                 request.delegate_action.clone(),
                 request.oidc_token.clone(),
-                frp_pk,
+                frp_pk.clone(),
             )?;
 
-            let frp_pk = PublicKey::from_str(&request.frp_public_key)
-                .map_err(|e| CommitError::MalformedPublicKey(request.frp_public_key.clone(), e))?;
-
-            match check_signature(&frp_pk, &request.frp_signature, &digest) {
-                Ok(_) => tracing::debug!("FRP signature verified"),
-                Err(e) => return Err(CommitError::SignatureVerificationFailed(e.into())),
-            };
+            check_digest_signature(&frp_pk, &request.frp_signature, &digest)?;
 
             // Get user credentials
             let internal_account_id = oidc_token_claims.get_internal_account_id();
@@ -297,6 +292,16 @@ async fn commit<T: OAuthTokenVerifier>(
                 StatusCode::BAD_REQUEST,
                 Json(Err(format!(
                     "signer failed to verify oidc token: {}",
+                    err_msg
+                ))),
+            )
+        }
+        Err(ref e @ CommitError::SignatureVerificationFailed(ref err_msg)) => {
+            tracing::error!(err = ?e);
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(Err(format!(
+                    "signer failed to verify signature: {}",
                     err_msg
                 ))),
             )
@@ -366,11 +371,20 @@ async fn signature_share(
     }
 }
 
+// TODO: this request must accept OIDC token
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn public_key(
     Extension(state): Extension<SignNodeState>,
     Json(request): Json<InternalAccountId>,
 ) -> (StatusCode, Json<Result<Point<Ed25519>, String>>) {
+    // Check the request signature
+    // TODO
+
+    // Check OIDC Token
+    // TODO
+
+    // Check if this OIDC token was claimed
+    // TODO
     match get_or_generate_user_creds(&state, request).await {
         Ok(user_credentials) => (
             StatusCode::OK,
