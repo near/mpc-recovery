@@ -9,8 +9,8 @@ use hyper::StatusCode;
 use mpc_recovery::{
     msg::{
         AcceptNodePublicKeysRequest, ClaimOidcRequest, ClaimOidcResponse, MpcPkRequest,
-        MpcPkResponse, NewAccountRequest, NewAccountResponse, SignRequest, SignResponse,
-        UserCredentialsRequest, UserCredentialsResponse,
+        MpcPkResponse, NewAccountRequest, NewAccountResponse, RotateKeyRequest, SignRequest,
+        SignResponse, UserCredentialsRequest, UserCredentialsResponse,
     },
     relayer::NearRpcAndRelayerClient,
 };
@@ -366,6 +366,13 @@ impl SignerNodeApi {
         request: AcceptNodePublicKeysRequest,
     ) -> anyhow::Result<(StatusCode, Result<String, String>)> {
         util::post(format!("{}/accept_pk_set", self.address), request).await
+    }
+
+    pub async fn rotate_key(
+        &self,
+        request: RotateKeyRequest,
+    ) -> anyhow::Result<(StatusCode, Result<(), String>)> {
+        util::post(format!("{}/rotate_key", self.address), request).await
     }
 }
 

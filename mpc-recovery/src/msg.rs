@@ -144,7 +144,8 @@ pub struct AcceptNodePublicKeysRequest {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RotateKeyRequest {
-    pub public_key: Point<Ed25519>,
+    pub new_public_key: Point<Ed25519>,
+    pub new_cipher: String,
 }
 
 mod hex_sig_share {

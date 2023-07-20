@@ -3,8 +3,8 @@ pub mod value;
 
 use self::value::{FromValue, IntoValue};
 use google_datastore1::api::{
-    CommitRequest, Entity, Key, KindExpression, LookupRequest, Mutation, PathElement, Query,
-    RunQueryRequest,
+    CommitRequest, Entity, EntityResult, Key, KindExpression, LookupRequest, Mutation, PathElement,
+    Query, RunQueryRequest,
 };
 use google_datastore1::oauth2::AccessTokenAuthenticator;
 use google_datastore1::Datastore;
@@ -213,7 +213,11 @@ impl GcpService {
         Ok(())
     }
 
-    pub async fn fetch_entities<T: KeyKind>(&self) -> anyhow::Result<()> {
+    // pub async fn commit<T: KeyKind>(&self) -> anyhow::Result<()> {
+    //     Ok(())
+    // }
+
+    pub async fn fetch_entities<T: KeyKind>(&self) -> anyhow::Result<Vec<EntityResult>> {
         let kind: String = format!("{}-{}", T::kind(), self.env);
         let req = RunQueryRequest {
             database_id: Some("".to_string()),
@@ -233,28 +237,18 @@ impl GcpService {
             gql_query: None,
         };
 
-        let query = self
+        let (_hyper_resp, query_resp) = self
             .datastore
             .projects()
             .run_query(req, &self.project_id)
             .doit()
-            .await;
-        match query {
-            Err(e) => eprintln!("Error executing query: {:?}", e),
-            Ok((hyper_resp, query_resp)) => {
-                println!("Hyper resp: {:?}", hyper_resp);
-                println!(
-                    "Query results: {:?}",
-                    query_resp.batch.unwrap().entity_results
-                );
-                //     for entity_result in response.entity_results.unwrap_or_else(Vec::new) {
-                //         if let Some(entity) = entity_result.entity {
-                //             println!("Entity: {:?}", entity);
-                //         }
-                // }
-            }
-        }
+            .await?;
+        let batch = query_resp
+            .batch
+            .ok_or_else(|| anyhow::anyhow!("Could not retrieve batch while fetching entities"))?;
 
-        Ok(())
+        batch.entity_results.ok_or_else(|| {
+            anyhow::anyhow!("Could not retrieve entity results while fetching entities")
+        })
     }
 }

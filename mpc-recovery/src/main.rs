@@ -237,6 +237,7 @@ async fn main() -> anyhow::Result<()> {
                 vault: mpc_recovery::sign_node::migration::Vault::Stable {
                     cipher: cipher.clone(),
                     node_key: sk_share.clone(),
+                    node_id: node_id as usize,
                 },
                 gcp_service,
                 our_index: node_id,

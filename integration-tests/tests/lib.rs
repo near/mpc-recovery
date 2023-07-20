@@ -3,7 +3,7 @@ mod mpc;
 use curv::elliptic::curves::{Ed25519, Point};
 use futures::future::BoxFuture;
 use mpc_recovery::gcp::GcpService;
-use mpc_recovery::GenerateResult;
+use mpc_recovery::msg::RotateKeyRequest;
 use mpc_recovery::sign_node::user_credentials::EncryptedUserCredentials;
 use mpc_recovery_integration_tests::containers;
 use workspaces::{network::Sandbox, Worker};
@@ -80,11 +80,36 @@ where
     })
     .await?;
 
-    // let gcp_service =
-    //     GcpService::new("dev".into(), GCP_PROJECT_ID.into(), Some(datastore.address)).await?;
+    let gcp_service =
+        GcpService::new("dev".into(), GCP_PROJECT_ID.into(), Some(datastore.address)).await?;
 
-    // gcp_service.fetch_entities::<EncryptedUserCredentials>().await?;
+    let entities = gcp_service
+        .fetch_entities::<EncryptedUserCredentials>()
+        .await?;
 
+    println!("LEN: {:?}", entities.len());
+    println!("{:?}\n", entities);
+
+    let pk = "{\"curve\":\"ed25519\",\"point\":[150,246,216,55,178,96,37,197,213,99,54,197,88,57,212,173,182,75,30,148,23,115,179,94,58,180,33,91,180,126,92,245]}";
+    let new_public_key =serde_json::from_str(pk)?;
+    let res = signer_nodes[0]
+        .api()
+        .rotate_key(RotateKeyRequest {
+            new_public_key,
+            new_cipher: "ccd92228b629da694e833b648997b4a369f5ef56e1e12d213b748a5664926615".into(),
+        })
+        .await
+        .unwrap();
+
+    println!("RES: {:?}\n", res);
+
+    let entities = gcp_service
+        .fetch_entities::<EncryptedUserCredentials>()
+        .await
+        .unwrap();
+
+    println!("LEN: {:?}", entities.len());
+    println!("{:?}\n", entities);
 
     // use google_datastore1::api::{KindExpression, Query, RunQueryRequest};
 

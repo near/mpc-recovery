@@ -19,6 +19,7 @@ near-crypto = "0.16.1"
 near-jsonrpc-client = "0.5.1"
 near-primitives = "0.16.1"
 near-units = "0.2.0"
+once_cell = "1"
 portpicker = "0.1"
 serde = "1"
 serde_json = "1"
@@ -28,7 +29,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 workspaces = { git = "https://github.com/near/workspaces-rs", branch = "main" }
 
 [dev-dependencies]
-once_cell = "1"
+aes-gcm = "0.10"
 rand = "0.8"
 test-log = { version = "0.2.12", features = ["log", "trace"] }
 env_logger = "0.10.0"
