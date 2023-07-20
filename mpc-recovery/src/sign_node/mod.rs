@@ -2,13 +2,13 @@ use self::aggregate_signer::{NodeInfo, Reveal, SignedCommitment, SigningState};
 use self::oidc::OidcDigest;
 use self::user_credentials::EncryptedUserCredentials;
 use crate::gcp::GcpService;
-use crate::msg::{AcceptNodePublicKeysRequest, SignNodeRequest};
+use crate::msg::{AcceptNodePublicKeysRequest, PublicKeyNodeRequest, SignNodeRequest};
 use crate::oauth::OAuthTokenVerifier;
 use crate::primitives::InternalAccountId;
 use crate::sign_node::pk_set::SignerNodePkSet;
 use crate::utils::{
     check_digest_signature, claim_oidc_request_digest, claim_oidc_response_digest,
-    sign_request_digest,
+    sign_request_digest, user_credentials_request_digest,
 };
 use crate::NodeId;
 use aes_gcm::Aes256Gcm;
@@ -79,7 +79,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         .route("/commit", post(commit::<T>))
         .route("/reveal", post(reveal))
         .route("/signature_share", post(signature_share))
-        .route("/public_key", post(public_key))
+        .route("/public_key", post(public_key::<T>))
         .route("/public_key_node", post(public_key_node))
         .route("/accept_pk_set", post(accept_pk_set))
         .layer(Extension(state));
@@ -167,8 +167,10 @@ async fn process_commit<T: OAuthTokenVerifier>(
                 .map_err(|e| CommitError::MalformedPublicKey(request.public_key.clone(), e))?;
             let digest = claim_oidc_request_digest(request.oidc_token_hash, public_key.clone())?;
 
-            check_digest_signature(&public_key, &request.signature, &digest)?;
-            tracing::debug!("oidc token hash signature verified");
+            match check_digest_signature(&public_key, &request.signature, &digest) {
+                Ok(()) => tracing::debug!("claim oidc token digest signature verified"),
+                Err(e) => return Err(CommitError::SignatureVerificationFailed(e)),
+            };
 
             // Save info about token in the database, if it's present, throw an error
             let oidc_digest = OidcDigest {
@@ -241,7 +243,10 @@ async fn process_commit<T: OAuthTokenVerifier>(
                 frp_pk.clone(),
             )?;
 
-            check_digest_signature(&frp_pk, &request.frp_signature, &digest)?;
+            match check_digest_signature(&frp_pk, &request.frp_signature, &digest) {
+                Ok(()) => tracing::debug!("sign request digest signature verified"),
+                Err(e) => return Err(CommitError::SignatureVerificationFailed(e)),
+            };
 
             // Get user credentials
             let internal_account_id = oidc_token_claims.get_internal_account_id();
@@ -371,32 +376,91 @@ async fn signature_share(
     }
 }
 
-// TODO: this request must accept OIDC token
-#[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
-async fn public_key(
-    Extension(state): Extension<SignNodeState>,
-    Json(request): Json<InternalAccountId>,
-) -> (StatusCode, Json<Result<Point<Ed25519>, String>>) {
-    // Check the request signature
-    // TODO
+#[derive(thiserror::Error, Debug)]
+pub enum PublicKeyRequestError {
+    #[error("malformed public key {0}: {1}")]
+    MalformedPublicKey(String, ParseKeyError),
+    #[error("failed to verify oidc token: {0}")]
+    OidcVerificationFailed(anyhow::Error),
+    #[error("failed to verify signature: {0}")]
+    SignatureVerificationFailed(anyhow::Error),
+    #[error("{0}")]
+    Other(#[from] anyhow::Error),
+}
 
+async fn process_public_key<T: OAuthTokenVerifier>(
+    state: SignNodeState,
+    request: PublicKeyNodeRequest,
+) -> Result<Point<Ed25519>, PublicKeyRequestError> {
     // Check OIDC Token
-    // TODO
+    let oidc_token_claims =
+        T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
+            .await
+            .map_err(PublicKeyRequestError::OidcVerificationFailed)?;
+
+    // Check the request signature
+    let frp_pk = PublicKey::from_str(&request.frp_public_key).map_err(|e| {
+        PublicKeyRequestError::MalformedPublicKey(request.frp_public_key.clone(), e)
+    })?;
+
+    let digest = user_credentials_request_digest(request.oidc_token.clone(), frp_pk.clone())?;
+
+    match check_digest_signature(&frp_pk, &request.frp_signature, &digest) {
+        Ok(()) => tracing::debug!("user credentials digest signature verified"),
+        Err(e) => return Err(PublicKeyRequestError::SignatureVerificationFailed(e)),
+    };
 
     // Check if this OIDC token was claimed
     // TODO
-    match get_or_generate_user_creds(&state, request).await {
-        Ok(user_credentials) => (
-            StatusCode::OK,
-            Json(Ok(user_credentials.public_key().clone())),
-        ),
-        Err(err) => {
-            tracing::error!(?err);
+
+    let internal_acc_id = oidc_token_claims.get_internal_account_id();
+    match get_or_generate_user_creds(&state, internal_acc_id).await {
+        Ok(user_credentials) => Ok(user_credentials.public_key().clone()),
+        Err(err) => Err(PublicKeyRequestError::Other(err)),
+    }
+}
+
+#[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
+async fn public_key<T: OAuthTokenVerifier>(
+    Extension(state): Extension<SignNodeState>,
+    Json(request): Json<PublicKeyNodeRequest>,
+) -> (StatusCode, Json<Result<Point<Ed25519>, String>>) {
+    match process_public_key::<T>(state, request).await {
+        Ok(pk_point) => (StatusCode::OK, Json(Ok(pk_point))),
+        Err(ref e @ PublicKeyRequestError::OidcVerificationFailed(ref err_msg)) => {
+            tracing::error!(err = ?e);
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(Err(format!(
+                    "signer failed to verify oidc token: {}",
+                    err_msg
+                ))),
+            )
+        }
+        Err(ref e @ PublicKeyRequestError::SignatureVerificationFailed(ref err_msg)) => {
+            tracing::error!(err = ?e);
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(Err(format!(
+                    "signer failed to verify signature: {}",
+                    err_msg
+                ))),
+            )
+        }
+        Err(ref e @ PublicKeyRequestError::MalformedPublicKey(ref err_msg, ref error)) => {
+            tracing::error!(err = ?e);
+            (
+                StatusCode::BAD_REQUEST,
+                Json(Err(format!("bad public key: {}, {}", err_msg, error))),
+            )
+        }
+        Err(ref e @ PublicKeyRequestError::Other(ref err_msg)) => {
+            tracing::error!(err = ?e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(Err(format!(
-                    "failed to fetch/generate a public key for given account: {}",
-                    err,
+                    "signer failed to verify signature: {}",
+                    err_msg
                 ))),
             )
         }

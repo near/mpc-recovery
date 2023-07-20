@@ -121,6 +121,12 @@ pub struct ClaimOidcNodeRequest {
     #[serde(with = "hex_sig_share")]
     pub signature: Signature,
 }
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PublicKeyNodeRequest {
+    pub oidc_token: String,
+    pub frp_signature: Signature,
+    pub frp_public_key: String,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AcceptNodePublicKeysRequest {

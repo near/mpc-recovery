@@ -267,7 +267,9 @@ async fn process_user_credentials<T: OAuthTokenVerifier>(
         let mpc_user_recovery_pk = get_user_recovery_pk(
             &state.reqwest_client,
             &state.sign_nodes,
-            internal_acc_id.clone(),
+            request.oidc_token.clone(),
+            request.frp_signature,
+            request.frp_public_key.clone(),
         )
         .await?;
 
