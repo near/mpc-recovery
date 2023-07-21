@@ -1,22 +1,20 @@
+use crate::msg::{SignNodeRequest, SignShareNodeRequest};
+use crate::sign_node::aggregate_signer::{Reveal, SignedCommitment};
 use anyhow::{anyhow, Context};
 use curv::elliptic::curves::{Ed25519, Point};
 use ed25519_dalek::Signature;
 use futures::{future, FutureExt};
+use hyper::StatusCode;
 use multi_party_eddsa::protocols::aggsig::KeyAgg;
 use multi_party_eddsa::protocols::{self, aggsig};
 use near_crypto::{InMemorySigner, PublicKey, SecretKey};
-use near_primitives::transaction::{Action, FunctionCallAction};
-use near_primitives::types::{AccountId, Nonce};
-
 use near_primitives::delegate_action::{DelegateAction, NonDelegateAction, SignedDelegateAction};
 use near_primitives::signable_message::{SignableMessage, SignableMessageType};
-
+use near_primitives::transaction::{Action, FunctionCallAction};
+use near_primitives::types::{AccountId, Nonce};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-
-use crate::msg::{SignNodeRequest, SignShareNodeRequest};
-use crate::sign_node::aggregate_signer::{Reveal, SignedCommitment};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CreateAccountOptions {
@@ -104,7 +102,7 @@ pub async fn get_mpc_signature(
     delegate_action: DelegateAction,
     frp_signature: Signature,
     frp_public_key: String,
-) -> anyhow::Result<Signature> {
+) -> Result<Signature, NodeSignError> {
     let sig_share_request = SignNodeRequest::SignShare(SignShareNodeRequest {
         oidc_token: oidc_token.clone(),
         delegate_action,
@@ -116,11 +114,20 @@ pub async fn get_mpc_signature(
     Ok(signature)
 }
 
+#[derive(thiserror::Error, Debug)]
+#[allow(dead_code)]
+pub enum NodeSignError {
+    #[error("call error: {0}")]
+    CallError(#[from] NodeCallError),
+    #[error("{0}")]
+    Other(#[from] anyhow::Error),
+}
+
 pub async fn sign_payload_with_mpc(
     client: &reqwest::Client,
     sign_nodes: &[String],
     sig_share_request: SignNodeRequest,
-) -> anyhow::Result<Signature> {
+) -> Result<Signature, NodeSignError> {
     let commitments: Vec<SignedCommitment> =
         call_all_nodes(client, sign_nodes, "commit", sig_share_request).await?;
 
@@ -131,7 +138,18 @@ pub async fn sign_payload_with_mpc(
 
     let raw_sig = aggsig::add_signature_parts(&signature_shares);
 
-    to_dalek_signature(&raw_sig)
+    Ok(to_dalek_signature(&raw_sig)?)
+}
+
+#[derive(thiserror::Error, Debug)]
+#[allow(dead_code)]
+pub enum NodeCallError {
+    #[error("client error: {0}")]
+    ClientError(String, StatusCode),
+    #[error("server error: {0}")]
+    ServerError(String),
+    #[error("{0}")]
+    Other(anyhow::Error),
 }
 
 /// Call every node with an identical payload and send the response
@@ -140,7 +158,7 @@ pub async fn call_all_nodes<Req: Serialize, Res: DeserializeOwned>(
     sign_nodes: &[String],
     path: &str,
     request: Req,
-) -> anyhow::Result<Vec<Res>> {
+) -> Result<Vec<Res>, NodeCallError> {
     let responses = sign_nodes.iter().map(|sign_node| {
         client
             .post(format!("{}/{}", sign_node, path))
@@ -150,11 +168,18 @@ pub async fn call_all_nodes<Req: Serialize, Res: DeserializeOwned>(
             .then(|r| async move {
                 match r {
                     // Flatten all errors to strings
-                    Ok(ok) => match ok.json::<Result<Res, String>>().await {
-                        Ok(ok) => ok.map_err(|e| anyhow!(e)),
-                        Err(e) => Err(anyhow!(e)),
-                    },
-                    Err(e) => Err(anyhow!(e)),
+                    Ok(ok) => {
+                        let status_code = ok.status();
+                        match ok.json::<Result<Res, String>>().await {
+                            Ok(Ok(res)) => Ok(res),
+                            Ok(Err(e)) if status_code.is_client_error() => {
+                                Err(NodeCallError::ClientError(e, status_code))
+                            }
+                            Ok(Err(e)) => Err(NodeCallError::ServerError(e)),
+                            Err(e) => Err(NodeCallError::Other(anyhow!(e))),
+                        }
+                    }
+                    Err(e) => Err(NodeCallError::Other(anyhow!(e))),
                 }
             })
     });

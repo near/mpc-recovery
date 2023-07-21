@@ -185,10 +185,24 @@ trait MpcCheck {
     type Response;
 
     fn assert_ok(self) -> anyhow::Result<Self::Response>;
-    fn assert_bad_request(self) -> anyhow::Result<Self::Response>;
-    fn assert_unauthorized(self) -> anyhow::Result<Self::Response>;
+    fn assert_bad_request_contains(self, expected: &str) -> anyhow::Result<Self::Response>;
+    fn assert_unauthorized_contains(self, expected: &str) -> anyhow::Result<Self::Response>;
+
+    fn assert_bad_request(self) -> anyhow::Result<Self::Response>
+    where
+        Self: Sized,
+    {
+        self.assert_bad_request_contains("")
+    }
+    fn assert_unauthorized(self) -> anyhow::Result<Self::Response>
+    where
+        Self: Sized,
+    {
+        self.assert_unauthorized_contains("")
+    }
 }
 
+// Presumes that $response::Err has a `msg: String` field.
 #[macro_export]
 macro_rules! impl_mpc_check {
     ( $response:ident ) => {
@@ -213,14 +227,15 @@ macro_rules! impl_mpc_check {
                 }
             }
 
-            fn assert_bad_request(self) -> anyhow::Result<Self::Response> {
+            fn assert_bad_request_contains(self, expected: &str) -> anyhow::Result<Self::Response> {
                 let status_code = self.0;
                 let response = self.1;
 
                 if status_code == StatusCode::BAD_REQUEST {
-                    let $response::Err { .. } = response else {
+                    let $response::Err { ref msg, .. } = response else {
                         anyhow::bail!("unexpected Ok with a 400 http code");
                     };
+                    assert!(msg.contains(expected));
 
                     Ok(response)
                 } else {
@@ -228,14 +243,15 @@ macro_rules! impl_mpc_check {
                 }
             }
 
-            fn assert_unauthorized(self) -> anyhow::Result<Self::Response> {
+            fn assert_unauthorized_contains(self, expected: &str) -> anyhow::Result<Self::Response> {
                 let status_code = self.0;
                 let response = self.1;
 
                 if status_code == StatusCode::UNAUTHORIZED {
-                    let $response::Err { .. } = response else {
+                    let $response::Err { ref msg, .. } = response else {
                         anyhow::bail!("unexpected Ok with a 401 http code");
                     };
+                    assert!(msg.contains(expected));
 
                     Ok(response)
                 } else {

@@ -433,7 +433,7 @@ async fn public_key<T: OAuthTokenVerifier>(
             (
                 StatusCode::UNAUTHORIZED,
                 Json(Err(format!(
-                    "signer failed to verify oidc token: {}",
+                    "signer failed to verify oidc token PPPPMMMM: {}",
                     err_msg
                 ))),
             )

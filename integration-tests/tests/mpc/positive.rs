@@ -1,9 +1,11 @@
 use crate::{account, check, key, token, with_nodes, MpcCheck};
 use anyhow::anyhow;
+use ed25519_dalek::PublicKey as PublicKeyEd25519;
+use ed25519_dalek::Signature;
 use ed25519_dalek::Verifier;
 use hyper::StatusCode;
 use mpc_recovery::{
-    msg::{ClaimOidcRequest, ClaimOidcResponse, MpcPkRequest, MpcPkResponse, NewAccountResponse},
+    msg::{ClaimOidcRequest, MpcPkRequest, NewAccountResponse},
     transaction::LimitedAccessKey,
     utils::{claim_oidc_request_digest, claim_oidc_response_digest, oidc_digest},
 };
@@ -26,23 +28,12 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             let wrong_oidc_token = token::valid_random();
 
             // Get MPC public key
-            let mpc_pk_response = ctx
+            let mpc_pk: PublicKeyEd25519 = ctx
                 .leader_node
                 .get_mpc_pk(MpcPkRequest {})
                 .await?
-                .assert_ok()?;
-
-            let mpc_pk = match mpc_pk_response {
-                MpcPkResponse::Ok { mpc_pk } => mpc_pk,
-                MpcPkResponse::Err { msg } => anyhow::bail!(msg),
-            };
-
-            let decoded_mpc_pk = match hex::decode(mpc_pk.clone()) {
-                Ok(v) => v,
-                Err(e) => anyhow::bail!("Failed to decode mpc pk. {}", e),
-            };
-
-            let mpc_pk = ed25519_dalek::PublicKey::from_bytes(&decoded_mpc_pk).unwrap();
+                .assert_ok()?
+                .try_into()?;
 
             // Prepare the oidc claiming request
             let oidc_token_hash = oidc_digest(&oidc_token);
@@ -58,7 +49,7 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
                 _ => anyhow::bail!("Wrong signature type"),
             };
 
-            let request_digest_wrong_signature = match user_secret_key.sign(&wrong_digest) {
+            let wrong_request_digest_signature = match user_secret_key.sign(&wrong_digest) {
                 near_crypto::Signature::ED25519(k) => k,
                 _ => anyhow::bail!("Wrong signature type"),
             };
@@ -72,70 +63,35 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             let bad_oidc_request = ClaimOidcRequest {
                 oidc_token_hash,
                 public_key: user_public_key.clone().to_string(),
-                frp_signature: request_digest_wrong_signature,
+                frp_signature: wrong_request_digest_signature,
             };
 
             // Make the claiming request with wrong signature
-            let oidc_response = ctx
-                .leader_node
+            ctx.leader_node
                 .claim_oidc(bad_oidc_request.clone())
                 .await?
-                .assert_bad_request()?;
-
-            match oidc_response {
-                ClaimOidcResponse::Ok { .. } => {
-                    return Err(anyhow::anyhow!(
-                        "Response should be Err when signature is wrong"
-                    ))
-                }
-                ClaimOidcResponse::Err { msg } => {
-                    assert!(
-                        msg.contains("failed to verify signature"),
-                        "Error message does not contain 'failed to verify signature'"
-                    );
-                }
-            }
+                .assert_bad_request_contains("failed to verify signature")?;
 
             // Making the claiming request with correct signature
-            let oidc_response = ctx
+            let mpc_signature: Signature = ctx
                 .leader_node
                 .claim_oidc(oidc_request.clone())
                 .await?
-                .assert_ok()?;
-
-            let mpc_signature = match oidc_response {
-                ClaimOidcResponse::Ok { mpc_signature } => mpc_signature,
-                ClaimOidcResponse::Err { msg } => return Err(anyhow::anyhow!(msg)),
-            };
+                .assert_ok()?
+                .try_into()?;
 
             // Making the same claiming request should fail
-            let oidc_response = ctx
-                .leader_node
+            ctx.leader_node
                 .claim_oidc(oidc_request.clone())
                 .await?
-                .assert_bad_request()?;
-
-            match oidc_response {
-                ClaimOidcResponse::Ok { .. } => {
-                    return Err(anyhow::anyhow!(
-                        "Response should be Err when claiming registered token"
-                    ))
-                }
-                ClaimOidcResponse::Err { msg } => {
-                    assert!(
-                        msg.contains("already claimed"),
-                        "Wrong error message when claiming registered token",
-                    );
-                }
-            }
+                .assert_bad_request_contains("already claimed")?;
 
             // Verify signature
-            let response_digest = claim_oidc_response_digest(oidc_request.frp_signature).unwrap();
+            let response_digest = claim_oidc_response_digest(oidc_request.frp_signature)?;
             mpc_pk.verify(&response_digest, &mpc_signature)?;
 
             // Verify signature with wrong digest
-            let wrong_response_digest =
-                claim_oidc_response_digest(bad_oidc_request.frp_signature).unwrap();
+            let wrong_response_digest = claim_oidc_response_digest(bad_oidc_request.frp_signature)?;
             if mpc_pk
                 .verify(&wrong_response_digest, &mpc_signature)
                 .is_ok()
@@ -213,19 +169,19 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             // Add key with bad FRP signature should fail
             let new_user_public_key = key::random_pk();
 
-            // let bad_user_sk = key::random_sk();
+            let bad_user_sk = key::random_sk();
 
-            // ctx.leader_node
-            //     .add_key(
-            //         account_id.clone(),
-            //         oidc_token.clone(),
-            //         new_user_public_key.parse()?,
-            //         recovery_pk.clone(),
-            //         bad_user_sk.clone(),
-            //         user_public_key.clone(),
-            //     )
-            //     .await?
-            //     .assert_unauthorized()?; // TODO: why it returns internal server error?
+            ctx.leader_node
+                .add_key(
+                    account_id.clone(),
+                    oidc_token.clone(),
+                    new_user_public_key.parse()?,
+                    recovery_pk.clone(),
+                    bad_user_sk.clone(),
+                    user_public_key.clone(),
+                )
+                .await?
+                .assert_unauthorized()?;
 
             // Add key with proper FRP signature should succeed
             ctx.leader_node

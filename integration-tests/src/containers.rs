@@ -574,6 +574,7 @@ impl LeaderNodeApi {
     }
 
     // TODO: move to utils
+    // TODO: I would say this need to replace the regular `new_account` once FRP is enforced
     pub async fn new_account_with_helper(
         &self,
         account_id: String,
