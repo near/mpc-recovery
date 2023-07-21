@@ -1,5 +1,6 @@
 use crate::{
-    transaction::{call_all_nodes, to_dalek_public_key}, msg::PublicKeyNodeRequest,
+    msg::PublicKeyNodeRequest,
+    transaction::{call_all_nodes, to_dalek_public_key},
 };
 use ed25519_dalek::Signature;
 use multi_party_eddsa::protocols::aggsig::KeyAgg;

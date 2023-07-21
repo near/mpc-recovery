@@ -256,12 +256,9 @@ async fn process_user_credentials<T: OAuthTokenVerifier>(
     state: LeaderState,
     request: UserCredentialsRequest,
 ) -> Result<UserCredentialsResponse, UserCredentialsError> {
-    let oidc_token_claims =
-        T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
-            .await
-            .map_err(UserCredentialsError::OidcVerificationFailed)?;
-
-    let internal_acc_id = oidc_token_claims.get_internal_account_id();
+    T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
+        .await
+        .map_err(UserCredentialsError::OidcVerificationFailed)?;
 
     nar::retry(|| async {
         let mpc_user_recovery_pk = get_user_recovery_pk(
@@ -330,6 +327,8 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             &state.reqwest_client,
             &state.sign_nodes,
             internal_acc_id.clone(),
+            request.frp_signature, // TODO: this signature is worng and works only because FRP protection is turned of for now
+            request.frp_public_key.clone(), // TODO: this public key is worng and works only because FRP protection is turned of for now
         )
         .await?;
 
