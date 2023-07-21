@@ -1,4 +1,4 @@
-use crate::key_recovery::get_user_recovery_pk;
+use crate::key_recovery::{get_user_recovery_pk, NodeRecoveryError};
 use crate::msg::{
     AcceptNodePublicKeysRequest, ClaimOidcNodeRequest, ClaimOidcRequest, ClaimOidcResponse,
     MpcPkRequest, MpcPkResponse, NewAccountRequest, NewAccountResponse, SignNodeRequest,
@@ -11,7 +11,7 @@ use crate::relayer::msg::RegisterAccountRequest;
 use crate::relayer::NearRpcAndRelayerClient;
 use crate::transaction::{
     get_create_account_delegate_action, get_local_signed_delegated_action, get_mpc_signature,
-    sign_payload_with_mpc, to_dalek_combined_public_key,
+    sign_payload_with_mpc, to_dalek_combined_public_key, NodeCallError, NodeSignError,
 };
 use axum::routing::get;
 use axum::{http::StatusCode, routing::post, Extension, Json, Router};
@@ -232,6 +232,15 @@ async fn user_credentials<T: OAuthTokenVerifier>(
                 }),
             )
         }
+        Err(UserCredentialsError::RecoveryKeyError(NodeRecoveryError::CallError(
+            NodeCallError::ClientError(e, status_code),
+        ))) => {
+            tracing::error!(err = ?e);
+            (
+                status_code,
+                Json(UserCredentialsResponse::Err { msg: e.to_string() }),
+            )
+        }
         Err(e) => {
             tracing::error!(err = ?e);
             (
@@ -248,6 +257,8 @@ async fn user_credentials<T: OAuthTokenVerifier>(
 enum UserCredentialsError {
     #[error("failed to verify oidc token: {0}")]
     OidcVerificationFailed(anyhow::Error),
+    #[error("failed to fetch recovery key: {0}")]
+    RecoveryKeyError(#[from] NodeRecoveryError),
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }
@@ -286,6 +297,8 @@ enum NewAccountError {
     OidcVerificationFailed(anyhow::Error),
     #[error("relayer error: {0}")]
     RelayerError(#[from] RelayerError),
+    #[error("failed to fetch recovery key: {0}")]
+    RecoveryKeyError(#[from] NodeRecoveryError),
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }
@@ -443,6 +456,12 @@ async fn new_account<T: OAuthTokenVerifier>(
             tracing::error!(err = ?e);
             response::new_acc_unauthorized(format!("failed to verify oidc token: {}", err_msg))
         }
+        Err(NewAccountError::RecoveryKeyError(NodeRecoveryError::CallError(
+            NodeCallError::ClientError(e, status_code),
+        ))) => {
+            tracing::error!(err = ?e);
+            (status_code, Json(NewAccountResponse::err(e.to_string())))
+        }
         Err(e) => {
             tracing::error!(err = ?e);
             response::new_acc_internal_error(format!("failed to process new account: {}", e))
@@ -455,6 +474,8 @@ async fn new_account<T: OAuthTokenVerifier>(
 enum SignError {
     #[error("failed to verify oidc token: {0}")]
     OidcVerificationFailed(anyhow::Error),
+    #[error("failed to sign by sign node: {0}")]
+    NodeError(#[from] NodeSignError),
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }
@@ -504,6 +525,13 @@ async fn sign<T: OAuthTokenVerifier>(
             tracing::error!(err = ?e);
             response::sign_unauthorized(format!("failed to verify oidc token: {}", err_msg))
         }
+        Err(SignError::NodeError(NodeSignError::CallError(NodeCallError::ClientError(
+            e,
+            status_code,
+        )))) => {
+            tracing::error!(err = ?e);
+            (status_code, Json(SignResponse::err(e.to_string())))
+        }
         Err(e) => {
             tracing::error!(err = ?e);
             response::sign_internal_error(format!("failed to process sign: {}", e))
@@ -513,7 +541,7 @@ async fn sign<T: OAuthTokenVerifier>(
 
 async fn gather_sign_node_pk_shares(state: &LeaderState) -> anyhow::Result<Vec<Point<Ed25519>>> {
     let fut = nar::retry_every(std::time::Duration::from_secs(1), || async {
-        let results: anyhow::Result<Vec<(usize, Point<Ed25519>)>> =
+        let results: Result<Vec<(usize, Point<Ed25519>)>, NodeCallError> =
             crate::transaction::call_all_nodes(
                 &state.reqwest_client,
                 &state.sign_nodes,

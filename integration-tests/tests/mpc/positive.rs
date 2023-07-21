@@ -5,7 +5,7 @@ use ed25519_dalek::Signature;
 use ed25519_dalek::Verifier;
 use hyper::StatusCode;
 use mpc_recovery::{
-    msg::{ClaimOidcRequest, ClaimOidcResponse, MpcPkRequest, NewAccountResponse},
+    msg::{ClaimOidcRequest, MpcPkRequest, NewAccountResponse},
     transaction::LimitedAccessKey,
     utils::{claim_oidc_request_digest, claim_oidc_response_digest, oidc_digest},
 };
@@ -169,19 +169,19 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             // Add key with bad FRP signature should fail
             let new_user_public_key = key::random_pk();
 
-            // let bad_user_sk = key::random_sk();
+            let bad_user_sk = key::random_sk();
 
-            // ctx.leader_node
-            //     .add_key(
-            //         account_id.clone(),
-            //         oidc_token.clone(),
-            //         new_user_public_key.parse()?,
-            //         recovery_pk.clone(),
-            //         bad_user_sk.clone(),
-            //         user_public_key.clone(),
-            //     )
-            //     .await?
-            //     .assert_unauthorized()?; // TODO: why it returns internal server error?
+            ctx.leader_node
+                .add_key(
+                    account_id.clone(),
+                    oidc_token.clone(),
+                    new_user_public_key.parse()?,
+                    recovery_pk.clone(),
+                    bad_user_sk.clone(),
+                    user_public_key.clone(),
+                )
+                .await?
+                .assert_unauthorized()?;
 
             // Add key with proper FRP signature should succeed
             ctx.leader_node
