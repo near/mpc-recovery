@@ -8,7 +8,7 @@ use crate::primitives::InternalAccountId;
 use crate::sign_node::pk_set::SignerNodePkSet;
 use crate::utils::{
     check_digest_signature, claim_oidc_request_digest, claim_oidc_response_digest,
-    sign_request_digest, user_credentials_request_digest,
+    sign_request_digest,
 };
 use crate::NodeId;
 use aes_gcm::Aes256Gcm;
@@ -398,17 +398,18 @@ async fn process_public_key<T: OAuthTokenVerifier>(
             .await
             .map_err(PublicKeyRequestError::OidcVerificationFailed)?;
 
+    // TODO: this check is turned off because new_account request does not have proper digest signature
     // Check the request signature
-    let frp_pk = PublicKey::from_str(&request.frp_public_key).map_err(|e| {
-        PublicKeyRequestError::MalformedPublicKey(request.frp_public_key.clone(), e)
-    })?;
+    // let frp_pk = PublicKey::from_str(&request.frp_public_key).map_err(|e| {
+    //     PublicKeyRequestError::MalformedPublicKey(request.frp_public_key.clone(), e)
+    // })?;
 
-    let digest = user_credentials_request_digest(request.oidc_token.clone(), frp_pk.clone())?;
+    // let digest = user_credentials_request_digest(request.oidc_token.clone(), frp_pk.clone())?;
 
-    match check_digest_signature(&frp_pk, &request.frp_signature, &digest) {
-        Ok(()) => tracing::debug!("user credentials digest signature verified"),
-        Err(e) => return Err(PublicKeyRequestError::SignatureVerificationFailed(e)),
-    };
+    // match check_digest_signature(&frp_pk, &request.frp_signature, &digest) {
+    //     Ok(()) => tracing::debug!("user credentials digest signature verified"),
+    //     Err(e) => return Err(PublicKeyRequestError::SignatureVerificationFailed(e)),
+    // };
 
     // Check if this OIDC token was claimed
     // TODO
