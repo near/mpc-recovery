@@ -51,7 +51,7 @@ pub fn sign_request_digest(
 pub fn user_credentials_request_digest(
     oidc_token: String,
     frp_public_key: PublicKey,
-) -> Result<Vec<u8>, CommitError> {
+) -> anyhow::Result<Vec<u8>> {
     let mut hasher = Sha256::default();
     BorshSerialize::serialize(&HashSalt::UserCredentialsRequest.get_salt(), &mut hasher)
         .context("Serialization failed")?;
@@ -81,14 +81,14 @@ pub fn check_digest_signature(
     public_key: &PublicKey,
     signature: &Signature,
     digest: &[u8],
-) -> Result<(), CommitError> {
+) -> Result<(), anyhow::Error> {
     if !near_crypto::Signature::ED25519(*signature).verify(digest, public_key) {
-        Err(CommitError::SignatureVerificationFailed(anyhow::anyhow!(
+        Err(anyhow::anyhow!(
             "Public key {}, digest {} and signature {} don't match",
             &public_key,
             &hex::encode(digest),
             &signature
-        )))
+        ))
     } else {
         Ok(())
     }
