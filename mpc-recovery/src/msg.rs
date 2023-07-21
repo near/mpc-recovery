@@ -29,8 +29,8 @@ impl TryInto<PublicKey> for MpcPkResponse {
             Err(e) => anyhow::bail!("failed to decode mpc pk: {}", e),
         };
 
-        Ok(ed25519_dalek::PublicKey::from_bytes(&decoded_mpc_pk)
-            .with_context(|| "failed to construct public key")?)
+        ed25519_dalek::PublicKey::from_bytes(&decoded_mpc_pk)
+            .with_context(|| "failed to construct public key")
     }
 }
 
