@@ -1,5 +1,6 @@
+use anyhow::Context;
 use curv::elliptic::curves::{Ed25519, Point};
-use ed25519_dalek::Signature;
+use ed25519_dalek::{PublicKey, Signature};
 use near_primitives::delegate_action::DelegateAction;
 use serde::{Deserialize, Serialize};
 
@@ -12,6 +13,25 @@ pub struct MpcPkRequest {}
 pub enum MpcPkResponse {
     Ok { mpc_pk: String },
     Err { msg: String },
+}
+
+impl TryInto<PublicKey> for MpcPkResponse {
+    type Error = anyhow::Error;
+
+    fn try_into(self) -> Result<PublicKey, Self::Error> {
+        let mpc_pk = match self {
+            MpcPkResponse::Ok { mpc_pk } => mpc_pk,
+            MpcPkResponse::Err { msg } => anyhow::bail!("error response: {}", msg),
+        };
+
+        let decoded_mpc_pk = match hex::decode(mpc_pk.clone()) {
+            Ok(v) => v,
+            Err(e) => anyhow::bail!("failed to decode mpc pk: {}", e),
+        };
+
+        Ok(ed25519_dalek::PublicKey::from_bytes(&decoded_mpc_pk)
+            .with_context(|| "failed to construct public key")?)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -32,6 +52,19 @@ pub enum ClaimOidcResponse {
     Err {
         msg: String,
     },
+}
+
+impl TryInto<Signature> for ClaimOidcResponse {
+    type Error = anyhow::Error;
+
+    fn try_into(self) -> Result<Signature, Self::Error> {
+        let mpc_signature = match self {
+            ClaimOidcResponse::Ok { mpc_signature } => mpc_signature,
+            ClaimOidcResponse::Err { msg } => anyhow::bail!("error response: {}", msg),
+        };
+
+        Ok(mpc_signature)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

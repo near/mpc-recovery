@@ -29,7 +29,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 workspaces = { git = "https://github.com/near/workspaces-rs", branch = "main" }
 
 [dev-dependencies]
-rand = "0.8"
+rand = "0.7"
+rand8 = { package = "rand", version = "0.8" }
 test-log = { version = "0.2.12", features = ["log", "trace"] }
 env_logger = "0.10.0"
 tracing-log = "0.1.3"
