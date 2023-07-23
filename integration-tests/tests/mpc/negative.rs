@@ -105,6 +105,25 @@ async fn test_invalid_token() -> anyhow::Result<()> {
             let oidc_token = token::valid_random();
             let invalid_oidc_token = token::invalid();
 
+            // Claim OIDC token
+            ctx.leader_node
+                .claim_oidc_with_helper(
+                    oidc_token.clone(),
+                    user_public_key.clone(),
+                    user_secret_key.clone(),
+                )
+                .await?;
+
+            // Claim invalid OIDC token to get proper errors
+            ctx.leader_node
+                .claim_oidc_with_helper(
+                    invalid_oidc_token.clone(),
+                    user_public_key.clone(),
+                    user_secret_key.clone(),
+                )
+                .await?;
+
+            // Try to create an account with invalid token
             ctx.leader_node
                 .new_account_with_helper(
                     account_id.clone().to_string(),
@@ -116,7 +135,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                 .await?
                 .assert_unauthorized()?;
 
-            // Check that the service is still available
+            // Try to create an account with valid token
             let new_acc_response = ctx
                 .leader_node
                 .new_account_with_helper(
@@ -151,10 +170,11 @@ async fn test_invalid_token() -> anyhow::Result<()> {
 
             let new_user_public_key = key::random_pk();
 
+            // Try to add a key with invalid token
             ctx.leader_node
                 .add_key(
                     account_id.clone(),
-                    token::invalid(),
+                    invalid_oidc_token.clone(),
                     new_user_public_key.parse()?,
                     recovery_pk.clone(),
                     user_secret_key.clone(),
@@ -163,7 +183,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                 .await?
                 .assert_unauthorized()?;
 
-            // Check that the service is still available
+            // Try to add a key with valid token
             ctx.leader_node
                 .add_key(
                     account_id.clone(),

@@ -7,7 +7,7 @@ use crate::oauth::OAuthTokenVerifier;
 use crate::primitives::InternalAccountId;
 use crate::sign_node::pk_set::SignerNodePkSet;
 use crate::utils::{
-    check_digest_signature, claim_oidc_request_digest, claim_oidc_response_digest,
+    check_digest_signature, claim_oidc_request_digest, claim_oidc_response_digest, oidc_digest,
     sign_request_digest,
 };
 use crate::NodeId;
@@ -245,9 +245,13 @@ async fn process_commit<T: OAuthTokenVerifier>(
             };
 
             // Check if this OIDC token was claimed
+            let oidc_hash = oidc_digest(&request.oidc_token);
+
+            let claim_digest = claim_oidc_request_digest(oidc_hash, frp_pk.clone())?;
+
             let oidc_digest = OidcDigest {
                 node_id: state.node_info.our_index,
-                digest: <[u8; 32]>::try_from(digest).expect("Hash was wrong size"),
+                digest: <[u8; 32]>::try_from(claim_digest).expect("Hash was wrong size"),
                 public_key: frp_pk,
             };
 

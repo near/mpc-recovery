@@ -650,10 +650,7 @@ impl LeaderNodeApi {
             frp_pk.clone(),
         )?;
 
-        let frp_signature = match frp_sk.sign(&sign_request_digest) {
-            near_crypto::Signature::ED25519(k) => k,
-            _ => return Err(anyhow::anyhow!("Wrong signature type")),
-        };
+        let frp_signature = sign_digest(&sign_request_digest, &frp_sk)?;
 
         let sign_request = SignRequest {
             delegate_action: add_key_delegate_action.clone(),

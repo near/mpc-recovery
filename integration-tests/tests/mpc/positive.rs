@@ -141,6 +141,15 @@ async fn test_basic_action() -> anyhow::Result<()> {
             let user_public_key = user_secret_key.public_key();
             let oidc_token = token::valid_random();
 
+            // Claim OIDC token
+            ctx.leader_node
+                .claim_oidc_with_helper(
+                    oidc_token.clone(),
+                    user_public_key.clone(),
+                    user_secret_key.clone(),
+                )
+                .await?;
+
             // Create account
             let new_acc_response = ctx
                 .leader_node
