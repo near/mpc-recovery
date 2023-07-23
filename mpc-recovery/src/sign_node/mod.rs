@@ -346,10 +346,7 @@ async fn commit<T: OAuthTokenVerifier>(
             tracing::error!(err = ?e);
             (
                 StatusCode::UNAUTHORIZED,
-                Json(Err(format!(
-                    "OIDC Token was not claimed: {}",
-                    e
-                ))),
+                Json(Err(format!("OIDC Token was not claimed: {}", e))),
             )
         }
         // TODO: Ideally we should process some of the newly added errors
