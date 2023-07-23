@@ -342,6 +342,16 @@ async fn commit<T: OAuthTokenVerifier>(
                 ))),
             )
         }
+        Err(ref e @ CommitError::OidcTokenNotClaimed(ref _err_msg)) => {
+            tracing::error!(err = ?e);
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(Err(format!(
+                    "OIDC Token was not claimed: {}",
+                    e
+                ))),
+            )
+        }
         // TODO: Ideally we should process some of the newly added errors
         // differently here to shift the blame from us (500) to the caller (4xx)
         Err(e) => {
