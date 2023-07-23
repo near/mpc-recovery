@@ -114,6 +114,8 @@ pub enum CommitError {
     SignatureVerificationFailed(anyhow::Error),
     #[error("oidc token {0:?} already claimed")]
     OidcTokenAlreadyClaimed(OidcDigest),
+    #[error("oidc token {0:?} was not claimed")]
+    OidcTokenNotClaimed(OidcDigest),
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }
@@ -227,12 +229,6 @@ async fn process_commit<T: OAuthTokenVerifier>(
                     .map_err(CommitError::OidcVerificationFailed)?;
             tracing::debug!(?oidc_token_claims, "oidc token verified");
 
-            // Check if this OIDC token was claimed
-            // TODO:
-
-            // Restrict certain types of DelegateActions
-            // TODO
-
             // Check request FRP signature
             let frp_pk = PublicKey::from_str(&request.frp_public_key)
                 .map_err(|e| CommitError::MalformedPublicKey(request.frp_public_key.clone(), e))?;
@@ -247,6 +243,37 @@ async fn process_commit<T: OAuthTokenVerifier>(
                 Ok(()) => tracing::debug!("sign request digest signature verified"),
                 Err(e) => return Err(CommitError::SignatureVerificationFailed(e)),
             };
+
+            // Check if this OIDC token was claimed
+            let oidc_digest = OidcDigest {
+                node_id: state.node_info.our_index,
+                digest: <[u8; 32]>::try_from(digest).expect("Hash was wrong size"),
+                public_key: frp_pk,
+            };
+
+            match state
+                .gcp_service
+                .get::<_, OidcDigest>(oidc_digest.to_name())
+                .await
+            {
+                Ok(Some(_stored_digest)) => {
+                    tracing::info!(?oidc_digest, "oidc token was claimed");
+                }
+                Ok(None) => {
+                    tracing::info!(?oidc_digest, "oidc token was not claimed");
+                    return Err(CommitError::OidcTokenNotClaimed(oidc_digest));
+                }
+                Err(e) => {
+                    tracing::error!(
+                        ?oidc_digest,
+                        "failed to get oidc token digest from the database"
+                    );
+                    return Err(CommitError::Other(e));
+                }
+            };
+
+            // Restrict certain types of DelegateActions
+            // TODO
 
             // Get user credentials
             let internal_account_id = oidc_token_claims.get_internal_account_id();

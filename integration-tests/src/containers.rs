@@ -5,6 +5,7 @@ use std::str::FromStr;
 use anyhow::{anyhow, Ok};
 use bollard::{container::LogsOptions, network::CreateNetworkOptions, service::Ipam, Docker};
 use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::GenericArray};
+use ed25519_dalek::{PublicKey as PublicKeyEd25519, Signature, Verifier};
 use futures::{lock::Mutex, StreamExt};
 use hyper::StatusCode;
 use mpc_recovery::{
@@ -15,7 +16,10 @@ use mpc_recovery::{
     },
     relayer::NearRpcAndRelayerClient,
     transaction::{CreateAccountOptions, LimitedAccessKey},
-    utils::{new_account_request_digest, sign_request_digest, user_credentials_request_digest},
+    utils::{
+        claim_oidc_request_digest, claim_oidc_response_digest, new_account_request_digest,
+        oidc_digest, sign_digest, sign_request_digest, user_credentials_request_digest,
+    },
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_crypto::{PublicKey, SecretKey};
@@ -675,6 +679,36 @@ impl LeaderNodeApi {
         } else {
             Err(anyhow::anyhow!("add_key failed with {:?}", response.status))
         }
+    }
+
+    // TODO: move to utils
+    pub async fn claim_oidc_with_helper(
+        &self,
+        oidc_token: String,
+        user_public_key: PublicKey,
+        user_secret_key: near_crypto::SecretKey,
+    ) -> anyhow::Result<()> {
+        let oidc_token_hash = oidc_digest(&oidc_token);
+
+        let request_digest =
+            claim_oidc_request_digest(oidc_token_hash, user_public_key.clone()).unwrap();
+
+        let request_digest_signature = sign_digest(&request_digest, &user_secret_key)?;
+
+        let oidc_request = ClaimOidcRequest {
+            oidc_token_hash,
+            public_key: user_public_key.clone().to_string(),
+            frp_signature: request_digest_signature,
+        };
+
+        let mpc_signature: Signature = self.claim_oidc(oidc_request.clone()).await?.1.try_into()?;
+
+        let mpc_pk: PublicKeyEd25519 = self.get_mpc_pk(MpcPkRequest {}).await?.1.try_into()?;
+
+        // Verify signature
+        let response_digest = claim_oidc_response_digest(oidc_request.frp_signature)?;
+        mpc_pk.verify(&response_digest, &mpc_signature)?;
+        Ok(())
     }
 
     pub async fn recovery_pk(

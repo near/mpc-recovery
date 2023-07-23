@@ -1,14 +1,7 @@
 use crate::{account, check, key, token, with_nodes, MpcCheck};
 use anyhow::anyhow;
-use ed25519_dalek::PublicKey as PublicKeyEd25519;
-use ed25519_dalek::Signature;
-use ed25519_dalek::Verifier;
 use hyper::StatusCode;
-use mpc_recovery::{
-    msg::{ClaimOidcRequest, MpcPkRequest, NewAccountResponse},
-    transaction::LimitedAccessKey,
-    utils::{claim_oidc_request_digest, claim_oidc_response_digest, oidc_digest},
-};
+use mpc_recovery::{msg::NewAccountResponse, transaction::LimitedAccessKey};
 use near_crypto::PublicKey;
 use std::{str::FromStr, time::Duration};
 use workspaces::types::AccessKeyPermission;
@@ -25,81 +18,15 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
                 near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519);
             let user_public_key = user_secret_key.public_key();
             let oidc_token = token::valid_random();
-            let wrong_oidc_token = token::valid_random();
 
-            // Get MPC public key
-            let mpc_pk: PublicKeyEd25519 = ctx
-                .leader_node
-                .get_mpc_pk(MpcPkRequest {})
-                .await?
-                .assert_ok()?
-                .try_into()?;
-
-            // Prepare the oidc claiming request
-            let oidc_token_hash = oidc_digest(&oidc_token);
-            let wrong_oidc_token_hash = oidc_digest(&wrong_oidc_token);
-
-            let request_digest =
-                claim_oidc_request_digest(oidc_token_hash, user_public_key.clone()).unwrap();
-            let wrong_digest =
-                claim_oidc_request_digest(wrong_oidc_token_hash, user_public_key.clone()).unwrap();
-
-            let request_digest_signature = match user_secret_key.sign(&request_digest) {
-                near_crypto::Signature::ED25519(k) => k,
-                _ => anyhow::bail!("Wrong signature type"),
-            };
-
-            let wrong_request_digest_signature = match user_secret_key.sign(&wrong_digest) {
-                near_crypto::Signature::ED25519(k) => k,
-                _ => anyhow::bail!("Wrong signature type"),
-            };
-
-            let oidc_request = ClaimOidcRequest {
-                oidc_token_hash,
-                public_key: user_public_key.clone().to_string(),
-                frp_signature: request_digest_signature,
-            };
-
-            let bad_oidc_request = ClaimOidcRequest {
-                oidc_token_hash,
-                public_key: user_public_key.clone().to_string(),
-                frp_signature: wrong_request_digest_signature,
-            };
-
-            // Make the claiming request with wrong signature
+            // Claim OIDC token
             ctx.leader_node
-                .claim_oidc(bad_oidc_request.clone())
-                .await?
-                .assert_bad_request_contains("failed to verify signature")?;
-
-            // Making the claiming request with correct signature
-            let mpc_signature: Signature = ctx
-                .leader_node
-                .claim_oidc(oidc_request.clone())
-                .await?
-                .assert_ok()?
-                .try_into()?;
-
-            // Making the same claiming request should fail
-            ctx.leader_node
-                .claim_oidc(oidc_request.clone())
-                .await?
-                .assert_bad_request_contains("already claimed")?;
-
-            // Verify signature
-            let response_digest = claim_oidc_response_digest(oidc_request.frp_signature)?;
-            mpc_pk.verify(&response_digest, &mpc_signature)?;
-
-            // Verify signature with wrong digest
-            let wrong_response_digest = claim_oidc_response_digest(bad_oidc_request.frp_signature)?;
-            if mpc_pk
-                .verify(&wrong_response_digest, &mpc_signature)
-                .is_ok()
-            {
-                return Err(anyhow::anyhow!(
-                    "Signature verification should fail with wrong digest"
-                ));
-            }
+                .claim_oidc_with_helper(
+                    oidc_token.clone(),
+                    user_public_key.clone(),
+                    user_secret_key.clone(),
+                )
+                .await?;
 
             // Create account
             let new_acc_response = ctx

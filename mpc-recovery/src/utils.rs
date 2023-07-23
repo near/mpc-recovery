@@ -99,3 +99,13 @@ pub fn oidc_digest(oidc_token: &str) -> [u8; 32] {
 
     <[u8; 32]>::try_from(hasher.finalize().as_slice()).expect("Hash is the wrong size")
 }
+
+pub fn sign_digest(
+    request_digest: &[u8],
+    user_secret_key: &near_crypto::SecretKey,
+) -> anyhow::Result<Signature> {
+    match user_secret_key.sign(&request_digest) {
+        near_crypto::Signature::ED25519(signature) => Ok(signature),
+        _ => anyhow::bail!("Wrong signature type"),
+    }
+}
