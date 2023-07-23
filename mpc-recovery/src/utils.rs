@@ -104,7 +104,7 @@ pub fn sign_digest(
     request_digest: &[u8],
     user_secret_key: &near_crypto::SecretKey,
 ) -> anyhow::Result<Signature> {
-    match user_secret_key.sign(&request_digest) {
+    match user_secret_key.sign(request_digest) {
         near_crypto::Signature::ED25519(signature) => Ok(signature),
         _ => anyhow::bail!("Wrong signature type"),
     }
