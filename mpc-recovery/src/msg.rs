@@ -74,10 +74,18 @@ pub struct UserCredentialsRequest {
     pub frp_public_key: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum UserCredentialsResponse {
     Ok { recovery_pk: String },
     Err { msg: String },
+}
+
+impl UserCredentialsResponse {
+    pub fn err(msg: String) -> Self {
+        UserCredentialsResponse::Err { msg }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

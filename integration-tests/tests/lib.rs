@@ -4,7 +4,9 @@ use curv::elliptic::curves::{Ed25519, Point};
 use futures::future::BoxFuture;
 use hyper::StatusCode;
 use mpc_recovery::{
-    msg::{ClaimOidcResponse, MpcPkResponse, NewAccountResponse, SignResponse},
+    msg::{
+        ClaimOidcResponse, MpcPkResponse, NewAccountResponse, SignResponse, UserCredentialsResponse,
+    },
     GenerateResult,
 };
 use mpc_recovery_integration_tests::containers;
@@ -266,3 +268,4 @@ impl_mpc_check!(SignResponse);
 impl_mpc_check!(NewAccountResponse);
 impl_mpc_check!(MpcPkResponse);
 impl_mpc_check!(ClaimOidcResponse);
+impl_mpc_check!(UserCredentialsResponse);

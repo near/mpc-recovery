@@ -405,12 +405,13 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             )
             .await?;
 
+        // FRP signature here is a signature of the user_credentials request
         let mpc_user_recovery_pk = get_user_recovery_pk(
             &state.reqwest_client,
             &state.sign_nodes,
             request.oidc_token.clone(),
-            request.frp_signature, // TODO: this signature is worng and works only because FRP protection is turned of for now
-            request.frp_public_key.clone(), // TODO: this public key is worng and works only because FRP protection is turned of for now
+            request.frp_signature,
+            request.frp_public_key.clone(),
         )
         .await?;
 

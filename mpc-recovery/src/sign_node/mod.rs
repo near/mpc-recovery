@@ -8,7 +8,7 @@ use crate::primitives::InternalAccountId;
 use crate::sign_node::pk_set::SignerNodePkSet;
 use crate::utils::{
     check_digest_signature, claim_oidc_request_digest, claim_oidc_response_digest, oidc_digest,
-    sign_request_digest,
+    sign_request_digest, user_credentials_request_digest,
 };
 use crate::NodeId;
 use aes_gcm::Aes256Gcm;
@@ -420,6 +420,8 @@ pub enum PublicKeyRequestError {
     MalformedPublicKey(String, ParseKeyError),
     #[error("failed to verify oidc token: {0}")]
     OidcVerificationFailed(anyhow::Error),
+    #[error("oidc token {0:?} was not claimed")]
+    OidcTokenNotClaimed(OidcDigest),
     #[error("failed to verify signature: {0}")]
     SignatureVerificationFailed(anyhow::Error),
     #[error("{0}")]
@@ -436,21 +438,49 @@ async fn process_public_key<T: OAuthTokenVerifier>(
             .await
             .map_err(PublicKeyRequestError::OidcVerificationFailed)?;
 
-    // TODO: this check is turned off because new_account request does not have proper digest signature
     // Check the request signature
-    // let frp_pk = PublicKey::from_str(&request.frp_public_key).map_err(|e| {
-    //     PublicKeyRequestError::MalformedPublicKey(request.frp_public_key.clone(), e)
-    // })?;
+    let frp_pk = PublicKey::from_str(&request.frp_public_key).map_err(|e| {
+        PublicKeyRequestError::MalformedPublicKey(request.frp_public_key.clone(), e)
+    })?;
 
-    // let digest = user_credentials_request_digest(request.oidc_token.clone(), frp_pk.clone())?;
+    let digest = user_credentials_request_digest(request.oidc_token.clone(), frp_pk.clone())?;
 
-    // match check_digest_signature(&frp_pk, &request.frp_signature, &digest) {
-    //     Ok(()) => tracing::debug!("user credentials digest signature verified"),
-    //     Err(e) => return Err(PublicKeyRequestError::SignatureVerificationFailed(e)),
-    // };
+    match check_digest_signature(&frp_pk, &request.frp_signature, &digest) {
+        Ok(()) => tracing::debug!("user credentials digest signature verified"),
+        Err(e) => return Err(PublicKeyRequestError::SignatureVerificationFailed(e)),
+    };
 
     // Check if this OIDC token was claimed
-    // TODO
+    let oidc_hash = oidc_digest(&request.oidc_token);
+
+    let claim_digest = claim_oidc_request_digest(oidc_hash, frp_pk.clone())?;
+
+    let oidc_digest = OidcDigest {
+        node_id: state.node_info.our_index,
+        digest: <[u8; 32]>::try_from(claim_digest).expect("Hash was wrong size"),
+        public_key: frp_pk,
+    };
+
+    match state
+        .gcp_service
+        .get::<_, OidcDigest>(oidc_digest.to_name())
+        .await
+    {
+        Ok(Some(_stored_digest)) => {
+            tracing::info!(?oidc_digest, "oidc token was claimed");
+        }
+        Ok(None) => {
+            tracing::info!(?oidc_digest, "oidc token was not claimed");
+            return Err(PublicKeyRequestError::OidcTokenNotClaimed(oidc_digest));
+        }
+        Err(e) => {
+            tracing::error!(
+                ?oidc_digest,
+                "failed to get oidc token digest from the database"
+            );
+            return Err(PublicKeyRequestError::Other(e));
+        }
+    };
 
     let internal_acc_id = oidc_token_claims.get_internal_account_id();
     match get_or_generate_user_creds(&state, internal_acc_id).await {
@@ -491,6 +521,13 @@ async fn public_key<T: OAuthTokenVerifier>(
             (
                 StatusCode::BAD_REQUEST,
                 Json(Err(format!("bad public key: {}, {}", err_msg, error))),
+            )
+        }
+        Err(ref e @ PublicKeyRequestError::OidcTokenNotClaimed(ref _err_msg)) => {
+            tracing::error!(err = ?e);
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(Err(format!("OIDC Token was not claimed: {}", e))),
             )
         }
         Err(ref e @ PublicKeyRequestError::Other(ref err_msg)) => {

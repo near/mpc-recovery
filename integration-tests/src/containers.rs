@@ -1,7 +1,4 @@
 #![allow(clippy::too_many_arguments)]
-
-use std::str::FromStr;
-
 use anyhow::{anyhow, Ok};
 use bollard::{container::LogsOptions, network::CreateNetworkOptions, service::Ipam, Docker};
 use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::GenericArray};
@@ -17,8 +14,8 @@ use mpc_recovery::{
     relayer::NearRpcAndRelayerClient,
     transaction::{CreateAccountOptions, LimitedAccessKey},
     utils::{
-        claim_oidc_request_digest, claim_oidc_response_digest, new_account_request_digest,
-        oidc_digest, sign_digest, sign_request_digest, user_credentials_request_digest,
+        claim_oidc_request_digest, claim_oidc_response_digest, oidc_digest, sign_digest,
+        sign_request_digest, user_credentials_request_digest,
     },
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
@@ -597,14 +594,11 @@ impl LeaderNodeApi {
             contract_bytes: None,
         };
 
-        let new_account_digest = new_account_request_digest(
-            account_id.clone(),
-            create_account_options.clone(),
-            oidc_token.clone(),
-            user_pk.clone(),
-        )?;
+        // By signing this digest we are giving the leader node permission to get user recovery pk
+        let user_credentials_request_digest =
+            user_credentials_request_digest(oidc_token.clone(), user_pk.clone())?;
 
-        let frp_signature = match user_secret_key.sign(&new_account_digest) {
+        let frp_signature = match user_secret_key.sign(&user_credentials_request_digest) {
             near_crypto::Signature::ED25519(k) => k,
             _ => return Err(anyhow::anyhow!("Wrong signature type")),
         };
@@ -708,12 +702,12 @@ impl LeaderNodeApi {
         Ok(())
     }
 
-    pub async fn recovery_pk(
+    pub async fn user_credentials_with_helper(
         &self,
         oidc_token: String,
         client_sk: SecretKey,
         client_pk: PublicKey,
-    ) -> anyhow::Result<PublicKey> {
+    ) -> anyhow::Result<(StatusCode, UserCredentialsResponse)> {
         let user_credentials_request_digest =
             user_credentials_request_digest(oidc_token.clone(), client_pk.clone())?;
 
@@ -722,24 +716,12 @@ impl LeaderNodeApi {
             _ => return Err(anyhow::anyhow!("Wrong signature type")),
         };
 
-        let (status_code, user_credentials) = self
-            .user_credentials(UserCredentialsRequest {
-                oidc_token: oidc_token.clone(),
-                frp_signature,
-                frp_public_key: client_pk.clone().to_string(),
-            })
-            .await?;
-
-        assert_eq!(status_code, StatusCode::OK);
-
-        let recovery_pk: PublicKey = match user_credentials {
-            UserCredentialsResponse::Ok { recovery_pk } => PublicKey::from_str(&recovery_pk)?,
-            UserCredentialsResponse::Err { msg } => {
-                return Err(anyhow::anyhow!(msg));
-            }
-        };
-
-        Ok(recovery_pk)
+        self.user_credentials(UserCredentialsRequest {
+            oidc_token: oidc_token.clone(),
+            frp_signature,
+            frp_public_key: client_pk.clone().to_string(),
+        })
+        .await
     }
 
     pub fn get_add_key_delegate_action(
