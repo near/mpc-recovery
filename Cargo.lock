@@ -2447,6 +2447,7 @@ dependencies = [
 name = "mpc-recovery-integration-tests"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
  "anyhow",
  "bollard",
  "clap 4.3.5",
