@@ -22,6 +22,42 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
             let oidc_token = token::valid_random();
             let wrong_oidc_token = token::valid_random();
 
+            // Create account
+            ctx.leader_node
+                .new_account_with_helper(
+                    account_id.clone().to_string(),
+                    user_public_key.clone(),
+                    None,
+                    user_secret_key.clone(),
+                    oidc_token.clone(),
+                )
+                .await?
+                .assert_ok()?;
+
+            // Making a sign request with unclaimed OIDC token
+            let recovery_pk = ctx
+                .leader_node
+                .recovery_pk(
+                    oidc_token.clone(),
+                    user_secret_key.clone(),
+                    user_secret_key.clone().public_key(),
+                )
+                .await?;
+
+            let new_user_public_key = key::random_pk();
+
+            ctx.leader_node
+                .add_key(
+                    account_id.clone(),
+                    oidc_token.clone(),
+                    new_user_public_key.parse()?,
+                    recovery_pk.clone(),
+                    user_secret_key.clone(),
+                    user_public_key.clone(),
+                )
+                .await?
+                .assert_unauthorized_contains("was not claimed")?;
+
             // Get MPC public key
             let mpc_pk: PublicKeyEd25519 = ctx
                 .leader_node
@@ -88,42 +124,6 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
                     "Signature verification should fail with wrong digest"
                 ));
             }
-
-            // Create account
-            ctx.leader_node
-                .new_account_with_helper(
-                    account_id.clone().to_string(),
-                    user_public_key.clone(),
-                    None,
-                    user_secret_key.clone(),
-                    oidc_token.clone(),
-                )
-                .await?
-                .assert_ok()?;
-
-            // Making a sign request with unclaimed OIDC token
-            let recovery_pk = ctx
-                .leader_node
-                .recovery_pk(
-                    oidc_token.clone(),
-                    user_secret_key.clone(),
-                    user_secret_key.clone().public_key(),
-                )
-                .await?;
-
-            let new_user_public_key = key::random_pk();
-
-            ctx.leader_node
-                .add_key(
-                    account_id.clone(),
-                    oidc_token.clone(),
-                    new_user_public_key.parse()?,
-                    recovery_pk.clone(),
-                    user_secret_key.clone(),
-                    user_public_key.clone(),
-                )
-                .await?
-                .assert_unauthorized_contains("was not claimed")?;
 
             Ok(())
         })
