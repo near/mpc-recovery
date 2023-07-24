@@ -242,38 +242,44 @@ async fn test_aggregate_signatures() -> anyhow::Result<()> {
     .await
 }
 
+async fn new_random_account(
+    ctx: &crate::TestContext<'_>,
+) -> anyhow::Result<(workspaces::AccountId, String, String)> {
+    let account_id = account::random(ctx.worker)?;
+    let user_public_key = key::random();
+    let oidc_token = token::valid_random();
+    let create_account_options = CreateAccountOptions {
+        full_access_keys: Some(vec![user_public_key.clone().parse().unwrap()]),
+        limited_access_keys: None,
+        contract_bytes: None,
+    };
+
+    let (status_code, new_acc_response) = ctx
+        .leader_node
+        .new_account(NewAccountRequest {
+            near_account_id: account_id.to_string(),
+            create_account_options,
+            oidc_token: oidc_token.clone(),
+            signature: None,
+        })
+        .await?;
+
+    assert_eq!(status_code, StatusCode::OK);
+    assert!(matches!(new_acc_response, NewAccountResponse::Ok {
+            create_account_options: _,
+            user_recovery_public_key: _,
+            near_account_id: acc_id,
+        } if acc_id == account_id.to_string()
+    ));
+
+    Ok((account_id, user_public_key, oidc_token))
+}
+
 #[test(tokio::test)]
 async fn test_basic_action() -> anyhow::Result<()> {
     with_nodes(3, |ctx| {
         Box::pin(async move {
-            let account_id = account::random(ctx.worker)?;
-            let user_public_key = key::random();
-            let oidc_token = token::valid_random();
-
-            let create_account_options = CreateAccountOptions {
-                full_access_keys: Some(vec![user_public_key.clone().parse().unwrap()]),
-                limited_access_keys: None,
-                contract_bytes: None,
-            };
-
-            // Create account
-            let (status_code, new_acc_response) = ctx
-                .leader_node
-                .new_account(NewAccountRequest {
-                    near_account_id: account_id.to_string(),
-                    create_account_options,
-                    oidc_token: oidc_token.clone(),
-                    signature: None,
-                })
-                .await?;
-            assert_eq!(status_code, StatusCode::OK);
-            assert!(matches!(new_acc_response, NewAccountResponse::Ok {
-                    create_account_options: _,
-                    user_recovery_public_key: _,
-                    near_account_id: acc_id,
-                } if acc_id == account_id.to_string()
-            ));
-
+            let (account_id, user_public_key, oidc_token) = new_random_account(&ctx).await?;
             tokio::time::sleep(Duration::from_millis(2000)).await;
 
             check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
@@ -460,6 +466,63 @@ async fn test_accept_existing_pk_set() -> anyhow::Result<()> {
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
             assert!(matches!(result, Ok(_)));
+
+            Ok(())
+        })
+    })
+    .await
+}
+
+#[test(tokio::test)]
+async fn test_rotate_node_keys() -> anyhow::Result<()> {
+    with_nodes(3, |ctx| {
+        Box::pin(async move {
+            let (account_id, _, oidc_token) = new_random_account(&ctx).await?;
+            tokio::time::sleep(Duration::from_millis(2000)).await;
+
+            // Add key
+            let recovery_pk = ctx.leader_node.recovery_pk(oidc_token.clone()).await?;
+            let new_user_public_key = key::random();
+            let (status_code, sign_response) = ctx
+                .leader_node
+                .add_key(
+                    account_id.clone(),
+                    oidc_token.clone(),
+                    new_user_public_key.parse()?,
+                    recovery_pk.clone(),
+                )
+                .await?;
+            assert_eq!(status_code, StatusCode::OK);
+            let SignResponse::Ok { .. } = sign_response else {
+                anyhow::bail!("failed to get a signature from mpc-recovery");
+            };
+            tokio::time::sleep(Duration::from_millis(2000)).await;
+            check::access_key_exists(&ctx, &account_id, &new_user_public_key).await?;
+
+            let gcp_service = ctx.gcp_service().await?;
+            let entities = gcp_service
+                .fetch_entities::<mpc_recovery::sign_node::user_credentials::EncryptedUserCredentials>()
+                .await
+                .unwrap();
+
+            println!("LEN: {:?}", entities.len());
+            println!("{:?}\n", entities);
+
+            // Generate a new set of ciphers to rotate out each node:
+            let mpc_recovery::GenerateResult { secrets, .. } = mpc_recovery::generate(3);
+
+            // Rotate out with new the cipher.
+            for ((_sk_share, new_cipher), sign_node) in secrets.iter().zip(ctx.signer_nodes) {
+                sign_node.run_rotate_node_key(new_cipher).await?;
+            }
+
+            let entities = gcp_service
+                .fetch_entities::<mpc_recovery::sign_node::user_credentials::EncryptedUserCredentials>()
+                .await
+                .unwrap();
+
+            println!("LEN: {:?}", entities.len());
+            println!("{:?}\n", entities);
 
             Ok(())
         })

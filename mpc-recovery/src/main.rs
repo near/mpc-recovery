@@ -6,6 +6,7 @@ use clap::Parser;
 use mpc_recovery::{
     gcp::GcpService,
     oauth::{PagodaFirebaseTokenVerifier, UniversalTokenVerifier},
+    sign_node::migration,
     GenerateResult, LeaderConfig, SignerConfig,
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
@@ -99,6 +100,9 @@ enum Cli {
         /// Environment to run in (`dev` or `prod`)
         #[arg(long, env("MPC_RECOVERY_ENV"), default_value("dev"))]
         env: String,
+        /// If no `new_env` is specified, the rotation will be done inplace in the current `env`.
+        #[arg(long, env("MPC_RECOVERY_ROTATE_INPLACE"))]
+        new_env: Option<String>,
         /// Node ID
         #[arg(long, env("MPC_RECOVERY_NODE_ID"))]
         node_id: u64,
@@ -282,30 +286,48 @@ async fn main() -> anyhow::Result<()> {
         }
         Cli::RotateSignNodeKey {
             env,
+            new_env,
             node_id,
             old_cipher_key,
             new_cipher_key,
-            old_sk_share,
-            new_sk_share,
+            old_sk_share: _,
+            new_sk_share: _,
             gcp_project_id,
             gcp_datastore_url,
         } => {
-            let gcp_service =
-                GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
+            let gcp_service = GcpService::new(
+                env.clone(),
+                gcp_project_id.clone(),
+                gcp_datastore_url.clone(),
+            )
+            .await?;
 
-            let old_cipher_key = load_cipher_key(&gcp_service, &env, node_id, old_cipher_key).await?;
+            let dest_gcp_service = if let Some(new_env) = new_env {
+                GcpService::new(new_env, gcp_project_id, gcp_datastore_url).await?
+            } else {
+                gcp_service.clone()
+            };
+
+            let old_cipher_key =
+                load_cipher_key(&gcp_service, &env, node_id, old_cipher_key).await?;
             let old_cipher_key = hex::decode(old_cipher_key)?;
             let old_cipher_key = GenericArray::<u8, U32>::clone_from_slice(&old_cipher_key);
             let old_cipher = Aes256Gcm::new(&old_cipher_key);
-            let old_sk_share = load_sh_skare(&gcp_service, &env, node_id, old_sk_share).await?;
-            let old_sk_share: ExpandedKeyPair = serde_json::from_str(&old_sk_share).unwrap();
 
-            let new_cipher_key = load_cipher_key(&gcp_service, &env, node_id, new_cipher_key).await?;
+            let new_cipher_key =
+                load_cipher_key(&gcp_service, &env, node_id, new_cipher_key).await?;
             let new_cipher_key = hex::decode(new_cipher_key)?;
             let new_cipher_key = GenericArray::<u8, U32>::clone_from_slice(&new_cipher_key);
             let new_cipher = Aes256Gcm::new(&new_cipher_key);
-            let new_sk_share: ExpandedKeyPair = serde_json::from_str(&new_sk_share).unwrap();
 
+            migration::rotate_cipher(
+                node_id as usize,
+                old_cipher,
+                new_cipher,
+                &gcp_service,
+                &dest_gcp_service,
+            )
+            .await?;
         }
     }
 

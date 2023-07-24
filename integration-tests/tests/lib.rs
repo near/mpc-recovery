@@ -4,7 +4,6 @@ use curv::elliptic::curves::{Ed25519, Point};
 use futures::future::BoxFuture;
 use mpc_recovery::gcp::GcpService;
 use mpc_recovery::msg::RotateKeyRequest;
-use mpc_recovery::sign_node::user_credentials::EncryptedUserCredentials;
 use mpc_recovery::GenerateResult;
 use mpc_recovery_integration_tests::containers;
 use workspaces::{network::Sandbox, Worker};
@@ -19,6 +18,18 @@ pub struct TestContext<'a> {
     pk_set: &'a Vec<Point<Ed25519>>,
     worker: &'a Worker<Sandbox>,
     signer_nodes: &'a Vec<containers::SignerNodeApi>,
+    gcp_datastore_url: String,
+}
+
+impl<'a> TestContext<'a> {
+    pub async fn gcp_service(&self) -> anyhow::Result<GcpService> {
+        GcpService::new(
+            "dev".into(),
+            GCP_PROJECT_ID.into(),
+            Some(self.gcp_datastore_url.clone()),
+        )
+        .await
+    }
 }
 
 async fn with_nodes<F>(nodes: usize, f: F) -> anyhow::Result<()>
@@ -78,22 +89,13 @@ where
         pk_set: &pk_set,
         signer_nodes: &signer_nodes.iter().map(|n| n.api()).collect(),
         worker: &relayer_ctx.worker,
+        gcp_datastore_url: datastore.address,
     })
     .await?;
 
-    let gcp_service =
-        GcpService::new("dev".into(), GCP_PROJECT_ID.into(), Some(datastore.address)).await?;
-
-    let entities = gcp_service
-        .fetch_entities::<EncryptedUserCredentials>()
-        .await?;
-
-    println!("LEN: {:?}", entities.len());
-    println!("{:?}\n", entities);
-
     let pk = "{\"curve\":\"ed25519\",\"point\":[150,246,216,55,178,96,37,197,213,99,54,197,88,57,212,173,182,75,30,148,23,115,179,94,58,180,33,91,180,126,92,245]}";
     let new_public_key = serde_json::from_str(pk)?;
-    let res = signer_nodes[0]
+    let _res = signer_nodes[0]
         .api()
         .rotate_key(RotateKeyRequest {
             new_public_key,
@@ -101,39 +103,6 @@ where
         })
         .await
         .unwrap();
-
-    println!("RES: {:?}\n", res);
-
-    let entities = gcp_service
-        .fetch_entities::<EncryptedUserCredentials>()
-        .await
-        .unwrap();
-
-    println!("LEN: {:?}", entities.len());
-    println!("{:?}\n", entities);
-
-    // use google_datastore1::api::{KindExpression, Query, RunQueryRequest};
-
-    // let kind: String = "EncryptedUserCredentials-dev".to_string();
-    // let req = RunQueryRequest {
-    //     database_id: Some("".to_string()),
-    //     partition_id: Default::default(),
-    //     read_options: Default::default(),
-    //     query: Some(Query {
-    //         projection: None,
-    //         kind: Some(vec![KindExpression { name: Some(kind) }]),
-    //         filter: None,
-    //         order: None,
-    //         distinct_on: Some(vec![]),
-    //         start_cursor: None,
-    //         end_cursor: None,
-    //         offset: None,
-    //         limit: None,
-    //     }),
-    //     gql_query: None,
-    // };
-
-    // let query = datastore.projects().run_query(req, GCP_PROJECT_ID);
 
     Ok(())
 }

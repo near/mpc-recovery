@@ -5,6 +5,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
+aes-gcm = "0.10"
 anyhow = "1.0"
 bollard = "0.11"
 clap = { version = "4.2", features = ["derive", "env"] }
@@ -29,7 +30,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 workspaces = { git = "https://github.com/near/workspaces-rs", branch = "main" }
 
 [dev-dependencies]
-aes-gcm = "0.10"
 rand = "0.8"
 test-log = { version = "0.2.12", features = ["log", "trace"] }
 env_logger = "0.10.0"

@@ -16,15 +16,19 @@ pub async fn rotate_cipher(
     node_id: usize,
     old_cipher: Aes256Gcm,
     new_cipher: Aes256Gcm,
-    gcp_service: &GcpService,
+    src_gcp_service: &GcpService,
+    dest_gcp_service: &GcpService,
 ) -> anyhow::Result<()> {
     // TODO: replace with less memory intensive method such that we don't run out of memory
-    let entities = gcp_service
+    let entities = src_gcp_service
         .fetch_entities::<EncryptedUserCredentials>()
         .await?;
 
     for entity in entities {
         let old_entity = entity.entity.unwrap();
+
+        // Check if this entity belongs to this node. This check is needed for integration tests as all
+        // entities are stored in the same datastore instead of separate ones during test-time.
         if !old_entity.key.as_ref().unwrap().path.as_ref().unwrap()[0]
             .name
             .as_ref()
@@ -48,7 +52,7 @@ pub async fn rotate_cipher(
         )?;
 
         // TODO: send all updates at once?
-        gcp_service.update(new_cred).await?;
+        dest_gcp_service.upsert(new_cred).await?;
     }
 
     Ok(())

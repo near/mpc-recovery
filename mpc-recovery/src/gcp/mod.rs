@@ -213,6 +213,46 @@ impl GcpService {
         Ok(())
     }
 
+    pub async fn upsert<T: IntoValue + KeyKind>(&self, value: T) -> anyhow::Result<()> {
+        let mut entity = Entity::from_value(value.into_value())?;
+        let path_element = entity
+            .key
+            .as_mut()
+            .and_then(|k| k.path.as_mut())
+            .and_then(|p| p.first_mut());
+        if let Some(path_element) = path_element {
+            // We can't create multiple datastore databases in GCP, so we have to suffix
+            // type kinds with env (`dev`, `prod`).
+            path_element.kind = Some(format!("{}-{}", T::kind(), self.env))
+        }
+
+        let request = CommitRequest {
+            database_id: Some("".to_string()),
+            mode: Some(String::from("NON_TRANSACTIONAL")),
+            mutations: Some(vec![Mutation {
+                insert: None,
+                delete: None,
+                update: None,
+                base_version: None,
+                upsert: Some(entity),
+                update_time: None,
+            }]),
+            single_use_transaction: None,
+            transaction: None,
+        };
+
+        tracing::debug!(?request);
+        let (_, response) = self
+            .datastore
+            .projects()
+            .commit(request, &self.project_id)
+            .doit()
+            .await?;
+        tracing::debug!(?response, "received response");
+
+        Ok(())
+    }
+
     // pub async fn commit<T: KeyKind>(&self) -> anyhow::Result<()> {
     //     Ok(())
     // }
