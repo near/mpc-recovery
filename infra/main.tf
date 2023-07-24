@@ -20,6 +20,8 @@ locals {
   client_email = jsondecode(local.credentials).client_email
   client_id    = jsondecode(local.credentials).client_id
 
+  git_commit_hash = trimspace(file("../.git/${trimspace(trimprefix(file("../.git/HEAD"), "ref:"))}"))
+
   env = {
     defaults = {
       near_rpc          = "https://rpc.testnet.near.org"
@@ -88,7 +90,7 @@ resource "docker_registry_image" "mpc_recovery" {
 }
 
 resource "docker_image" "mpc_recovery" {
-  name = "${var.region}-docker.pkg.dev/${var.project}/${google_artifact_registry_repository.mpc_recovery.name}/mpc-recovery-${var.env}"
+  name = "${var.region}-docker.pkg.dev/${var.project}/${google_artifact_registry_repository.mpc_recovery.name}/mpc-recovery-${var.env}:${local.git_commit_hash}"
   build {
     context = "${path.cwd}/.."
   }
