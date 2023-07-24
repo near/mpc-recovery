@@ -7,6 +7,8 @@ The aim of this project is to offer NEAR users the opportunity to create and res
 - Each action must be signed by all 3 nodes
 - Nodes signatures are then combined into a single signature on the leader node
 
+In the future we are planning to get rid  of the leader node to make the system more decentralized.
+
 ## External API
 
 The recovery service is currently hosted at https://near.org
