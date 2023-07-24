@@ -12,6 +12,48 @@ use crate::gcp::GcpService;
 
 use super::user_credentials::EncryptedUserCredentials;
 
+pub async fn rotate_cipher(
+    node_id: usize,
+    old_cipher: Aes256Gcm,
+    new_cipher: Aes256Gcm,
+    gcp_service: &GcpService,
+) -> anyhow::Result<()> {
+    // TODO: replace with less memory intensive method such that we don't run out of memory
+    let entities = gcp_service
+        .fetch_entities::<EncryptedUserCredentials>()
+        .await?;
+
+    for entity in entities {
+        let old_entity = entity.entity.unwrap();
+        if !old_entity.key.as_ref().unwrap().path.as_ref().unwrap()[0]
+            .name
+            .as_ref()
+            .unwrap()
+            .starts_with(&node_id.to_string())
+        {
+            println!("Skipping: {:#?}", old_entity.key);
+            continue;
+        }
+
+        let old_cred = EncryptedUserCredentials::from_value(old_entity.into_value())?;
+        let key_pair = old_cred
+            .decrypt_key_pair(&old_cipher)
+            .map_err(|e| anyhow::anyhow!(e))?;
+
+        let new_cred = EncryptedUserCredentials::new(
+            old_cred.node_id,
+            old_cred.internal_account_id,
+            &new_cipher,
+            key_pair,
+        )?;
+
+        // TODO: send all updates at once?
+        gcp_service.update(new_cred).await?;
+    }
+
+    Ok(())
+}
+
 #[derive(Clone)]
 pub enum Vault {
     Stable {
@@ -41,53 +83,6 @@ impl Vault {
         id: crate::primitives::InternalAccountId,
     ) -> anyhow::Result<EncryptedUserCredentials> {
         EncryptedUserCredentials::random(node_id, id, self.cipher())
-    }
-
-    pub async fn rotate_cipher(
-        &mut self,
-        new_cipher: Aes256Gcm,
-        gcp_service: &GcpService,
-    ) -> anyhow::Result<()> {
-        let Self::Stable {
-            node_id, node_key: _, cipher: old_cipher
-        } = self else {
-            anyhow::bail!("Invalid state to be in while rotating key");
-        };
-
-        // TODO: replace with less memory intensive method such that we don't run out of memory
-        let entities = gcp_service
-            .fetch_entities::<EncryptedUserCredentials>()
-            .await?;
-
-        for entity in entities {
-            let old_entity = entity.entity.unwrap();
-            if !old_entity.key.as_ref().unwrap().path.as_ref().unwrap()[0]
-                .name
-                .as_ref()
-                .unwrap()
-                .starts_with(&node_id.to_string())
-            {
-                println!("Skipping: {:#?}", old_entity.key);
-                continue;
-            }
-
-            let old_cred = EncryptedUserCredentials::from_value(old_entity.into_value())?;
-            let key_pair = old_cred
-                .decrypt_key_pair(old_cipher)
-                .map_err(|e| anyhow::anyhow!(e))?;
-
-            let new_cred = EncryptedUserCredentials::new(
-                old_cred.node_id,
-                old_cred.internal_account_id,
-                &new_cipher,
-                key_pair,
-            )?;
-
-            // TODO: send all updates at once?
-            gcp_service.update(new_cred).await?;
-        }
-
-        Ok(())
     }
 
     fn _migrate(&mut self, new_cipher: Aes256Gcm) {

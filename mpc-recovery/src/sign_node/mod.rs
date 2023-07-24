@@ -429,10 +429,10 @@ async fn rotate_key(
     };
     let new_cipher = GenericArray::<u8, U32>::clone_from_slice(&new_cipher);
     let new_cipher = Aes256Gcm::new(&new_cipher);
-    if let Err(err) = state.vault.rotate_cipher(new_cipher, &state.gcp_service).await {
-        let msg = format!("Rotating cipher errored out: {err:?}");
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(Err(msg)))
-    }
+    // if let Err(err) = state.vault.rotate_cipher(new_cipher, &state.gcp_service).await {
+    //     let msg = format!("Rotating cipher errored out: {err:?}");
+    //     return (StatusCode::INTERNAL_SERVER_ERROR, Json(Err(msg)))
+    // }
 
     (StatusCode::OK, Json(Ok(())))
 }
