@@ -20,6 +20,8 @@ use mpc_recovery::{
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_crypto::{PublicKey, SecretKey};
+use near_primitives::transaction::DeleteKeyAction;
+use near_primitives::types::{BlockHeight, Nonce};
 use near_primitives::{
     account::{AccessKey, AccessKeyPermission},
     delegate_action::{DelegateAction, SignedDelegateAction},
@@ -615,7 +617,7 @@ impl LeaderNodeApi {
     }
 
     // TODO: add_key should me moved to utils in the future, it is not a part of the API
-    pub async fn add_key(
+    pub async fn add_key_with_helper(
         &self,
         account_id: AccountId,
         oidc_token: String,
@@ -625,9 +627,8 @@ impl LeaderNodeApi {
         frp_pk: PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
-        let (_, block_height, nonce) = self
-            .client
-            .access_key(account_id.clone(), recovery_pk.clone())
+        let (block_height, nonce) = self
+            .get_key_info_with_helper(account_id.clone(), recovery_pk.clone())
             .await?;
 
         let add_key_delegate_action = self.get_add_key_delegate_action(
@@ -670,6 +671,88 @@ impl LeaderNodeApi {
         } else {
             Err(anyhow::anyhow!("add_key failed with {:?}", response.status))
         }
+    }
+
+    pub async fn delete_key_with_helper(
+        &self,
+        account_id: AccountId,
+        oidc_token: String,
+        public_key: PublicKey,
+        recovery_pk: PublicKey,
+        frp_sk: SecretKey,
+        frp_pk: PublicKey,
+    ) -> anyhow::Result<(StatusCode, SignResponse)> {
+        // Prepare SignRequest with add key delegate action
+        let (block_height, nonce) = self
+            .get_key_info_with_helper(account_id.clone(), recovery_pk.clone())
+            .await?;
+
+        let delete_key_delegate_action = self.get_delete_key_delegate_action(
+            account_id.clone(),
+            public_key.clone(),
+            recovery_pk.clone(),
+            nonce,
+            block_height,
+        )?;
+
+        let sign_request_digest = sign_request_digest(
+            delete_key_delegate_action.clone(),
+            oidc_token.clone(),
+            frp_pk.clone(),
+        )?;
+
+        let frp_signature = sign_digest(&sign_request_digest, &frp_sk)?;
+
+        let sign_request = SignRequest {
+            delegate_action: delete_key_delegate_action.clone(),
+            oidc_token,
+            frp_signature,
+            frp_public_key: frp_sk.public_key().to_string(),
+        };
+        // Send SignRequest to leader node
+        let (status_code, sign_response): (_, SignResponse) = self.sign(sign_request).await?;
+        let signature = match &sign_response {
+            SignResponse::Ok { signature } => signature,
+            SignResponse::Err { .. } => return Ok((status_code, sign_response)),
+        };
+        let response = self
+            .client
+            .send_meta_tx(SignedDelegateAction {
+                delegate_action: delete_key_delegate_action,
+                signature: near_crypto::Signature::ED25519(*signature),
+            })
+            .await?;
+        if matches!(response.status, FinalExecutionStatus::SuccessValue(_)) {
+            Ok((status_code, sign_response))
+        } else {
+            Err(anyhow::anyhow!(
+                "delete_key failed with {:?}",
+                response.status
+            ))
+        }
+    }
+
+    pub async fn perform_delegate_action_with_helper(
+        &self,
+        delegate_action: DelegateAction,
+        oidc_token: String,
+        frp_sk: SecretKey,
+        frp_pk: PublicKey,
+    ) -> anyhow::Result<(StatusCode, SignResponse)> {
+        let sign_request_digest =
+            sign_request_digest(delegate_action.clone(), oidc_token.clone(), frp_pk.clone())?;
+
+        let frp_signature = sign_digest(&sign_request_digest, &frp_sk)?;
+
+        let sign_request = SignRequest {
+            delegate_action: delegate_action.clone(),
+            oidc_token,
+            frp_signature,
+            frp_public_key: frp_sk.public_key().to_string(),
+        };
+        // Send SignRequest to leader node
+        let (status_code, sign_response): (_, SignResponse) = self.sign(sign_request).await?;
+        Ok((status_code, sign_response))
     }
 
     // TODO: move to utils
@@ -747,5 +830,35 @@ impl LeaderNodeApi {
             max_block_height: block_height + 100,
             public_key: recovery_pk,
         })
+    }
+
+    pub fn get_delete_key_delegate_action(
+        &self,
+        account_id: AccountId,
+        public_key: PublicKey,
+        recovery_pk: PublicKey,
+        nonce: u64,
+        block_height: u64,
+    ) -> anyhow::Result<DelegateAction> {
+        Ok(DelegateAction {
+            sender_id: account_id.clone(),
+            receiver_id: account_id,
+            actions: vec![Action::DeleteKey(DeleteKeyAction { public_key }).try_into()?],
+            nonce,
+            max_block_height: block_height + 100,
+            public_key: recovery_pk,
+        })
+    }
+
+    pub async fn get_key_info_with_helper(
+        &self,
+        account_id: AccountId,
+        pk: PublicKey,
+    ) -> anyhow::Result<(BlockHeight, Nonce)> {
+        let (_, block_height, nonce) = self
+            .client
+            .access_key(account_id.clone(), pk.clone())
+            .await?;
+        Ok((block_height, nonce))
     }
 }

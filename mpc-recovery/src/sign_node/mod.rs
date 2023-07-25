@@ -19,8 +19,10 @@ use curv::elliptic::curves::{Ed25519, Point};
 use multi_party_eddsa::protocols::{self, ExpandedKeyPair};
 use near_crypto::{ParseKeyError, PublicKey};
 use near_primitives::account::id::ParseAccountError;
+use near_primitives::delegate_action::NonDelegateAction;
 use near_primitives::hash::hash;
 use near_primitives::signable_message::{SignableMessage, SignableMessageType};
+use near_primitives::transaction::{Action, AddKeyAction, DeleteKeyAction};
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -116,6 +118,10 @@ pub enum CommitError {
     OidcTokenAlreadyClaimed(OidcDigest),
     #[error("oidc token {0:?} was not claimed")]
     OidcTokenNotClaimed(OidcDigest),
+    #[error("This kind of action can not be performed")]
+    UnsupportedAction,
+    #[error("Recovery key can not be deleted: {0}")]
+    RecoveryKeyCanNotBeDeleted(PublicKey),
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }
@@ -277,7 +283,28 @@ async fn process_commit<T: OAuthTokenVerifier>(
             };
 
             // Restrict certain types of DelegateActions
-            // TODO
+            let requested_delegate_actions: &Vec<NonDelegateAction> =
+                &request.delegate_action.actions;
+
+            let requested_actions: &Vec<Action> = &requested_delegate_actions
+                .iter()
+                .map(|non_delegate_action| Action::from(non_delegate_action.clone()))
+                .collect();
+
+            for action in requested_actions {
+                match action {
+                    Action::AddKey(AddKeyAction { .. }) => {
+                        tracing::debug!("AddKeyAction is supported");
+                    }
+                    Action::DeleteKey(DeleteKeyAction { .. }) => {
+                        tracing::debug!("DeleteKeyAction is supported");
+                    }
+                    _ => {
+                        tracing::error!("Unsupported action: {:?}", action);
+                        return Err(CommitError::UnsupportedAction);
+                    }
+                }
+            }
 
             // Get user credentials
             let internal_account_id = oidc_token_claims.get_internal_account_id();
@@ -347,6 +374,23 @@ async fn commit<T: OAuthTokenVerifier>(
             (
                 StatusCode::UNAUTHORIZED,
                 Json(Err(format!("OIDC Token was not claimed: {}", e))),
+            )
+        }
+        Err(ref e @ CommitError::UnsupportedAction) => {
+            tracing::error!(err = ?e);
+            (
+                StatusCode::BAD_REQUEST,
+                Json(Err(format!(
+                    "You are trying to perform an action that is not supported: {}",
+                    e
+                ))),
+            )
+        }
+        Err(ref e @ CommitError::RecoveryKeyCanNotBeDeleted(ref _recovery_pk)) => {
+            tracing::error!(err = ?e);
+            (
+                StatusCode::BAD_REQUEST,
+                Json(Err(format!("You can not delete you recovery key: {:?}", e))),
             )
         }
         // TODO: Ideally we should process some of the newly added errors

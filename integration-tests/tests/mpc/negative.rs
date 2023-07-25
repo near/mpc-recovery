@@ -7,8 +7,139 @@ use mpc_recovery::{
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_crypto::PublicKey;
+use near_primitives::{
+    account::AccessKey,
+    delegate_action::DelegateAction,
+    transaction::{
+        Action, AddKeyAction, CreateAccountAction, DeleteAccountAction, DeleteKeyAction,
+        DeployContractAction, FunctionCallAction, StakeAction, TransferAction,
+    },
+};
 use std::{str::FromStr, time::Duration};
 use test_log::test;
+use workspaces::AccountId;
+
+#[test(tokio::test)]
+async fn whitlisted_actions_test() -> anyhow::Result<()> {
+    with_nodes(3, |ctx| {
+        Box::pin(async move {
+            // Preparing user credentials
+            let account_id = account::random(ctx.worker)?;
+            let user_secret_key =
+                near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519);
+            let user_public_key = user_secret_key.public_key();
+            let oidc_token = token::valid_random();
+
+            // Claim OIDC token
+            ctx.leader_node
+                .claim_oidc_with_helper(
+                    oidc_token.clone(),
+                    user_public_key.clone(),
+                    user_secret_key.clone(),
+                )
+                .await?;
+
+            // Create account with claimed OIDC token
+            ctx.leader_node
+                .new_account_with_helper(
+                    account_id.clone().to_string(),
+                    user_public_key.clone(),
+                    None,
+                    user_secret_key.clone(),
+                    oidc_token.clone(),
+                )
+                .await?
+                .assert_ok()?;
+
+            // Performing whitelisted actions
+            let whitelisted_actions = vec![ActionType::AddKey, ActionType::DeleteKey];
+
+            for whitelisted_action in whitelisted_actions {
+                ctx.leader_node
+                    .perform_delegate_action_with_helper(
+                        get_stub_delegate_action(whitelisted_action)?,
+                        oidc_token.clone(),
+                        user_secret_key.clone(),
+                        user_public_key.clone(),
+                    )
+                    .await?
+                    .assert_ok()?;
+            }
+
+            // Performing blacklisted actions
+            let blacklisted_actions = vec![
+                ActionType::CreateAccount,
+                ActionType::DeployContract,
+                ActionType::FunctionCall,
+                ActionType::Transfer,
+                ActionType::Stake,
+                ActionType::DeleteAccount,
+            ];
+
+            for blacklisted_action in blacklisted_actions {
+                ctx.leader_node
+                    .perform_delegate_action_with_helper(
+                        get_stub_delegate_action(blacklisted_action)?,
+                        oidc_token.clone(),
+                        user_secret_key.clone(),
+                        user_public_key.clone(),
+                    )
+                    .await?
+                    .assert_bad_request_contains("action can not be performed")?;
+            }
+
+            Ok(())
+        })
+    })
+    .await
+}
+
+pub enum ActionType {
+    CreateAccount,
+    DeployContract,
+    FunctionCall,
+    Transfer,
+    Stake,
+    AddKey,
+    DeleteKey,
+    DeleteAccount,
+}
+
+fn get_stub_delegate_action(action_type: ActionType) -> anyhow::Result<DelegateAction> {
+    let action: Action = match action_type {
+        ActionType::CreateAccount => Action::CreateAccount(CreateAccountAction {}),
+        ActionType::DeployContract => Action::DeployContract(DeployContractAction { code: vec![] }),
+        ActionType::FunctionCall => Action::FunctionCall(FunctionCallAction {
+            method_name: "test".to_string(),
+            args: vec![],
+            gas: 0,
+            deposit: 0,
+        }),
+        ActionType::Transfer => Action::Transfer(TransferAction { deposit: 0 }),
+        ActionType::Stake => Action::Stake(StakeAction {
+            stake: 0,
+            public_key: key::random_sk().public_key(),
+        }),
+        ActionType::AddKey => Action::AddKey(AddKeyAction {
+            public_key: key::random_sk().public_key(),
+            access_key: AccessKey::full_access(),
+        }),
+        ActionType::DeleteKey => Action::DeleteKey(DeleteKeyAction {
+            public_key: key::random_sk().public_key(),
+        }),
+        ActionType::DeleteAccount => Action::DeleteAccount(DeleteAccountAction {
+            beneficiary_id: AccountId::from_str("test.near").unwrap(),
+        }),
+    };
+    Ok(DelegateAction {
+        sender_id: AccountId::from_str("test.near").unwrap(),
+        receiver_id: AccountId::from_str("test.near").unwrap(),
+        actions: vec![action.try_into()?],
+        nonce: 1,
+        max_block_height: 1,
+        public_key: key::random_sk().public_key(),
+    })
+}
 
 #[test(tokio::test)]
 async fn negative_front_running_protection() -> anyhow::Result<()> {
@@ -86,7 +217,7 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
             let new_user_public_key = key::random_pk();
 
             ctx.leader_node
-                .add_key(
+                .add_key_with_helper(
                     account_id.clone(),
                     oidc_token_2.clone(),
                     new_user_public_key.parse()?,
@@ -252,7 +383,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
 
             // Try to add a key with invalid token
             ctx.leader_node
-                .add_key(
+                .add_key_with_helper(
                     account_id.clone(),
                     invalid_oidc_token.clone(),
                     new_user_public_key.parse()?,
@@ -265,7 +396,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
 
             // Try to add a key with valid token
             ctx.leader_node
-                .add_key(
+                .add_key_with_helper(
                     account_id.clone(),
                     oidc_token,
                     new_user_public_key.parse()?,
