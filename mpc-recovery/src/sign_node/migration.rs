@@ -1,9 +1,6 @@
 //! Module that defines all the migrating logic for the sign node
 //! when we want to rotate the key if our sign node gets compromised.
 
-// Store both old and new ciphers in GCP. If old cipher exists,
-// then we are in a state of migration.
-
 use aes_gcm::Aes256Gcm;
 use anyhow::Context;
 
