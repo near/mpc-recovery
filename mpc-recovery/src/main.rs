@@ -322,8 +322,8 @@ async fn main() -> anyhow::Result<()> {
 
             migration::rotate_cipher(
                 node_id as usize,
-                old_cipher,
-                new_cipher,
+                &old_cipher,
+                &new_cipher,
                 &gcp_service,
                 &dest_gcp_service,
             )

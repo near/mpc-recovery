@@ -2,6 +2,7 @@
 
 use std::str::FromStr;
 
+use aes_gcm::{Aes256Gcm, KeyInit};
 use anyhow::{anyhow, Ok};
 use bollard::Docker;
 use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::GenericArray};
@@ -281,20 +282,20 @@ pub struct SignerNode<'a> {
     pub container: Container<'a, GenericImage>,
     pub address: String,
     pub local_address: String,
-    pub node_id: usize,
-    pub sk_share: ExpandedKeyPair,
-    pub cipher_key: GenericArray<u8, U32>,
+    node_id: usize,
+    sk_share: ExpandedKeyPair,
+    cipher_key: GenericArray<u8, U32>,
     gcp_project_id: String,
     gcp_datastore_url: String,
 }
 
 pub struct SignerNodeApi {
     pub address: String,
-    node_id: usize,
-    sk_share: ExpandedKeyPair,
-    cipher_key: GenericArray<u8, U32>,
-    gcp_project_id: String,
-    gcp_datastore_url: String,
+    pub node_id: usize,
+    pub sk_share: ExpandedKeyPair,
+    pub cipher_key: Aes256Gcm,
+    pub gcp_project_id: String,
+    pub gcp_datastore_url: String,
 }
 
 impl<'a> SignerNode<'a> {
@@ -373,7 +374,7 @@ impl<'a> SignerNode<'a> {
             address: self.local_address.clone(),
             node_id: self.node_id,
             sk_share: self.sk_share.clone(),
-            cipher_key: self.cipher_key.clone(),
+            cipher_key: Aes256Gcm::new(&self.cipher_key),
             gcp_project_id: self.gcp_project_id.clone(),
             gcp_datastore_url: self.gcp_datastore_url.clone(),
         }
@@ -398,7 +399,7 @@ impl SignerNodeApi {
     pub async fn run_rotate_node_key(
         &self,
         new_cipher_key: &GenericArray<u8, U32>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<(Aes256Gcm, Aes256Gcm)> {
         let env = "dev".to_string();
         let gcp_service = mpc_recovery::gcp::GcpService::new(
             env.clone(),
@@ -407,20 +408,20 @@ impl SignerNodeApi {
         )
         .await?;
 
-        let old_cipher = <aes_gcm::Aes256Gcm as aes_gcm::KeyInit>::new(&self.cipher_key);
-        let new_cipher = <aes_gcm::Aes256Gcm as aes_gcm::KeyInit>::new(new_cipher_key);
+        let new_cipher = Aes256Gcm::new(new_cipher_key);
+        let old_cipher = &self.cipher_key;
 
         // Do inplace rotation of node key
         mpc_recovery::sign_node::migration::rotate_cipher(
             self.node_id,
-            old_cipher,
-            new_cipher,
+            &old_cipher,
+            &new_cipher,
             &gcp_service,
             &gcp_service,
         )
         .await?;
 
-        Ok(())
+        Ok((old_cipher.clone(), new_cipher))
     }
 }
 

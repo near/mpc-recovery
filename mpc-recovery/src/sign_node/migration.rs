@@ -14,8 +14,8 @@ use super::user_credentials::EncryptedUserCredentials;
 
 pub async fn rotate_cipher(
     node_id: usize,
-    old_cipher: Aes256Gcm,
-    new_cipher: Aes256Gcm,
+    old_cipher: &Aes256Gcm,
+    new_cipher: &Aes256Gcm,
     src_gcp_service: &GcpService,
     dest_gcp_service: &GcpService,
 ) -> anyhow::Result<()> {
@@ -29,25 +29,25 @@ pub async fn rotate_cipher(
 
         // Check if this entity belongs to this node. This check is needed for integration tests as all
         // entities are stored in the same datastore instead of separate ones during test-time.
+        // TODO: fix this check -- starts_with doesn't work with all cases
         if !old_entity.key.as_ref().unwrap().path.as_ref().unwrap()[0]
             .name
             .as_ref()
             .unwrap()
             .starts_with(&node_id.to_string())
         {
-            println!("Skipping: {:#?}", old_entity.key);
             continue;
         }
 
         let old_cred = EncryptedUserCredentials::from_value(old_entity.into_value())?;
         let key_pair = old_cred
-            .decrypt_key_pair(&old_cipher)
+            .decrypt_key_pair(old_cipher)
             .map_err(|e| anyhow::anyhow!(e))?;
 
         let new_cred = EncryptedUserCredentials::new(
             old_cred.node_id,
             old_cred.internal_account_id,
-            &new_cipher,
+            new_cipher,
             key_pair,
         )?;
 

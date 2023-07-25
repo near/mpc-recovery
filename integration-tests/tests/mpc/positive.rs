@@ -3,11 +3,13 @@ use anyhow::anyhow;
 use ed25519_dalek::Verifier;
 use hyper::StatusCode;
 use mpc_recovery::{
+    gcp::value::{FromValue, IntoValue},
     msg::{
         ClaimOidcRequest, ClaimOidcResponse, MpcPkRequest, MpcPkResponse, NewAccountRequest,
         NewAccountResponse, SignNodeRequest, SignResponse, SignShareNodeRequest,
     },
     oauth::get_test_claims,
+    sign_node::user_credentials::EncryptedUserCredentials,
     transaction::{
         call_all_nodes, sign_payload_with_mpc, to_dalek_combined_public_key, CreateAccountOptions,
         LimitedAccessKey,
@@ -16,7 +18,7 @@ use mpc_recovery::{
 };
 use near_crypto::PublicKey;
 use rand::{distributions::Alphanumeric, Rng};
-use std::{str::FromStr, time::Duration};
+use std::{collections::HashMap, str::FromStr, time::Duration};
 use workspaces::types::AccessKeyPermission;
 
 use test_log::test;
@@ -500,29 +502,59 @@ async fn test_rotate_node_keys() -> anyhow::Result<()> {
             check::access_key_exists(&ctx, &account_id, &new_user_public_key).await?;
 
             let gcp_service = ctx.gcp_service().await?;
-            let entities = gcp_service
+            let old_entities = gcp_service
                 .fetch_entities::<mpc_recovery::sign_node::user_credentials::EncryptedUserCredentials>()
                 .await
-                .unwrap();
-
-            println!("LEN: {:?}", entities.len());
-            println!("{:?}\n", entities);
+                .unwrap()
+                .into_iter()
+                .map(|entity| {
+                    let entity = entity.entity.unwrap();
+                    (entity.key.as_ref().unwrap().path.as_ref().unwrap()[0].name.as_ref().unwrap().clone(), entity)
+                })
+                .collect::<HashMap<_, _>>();
 
             // Generate a new set of ciphers to rotate out each node:
             let mpc_recovery::GenerateResult { secrets, .. } = mpc_recovery::generate(3);
 
+            let mut ciphers = HashMap::new();
             // Rotate out with new the cipher.
             for ((_sk_share, new_cipher), sign_node) in secrets.iter().zip(ctx.signer_nodes) {
-                sign_node.run_rotate_node_key(new_cipher).await?;
+                let cipher_pair = sign_node.run_rotate_node_key(new_cipher).await?;
+                ciphers.insert(sign_node.node_id, cipher_pair);
             }
 
-            let entities = gcp_service
+            let mut new_entities = gcp_service
                 .fetch_entities::<mpc_recovery::sign_node::user_credentials::EncryptedUserCredentials>()
                 .await
-                .unwrap();
+                .unwrap()
+                .into_iter()
+                .map(|entity| {
+                    let entity = entity.entity.unwrap();
+                    (entity.key.as_ref().unwrap().path.as_ref().unwrap()[0].name.as_ref().unwrap().clone(), entity)
+                })
+                .collect::<HashMap<_, _>>();
 
-            println!("LEN: {:?}", entities.len());
-            println!("{:?}\n", entities);
+            assert_eq!(old_entities.len(), new_entities.len());
+            for (path, old_entity) in old_entities.into_iter() {
+                let node_id = path.split("/").into_iter().next().unwrap().parse::<usize>()?;
+                let (old_cipher, new_cipher) = ciphers.get(&node_id).unwrap();
+
+                let old_cred = EncryptedUserCredentials::from_value(old_entity.into_value())?;
+                let new_entity = new_entities.remove(&path).unwrap();
+                let new_cred = EncryptedUserCredentials::from_value(new_entity.into_value())?;
+
+                // Once rotated, the key pairs should not be equal as they use different cipher keys:
+                assert_ne!(old_cred.encrypted_key_pair, new_cred.encrypted_key_pair);
+
+                // Make sure that the actual key pairs are still the same after cipher rotation:
+                let old_key_pair = old_cred
+                    .decrypt_key_pair(old_cipher)
+                    .map_err(|e| anyhow::anyhow!(e))?;
+                let new_key_pair = new_cred
+                    .decrypt_key_pair(new_cipher)
+                    .map_err(|e| anyhow::anyhow!(e))?;
+                assert_eq!(old_key_pair.public_key, new_key_pair.public_key);
+            }
 
             Ok(())
         })
