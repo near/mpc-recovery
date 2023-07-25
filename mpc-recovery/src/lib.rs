@@ -10,6 +10,7 @@ use multi_party_eddsa::protocols::ExpandedKeyPair;
 pub mod gcp;
 pub mod key_recovery;
 pub mod leader_node;
+pub mod metrics;
 pub mod msg;
 pub mod nar;
 pub mod oauth;

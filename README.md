@@ -7,30 +7,29 @@ The aim of this project is to offer NEAR users the opportunity to create and res
 - Each action must be signed by all 3 nodes
 - Nodes signatures are then combined into a single signature on the leader node
 
+In the future we are planning to get rid  of the leader node to make the system more decentralized.
+
 ## External API
 
 The recovery service is currently hosted at https://near.org
 
-### Claim OIDC Id Token ownership (temporarily optional)
+### Claim OIDC Id Token ownership
 
     URL: /claim_oidc_token
     Request parameters: {
         oidc_token_hash: [u8; 32],
         public_key: String,
-        signature: [u8; 64],
+        frp_signature: [u8; 64],
     }
     Response: Ok {
         mpc_signature: String,
-        mpc_pk: String,
-        recovery_public_key: Option<String>,
-        near_account_id: Option<String>,
     } / Err{
         msg: String
     }
 
 Before transmitting your OIDC Id Token to the recovery service you must first claim the ownership of the token. This prevents a rogue node from taking your token and using it to sign another request.
 
-The signature you send must be an Ed22519 signature of the hash:
+The frp_signature you send must be an Ed22519 signature of the hash:
 
     SALT = 3177899144
     sha256.hash(Borsh.serialize<u32>(SALT + 0) ++ Borsh.serialize<[u8]>(oidc_token_hash))
@@ -43,14 +42,42 @@ If you successfully claim the token you will receive a signature in return of:
 
     sha256.hash(Borsh.serialize<u32>(SALT + 1) ++ Borsh.serialize<[u8]>(signature))
 
-This will be signed by the nodes combined Ed22519 signature. PK that you will use to check it should be hard coded in your validation code NOT fetched from the nodes themselves.
+This will be signed by the nodes combined Ed22519 signature. MPC PK that you will use to check it should be hard coded in your validation code NOT fetched from the nodes themselves.
 
-If user has already used this Id Token ID to claim an account, then the response will contain the NEAR account id and the recovery public key.
-
-If this repeatedly fails, you should discard your oidc token and regenerate.
+If this repeatedly fails, you should discard your oidc token, generate a new one and try again.
 
 Registered ID Token will be added to the persistent DB on each Signing node and saved until expiration. Regstered Id Tokens are tied to the provided PK.
 
+### MPC Public Key
+
+    URL: /mpc_public_key
+    Request parameters: {}
+    Response: Ok {
+        mpc_pk: String,
+    } / Err{
+        msg: String
+    }
+
+Returns the MPC public key that is used to sign the OIDC claiming response. Should not be used in production environment, as the MPC PK should be hardcoded in the client.
+
+### User Credentials
+
+    URL: /user_credentials
+    Request parameters: {
+        oidc_token: String,
+        frp_signature: Signature,
+        frp_public_key: String,
+    }
+    Response: Ok {
+        public_key: String,
+    } / Err{
+        msg: String
+    }
+
+Returns the recovery public key associated with the provided OIDC token.
+The frp_signature you send must be an Ed22519 signature of the hash:
+
+    sha256.hash(Borsh.serialize<u32>(SALT + 2) ++ Borsh.serialize<[u8]>(oidc_token_hash, frp_public_key))
 
 ### Create New Account
 
@@ -59,7 +86,8 @@ Registered ID Token will be added to the persistent DB on each Signing node and 
         near_account_id: String,
         create_account_options: CreateAccountOptions,
         oidc_token: String,
-        signature: Option<Signature>,
+        frp_signature: Signature,
+        frp_public_key: String,
     }
     Response:
     Ok {
@@ -79,23 +107,20 @@ Newly created NEAR account will have two full access keys. One that was provided
 
 In the future, MPC Service will disallow creating account with ID Tokes that were not claimed first. It is expected, that PK that client wants to use for the account creation is the same as the one that was used to claim the ID Token.
 
-The signature field is a signature of:
+The frp_signature you send must be an Ed22519 signature of the hash:
 
-    sha256.hash(Borsh.serialize<u32>(SALT + 2) ++ Borsh.serialize({
-        near_account_id: Option<String>,
-        oidc_token: String,
-        public_key: String,
-    }))
+    sha256.hash(Borsh.serialize<u32>(SALT + 3) ++ Borsh.serialize<[u8]>(oidc_token_hash, frp_public_key))
 
-signed by the key you used to claim the oidc token. This does not have to be the same as the key in the public key field.
-
+signed by the key you used to claim the oidc token. This does not have to be the same as the key in the public key field. This digest is the same as the one used in the user_credentials endpoint, because new_account request needs to get the recovery public key of the user that is creating the account.
 
 ### Sign
 
     URL: /sign
     Request parameters: {
         delegate_action: DelegateAction,
-        oidc_token: String
+        oidc_token: String,
+        frp_signature: Signature,
+        frp_public_key: String,
     }
     Response:
     Ok {
@@ -104,6 +129,16 @@ signed by the key you used to claim the oidc token. This does not have to be the
     Err{
         msg: String
     }
+
+This endpoint can be used to sign a delegate action that can then be sent to the relayer. The delegate action is signed by user recovery key.
+
+The frp_signature you send must be an Ed22519 signature of the hash:
+
+    sha256.hash(Borsh.serialize<u32>(SALT + 3) ++ Borsh.serialize<[u8]>(
+        delegate_action,
+        oidc_token_hash,
+        frp_public_key,
+    ))
 
 ## OIDC (OAuth 2.0) authentication
 

@@ -23,7 +23,9 @@ hex = "0.4"
 hyper = { version = "0.14", features = ["full"] }
 hyper-rustls = { version = "=0.23", features = ["http2"] }
 jsonwebtoken = "8.3.0"
+lazy_static = "1.4.0"
 oauth2 = "4.3.0"
+prometheus = { version = "0.13.3", features = ["process"] }
 rand = "0.7"
 rand8 = { package = "rand", version = "0.8" }
 reqwest = "0.11.16"

@@ -1,5 +1,6 @@
+use anyhow::Context;
 use curv::elliptic::curves::{Ed25519, Point};
-use ed25519_dalek::Signature;
+use ed25519_dalek::{PublicKey, Signature};
 use near_primitives::delegate_action::DelegateAction;
 use serde::{Deserialize, Serialize};
 
@@ -14,13 +15,32 @@ pub enum MpcPkResponse {
     Err { msg: String },
 }
 
+impl TryInto<PublicKey> for MpcPkResponse {
+    type Error = anyhow::Error;
+
+    fn try_into(self) -> Result<PublicKey, Self::Error> {
+        let mpc_pk = match self {
+            MpcPkResponse::Ok { mpc_pk } => mpc_pk,
+            MpcPkResponse::Err { msg } => anyhow::bail!("error response: {}", msg),
+        };
+
+        let decoded_mpc_pk = match hex::decode(mpc_pk.clone()) {
+            Ok(v) => v,
+            Err(e) => anyhow::bail!("failed to decode mpc pk: {}", e),
+        };
+
+        ed25519_dalek::PublicKey::from_bytes(&decoded_mpc_pk)
+            .with_context(|| "failed to construct public key")
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ClaimOidcRequest {
     #[serde(with = "hex::serde")]
     pub oidc_token_hash: [u8; 32],
     pub public_key: String,
     #[serde(with = "hex_sig_share")]
-    pub signature: Signature,
+    pub frp_signature: Signature,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -34,15 +54,38 @@ pub enum ClaimOidcResponse {
     },
 }
 
+impl TryInto<Signature> for ClaimOidcResponse {
+    type Error = anyhow::Error;
+
+    fn try_into(self) -> Result<Signature, Self::Error> {
+        let mpc_signature = match self {
+            ClaimOidcResponse::Ok { mpc_signature } => mpc_signature,
+            ClaimOidcResponse::Err { msg } => anyhow::bail!("error response: {}", msg),
+        };
+
+        Ok(mpc_signature)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UserCredentialsRequest {
     pub oidc_token: String,
+    pub frp_signature: Signature,
+    pub frp_public_key: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum UserCredentialsResponse {
     Ok { recovery_pk: String },
     Err { msg: String },
+}
+
+impl UserCredentialsResponse {
+    pub fn err(msg: String) -> Self {
+        UserCredentialsResponse::Err { msg }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -50,12 +93,8 @@ pub struct NewAccountRequest {
     pub near_account_id: String,
     pub create_account_options: CreateAccountOptions,
     pub oidc_token: String,
-    // TODO: does it make any scence to send this signature here?
-    // To make it work, we will need to keep track of registered
-    // tokens on the leader node.
-    // What kind of harm can be done if we don't enforce this in new_acc call?
-    #[serde(with = "hex_option_sig_share")]
-    pub signature: Option<Signature>,
+    pub frp_signature: Signature,
+    pub frp_public_key: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -82,6 +121,8 @@ impl NewAccountResponse {
 pub struct SignRequest {
     pub delegate_action: DelegateAction,
     pub oidc_token: String,
+    pub frp_signature: Signature,
+    pub frp_public_key: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -98,23 +139,6 @@ impl SignResponse {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct LeaderRequest {
-    pub payload: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
-#[allow(clippy::large_enum_variant)]
-pub enum LeaderResponse {
-    Ok {
-        #[serde(with = "hex_sig_share")]
-        signature: Signature,
-    },
-    Err,
-}
-
 /// The set of actions that a user can request us to sign
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum SignNodeRequest {
@@ -125,7 +149,9 @@ pub enum SignNodeRequest {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SignShareNodeRequest {
     pub oidc_token: String,
-    pub payload: Vec<u8>,
+    pub delegate_action: DelegateAction,
+    pub frp_signature: Signature,
+    pub frp_public_key: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -135,6 +161,12 @@ pub struct ClaimOidcNodeRequest {
     pub public_key: String,
     #[serde(with = "hex_sig_share")]
     pub signature: Signature,
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PublicKeyNodeRequest {
+    pub oidc_token: String,
+    pub frp_signature: Signature,
+    pub frp_public_key: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -172,46 +204,5 @@ mod hex_sig_share {
             })?,
         )
         .map_err(serde::de::Error::custom)
-    }
-}
-
-// There has to be a less dumb way to do this, but I don't have time to work it out
-mod hex_option_sig_share {
-    use ed25519_dalek::Signature;
-    use serde::{Deserialize, Deserializer, Serializer};
-
-    pub fn serialize<S>(sig_share: &Option<Signature>, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let s = match sig_share {
-            Some(sig) => hex::encode(Signature::to_bytes(*sig)),
-            None => String::new(),
-        };
-        serializer.serialize_str(&s)
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Signature>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        if s.is_empty() {
-            return Ok(None);
-        }
-        let sig = Signature::from_bytes(
-            &<[u8; Signature::BYTE_SIZE]>::try_from(
-                hex::decode(s).map_err(serde::de::Error::custom)?,
-            )
-            .map_err(|v: Vec<u8>| {
-                serde::de::Error::custom(format!(
-                    "signature has incorrect length: expected {} bytes, but got {}",
-                    Signature::BYTE_SIZE,
-                    v.len()
-                ))
-            })?,
-        )
-        .map_err(serde::de::Error::custom)?;
-        Ok(Some(sig))
     }
 }

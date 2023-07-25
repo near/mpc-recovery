@@ -1,27 +1,37 @@
-use crate::key_recovery::get_user_recovery_pk;
+use crate::key_recovery::{get_user_recovery_pk, NodeRecoveryError};
 use crate::msg::{
     AcceptNodePublicKeysRequest, ClaimOidcNodeRequest, ClaimOidcRequest, ClaimOidcResponse,
     MpcPkRequest, MpcPkResponse, NewAccountRequest, NewAccountResponse, SignNodeRequest,
     SignRequest, SignResponse, UserCredentialsRequest, UserCredentialsResponse,
 };
-use crate::nar;
 use crate::oauth::OAuthTokenVerifier;
 use crate::relayer::error::RelayerError;
 use crate::relayer::msg::RegisterAccountRequest;
 use crate::relayer::NearRpcAndRelayerClient;
 use crate::transaction::{
     get_create_account_delegate_action, get_local_signed_delegated_action, get_mpc_signature,
-    sign_payload_with_mpc, to_dalek_combined_public_key,
+    sign_payload_with_mpc, to_dalek_combined_public_key, NodeCallError, NodeSignError,
 };
+use crate::{metrics, nar};
+use anyhow::Context;
+use axum::extract::MatchedPath;
+use axum::middleware::{self, Next};
+use axum::response::IntoResponse;
 use axum::routing::get;
-use axum::{http::StatusCode, routing::post, Extension, Json, Router};
+use axum::{
+    http::{Request, StatusCode},
+    routing::post,
+    Extension, Json, Router,
+};
 use curv::elliptic::curves::{Ed25519, Point};
 use near_crypto::SecretKey;
 use near_primitives::account::id::ParseAccountError;
 use near_primitives::types::AccountId;
 use near_primitives::views::FinalExecutionStatus;
+use prometheus::{Encoder, TextEncoder};
 use rand::{distributions::Alphanumeric, Rng};
 use std::net::SocketAddr;
+use std::time::Instant;
 
 pub struct Config {
     pub env: String,
@@ -118,6 +128,8 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         .route("/user_credentials", post(user_credentials::<T>))
         .route("/new_account", post(new_account::<T>))
         .route("/sign", post(sign::<T>))
+        .route("/metrics", get(metrics))
+        .route_layer(middleware::from_fn(track_metrics))
         .layer(Extension(state))
         .layer(cors_layer);
 
@@ -127,6 +139,63 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         .serve(app.into_make_service())
         .await
         .unwrap();
+}
+
+async fn track_metrics<B>(req: Request<B>, next: Next<B>) -> impl IntoResponse {
+    let timer = Instant::now();
+    let path = if let Some(matched_path) = req.extensions().get::<MatchedPath>() {
+        matched_path.as_str().to_owned()
+    } else {
+        req.uri().path().to_owned()
+    };
+    let method = req.method().clone();
+
+    let response = next.run(req).await;
+    let processing_time = timer.elapsed().as_secs_f64();
+
+    metrics::HTTP_REQUEST_COUNT
+        .with_label_values(&[method.as_str(), &path])
+        .inc();
+    metrics::HTTP_PROCESSING_TIME
+        .with_label_values(&[method.as_str(), &path])
+        .observe(processing_time);
+
+    if response.status().is_client_error() {
+        metrics::HTTP_CLIENT_ERROR_COUNT
+            .with_label_values(&[method.as_str(), &path])
+            .inc();
+    }
+    if response.status().is_server_error() {
+        metrics::HTTP_SERVER_ERROR_COUNT
+            .with_label_values(&[method.as_str(), &path])
+            .inc();
+    }
+
+    response
+}
+
+async fn metrics() -> (StatusCode, String) {
+    let grab_metrics = || {
+        let encoder = TextEncoder::new();
+        let mut buffer = vec![];
+        encoder
+            .encode(&prometheus::gather(), &mut buffer)
+            .with_context(|| "failed to encode metrics")?;
+
+        let response = String::from_utf8(buffer.clone())
+            .with_context(|| "failed to convert bytes to string")?;
+        buffer.clear();
+
+        Ok::<String, anyhow::Error>(response)
+    };
+
+    match grab_metrics() {
+        Ok(response) => (StatusCode::OK, response),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "failed to generate prometheus metrics".to_string(),
+        ),
+    }
 }
 
 #[derive(Clone)]
@@ -174,15 +243,23 @@ async fn mpc_public_key(
     (StatusCode::OK, Json(MpcPkResponse::Ok { mpc_pk }))
 }
 
+#[tracing::instrument(level = "info", skip_all, fields(env = state.env))]
 async fn claim_oidc(
     Extension(state): Extension<LeaderState>,
     Json(claim_oidc_request): Json<ClaimOidcRequest>,
 ) -> (StatusCode, Json<ClaimOidcResponse>) {
+    tracing::info!(
+        oidc_hash = hex::encode(claim_oidc_request.oidc_token_hash),
+        pk = claim_oidc_request.public_key,
+        sig = claim_oidc_request.frp_signature.to_string(),
+        "claim_oidc request"
+    );
+
     // Calim OIDC ID Token and get MPC signature from sign nodes
     let sig_share_request = SignNodeRequest::ClaimOidc(ClaimOidcNodeRequest {
         oidc_token_hash: claim_oidc_request.oidc_token_hash,
         public_key: claim_oidc_request.public_key,
-        signature: claim_oidc_request.signature,
+        signature: claim_oidc_request.frp_signature,
     });
 
     let res =
@@ -224,6 +301,15 @@ async fn user_credentials<T: OAuthTokenVerifier>(
                 }),
             )
         }
+        Err(UserCredentialsError::RecoveryKeyError(NodeRecoveryError::CallError(
+            NodeCallError::ClientError(e, status_code),
+        ))) => {
+            tracing::error!(err = ?e);
+            (
+                status_code,
+                Json(UserCredentialsResponse::Err { msg: e.to_string() }),
+            )
+        }
         Err(e) => {
             tracing::error!(err = ?e);
             (
@@ -240,6 +326,8 @@ async fn user_credentials<T: OAuthTokenVerifier>(
 enum UserCredentialsError {
     #[error("failed to verify oidc token: {0}")]
     OidcVerificationFailed(anyhow::Error),
+    #[error("failed to fetch recovery key: {0}")]
+    RecoveryKeyError(#[from] NodeRecoveryError),
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }
@@ -248,18 +336,17 @@ async fn process_user_credentials<T: OAuthTokenVerifier>(
     state: LeaderState,
     request: UserCredentialsRequest,
 ) -> Result<UserCredentialsResponse, UserCredentialsError> {
-    let oidc_token_claims =
-        T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
-            .await
-            .map_err(UserCredentialsError::OidcVerificationFailed)?;
-
-    let internal_acc_id = oidc_token_claims.get_internal_account_id();
+    T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
+        .await
+        .map_err(UserCredentialsError::OidcVerificationFailed)?;
 
     nar::retry(|| async {
         let mpc_user_recovery_pk = get_user_recovery_pk(
             &state.reqwest_client,
             &state.sign_nodes,
-            internal_acc_id.clone(),
+            request.oidc_token.clone(),
+            request.frp_signature,
+            request.frp_public_key.clone(),
         )
         .await?;
 
@@ -278,6 +365,8 @@ enum NewAccountError {
     OidcVerificationFailed(anyhow::Error),
     #[error("relayer error: {0}")]
     RelayerError(#[from] RelayerError),
+    #[error("failed to fetch recovery key: {0}")]
+    RecoveryKeyError(#[from] NodeRecoveryError),
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }
@@ -316,10 +405,13 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             )
             .await?;
 
+        // FRP signature here is a signature of the user_credentials request
         let mpc_user_recovery_pk = get_user_recovery_pk(
             &state.reqwest_client,
             &state.sign_nodes,
-            internal_acc_id.clone(),
+            request.oidc_token.clone(),
+            request.frp_signature,
+            request.frp_public_key.clone(),
         )
         .await?;
 
@@ -435,6 +527,12 @@ async fn new_account<T: OAuthTokenVerifier>(
             tracing::error!(err = ?e);
             response::new_acc_unauthorized(format!("failed to verify oidc token: {}", err_msg))
         }
+        Err(NewAccountError::RecoveryKeyError(NodeRecoveryError::CallError(
+            NodeCallError::ClientError(e, status_code),
+        ))) => {
+            tracing::error!(err = ?e);
+            (status_code, Json(NewAccountResponse::err(e.to_string())))
+        }
         Err(e) => {
             tracing::error!(err = ?e);
             response::new_acc_internal_error(format!("failed to process new account: {}", e))
@@ -447,6 +545,8 @@ async fn new_account<T: OAuthTokenVerifier>(
 enum SignError {
     #[error("failed to verify oidc token: {0}")]
     OidcVerificationFailed(anyhow::Error),
+    #[error("failed to sign by sign node: {0}")]
+    NodeError(#[from] NodeSignError),
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }
@@ -467,6 +567,8 @@ async fn process_sign<T: OAuthTokenVerifier>(
             &state.sign_nodes,
             request.oidc_token.clone(),
             request.delegate_action.clone(),
+            request.frp_signature,
+            request.frp_public_key.clone(),
         )
         .await?;
 
@@ -494,6 +596,13 @@ async fn sign<T: OAuthTokenVerifier>(
             tracing::error!(err = ?e);
             response::sign_unauthorized(format!("failed to verify oidc token: {}", err_msg))
         }
+        Err(SignError::NodeError(NodeSignError::CallError(NodeCallError::ClientError(
+            e,
+            status_code,
+        )))) => {
+            tracing::error!(err = ?e);
+            (status_code, Json(SignResponse::err(e.to_string())))
+        }
         Err(e) => {
             tracing::error!(err = ?e);
             response::sign_internal_error(format!("failed to process sign: {}", e))
@@ -503,7 +612,7 @@ async fn sign<T: OAuthTokenVerifier>(
 
 async fn gather_sign_node_pk_shares(state: &LeaderState) -> anyhow::Result<Vec<Point<Ed25519>>> {
     let fut = nar::retry_every(std::time::Duration::from_secs(1), || async {
-        let results: anyhow::Result<Vec<(usize, Point<Ed25519>)>> =
+        let results: Result<Vec<(usize, Point<Ed25519>)>, NodeCallError> =
             crate::transaction::call_all_nodes(
                 &state.reqwest_client,
                 &state.sign_nodes,

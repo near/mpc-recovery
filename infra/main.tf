@@ -41,6 +41,10 @@ locals {
   workspace = merge(local.env["defaults"], contains(keys(local.env), terraform.workspace) ? local.env[terraform.workspace] : local.env["defaults"])
 }
 
+data "external" "git_checkout" {
+  program = ["${path.module}/scripts/get_sha.sh"]
+}
+
 provider "google" {
   credentials = local.credentials
 
@@ -88,7 +92,7 @@ resource "docker_registry_image" "mpc_recovery" {
 }
 
 resource "docker_image" "mpc_recovery" {
-  name = "${var.region}-docker.pkg.dev/${var.project}/${google_artifact_registry_repository.mpc_recovery.name}/mpc-recovery-${var.env}"
+  name = "${var.region}-docker.pkg.dev/${var.project}/${google_artifact_registry_repository.mpc_recovery.name}/mpc-recovery-${var.env}:${data.external.git_checkout.result.sha}"
   build {
     context = "${path.cwd}/.."
   }

@@ -98,6 +98,8 @@ impl OidcDigest {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use crate::utils::{claim_oidc_request_digest, oidc_digest};
 
     use super::*;
@@ -109,12 +111,14 @@ mod tests {
 
         let oidc_token_hash = oidc_digest(&oidc_token);
 
-        let digest = match claim_oidc_request_digest(oidc_token_hash) {
+        let user_pk: PublicKey = PublicKey::from_str(&public_key).unwrap();
+
+        let oidc_request_digest = match claim_oidc_request_digest(oidc_token_hash, user_pk) {
             Ok(digest) => digest,
             Err(err) => panic!("Failed to create digest: {:?}", err),
         };
 
-        let digest_32 = <[u8; 32]>::try_from(digest).expect("Hash was wrong size");
+        let digest_32 = <[u8; 32]>::try_from(oidc_request_digest).expect("Hash was wrong size");
 
         let oidc_digest = OidcDigest {
             node_id: 1,
@@ -145,10 +149,11 @@ mod tests {
     fn test_oidc_to_name() {
         let public_key = "ed25519:J75xXmF7WUPS3xCm3hy2tgwLCKdYM1iJd4BWF8sWVnae".to_string();
         let oidc_token = "validToken:oR8hig9XkU".to_string();
+        let user_pk: PublicKey = PublicKey::from_str(&public_key).unwrap();
 
         let oidc_token_hash = oidc_digest(&oidc_token);
 
-        let digest = match claim_oidc_request_digest(oidc_token_hash) {
+        let digest = match claim_oidc_request_digest(oidc_token_hash, user_pk) {
             Ok(digest) => digest,
             Err(err) => panic!("Failed to create digest: {:?}", err),
         };

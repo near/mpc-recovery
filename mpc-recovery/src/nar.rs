@@ -129,6 +129,7 @@ pub(crate) async fn invalidate_nonce_if_tx_failed(
 ) {
     // InvalidNonce, cached nonce is potentially very far behind, so invalidate it.
     if err_str.contains("InvalidNonce")
+        || err_str.contains("DelegateActionInvalidNonce")
         || err_str.contains("must be larger than nonce of the used access key")
     {
         let mut nonces = cached_nonces.write().await;

@@ -40,7 +40,7 @@ jobs:
       # Applies Terraform configuration to the temporary environment
       - name: Terraform Apply
         id: apply
-        run: terraform apply -auto-approve -input=false -no-color -var-file terraform-dev.tfvars -var "credentials=$GOOGLE_CREDENTIALS" -var "env=dev-$PR_NUMBER"
+        run: terraform apply -auto-approve -input=false -no-color -lock-timeout=1h -var-file terraform-dev.tfvars -var "credentials=$GOOGLE_CREDENTIALS" -var "env=dev-$PR_NUMBER"
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
           PR_NUMBER: ${{ env.PR_NUMBER }}

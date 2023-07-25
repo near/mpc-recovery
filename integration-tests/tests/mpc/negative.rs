@@ -1,8 +1,9 @@
-use crate::{account, check, key, token, with_nodes};
+use crate::{account, check, key, token, with_nodes, MpcCheck};
+use ed25519_dalek::{PublicKey as PublicKeyEd25519, Signature, Verifier};
 use hyper::StatusCode;
 use mpc_recovery::{
-    msg::{NewAccountRequest, NewAccountResponse, SignRequest, SignResponse},
-    transaction::CreateAccountOptions,
+    msg::{ClaimOidcRequest, MpcPkRequest, NewAccountResponse, UserCredentialsResponse},
+    utils::{claim_oidc_request_digest, claim_oidc_response_digest, oidc_digest, sign_digest},
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_crypto::PublicKey;
@@ -10,42 +11,218 @@ use std::{str::FromStr, time::Duration};
 use test_log::test;
 
 #[test(tokio::test)]
+async fn negative_front_running_protection() -> anyhow::Result<()> {
+    with_nodes(3, |ctx| {
+        Box::pin(async move {
+            // Preparing user credentials
+            let account_id = account::random(ctx.worker)?;
+            let user_secret_key =
+                near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519);
+            let user_public_key = user_secret_key.public_key();
+            let oidc_token_1 = token::valid_random();
+            let oidc_token_2 = token::valid_random();
+            let wrong_oidc_token = token::valid_random();
+
+            // Create account before claiming OIDC token
+            // This part of the test is commented since account creation is not atomic (known issue)
+            // Relayer is wasting a token even if account was not created
+            // ctx.leader_node
+            //     .new_account_with_helper(
+            //         account_id.clone().to_string(),
+            //         user_public_key.clone(),
+            //         None,
+            //         user_secret_key.clone(),
+            //         oidc_token_1.clone(),
+            //     )
+            //     .await?
+            //     .assert_unauthorized_contains("was not claimed")?;
+
+            // Get user recovery PK before claiming OIDC token
+            ctx.leader_node
+                .user_credentials_with_helper(
+                    oidc_token_1.clone(),
+                    user_secret_key.clone(),
+                    user_secret_key.clone().public_key(),
+                )
+                .await?
+                .assert_unauthorized_contains("was not claimed")?;
+
+            // Claim OIDC token
+            ctx.leader_node
+                .claim_oidc_with_helper(
+                    oidc_token_1.clone(),
+                    user_public_key.clone(),
+                    user_secret_key.clone(),
+                )
+                .await?;
+
+            // Create account with claimed OIDC token
+            ctx.leader_node
+                .new_account_with_helper(
+                    account_id.clone().to_string(),
+                    user_public_key.clone(),
+                    None,
+                    user_secret_key.clone(),
+                    oidc_token_1.clone(),
+                )
+                .await?
+                .assert_ok()?;
+
+            // Making a sign request with unclaimed OIDC token
+            let recovery_pk: PublicKey = match ctx
+                .leader_node
+                .user_credentials_with_helper(
+                    oidc_token_1.clone(),
+                    user_secret_key.clone(),
+                    user_secret_key.clone().public_key(),
+                )
+                .await?
+                .assert_ok()?
+            {
+                UserCredentialsResponse::Ok { recovery_pk } => PublicKey::from_str(&recovery_pk)?,
+                UserCredentialsResponse::Err { msg } => anyhow::bail!("error response: {}", msg),
+            };
+
+            let new_user_public_key = key::random_pk();
+
+            ctx.leader_node
+                .add_key(
+                    account_id.clone(),
+                    oidc_token_2.clone(),
+                    new_user_public_key.parse()?,
+                    recovery_pk.clone(),
+                    user_secret_key.clone(),
+                    user_public_key.clone(),
+                )
+                .await?
+                .assert_unauthorized_contains("was not claimed")?;
+
+            // Get MPC public key
+            let mpc_pk: PublicKeyEd25519 = ctx
+                .leader_node
+                .get_mpc_pk(MpcPkRequest {})
+                .await?
+                .assert_ok()?
+                .try_into()?;
+
+            // Prepare the oidc claiming request
+            let oidc_token_hash = oidc_digest(&oidc_token_2);
+            let wrong_oidc_token_hash = oidc_digest(&wrong_oidc_token);
+
+            let request_digest =
+                claim_oidc_request_digest(oidc_token_hash, user_public_key.clone()).unwrap();
+            let wrong_digest =
+                claim_oidc_request_digest(wrong_oidc_token_hash, user_public_key.clone()).unwrap();
+
+            let request_digest_signature = sign_digest(&request_digest, &user_secret_key)?;
+
+            let wrong_request_digest_signature = match user_secret_key.sign(&wrong_digest) {
+                near_crypto::Signature::ED25519(k) => k,
+                _ => anyhow::bail!("Wrong signature type"),
+            };
+
+            let oidc_request = ClaimOidcRequest {
+                oidc_token_hash,
+                public_key: user_public_key.clone().to_string(),
+                frp_signature: request_digest_signature,
+            };
+
+            let bad_oidc_request = ClaimOidcRequest {
+                oidc_token_hash,
+                public_key: user_public_key.clone().to_string(),
+                frp_signature: wrong_request_digest_signature,
+            };
+
+            // Make the claiming request with wrong signature
+            ctx.leader_node
+                .claim_oidc(bad_oidc_request.clone())
+                .await?
+                .assert_bad_request_contains("failed to verify signature")?;
+
+            // Making the claiming request with correct signature
+            let mpc_signature: Signature = ctx
+                .leader_node
+                .claim_oidc(oidc_request.clone())
+                .await?
+                .assert_ok()?
+                .try_into()?;
+
+            // Making the same claiming request should fail
+            ctx.leader_node
+                .claim_oidc(oidc_request.clone())
+                .await?
+                .assert_bad_request_contains("already claimed")?;
+
+            // Verify signature with wrong digest
+            let wrong_response_digest = claim_oidc_response_digest(bad_oidc_request.frp_signature)?;
+            if mpc_pk
+                .verify(&wrong_response_digest, &mpc_signature)
+                .is_ok()
+            {
+                return Err(anyhow::anyhow!(
+                    "Signature verification should fail with wrong digest"
+                ));
+            }
+
+            Ok(())
+        })
+    })
+    .await
+}
+
+#[test(tokio::test)]
 async fn test_invalid_token() -> anyhow::Result<()> {
     with_nodes(1, |ctx| {
         Box::pin(async move {
             let account_id = account::random(ctx.worker)?;
-            let user_public_key = key::random();
+            let user_secret_key = key::random_sk();
+            let user_public_key = user_secret_key.public_key();
             let oidc_token = token::valid_random();
+            let invalid_oidc_token = token::invalid();
 
-            let create_account_options = CreateAccountOptions {
-                full_access_keys: Some(vec![user_public_key.clone().parse().unwrap()]),
-                limited_access_keys: None,
-                contract_bytes: None,
-            };
-
-            let (status_code, new_acc_response) = ctx
-                .leader_node
-                .new_account(NewAccountRequest {
-                    near_account_id: account_id.to_string(),
-                    create_account_options: create_account_options.clone(),
-                    oidc_token: token::invalid(),
-                    signature: None,
-                })
+            // Claim OIDC token
+            ctx.leader_node
+                .claim_oidc_with_helper(
+                    oidc_token.clone(),
+                    user_public_key.clone(),
+                    user_secret_key.clone(),
+                )
                 .await?;
-            assert_eq!(status_code, StatusCode::UNAUTHORIZED);
-            assert!(matches!(new_acc_response, NewAccountResponse::Err { .. }));
 
-            // Check that the service is still available
-            let (status_code, new_acc_response) = ctx
-                .leader_node
-                .new_account(NewAccountRequest {
-                    near_account_id: account_id.to_string(),
-                    create_account_options,
-                    oidc_token: oidc_token.clone(),
-                    signature: None,
-                })
+            // Claim invalid OIDC token to get proper errors
+            ctx.leader_node
+                .claim_oidc_with_helper(
+                    invalid_oidc_token.clone(),
+                    user_public_key.clone(),
+                    user_secret_key.clone(),
+                )
                 .await?;
-            assert_eq!(status_code, StatusCode::OK);
+
+            // Try to create an account with invalid token
+            ctx.leader_node
+                .new_account_with_helper(
+                    account_id.clone().to_string(),
+                    user_public_key.clone(),
+                    None,
+                    user_secret_key.clone(),
+                    invalid_oidc_token.clone(),
+                )
+                .await?
+                .assert_unauthorized()?;
+
+            // Try to create an account with valid token
+            let new_acc_response = ctx
+                .leader_node
+                .new_account_with_helper(
+                    account_id.clone().to_string(),
+                    user_public_key.clone(),
+                    None,
+                    user_secret_key.clone(),
+                    oidc_token.clone(),
+                )
+                .await?
+                .assert_ok()?;
+
             assert!(matches!(new_acc_response, NewAccountResponse::Ok {
                     create_account_options: _,
                     user_recovery_public_key: _,
@@ -55,39 +232,49 @@ async fn test_invalid_token() -> anyhow::Result<()> {
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
 
-            check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
+            check::access_key_exists(&ctx, &account_id, &user_public_key.to_string()).await?;
 
-            let recovery_pk = ctx.leader_node.recovery_pk(oidc_token.clone()).await?;
-
-            let new_user_public_key = key::random();
-
-            let (status_code, sign_response) = ctx
+            let recovery_pk = match ctx
                 .leader_node
+                .user_credentials_with_helper(
+                    oidc_token.clone(),
+                    user_secret_key.clone(),
+                    user_secret_key.clone().public_key(),
+                )
+                .await?
+                .assert_ok()?
+            {
+                UserCredentialsResponse::Ok { recovery_pk } => PublicKey::from_str(&recovery_pk)?,
+                UserCredentialsResponse::Err { msg } => anyhow::bail!("error response: {}", msg),
+            };
+
+            let new_user_public_key = key::random_pk();
+
+            // Try to add a key with invalid token
+            ctx.leader_node
                 .add_key(
                     account_id.clone(),
-                    token::invalid(),
+                    invalid_oidc_token.clone(),
                     new_user_public_key.parse()?,
                     recovery_pk.clone(),
+                    user_secret_key.clone(),
+                    user_public_key.clone(),
                 )
-                .await?;
-            assert_eq!(status_code, StatusCode::UNAUTHORIZED);
-            assert!(matches!(sign_response, SignResponse::Err { .. }));
+                .await?
+                .assert_unauthorized()?;
 
-            // Check that the service is still available
-            let (status_code, sign_response) = ctx
-                .leader_node
+            // Try to add a key with valid token
+            ctx.leader_node
                 .add_key(
                     account_id.clone(),
                     oidc_token,
                     new_user_public_key.parse()?,
                     recovery_pk.clone(),
+                    user_secret_key.clone(),
+                    user_public_key.clone(),
                 )
-                .await?;
-
-            assert_eq!(status_code, StatusCode::OK);
-            let SignResponse::Ok { .. } = sign_response else {
-                anyhow::bail!("failed to get a signature from mpc-recovery");
-            };
+                .await?
+                .assert_ok()?;
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
 
@@ -104,40 +291,44 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
     with_nodes(1, |ctx| {
         Box::pin(async move {
             let malformed_account_id = account::malformed();
-            let user_public_key = key::random();
+            let user_secret_key = key::random_sk();
+            let user_public_key = user_secret_key.public_key();
             let oidc_token = token::valid_random();
 
-            let create_account_options = CreateAccountOptions {
-                full_access_keys: Some(vec![user_public_key.clone().parse().unwrap()]),
-                limited_access_keys: None,
-                contract_bytes: None,
-            };
-
-            let (status_code, new_acc_response) = ctx
-                .leader_node
-                .new_account(NewAccountRequest {
-                    near_account_id: malformed_account_id.to_string(),
-                    create_account_options: create_account_options.clone(),
-                    oidc_token: oidc_token.clone(),
-                    signature: None,
-                })
+            ctx.leader_node
+                .claim_oidc_with_helper(
+                    oidc_token.clone(),
+                    user_public_key.clone(),
+                    user_secret_key.clone(),
+                )
                 .await?;
-            assert_eq!(status_code, StatusCode::BAD_REQUEST);
-            assert!(matches!(new_acc_response, NewAccountResponse::Err { .. }));
+
+            ctx.leader_node
+                .new_account_with_helper(
+                    malformed_account_id.clone(),
+                    user_public_key.clone(),
+                    None,
+                    user_secret_key.clone(),
+                    oidc_token.clone(),
+                )
+                .await?
+                .assert_bad_request()?;
 
             let account_id = account::random(ctx.worker)?;
 
             // Check that the service is still available
-            let (status_code, new_acc_response) = ctx
+            let new_acc_response = ctx
                 .leader_node
-                .new_account(NewAccountRequest {
-                    near_account_id: account_id.to_string(),
-                    create_account_options: create_account_options.clone(),
-                    oidc_token: oidc_token.clone(),
-                    signature: None,
-                })
-                .await?;
-            assert_eq!(status_code, StatusCode::OK);
+                .new_account_with_helper(
+                    account_id.clone().to_string(),
+                    user_public_key.clone(),
+                    None,
+                    user_secret_key.clone(),
+                    oidc_token.clone(),
+                )
+                .await?
+                .assert_ok()?;
+
             assert!(matches!(new_acc_response, NewAccountResponse::Ok {
                     create_account_options: _,
                     user_recovery_public_key: _,
@@ -147,7 +338,7 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
 
-            check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
+            check::access_key_exists(&ctx, &account_id, &user_public_key.to_string()).await?;
 
             Ok(())
         })
@@ -240,51 +431,6 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
 //     })
 //     .await
 // }
-
-#[test(tokio::test)]
-async fn test_add_key_to_non_existing_account() -> anyhow::Result<()> {
-    with_nodes(1, |ctx| {
-        Box::pin(async move {
-            let account_id = account::random(ctx.worker)?;
-            let oidc_token = token::valid_random();
-            let user_public_key = key::random();
-            let recovery_pk = key::random();
-
-            let add_key_delegate_action = ctx.leader_node.get_add_key_delegate_action(
-                account_id.clone(),
-                PublicKey::from_str(&user_public_key)?,
-                PublicKey::from_str(&recovery_pk)?,
-                1, // random number
-                1, // random number
-            )?;
-
-            let sign_request = SignRequest {
-                delegate_action: add_key_delegate_action.clone(),
-                oidc_token: oidc_token.clone(),
-            };
-
-            let (status_code, sign_response) = ctx.leader_node.sign(sign_request).await?;
-
-            // Sign responce should now fail, since MPC recovery service is no aware if the account exist
-            match sign_response {
-                SignResponse::Ok { .. } => {}
-                _ => anyhow::bail!(
-                    "Unexpected error returned during sign call {:?}",
-                    sign_response
-                ),
-            }
-
-            assert_eq!(status_code, StatusCode::OK);
-
-            tokio::time::sleep(Duration::from_millis(2000)).await;
-
-            check::no_account(&ctx, &account_id).await?;
-
-            Ok(())
-        })
-    })
-    .await
-}
 
 #[test(tokio::test)]
 async fn test_reject_new_pk_set() -> anyhow::Result<()> {
