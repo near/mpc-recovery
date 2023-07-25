@@ -24,8 +24,10 @@ use axum::{
     Extension, Json, Router,
 };
 use curv::elliptic::curves::{Ed25519, Point};
-use near_crypto::SecretKey;
+use near_crypto::{PublicKey, SecretKey};
 use near_primitives::account::id::ParseAccountError;
+use near_primitives::delegate_action::NonDelegateAction;
+use near_primitives::transaction::{Action, DeleteKeyAction};
 use near_primitives::types::AccountId;
 use near_primitives::views::FinalExecutionStatus;
 use prometheus::{Encoder, TextEncoder};
@@ -500,6 +502,10 @@ mod response {
             Json(SignResponse::err(msg)),
         )
     }
+
+    pub fn sign_bad_request(msg: String) -> (StatusCode, Json<SignResponse>) {
+        (StatusCode::BAD_REQUEST, Json(SignResponse::err(msg)))
+    }
 }
 
 #[tracing::instrument(level = "info", skip_all, fields(env = state.env))]
@@ -545,6 +551,8 @@ async fn new_account<T: OAuthTokenVerifier>(
 enum SignError {
     #[error("failed to verify oidc token: {0}")]
     OidcVerificationFailed(anyhow::Error),
+    #[error("Recovery key can not be deleted: {0}")]
+    RecoveryKeyCanNotBeDeleted(PublicKey),
     #[error("failed to sign by sign node: {0}")]
     NodeError(#[from] NodeSignError),
     #[error("{0}")]
@@ -559,6 +567,49 @@ async fn process_sign<T: OAuthTokenVerifier>(
     T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
         .await
         .map_err(SignError::OidcVerificationFailed)?;
+
+    // Prevent recovery key delition
+    let requested_delegate_actions: &Vec<NonDelegateAction> = &request.delegate_action.actions;
+
+    let requested_actions: &Vec<Action> = &requested_delegate_actions
+        .iter()
+        .map(|non_delegate_action| Action::from(non_delegate_action.clone()))
+        .collect();
+
+    let delete_key_actions: Vec<&DeleteKeyAction> = requested_actions
+        .iter()
+        .filter_map(|action| match action {
+            Action::DeleteKey(delete_key_action) => Some(delete_key_action),
+            _ => None,
+        })
+        .collect();
+
+    // TODO: use proper digest
+    let user_recovery_pk = nar::retry::<_, anyhow::Error, _, _>(|| async {
+        let mpc_user_recovery_pk = get_user_recovery_pk(
+            &state.reqwest_client,
+            &state.sign_nodes,
+            request.oidc_token.clone(),
+            request.frp_signature,
+            request.frp_public_key.clone(),
+        )
+        .await?;
+
+        Ok(mpc_user_recovery_pk)
+    })
+    .await?;
+
+    for delete_key_action in delete_key_actions {
+        if delete_key_action.public_key == user_recovery_pk {
+            tracing::error!(
+                "Recovery key can not be deleted: {:?}",
+                delete_key_action.public_key
+            );
+            return Err(SignError::RecoveryKeyCanNotBeDeleted(
+                delete_key_action.public_key.clone(),
+            ));
+        }
+    }
 
     // Get MPC signature
     nar::retry(|| async {
@@ -595,6 +646,10 @@ async fn sign<T: OAuthTokenVerifier>(
         Err(ref e @ SignError::OidcVerificationFailed(ref err_msg)) => {
             tracing::error!(err = ?e);
             response::sign_unauthorized(format!("failed to verify oidc token: {}", err_msg))
+        }
+        Err(ref e @ SignError::RecoveryKeyCanNotBeDeleted(ref _recovery_pk)) => {
+            tracing::error!(err = ?e);
+            response::sign_bad_request(format!("You can not delete you recovery key: {}", e))
         }
         Err(SignError::NodeError(NodeSignError::CallError(NodeCallError::ClientError(
             e,

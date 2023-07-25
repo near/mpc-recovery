@@ -120,8 +120,6 @@ pub enum CommitError {
     OidcTokenNotClaimed(OidcDigest),
     #[error("This kind of action can not be performed")]
     UnsupportedAction,
-    #[error("Recovery key can not be deleted: {0}")]
-    RecoveryKeyCanNotBeDeleted(PublicKey),
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }
@@ -384,13 +382,6 @@ async fn commit<T: OAuthTokenVerifier>(
                     "You are trying to perform an action that is not supported: {}",
                     e
                 ))),
-            )
-        }
-        Err(ref e @ CommitError::RecoveryKeyCanNotBeDeleted(ref _recovery_pk)) => {
-            tracing::error!(err = ?e);
-            (
-                StatusCode::BAD_REQUEST,
-                Json(Err(format!("You can not delete you recovery key: {:?}", e))),
             )
         }
         // TODO: Ideally we should process some of the newly added errors
