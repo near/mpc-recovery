@@ -1,15 +1,22 @@
-use crate::{account, check, key, token, with_nodes, MpcCheck, TestContext};
+use crate::{
+    account, check, key,
+    mpc::{add_pk_and_check_validity, fetch_recovery_pk, new_random_account},
+    token, with_nodes, MpcCheck,
+};
+
+use std::{collections::HashMap, str::FromStr, time::Duration};
+
 use anyhow::anyhow;
 use hyper::StatusCode;
+use near_crypto::PublicKey;
+use workspaces::types::AccessKeyPermission;
+
 use mpc_recovery::{
     gcp::value::{FromValue, IntoValue},
     msg::{NewAccountResponse, UserCredentialsResponse},
     sign_node::user_credentials::EncryptedUserCredentials,
     transaction::LimitedAccessKey,
 };
-use near_crypto::{PublicKey, SecretKey};
-use std::{collections::HashMap, str::FromStr, time::Duration};
-use workspaces::{types::AccessKeyPermission, AccountId};
 
 use test_log::test;
 #[test(tokio::test)]
@@ -117,94 +124,6 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
         })
     })
     .await
-}
-
-async fn new_random_account(
-    ctx: &crate::TestContext<'_>,
-) -> anyhow::Result<(
-    workspaces::AccountId,
-    near_crypto::SecretKey,
-    PublicKey,
-    String,
-)> {
-    let account_id = account::random(ctx.worker)?;
-    let user_secret_key = key::random_sk();
-    let user_public_key = user_secret_key.public_key();
-    let oidc_token = token::valid_random();
-
-    // Claim OIDC token
-    ctx.leader_node
-        .claim_oidc_with_helper(
-            oidc_token.clone(),
-            user_public_key.clone(),
-            user_secret_key.clone(),
-        )
-        .await?;
-
-    // Create account
-    let new_acc_response = ctx
-        .leader_node
-        .new_account_with_helper(
-            account_id.clone().to_string(),
-            user_public_key.clone(),
-            None,
-            user_secret_key.clone(),
-            oidc_token.clone(),
-        )
-        .await?
-        .assert_ok()?;
-
-    assert!(matches!(new_acc_response, NewAccountResponse::Ok {
-            create_account_options: _,
-            user_recovery_public_key: _,
-            near_account_id: acc_id,
-        } if acc_id == account_id.to_string()
-    ));
-
-    Ok((account_id, user_secret_key, user_public_key, oidc_token))
-}
-
-async fn fetch_recovery_pk(
-    ctx: &TestContext<'_>,
-    user_sk: &SecretKey,
-    user_oidc: String,
-) -> anyhow::Result<PublicKey> {
-    let recovery_pk = match ctx
-        .leader_node
-        .user_credentials_with_helper(user_oidc.clone(), user_sk.clone(), user_sk.public_key())
-        .await?
-        .assert_ok()?
-    {
-        UserCredentialsResponse::Ok { recovery_pk } => PublicKey::from_str(&recovery_pk)?,
-        UserCredentialsResponse::Err { msg } => anyhow::bail!("error response: {}", msg),
-    };
-    Ok(recovery_pk)
-}
-
-async fn add_pk_and_check_validity(
-    ctx: &TestContext<'_>,
-    user_id: &AccountId,
-    user_sk: &SecretKey,
-    user_pk: &PublicKey,
-    user_oidc: String,
-    user_recovery_pk: &PublicKey,
-    pk_to_add: Option<String>,
-) -> anyhow::Result<String> {
-    let new_user_pk = pk_to_add.unwrap_or_else(key::random_pk);
-    ctx.leader_node
-        .add_key(
-            user_id.clone(),
-            user_oidc,
-            new_user_pk.parse()?,
-            user_recovery_pk.clone(),
-            user_sk.clone(),
-            user_pk.clone(),
-        )
-        .await?
-        .assert_ok()?;
-    tokio::time::sleep(Duration::from_millis(2000)).await;
-    check::access_key_exists(ctx, user_id, &new_user_pk).await?;
-    Ok(new_user_pk)
 }
 
 #[test(tokio::test)]
