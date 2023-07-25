@@ -1,9 +1,8 @@
-use std::{collections::HashMap, time::Duration};
+use std::collections::HashMap;
 
 use crate::mpc::{add_pk_and_check_validity, fetch_recovery_pk, new_random_account};
-use crate::{account, key, token, with_nodes, MpcCheck};
+use crate::{account, key, with_nodes, MpcCheck};
 
-use anyhow::anyhow;
 use hyper::StatusCode;
 use workspaces::types::AccessKeyPermission;
 
@@ -18,7 +17,7 @@ use test_log::test;
 async fn test_basic_front_running_protection() -> anyhow::Result<()> {
     with_nodes(3, |ctx| {
         Box::pin(async move {
-            let (account_id, user_secret_key, oidc_token) = new_random_account(&ctx).await?;
+            let (account_id, user_secret_key, oidc_token) = new_random_account(&ctx, None).await?;
 
             // Add new FA key with front running protection (negative, wrong signature)
             // TODO: add exaample with front running protection signature (bad one)
@@ -65,7 +64,7 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
 async fn test_basic_action() -> anyhow::Result<()> {
     with_nodes(3, |ctx| {
         Box::pin(async move {
-            let (account_id, user_secret_key, oidc_token) = new_random_account(&ctx).await?;
+            let (account_id, user_secret_key, oidc_token) = new_random_account(&ctx, None).await?;
 
             // Add key
             let recovery_pk = fetch_recovery_pk(&ctx, &user_secret_key, oidc_token.clone()).await?;
@@ -100,19 +99,6 @@ async fn test_basic_action() -> anyhow::Result<()> {
 async fn test_random_recovery_keys() -> anyhow::Result<()> {
     with_nodes(3, |ctx| {
         Box::pin(async move {
-            let account_id = account::random(ctx.worker)?;
-            let user_full_access_sk = key::random_sk();
-            let user_full_access_pk = user_full_access_sk.public_key();
-            let oidc_token = token::valid_random();
-
-            ctx.leader_node
-                .claim_oidc_with_helper(
-                    oidc_token.clone(),
-                    user_full_access_pk.clone(),
-                    user_full_access_sk.clone(),
-                )
-                .await?;
-
             let user_limited_access_key = LimitedAccessKey {
                 public_key: key::random_pk(),
                 allowance: "100".to_string(),
@@ -120,52 +106,37 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
                 method_names: "method_names".to_string(),
             };
 
-            ctx.leader_node
-                .new_account_with_helper(
-                    account_id.clone().to_string(),
-                    user_full_access_pk.clone(),
-                    Some(user_limited_access_key.clone()),
-                    user_full_access_sk.clone(),
-                    oidc_token.clone(),
-                )
-                .await?
-                .assert_ok()?;
-
-            tokio::time::sleep(Duration::from_millis(2000)).await;
-
+            let (account_id, user_full_access_sk, _) =
+                new_random_account(&ctx, Some(user_limited_access_key.clone())).await?;
+            let user_full_access_pk = user_full_access_sk.public_key();
             let access_keys = ctx.worker.view_access_keys(&account_id).await?;
 
             let recovery_full_access_key1 = access_keys
                 .clone()
                 .into_iter()
                 .find(|ak| {
-                    ak.public_key.to_string() != user_full_access_pk.to_string()
-                        && ak.public_key.to_string()
-                            != user_limited_access_key.public_key.to_string()
+                    ak.public_key.key_data() != user_full_access_pk.key_data()
+                        && ak.public_key.key_data() != user_limited_access_key.public_key.key_data()
                 })
                 .ok_or_else(|| anyhow::anyhow!("missing recovery access key"))?;
 
             match recovery_full_access_key1.access_key.permission {
                 AccessKeyPermission::FullAccess => (),
                 AccessKeyPermission::FunctionCall(_) => {
-                    return Err(anyhow!(
-                        "Got a limited access key when we expected a full access key"
-                    ))
+                    anyhow::bail!("Got a limited access key when we expected a full access key")
                 }
             };
 
             let la_key = access_keys
                 .into_iter()
                 .find(|ak| {
-                    ak.public_key.to_string() == user_limited_access_key.public_key.to_string()
+                    ak.public_key.key_data() == user_limited_access_key.public_key.key_data()
                 })
                 .ok_or_else(|| anyhow::anyhow!("missing limited access key"))?;
 
             match la_key.access_key.permission {
                 AccessKeyPermission::FullAccess => {
-                    return Err(anyhow!(
-                        "Got a full access key when we expected a limited access key"
-                    ))
+                    anyhow::bail!("Got a full access key when we expected a limited access key")
                 }
                 AccessKeyPermission::FunctionCall(fc) => {
                     assert_eq!(
@@ -180,36 +151,14 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
             };
 
             // Generate another user
-            let account_id = account::random(ctx.worker)?;
-            let user_secret_key = key::random_sk();
+            let (account_id, user_secret_key, _) =
+                new_random_account(&ctx, Some(user_limited_access_key.clone())).await?;
             let user_public_key = user_secret_key.public_key();
-            let oidc_token = token::valid_random();
-
-            ctx.leader_node
-                .claim_oidc_with_helper(
-                    oidc_token.clone(),
-                    user_public_key.clone(),
-                    user_secret_key.clone(),
-                )
-                .await?;
-
-            ctx.leader_node
-                .new_account_with_helper(
-                    account_id.clone().to_string(),
-                    user_public_key.clone(),
-                    None,
-                    user_secret_key.clone(),
-                    oidc_token.clone(),
-                )
-                .await?
-                .assert_ok()?;
-
-            tokio::time::sleep(Duration::from_millis(2000)).await;
 
             let access_keys = ctx.worker.view_access_keys(&account_id).await?;
             let recovery_full_access_key2 = access_keys
                 .into_iter()
-                .find(|ak| ak.public_key.to_string() != user_public_key.to_string())
+                .find(|ak| ak.public_key.key_data() != user_public_key.key_data())
                 .ok_or_else(|| anyhow::anyhow!("missing recovery access key"))?;
 
             assert_ne!(
@@ -247,7 +196,7 @@ async fn test_accept_existing_pk_set() -> anyhow::Result<()> {
 async fn test_rotate_node_keys() -> anyhow::Result<()> {
     with_nodes(3, |ctx| {
         Box::pin(async move {
-            let (account_id, user_sk, oidc_token) = new_random_account(&ctx).await?;
+            let (account_id, user_sk, oidc_token) = new_random_account(&ctx, None).await?;
 
             // Add key
             let recovery_pk = fetch_recovery_pk(&ctx, &user_sk, oidc_token.clone()).await?;
