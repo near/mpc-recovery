@@ -12,7 +12,7 @@ mod positive;
 
 pub async fn new_random_account(
     ctx: &TestContext<'_>,
-) -> anyhow::Result<(AccountId, SecretKey, PublicKey, String)> {
+) -> anyhow::Result<(AccountId, SecretKey, String)> {
     let account_id = account::random(ctx.worker)?;
     let user_secret_key = key::random_sk();
     let user_public_key = user_secret_key.public_key();
@@ -31,7 +31,7 @@ pub async fn new_random_account(
     let new_acc_response = ctx
         .leader_node
         .new_account_with_helper(
-            account_id.clone().to_string(),
+            account_id.to_string(),
             user_public_key.clone(),
             None,
             user_secret_key.clone(),
@@ -47,7 +47,10 @@ pub async fn new_random_account(
         } if acc_id == account_id.to_string()
     ));
 
-    Ok((account_id, user_secret_key, user_public_key, oidc_token))
+    tokio::time::sleep(Duration::from_millis(2000)).await;
+    check::access_key_exists(ctx, &account_id, &user_public_key).await?;
+
+    Ok((account_id, user_secret_key, oidc_token))
 }
 
 pub async fn fetch_recovery_pk(
@@ -67,24 +70,24 @@ pub async fn fetch_recovery_pk(
     Ok(recovery_pk)
 }
 
+/// Add a new random public key or a supplied public key.
 pub async fn add_pk_and_check_validity(
     ctx: &TestContext<'_>,
     user_id: &AccountId,
     user_sk: &SecretKey,
-    user_pk: &PublicKey,
     user_oidc: String,
     user_recovery_pk: &PublicKey,
-    pk_to_add: Option<String>,
-) -> anyhow::Result<String> {
+    pk_to_add: Option<PublicKey>,
+) -> anyhow::Result<PublicKey> {
     let new_user_pk = pk_to_add.unwrap_or_else(key::random_pk);
     ctx.leader_node
         .add_key(
             user_id.clone(),
             user_oidc,
-            new_user_pk.parse()?,
+            new_user_pk.clone(),
             user_recovery_pk.clone(),
             user_sk.clone(),
-            user_pk.clone(),
+            user_sk.public_key(),
         )
         .await?
         .assert_ok()?;

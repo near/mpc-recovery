@@ -89,7 +89,7 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
                 .add_key(
                     account_id.clone(),
                     oidc_token_2.clone(),
-                    new_user_public_key.parse()?,
+                    new_user_public_key.clone(),
                     recovery_pk.clone(),
                     user_secret_key.clone(),
                     user_public_key.clone(),
@@ -232,7 +232,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
 
-            check::access_key_exists(&ctx, &account_id, &user_public_key.to_string()).await?;
+            check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
 
             let recovery_pk = match ctx
                 .leader_node
@@ -255,7 +255,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                 .add_key(
                     account_id.clone(),
                     invalid_oidc_token.clone(),
-                    new_user_public_key.parse()?,
+                    new_user_public_key.clone(),
                     recovery_pk.clone(),
                     user_secret_key.clone(),
                     user_public_key.clone(),
@@ -268,7 +268,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                 .add_key(
                     account_id.clone(),
                     oidc_token,
-                    new_user_public_key.parse()?,
+                    new_user_public_key.clone(),
                     recovery_pk.clone(),
                     user_secret_key.clone(),
                     user_public_key.clone(),
@@ -338,7 +338,7 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
 
-            check::access_key_exists(&ctx, &account_id, &user_public_key.to_string()).await?;
+            check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
 
             Ok(())
         })
