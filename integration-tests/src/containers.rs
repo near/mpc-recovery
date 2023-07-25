@@ -609,7 +609,7 @@ impl LeaderNodeApi {
             near_account_id: account_id.to_string(),
             create_account_options,
             oidc_token: oidc_token.clone(),
-            frp_signature,
+            user_credentials_frp_signature: frp_signature,
             frp_public_key: user_pk.clone().to_string(),
         };
 
@@ -647,10 +647,17 @@ impl LeaderNodeApi {
 
         let frp_signature = sign_digest(&sign_request_digest, &frp_sk)?;
 
+        let user_credentials_request_digest =
+            user_credentials_request_digest(oidc_token.clone(), frp_sk.public_key())?;
+
+        let user_credentials_frp_signature =
+            sign_digest(&user_credentials_request_digest, &frp_sk)?;
+
         let sign_request = SignRequest {
             delegate_action: add_key_delegate_action.clone(),
             oidc_token,
             frp_signature,
+            user_credentials_frp_signature,
             frp_public_key: frp_sk.public_key().to_string(),
         };
         // Send SignRequest to leader node
@@ -703,10 +710,17 @@ impl LeaderNodeApi {
 
         let frp_signature = sign_digest(&sign_request_digest, &frp_sk)?;
 
+        let user_credentials_request_digest =
+            user_credentials_request_digest(oidc_token.clone(), frp_sk.public_key())?;
+
+        let user_credentials_frp_signature =
+            sign_digest(&user_credentials_request_digest, &frp_sk)?;
+
         let sign_request = SignRequest {
             delegate_action: delete_key_delegate_action.clone(),
             oidc_token,
             frp_signature,
+            user_credentials_frp_signature,
             frp_public_key: frp_sk.public_key().to_string(),
         };
         // Send SignRequest to leader node
@@ -744,10 +758,17 @@ impl LeaderNodeApi {
 
         let frp_signature = sign_digest(&sign_request_digest, &frp_sk)?;
 
+        let user_credentials_request_digest =
+            user_credentials_request_digest(oidc_token.clone(), frp_sk.public_key())?;
+
+        let user_credentials_frp_signature =
+            sign_digest(&user_credentials_request_digest, &frp_sk)?;
+
         let sign_request = SignRequest {
             delegate_action: delegate_action.clone(),
             oidc_token,
             frp_signature,
+            user_credentials_frp_signature,
             frp_public_key: frp_sk.public_key().to_string(),
         };
         // Send SignRequest to leader node

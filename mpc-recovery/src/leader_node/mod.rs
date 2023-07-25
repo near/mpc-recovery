@@ -407,12 +407,11 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             )
             .await?;
 
-        // FRP signature here is a signature of the user_credentials request
         let mpc_user_recovery_pk = get_user_recovery_pk(
             &state.reqwest_client,
             &state.sign_nodes,
             request.oidc_token.clone(),
-            request.frp_signature,
+            request.user_credentials_frp_signature,
             request.frp_public_key.clone(),
         )
         .await?;
@@ -555,6 +554,8 @@ enum SignError {
     RecoveryKeyCanNotBeDeleted(PublicKey),
     #[error("failed to sign by sign node: {0}")]
     NodeError(#[from] NodeSignError),
+    #[error("Failed to retrieve recovery pk, check digest signature")]
+    FailedToRetrieveRecoveryPk(anyhow::Error),
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }
@@ -584,20 +585,27 @@ async fn process_sign<T: OAuthTokenVerifier>(
         })
         .collect();
 
-    // TODO: use proper digest
-    let user_recovery_pk = nar::retry::<_, anyhow::Error, _, _>(|| async {
+    let user_recovery_pk_res = nar::retry::<_, anyhow::Error, _, _>(|| async {
         let mpc_user_recovery_pk = get_user_recovery_pk(
             &state.reqwest_client,
             &state.sign_nodes,
             request.oidc_token.clone(),
-            request.frp_signature,
+            request.user_credentials_frp_signature,
             request.frp_public_key.clone(),
         )
         .await?;
 
         Ok(mpc_user_recovery_pk)
     })
-    .await?;
+    .await;
+
+    let user_recovery_pk = match user_recovery_pk_res {
+        Ok(user_recovery_pk) => user_recovery_pk,
+        Err(err) => {
+            tracing::error!("Failed to retrieve recovery pk: {err}");
+            return Err(SignError::FailedToRetrieveRecoveryPk(err));
+        }
+    };
 
     for delete_key_action in delete_key_actions {
         if delete_key_action.public_key == user_recovery_pk {
@@ -650,6 +658,13 @@ async fn sign<T: OAuthTokenVerifier>(
         Err(ref e @ SignError::RecoveryKeyCanNotBeDeleted(ref _recovery_pk)) => {
             tracing::error!(err = ?e);
             response::sign_bad_request(format!("You can not delete you recovery key: {}", e))
+        }
+        Err(ref e @ SignError::FailedToRetrieveRecoveryPk(ref err)) => {
+            tracing::error!(err = ?e);
+            response::sign_unauthorized(format!(
+                "Failed to retrieve recovery PK, check FRP digest: {}",
+                err
+            ))
         }
         Err(SignError::NodeError(NodeSignError::CallError(NodeCallError::ClientError(
             e,
