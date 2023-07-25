@@ -5,7 +5,7 @@
 // then we are in a state of migration.
 
 use aes_gcm::Aes256Gcm;
-use multi_party_eddsa::protocols::ExpandedKeyPair;
+use anyhow::Context;
 
 use crate::gcp::value::{FromValue, IntoValue};
 use crate::gcp::GcpService;
@@ -25,17 +25,26 @@ pub async fn rotate_cipher(
         .await?;
 
     for entity in entities {
-        let old_entity = entity.entity.unwrap();
+        let old_entity = entity.entity.context("`entity` attr cannot be found")?;
+        let entity_path = old_entity
+            .key
+            .as_ref()
+            .context("`key` attr cannot be found")?
+            .path
+            .as_ref()
+            .context("`path` attr cannot be found")?[0]
+            .name
+            .as_ref()
+            .context("`name` attr cannot be found")?;
+        let entity_node_id = entity_path
+            .split('/')
+            .next()
+            .context("cannot retrieve entity node_id")?
+            .parse::<usize>()?;
 
         // Check if this entity belongs to this node. This check is needed for integration tests as all
         // entities are stored in the same datastore instead of separate ones during test-time.
-        // TODO: fix this check -- starts_with doesn't work with all cases
-        if !old_entity.key.as_ref().unwrap().path.as_ref().unwrap()[0]
-            .name
-            .as_ref()
-            .unwrap()
-            .starts_with(&node_id.to_string())
-        {
+        if node_id != entity_node_id {
             continue;
         }
 
@@ -56,61 +65,4 @@ pub async fn rotate_cipher(
     }
 
     Ok(())
-}
-
-#[derive(Clone)]
-pub enum Vault {
-    Stable {
-        node_id: usize,
-        node_key: ExpandedKeyPair,
-        cipher: Aes256Gcm,
-    },
-    Migrating {
-        node_id: usize,
-        node_key: ExpandedKeyPair,
-        old_cipher: Aes256Gcm,
-        new_cipher: Aes256Gcm,
-    },
-}
-
-impl Vault {
-    pub fn cipher(&self) -> &Aes256Gcm {
-        match self {
-            Vault::Stable { cipher, .. } => cipher,
-            Vault::Migrating { new_cipher, .. } => new_cipher,
-        }
-    }
-
-    pub fn generate_user_creds(
-        &self,
-        node_id: usize,
-        id: crate::primitives::InternalAccountId,
-    ) -> anyhow::Result<EncryptedUserCredentials> {
-        EncryptedUserCredentials::random(node_id, id, self.cipher())
-    }
-
-    fn _migrate(&mut self, new_cipher: Aes256Gcm) {
-        match self {
-            Vault::Stable {
-                node_id,
-                cipher,
-                node_key,
-            } => {
-                *self = Vault::Migrating {
-                    old_cipher: cipher.clone(),
-                    new_cipher,
-                    node_key: node_key.clone(),
-                    node_id: *node_id,
-                };
-            }
-            Vault::Migrating {
-                old_cipher,
-                new_cipher,
-                node_key: _,
-                node_id: _,
-            } => {
-                *old_cipher = new_cipher.clone();
-            }
-        }
-    }
 }

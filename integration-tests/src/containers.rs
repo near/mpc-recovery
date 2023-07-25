@@ -363,7 +363,7 @@ impl<'a> SignerNode<'a> {
             local_address: format!("http://localhost:{host_port}"),
             node_id: node_id as usize,
             sk_share: sk_share.clone(),
-            cipher_key: cipher_key.clone(),
+            cipher_key: *cipher_key,
             gcp_project_id: gcp_project_id.to_string(),
             gcp_datastore_url: datastore_url.to_string(),
         })
@@ -414,7 +414,7 @@ impl SignerNodeApi {
         // Do inplace rotation of node key
         mpc_recovery::sign_node::migration::rotate_cipher(
             self.node_id,
-            &old_cipher,
+            old_cipher,
             &new_cipher,
             &gcp_service,
             &gcp_service,

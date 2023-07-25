@@ -501,6 +501,7 @@ async fn test_rotate_node_keys() -> anyhow::Result<()> {
             tokio::time::sleep(Duration::from_millis(2000)).await;
             check::access_key_exists(&ctx, &account_id, &new_user_public_key).await?;
 
+            // Fetch current entities to be compared later.
             let gcp_service = ctx.gcp_service().await?;
             let old_entities = gcp_service
                 .fetch_entities::<mpc_recovery::sign_node::user_credentials::EncryptedUserCredentials>()
@@ -534,6 +535,7 @@ async fn test_rotate_node_keys() -> anyhow::Result<()> {
                 })
                 .collect::<HashMap<_, _>>();
 
+            // Check whether node-key rotation was successful or not
             assert_eq!(old_entities.len(), new_entities.len());
             for (path, old_entity) in old_entities.into_iter() {
                 let node_id = path.split("/").into_iter().next().unwrap().parse::<usize>()?;

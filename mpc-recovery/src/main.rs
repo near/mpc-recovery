@@ -96,7 +96,7 @@ enum Cli {
         #[arg(long, env("MPC_RECOVERY_TEST"), default_value("false"))]
         test: bool,
     },
-    RotateSignNodeKey {
+    RotateSignNodeCipher {
         /// Environment to run in (`dev` or `prod`)
         #[arg(long, env("MPC_RECOVERY_ENV"), default_value("dev"))]
         env: String,
@@ -112,12 +112,6 @@ enum Cli {
         /// The new cipher key to replace each encrypted record with.
         #[arg(long, env("MPC_RECOVERY_NEW_CIPHER_KEY"))]
         new_cipher_key: Option<String>,
-        /// Old secret key share, will be pulled from GCP Secret Manager if omitted
-        #[arg(long, env("MPC_RECOVERY_OLD_SK_SHARE"))]
-        old_sk_share: Option<String>,
-        /// Newest secret key share.
-        #[arg(long, env("MPC_RECOVERY_NEW_SK_SHARE"))]
-        new_sk_share: String,
         /// GCP project ID
         #[arg(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
         gcp_project_id: String,
@@ -125,8 +119,6 @@ enum Cli {
         #[arg(long, env("MPC_RECOVERY_GCP_DATASTORE_URL"))]
         gcp_datastore_url: Option<String>,
     },
-    // RotateUserKeys {
-    // }
 }
 
 async fn load_sh_skare(
@@ -266,11 +258,6 @@ async fn main() -> anyhow::Result<()> {
             let sk_share: ExpandedKeyPair = serde_json::from_str(&sk_share).unwrap();
 
             let config = SignerConfig {
-                vault: mpc_recovery::sign_node::migration::Vault::Stable {
-                    cipher: cipher.clone(),
-                    node_key: sk_share.clone(),
-                    node_id: node_id as usize,
-                },
                 gcp_service,
                 our_index: node_id,
                 node_key: sk_share,
@@ -284,14 +271,12 @@ async fn main() -> anyhow::Result<()> {
                 mpc_recovery::run_sign_node::<PagodaFirebaseTokenVerifier>(config).await;
             }
         }
-        Cli::RotateSignNodeKey {
+        Cli::RotateSignNodeCipher {
             env,
             new_env,
             node_id,
             old_cipher_key,
             new_cipher_key,
-            old_sk_share: _,
-            new_sk_share: _,
             gcp_project_id,
             gcp_datastore_url,
         } => {

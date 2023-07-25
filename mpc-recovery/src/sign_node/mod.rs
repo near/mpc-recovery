@@ -1,17 +1,15 @@
 use self::aggregate_signer::{NodeInfo, Reveal, SignedCommitment, SigningState};
-use self::migration::Vault;
 use self::oidc::OidcDigest;
 use self::user_credentials::EncryptedUserCredentials;
 use crate::gcp::GcpService;
-use crate::msg::{AcceptNodePublicKeysRequest, RotateKeyRequest, SignNodeRequest};
+use crate::msg::{AcceptNodePublicKeysRequest, SignNodeRequest};
 use crate::oauth::OAuthTokenVerifier;
 use crate::primitives::InternalAccountId;
 use crate::sign_node::pk_set::SignerNodePkSet;
 use crate::utils::{check_signature, claim_oidc_request_digest, claim_oidc_response_digest};
 use crate::NodeId;
-use aes_gcm::aead::consts::U32;
-use aes_gcm::aead::generic_array::GenericArray;
-use aes_gcm::{Aes256Gcm, KeyInit};
+
+use aes_gcm::Aes256Gcm;
 use axum::routing::get;
 use axum::{http::StatusCode, routing::post, Extension, Json, Router};
 use curv::elliptic::curves::{Ed25519, Point};
@@ -33,7 +31,6 @@ pub struct Config {
     pub our_index: NodeId,
     pub node_key: ExpandedKeyPair,
     pub cipher: Aes256Gcm,
-    pub vault: Vault,
     pub port: u16,
     pub pagoda_firebase_audience_id: String,
 }
@@ -45,7 +42,6 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         our_index,
         node_key,
         cipher,
-        vault,
         port,
         pagoda_firebase_audience_id,
     } = config;
@@ -60,7 +56,6 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
     let state = SignNodeState {
         gcp_service,
         node_key,
-        vault,
         cipher,
         signing_state,
         pagoda_firebase_audience_id,
@@ -82,7 +77,6 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         .route("/public_key", post(public_key))
         .route("/public_key_node", post(public_key_node))
         .route("/accept_pk_set", post(accept_pk_set))
-        .route("/rotate_key", post(rotate_key))
         .layer(Extension(state));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
@@ -99,7 +93,6 @@ struct SignNodeState {
     pagoda_firebase_audience_id: String,
     node_key: ExpandedKeyPair,
     cipher: Aes256Gcm,
-    vault: Vault,
     signing_state: Arc<RwLock<SigningState>>,
     node_info: NodeInfo,
 }
@@ -417,24 +410,6 @@ async fn accept_pk_set(
             Json(Ok("failed to save the keys".to_string())),
         ),
     }
-}
-
-#[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
-async fn rotate_key(
-    Extension(mut state): Extension<SignNodeState>,
-    Json(request): Json<RotateKeyRequest>,
-) -> (StatusCode, Json<Result<(), String>>) {
-    let Ok(new_cipher) = hex::decode(request.new_cipher) else {
-        return (StatusCode::BAD_REQUEST, Json(Err("Invalid cipher provided to rotate key".into())));
-    };
-    let new_cipher = GenericArray::<u8, U32>::clone_from_slice(&new_cipher);
-    let new_cipher = Aes256Gcm::new(&new_cipher);
-    // if let Err(err) = state.vault.rotate_cipher(new_cipher, &state.gcp_service).await {
-    //     let msg = format!("Rotating cipher errored out: {err:?}");
-    //     return (StatusCode::INTERNAL_SERVER_ERROR, Json(Err(msg)))
-    // }
-
-    (StatusCode::OK, Json(Ok(())))
 }
 
 /// Validate whether the current state of the sign node is useable or not.
