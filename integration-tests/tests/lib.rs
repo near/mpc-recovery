@@ -135,17 +135,15 @@ mod account {
 }
 
 mod key {
-    use near_crypto::SecretKey;
+    use near_crypto::{PublicKey, SecretKey};
     use rand::{distributions::Alphanumeric, Rng};
 
     pub fn random_sk() -> SecretKey {
         near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519)
     }
 
-    pub fn random_pk() -> String {
-        near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519)
-            .public_key()
-            .to_string()
+    pub fn random_pk() -> PublicKey {
+        near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519).public_key()
     }
 
     #[allow(dead_code)]
@@ -178,18 +176,19 @@ mod token {
 
 mod check {
     use crate::TestContext;
+    use near_crypto::PublicKey;
     use workspaces::AccountId;
 
     pub async fn access_key_exists(
         ctx: &TestContext<'_>,
         account_id: &AccountId,
-        public_key: &str,
+        public_key: &PublicKey,
     ) -> anyhow::Result<()> {
         let access_keys = ctx.worker.view_access_keys(account_id).await?;
 
         if access_keys
             .iter()
-            .any(|ak| ak.public_key.to_string() == public_key)
+            .any(|ak| ak.public_key.key_data() == public_key.key_data())
         {
             Ok(())
         } else {
