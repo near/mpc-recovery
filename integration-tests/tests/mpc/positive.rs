@@ -203,7 +203,7 @@ async fn add_pk_and_check_validity(
         .await?
         .assert_ok()?;
     tokio::time::sleep(Duration::from_millis(2000)).await;
-    check::access_key_exists(&ctx, &user_id, &new_user_pk).await?;
+    check::access_key_exists(ctx, user_id, &new_user_pk).await?;
     Ok(new_user_pk)
 }
 
@@ -454,7 +454,7 @@ async fn test_rotate_node_keys() -> anyhow::Result<()> {
             // Check whether node-key rotation was successful or not
             assert_eq!(old_entities.len(), new_entities.len());
             for (path, old_entity) in old_entities.into_iter() {
-                let node_id = path.split("/").into_iter().next().unwrap().parse::<usize>()?;
+                let node_id = path.split('/').next().unwrap().parse::<usize>()?;
                 let (old_cipher, new_cipher) = ciphers.get(&node_id).unwrap();
 
                 let old_cred = EncryptedUserCredentials::from_value(old_entity.into_value())?;
