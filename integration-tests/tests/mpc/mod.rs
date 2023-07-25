@@ -2,6 +2,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use mpc_recovery::msg::{NewAccountResponse, UserCredentialsResponse};
+use mpc_recovery::transaction::LimitedAccessKey;
 use near_crypto::{PublicKey, SecretKey};
 use workspaces::AccountId;
 
@@ -12,6 +13,7 @@ mod positive;
 
 pub async fn new_random_account(
     ctx: &TestContext<'_>,
+    user_lak: Option<LimitedAccessKey>,
 ) -> anyhow::Result<(AccountId, SecretKey, String)> {
     let account_id = account::random(ctx.worker)?;
     let user_secret_key = key::random_sk();
@@ -33,7 +35,7 @@ pub async fn new_random_account(
         .new_account_with_helper(
             account_id.to_string(),
             user_public_key.clone(),
-            None,
+            user_lak,
             user_secret_key.clone(),
             oidc_token.clone(),
         )
