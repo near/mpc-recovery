@@ -142,12 +142,6 @@ pub struct AcceptNodePublicKeysRequest {
     pub public_keys: Vec<Point<Ed25519>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct RotateKeyRequest {
-    pub new_public_key: Point<Ed25519>,
-    pub new_cipher: String,
-}
-
 mod hex_sig_share {
     use ed25519_dalek::Signature;
     use serde::{Deserialize, Deserializer, Serializer};
