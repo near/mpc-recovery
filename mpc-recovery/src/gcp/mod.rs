@@ -253,10 +253,6 @@ impl GcpService {
         Ok(())
     }
 
-    // pub async fn commit<T: KeyKind>(&self) -> anyhow::Result<()> {
-    //     Ok(())
-    // }
-
     pub async fn fetch_entities<T: KeyKind>(&self) -> anyhow::Result<Vec<EntityResult>> {
         let kind: String = format!("{}-{}", T::kind(), self.env);
         let req = RunQueryRequest {
