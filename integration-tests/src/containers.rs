@@ -2,7 +2,7 @@
 use anyhow::{anyhow, Ok};
 use bollard::{container::LogsOptions, network::CreateNetworkOptions, service::Ipam, Docker};
 use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::GenericArray};
-use ed25519_dalek::{PublicKey as PublicKeyEd25519, Signature, Verifier};
+use ed25519_dalek::{PublicKey as PublicKeyEd25519, Verifier};
 use futures::{lock::Mutex, StreamExt};
 use hyper::StatusCode;
 use mpc_recovery::{
@@ -782,7 +782,7 @@ impl LeaderNodeApi {
         oidc_token: String,
         user_public_key: PublicKey,
         user_secret_key: near_crypto::SecretKey,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<(StatusCode, ClaimOidcResponse)> {
         let oidc_token_hash = oidc_digest(&oidc_token);
 
         let request_digest =
@@ -796,14 +796,20 @@ impl LeaderNodeApi {
             frp_signature: request_digest_signature,
         };
 
-        let mpc_signature: Signature = self.claim_oidc(oidc_request.clone()).await?.1.try_into()?;
+        let responce = self.claim_oidc(oidc_request.clone()).await?;
 
-        let mpc_pk: PublicKeyEd25519 = self.get_mpc_pk(MpcPkRequest {}).await?.1.try_into()?;
+        match responce.1 {
+            ClaimOidcResponse::Ok { mpc_signature } => {
+                let mpc_pk: PublicKeyEd25519 =
+                    self.get_mpc_pk(MpcPkRequest {}).await?.1.try_into()?;
 
-        // Verify signature
-        let response_digest = claim_oidc_response_digest(oidc_request.frp_signature)?;
-        mpc_pk.verify(&response_digest, &mpc_signature)?;
-        Ok(())
+                // Verify signature
+                let response_digest = claim_oidc_response_digest(oidc_request.frp_signature)?;
+                mpc_pk.verify(&response_digest, &mpc_signature)?;
+                Ok(responce)
+            }
+            ClaimOidcResponse::Err { .. } => return Ok(responce),
+        }
     }
 
     pub async fn user_credentials_with_helper(

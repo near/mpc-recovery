@@ -43,7 +43,7 @@ pub struct ClaimOidcRequest {
     pub frp_signature: Signature,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ClaimOidcResponse {
     Ok {
         #[serde(with = "hex_sig_share")]

@@ -346,6 +346,29 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
                 ));
             }
 
+            // It should not be possible to make the claiming with another key
+            let new_oidc_token = token::valid_random();
+            let user_sk = key::random_sk();
+            let user_pk = user_sk.public_key();
+            let atacker_sk = key::random_sk();
+            let atacker_pk = atacker_sk.public_key();
+
+            // User claims the token
+            ctx.leader_node
+                .claim_oidc_with_helper(new_oidc_token.clone(), user_pk.clone(), user_sk.clone())
+                .await?
+                .assert_ok()?;
+
+            // Attacker tries to claim the token
+            ctx.leader_node
+                .claim_oidc_with_helper(
+                    new_oidc_token.clone(),
+                    atacker_pk.clone(),
+                    atacker_sk.clone(),
+                )
+                .await?
+                .assert_bad_request_contains("already claimed with another key")?;
+
             Ok(())
         })
     })
