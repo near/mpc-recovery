@@ -483,7 +483,7 @@ impl SignerNodeApi {
     ) -> anyhow::Result<(Aes256Gcm, Aes256Gcm)> {
         let env = "dev".to_string();
         let gcp_service = mpc_recovery::gcp::GcpService::new(
-            env.clone(),
+            env,
             self.gcp_project_id.clone(),
             Some(self.gcp_datastore_local_url.clone()),
         )
