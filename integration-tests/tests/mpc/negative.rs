@@ -71,8 +71,8 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
                     oidc_token_2.clone(),
                     new_user_public_key.clone(),
                     recovery_pk.clone(),
-                    user_secret_key.clone(),
-                    user_public_key.clone(),
+                    &user_secret_key,
+                    &user_public_key,
                 )
                 .await?
                 .assert_unauthorized_contains("was not claimed")?;
@@ -229,8 +229,8 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                     invalid_oidc_token.clone(),
                     new_user_public_key.clone(),
                     recovery_pk.clone(),
-                    user_secret_key.clone(),
-                    user_public_key.clone(),
+                    &user_secret_key,
+                    &user_public_key,
                 )
                 .await?
                 .assert_unauthorized()?;
@@ -242,8 +242,8 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                     oidc_token,
                     new_user_public_key.clone(),
                     recovery_pk.clone(),
-                    user_secret_key.clone(),
-                    user_public_key.clone(),
+                    &user_secret_key,
+                    &user_public_key,
                 )
                 .await?
                 .assert_ok()?;

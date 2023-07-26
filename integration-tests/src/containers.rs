@@ -676,8 +676,8 @@ impl LeaderNodeApi {
         oidc_token: String,
         public_key: PublicKey,
         recovery_pk: PublicKey,
-        frp_sk: SecretKey,
-        frp_pk: PublicKey,
+        frp_sk: &SecretKey,
+        frp_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
         let (_, block_height, nonce) = self
@@ -686,23 +686,23 @@ impl LeaderNodeApi {
             .await?;
 
         let add_key_delegate_action = self.get_add_key_delegate_action(
-            account_id.clone(),
-            public_key.clone(),
-            recovery_pk.clone(),
+            account_id,
+            public_key,
+            recovery_pk,
             nonce,
             block_height,
         )?;
 
         let sign_request_digest: Vec<u8> =
-            sign_request_digest(&add_key_delegate_action, &oidc_token, &frp_pk)?;
+            sign_request_digest(&add_key_delegate_action, &oidc_token, frp_pk)?;
 
-        let frp_signature = sign_digest(&sign_request_digest, &frp_sk)?;
+        let frp_signature = sign_digest(&sign_request_digest, frp_sk)?;
 
         let sign_request = SignRequest {
             delegate_action: add_key_delegate_action.clone(),
             oidc_token,
             frp_signature,
-            frp_public_key: frp_sk.public_key().to_string(),
+            frp_public_key: frp_pk.to_string(),
         };
         // Send SignRequest to leader node
         let (status_code, sign_response): (_, SignResponse) = self.sign(sign_request).await?;

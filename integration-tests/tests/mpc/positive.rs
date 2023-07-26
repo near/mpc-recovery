@@ -37,8 +37,8 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
                     oidc_token.clone(),
                     new_user_public_key.clone(),
                     recovery_pk.clone(),
-                    bad_user_sk.clone(),
-                    user_secret_key.public_key(),
+                    &bad_user_sk,
+                    &user_secret_key.public_key(),
                 )
                 .await?
                 .assert_unauthorized()?;

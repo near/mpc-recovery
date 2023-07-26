@@ -104,8 +104,8 @@ pub async fn add_pk_and_check_validity(
             user_oidc,
             new_user_pk.clone(),
             user_recovery_pk.clone(),
-            user_sk.clone(),
-            user_sk.public_key(),
+            &user_sk,
+            &user_sk.public_key(),
         )
         .await?
         .assert_ok()?;
