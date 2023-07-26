@@ -45,7 +45,7 @@ pub async fn register_account(
     ));
 
     tokio::time::sleep(Duration::from_millis(2000)).await;
-    check::access_key_exists(ctx, &user_id, &user_pk).await?;
+    check::access_key_exists(ctx, user_id, user_pk).await?;
 
     Ok(())
 }

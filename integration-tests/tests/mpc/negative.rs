@@ -120,10 +120,10 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
                 .assert_bad_request_contains("Recovery key can not be deleted")?;
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
-            check::access_key_exists(&ctx, &account_id, &recovery_pk.to_string()).await?;
+            check::access_key_exists(&ctx, &account_id, &recovery_pk).await?;
 
             // Deletion of the regular key should work
-            check::access_key_exists(&ctx, &account_id, &user_public_key.to_string()).await?;
+            check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
 
             ctx.leader_node
                 .delete_key_with_helper(
