@@ -808,7 +808,7 @@ impl LeaderNodeApi {
                 mpc_pk.verify(&response_digest, &mpc_signature)?;
                 Ok(responce)
             }
-            ClaimOidcResponse::Err { .. } => return Ok(responce),
+            ClaimOidcResponse::Err { .. } => Ok(responce),
         }
     }
 
