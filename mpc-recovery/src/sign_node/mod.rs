@@ -417,12 +417,10 @@ async fn commit<T: OAuthTokenVerifier>(
                 ))),
             )
         }
-        // TODO: Ideally we should process some of the newly added errors
-        // differently here to shift the blame from us (500) to the caller (4xx)
         Err(e) => {
             tracing::error!(err = ?e);
             (
-                StatusCode::BAD_REQUEST,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 Json(Err(format!("failed to process commit call: {}", e))),
             )
         }
