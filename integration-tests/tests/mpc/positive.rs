@@ -32,7 +32,7 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             let new_user_public_key = key::random_pk();
             let bad_user_sk = key::random_sk();
             ctx.leader_node
-                .add_key(
+                .add_key_with_helper(
                     account_id.clone(),
                     oidc_token.clone(),
                     new_user_public_key.clone(),

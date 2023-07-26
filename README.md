@@ -86,7 +86,7 @@ The frp_signature you send must be an Ed22519 signature of the hash:
         near_account_id: String,
         create_account_options: CreateAccountOptions,
         oidc_token: String,
-        frp_signature: Signature,
+        user_credentials_frp_signature: Signature,
         frp_public_key: String,
     }
     Response:
@@ -107,7 +107,7 @@ Newly created NEAR account will have two full access keys. One that was provided
 
 In the future, MPC Service will disallow creating account with ID Tokes that were not claimed first. It is expected, that PK that client wants to use for the account creation is the same as the one that was used to claim the ID Token.
 
-The frp_signature you send must be an Ed22519 signature of the hash:
+The user_credentials_frp_signature you send must be an Ed22519 signature of the hash:
 
     sha256.hash(Borsh.serialize<u32>(SALT + 3) ++ Borsh.serialize<[u8]>(oidc_token_hash, frp_public_key))
 
@@ -120,6 +120,7 @@ signed by the key you used to claim the oidc token. This does not have to be the
         delegate_action: DelegateAction,
         oidc_token: String,
         frp_signature: Signature,
+        user_credentials_frp_signature: Signature,
         frp_public_key: String,
     }
     Response:
@@ -139,6 +140,8 @@ The frp_signature you send must be an Ed22519 signature of the hash:
         oidc_token_hash,
         frp_public_key,
     ))
+
+The user_credentials_frp_signature is needed to get user recovery PK. It is the same as in user_credentials endpoint.
 
 ## OIDC (OAuth 2.0) authentication
 

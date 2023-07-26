@@ -99,7 +99,7 @@ pub async fn add_pk_and_check_validity(
 ) -> anyhow::Result<PublicKey> {
     let new_user_pk = pk_to_add.unwrap_or_else(key::random_pk);
     ctx.leader_node
-        .add_key(
+        .add_key_with_helper(
             user_id.clone(),
             user_oidc,
             new_user_pk.clone(),
