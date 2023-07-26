@@ -78,7 +78,7 @@ pub async fn fetch_recovery_pk(
 ) -> anyhow::Result<PublicKey> {
     let recovery_pk = match ctx
         .leader_node
-        .user_credentials_with_helper(user_oidc.clone(), user_sk.clone(), user_sk.public_key())
+        .user_credentials_with_helper(user_oidc.clone(), &user_sk, &user_sk.public_key())
         .await?
         .assert_ok()?
     {

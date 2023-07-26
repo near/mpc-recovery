@@ -43,8 +43,8 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
             ctx.leader_node
                 .user_credentials_with_helper(
                     oidc_token_1.clone(),
-                    user_secret_key.clone(),
-                    user_secret_key.clone().public_key(),
+                    &user_secret_key,
+                    &user_public_key,
                 )
                 .await?
                 .assert_unauthorized_contains("was not claimed")?;
@@ -210,8 +210,8 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                 .leader_node
                 .user_credentials_with_helper(
                     oidc_token.clone(),
-                    user_secret_key.clone(),
-                    user_secret_key.clone().public_key(),
+                    &user_secret_key,
+                    &user_public_key,
                 )
                 .await?
                 .assert_ok()?

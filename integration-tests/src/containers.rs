@@ -755,11 +755,11 @@ impl LeaderNodeApi {
     pub async fn user_credentials_with_helper(
         &self,
         oidc_token: String,
-        client_sk: SecretKey,
-        client_pk: PublicKey,
+        client_sk: &SecretKey,
+        client_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, UserCredentialsResponse)> {
         let user_credentials_request_digest =
-            user_credentials_request_digest(&oidc_token, &client_pk)?;
+            user_credentials_request_digest(&oidc_token, client_pk)?;
 
         let frp_signature = match client_sk.sign(&user_credentials_request_digest) {
             near_crypto::Signature::ED25519(k) => k,
