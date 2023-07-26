@@ -49,13 +49,13 @@ pub fn sign_request_digest(
 }
 
 pub fn user_credentials_request_digest(
-    oidc_token: String,
+    oidc_token: &str,
     frp_public_key: &PublicKey,
 ) -> anyhow::Result<Vec<u8>> {
     let mut hasher = Sha256::default();
     BorshSerialize::serialize(&HashSalt::UserCredentialsRequest.get_salt(), &mut hasher)
         .context("Serialization failed")?;
-    BorshSerialize::serialize(&oidc_token, &mut hasher).context("Serialization failed")?;
+    BorshSerialize::serialize(oidc_token, &mut hasher).context("Serialization failed")?;
     BorshSerialize::serialize(frp_public_key, &mut hasher).context("Serialization failed")?;
     Ok(hasher.finalize().to_vec())
 }

@@ -442,7 +442,7 @@ async fn process_public_key<T: OAuthTokenVerifier>(
         PublicKeyRequestError::MalformedPublicKey(request.frp_public_key.clone(), e)
     })?;
 
-    let digest = user_credentials_request_digest(request.oidc_token.clone(), &frp_pk)?;
+    let digest = user_credentials_request_digest(&request.oidc_token, &frp_pk)?;
 
     match check_digest_signature(&frp_pk, &request.frp_signature, &digest) {
         Ok(()) => tracing::debug!("user credentials digest signature verified"),

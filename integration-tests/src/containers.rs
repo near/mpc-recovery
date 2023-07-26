@@ -651,7 +651,7 @@ impl LeaderNodeApi {
 
         // By signing this digest we are giving the leader node permission to get user recovery pk
         let user_credentials_request_digest =
-            user_credentials_request_digest(oidc_token.clone(), &user_pk)?;
+            user_credentials_request_digest(&oidc_token, &user_pk)?;
 
         let frp_signature = match user_secret_key.sign(&user_credentials_request_digest) {
             near_crypto::Signature::ED25519(k) => k,
@@ -759,7 +759,7 @@ impl LeaderNodeApi {
         client_pk: PublicKey,
     ) -> anyhow::Result<(StatusCode, UserCredentialsResponse)> {
         let user_credentials_request_digest =
-            user_credentials_request_digest(oidc_token.clone(), &client_pk)?;
+            user_credentials_request_digest(&oidc_token, &client_pk)?;
 
         let frp_signature = match client_sk.sign(&user_credentials_request_digest) {
             near_crypto::Signature::ED25519(k) => k,
