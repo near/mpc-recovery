@@ -369,6 +369,29 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
                 .await?
                 .assert_bad_request_contains("already claimed with another key")?;
 
+            // Sign request with claimed token but wrong key should fail
+            ctx.leader_node
+                .add_key_with_helper(
+                    account_id.clone(),
+                    new_oidc_token.clone(),
+                    new_user_public_key.parse()?,
+                    recovery_pk.clone(),
+                    atacker_sk.clone(),
+                    atacker_pk.clone(),
+                )
+                .await?
+                .assert_unauthorized_contains("was claimed with another key")?;
+
+            // User Credentials request with claimed token but wrong key should fail
+            ctx.leader_node
+                .user_credentials_with_helper(
+                    new_oidc_token.clone(),
+                    atacker_sk.clone(),
+                    atacker_pk.clone(),
+                )
+                .await?
+                .assert_unauthorized_contains("was claimed with another key")?;
+
             Ok(())
         })
     })
