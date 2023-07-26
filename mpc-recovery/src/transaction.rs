@@ -104,7 +104,7 @@ pub async fn get_mpc_signature(
     frp_public_key: String,
 ) -> Result<Signature, NodeSignError> {
     let sig_share_request = SignNodeRequest::SignShare(SignShareNodeRequest {
-        oidc_token: oidc_token.clone(),
+        oidc_token,
         delegate_action,
         frp_signature,
         frp_public_key,

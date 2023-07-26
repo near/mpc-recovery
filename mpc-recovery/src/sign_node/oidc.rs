@@ -55,7 +55,7 @@ impl IntoValue for OidcDigest {
 
 impl FromValue for OidcDigest {
     fn from_value(value: Value) -> Result<Self, ConvertError> {
-        match value.clone() {
+        match value {
             Value::EntityValue { mut properties, .. } => {
                 let (_, node_id) = properties
                     .remove_entry("node_id")
@@ -82,9 +82,9 @@ impl FromValue for OidcDigest {
                     public_key,
                 })
             }
-            _error => Err(ConvertError::UnexpectedPropertyType {
+            error => Err(ConvertError::UnexpectedPropertyType {
                 expected: "entity".to_string(),
-                got: format!("{:?}", value),
+                got: format!("{:?}", error),
             }),
         }
     }
