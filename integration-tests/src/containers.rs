@@ -693,11 +693,8 @@ impl LeaderNodeApi {
             block_height,
         )?;
 
-        let sign_request_digest = sign_request_digest(
-            add_key_delegate_action.clone(),
-            oidc_token.clone(),
-            frp_pk.clone(),
-        )?;
+        let sign_request_digest: Vec<u8> =
+            sign_request_digest(&add_key_delegate_action, &oidc_token, &frp_pk)?;
 
         let frp_signature = sign_digest(&sign_request_digest, &frp_sk)?;
 

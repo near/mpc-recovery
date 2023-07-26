@@ -35,16 +35,16 @@ pub fn claim_oidc_response_digest(users_signature: Signature) -> Result<Vec<u8>,
 }
 
 pub fn sign_request_digest(
-    delegate_action: DelegateAction,
-    oidc_token: String,
-    frp_public_key: PublicKey,
+    delegate_action: &DelegateAction,
+    oidc_token: &str,
+    frp_public_key: &PublicKey,
 ) -> Result<Vec<u8>, CommitError> {
     let mut hasher = Sha256::default();
     BorshSerialize::serialize(&HashSalt::SignRequest.get_salt(), &mut hasher)
         .context("Serialization failed")?;
-    BorshSerialize::serialize(&delegate_action, &mut hasher).context("Serialization failed")?;
-    BorshSerialize::serialize(&oidc_token, &mut hasher).context("Serialization failed")?;
-    BorshSerialize::serialize(&frp_public_key, &mut hasher).context("Serialization failed")?;
+    BorshSerialize::serialize(delegate_action, &mut hasher).context("Serialization failed")?;
+    BorshSerialize::serialize(oidc_token, &mut hasher).context("Serialization failed")?;
+    BorshSerialize::serialize(frp_public_key, &mut hasher).context("Serialization failed")?;
     Ok(hasher.finalize().to_vec())
 }
 

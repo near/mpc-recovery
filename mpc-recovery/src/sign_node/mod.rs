@@ -235,11 +235,8 @@ async fn process_commit<T: OAuthTokenVerifier>(
             let frp_pk = PublicKey::from_str(&request.frp_public_key)
                 .map_err(|e| CommitError::MalformedPublicKey(request.frp_public_key.clone(), e))?;
 
-            let digest = sign_request_digest(
-                request.delegate_action.clone(),
-                request.oidc_token.clone(),
-                frp_pk.clone(),
-            )?;
+            let digest =
+                sign_request_digest(&request.delegate_action, &request.oidc_token, &frp_pk)?;
 
             match check_digest_signature(&frp_pk, &request.frp_signature, &digest) {
                 Ok(()) => tracing::debug!("sign request digest signature verified"),
