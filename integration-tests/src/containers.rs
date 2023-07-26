@@ -636,7 +636,7 @@ impl LeaderNodeApi {
         account_id: String,
         user_fa_public_key: PublicKey,
         user_la_public_key: Option<LimitedAccessKey>,
-        user_secret_key: SecretKey,
+        user_secret_key: &SecretKey,
         oidc_token: String,
     ) -> anyhow::Result<(StatusCode, NewAccountResponse)> {
         let user_pk = user_secret_key.public_key();

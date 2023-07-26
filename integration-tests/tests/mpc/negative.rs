@@ -176,7 +176,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                     account_id.to_string(),
                     user_public_key.clone(),
                     None,
-                    user_secret_key.clone(),
+                    &user_secret_key,
                     invalid_oidc_token.clone(),
                 )
                 .await?
@@ -189,7 +189,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                     account_id.to_string(),
                     user_public_key.clone(),
                     None,
-                    user_secret_key.clone(),
+                    &user_secret_key,
                     oidc_token.clone(),
                 )
                 .await?
@@ -273,10 +273,10 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
 
             ctx.leader_node
                 .new_account_with_helper(
-                    malformed_account_id.clone(),
+                    malformed_account_id,
                     user_public_key.clone(),
                     None,
-                    user_secret_key.clone(),
+                    &user_secret_key,
                     oidc_token.clone(),
                 )
                 .await?
@@ -291,7 +291,7 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
                     account_id.to_string(),
                     user_public_key.clone(),
                     None,
-                    user_secret_key.clone(),
+                    &user_secret_key,
                     oidc_token.clone(),
                 )
                 .await?

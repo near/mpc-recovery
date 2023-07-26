@@ -31,7 +31,7 @@ pub async fn register_account(
             user_id.to_string(), // ??
             user_pk.clone(),
             user_lak,
-            user_sk.clone(),
+            user_sk,
             user_oidc,
         )
         .await?
