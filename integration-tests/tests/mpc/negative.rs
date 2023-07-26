@@ -88,6 +88,57 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
                     .assert_bad_request_contains("action can not be performed")?;
             }
 
+            // Client should not be able to delete their recovery key
+            let recovery_pk = match ctx
+                .leader_node
+                .user_credentials_with_helper(
+                    oidc_token.clone(),
+                    user_secret_key.clone(),
+                    user_secret_key.clone().public_key(),
+                )
+                .await?
+                .assert_ok()?
+            {
+                UserCredentialsResponse::Ok { recovery_pk } => PublicKey::from_str(&recovery_pk)?,
+                UserCredentialsResponse::Err { msg } => {
+                    return Err(anyhow::anyhow!("error response: {}", msg))
+                }
+            };
+
+            ctx.leader_node
+                .delete_key_with_helper(
+                    account_id.clone(),
+                    oidc_token.clone(),
+                    recovery_pk.clone(),
+                    recovery_pk.clone(),
+                    user_secret_key.clone(),
+                    user_public_key.clone(),
+                )
+                .await?
+                .assert_bad_request_contains("Recovery key can not be deleted")?;
+
+            tokio::time::sleep(Duration::from_millis(2000)).await;
+            check::access_key_exists(&ctx, &account_id, &recovery_pk.to_string()).await?;
+
+            // Deletion of the regular key should work
+            check::access_key_exists(&ctx, &account_id, &user_public_key.to_string()).await?;
+
+            ctx.leader_node
+                .delete_key_with_helper(
+                    account_id.clone(),
+                    oidc_token.clone(),
+                    user_public_key.clone(),
+                    recovery_pk.clone(),
+                    user_secret_key.clone(),
+                    user_public_key.clone(),
+                )
+                .await?
+                .assert_ok()?;
+
+            tokio::time::sleep(Duration::from_millis(2000)).await;
+            check::access_key_does_not_exists(&ctx, &account_id, &user_public_key.to_string())
+                .await?;
+
             Ok(())
         })
     })
