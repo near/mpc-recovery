@@ -90,9 +90,9 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
             let wrong_oidc_token_hash = oidc_digest(&wrong_oidc_token);
 
             let request_digest =
-                claim_oidc_request_digest(oidc_token_hash, user_public_key.clone()).unwrap();
+                claim_oidc_request_digest(oidc_token_hash, &user_public_key).unwrap();
             let wrong_digest =
-                claim_oidc_request_digest(wrong_oidc_token_hash, user_public_key.clone()).unwrap();
+                claim_oidc_request_digest(wrong_oidc_token_hash, &user_public_key).unwrap();
 
             let request_digest_signature = sign_digest(&request_digest, &user_secret_key)?;
 
@@ -162,20 +162,12 @@ async fn test_invalid_token() -> anyhow::Result<()> {
 
             // Claim OIDC token
             ctx.leader_node
-                .claim_oidc_with_helper(
-                    oidc_token.clone(),
-                    user_public_key.clone(),
-                    user_secret_key.clone(),
-                )
+                .claim_oidc_with_helper(&oidc_token, &user_public_key, &user_secret_key)
                 .await?;
 
             // Claim invalid OIDC token to get proper errors
             ctx.leader_node
-                .claim_oidc_with_helper(
-                    invalid_oidc_token.clone(),
-                    user_public_key.clone(),
-                    user_secret_key.clone(),
-                )
+                .claim_oidc_with_helper(&invalid_oidc_token, &user_public_key, &user_secret_key)
                 .await?;
 
             // Try to create an account with invalid token
@@ -276,11 +268,7 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
             let oidc_token = token::valid_random();
 
             ctx.leader_node
-                .claim_oidc_with_helper(
-                    oidc_token.clone(),
-                    user_public_key.clone(),
-                    user_secret_key.clone(),
-                )
+                .claim_oidc_with_helper(&oidc_token, &user_public_key, &user_secret_key)
                 .await?;
 
             ctx.leader_node

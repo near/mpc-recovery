@@ -21,18 +21,18 @@ pub async fn register_account(
 ) -> anyhow::Result<()> {
     // Claim OIDC token
     ctx.leader_node
-        .claim_oidc_with_helper(user_oidc.clone(), user_pk.clone(), user_sk.clone())
+        .claim_oidc_with_helper(user_oidc.as_str(), &user_pk, &user_sk)
         .await?;
 
     // Create account
     let new_acc_response = ctx
         .leader_node
         .new_account_with_helper(
-            user_id.to_string(),
+            user_id.to_string(), // ??
             user_pk.clone(),
             user_lak,
             user_sk.clone(),
-            user_oidc,
+            user_oidc.clone(), // ??
         )
         .await?
         .assert_ok()?;

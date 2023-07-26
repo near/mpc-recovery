@@ -644,14 +644,14 @@ impl LeaderNodeApi {
         let limited_access_keys = user_la_public_key.map(|pk| vec![pk]);
 
         let create_account_options = CreateAccountOptions {
-            full_access_keys: Some(vec![user_fa_public_key.clone()]),
+            full_access_keys: Some(vec![user_fa_public_key]),
             limited_access_keys,
             contract_bytes: None,
         };
 
         // By signing this digest we are giving the leader node permission to get user recovery pk
         let user_credentials_request_digest =
-            user_credentials_request_digest(oidc_token.clone(), user_pk.clone())?;
+            user_credentials_request_digest(oidc_token.clone(), &user_pk)?;
 
         let frp_signature = match user_secret_key.sign(&user_credentials_request_digest) {
             near_crypto::Signature::ED25519(k) => k,
@@ -659,11 +659,11 @@ impl LeaderNodeApi {
         };
 
         let new_account_request = NewAccountRequest {
-            near_account_id: account_id.to_string(),
+            near_account_id: account_id,
             create_account_options,
-            oidc_token: oidc_token.clone(),
+            oidc_token,
             frp_signature,
-            frp_public_key: user_pk.clone().to_string(),
+            frp_public_key: user_pk.to_string(),
         };
 
         self.new_account(new_account_request).await
@@ -730,20 +730,18 @@ impl LeaderNodeApi {
     // TODO: move to utils
     pub async fn claim_oidc_with_helper(
         &self,
-        oidc_token: String,
-        user_public_key: PublicKey,
-        user_secret_key: near_crypto::SecretKey,
+        oidc_token: &str,
+        user_public_key: &PublicKey,
+        user_secret_key: &SecretKey,
     ) -> anyhow::Result<()> {
-        let oidc_token_hash = oidc_digest(&oidc_token);
+        let oidc_token_hash = oidc_digest(oidc_token);
 
-        let request_digest =
-            claim_oidc_request_digest(oidc_token_hash, user_public_key.clone()).unwrap();
-
-        let request_digest_signature = sign_digest(&request_digest, &user_secret_key)?;
+        let request_digest = claim_oidc_request_digest(oidc_token_hash, user_public_key).unwrap();
+        let request_digest_signature = sign_digest(&request_digest, user_secret_key)?;
 
         let oidc_request = ClaimOidcRequest {
             oidc_token_hash,
-            public_key: user_public_key.clone().to_string(),
+            public_key: user_public_key.to_string(),
             frp_signature: request_digest_signature,
         };
 
@@ -764,7 +762,7 @@ impl LeaderNodeApi {
         client_pk: PublicKey,
     ) -> anyhow::Result<(StatusCode, UserCredentialsResponse)> {
         let user_credentials_request_digest =
-            user_credentials_request_digest(oidc_token.clone(), client_pk.clone())?;
+            user_credentials_request_digest(oidc_token.clone(), &client_pk)?;
 
         let frp_signature = match client_sk.sign(&user_credentials_request_digest) {
             near_crypto::Signature::ED25519(k) => k,

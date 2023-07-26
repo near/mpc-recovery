@@ -113,7 +113,7 @@ mod tests {
 
         let user_pk: PublicKey = PublicKey::from_str(&public_key).unwrap();
 
-        let oidc_request_digest = match claim_oidc_request_digest(oidc_token_hash, user_pk) {
+        let oidc_request_digest = match claim_oidc_request_digest(oidc_token_hash, &user_pk) {
             Ok(digest) => digest,
             Err(err) => panic!("Failed to create digest: {:?}", err),
         };
@@ -153,7 +153,7 @@ mod tests {
 
         let oidc_token_hash = oidc_digest(&oidc_token);
 
-        let digest = match claim_oidc_request_digest(oidc_token_hash, user_pk) {
+        let digest = match claim_oidc_request_digest(oidc_token_hash, &user_pk) {
             Ok(digest) => digest,
             Err(err) => panic!("Failed to create digest: {:?}", err),
         };
