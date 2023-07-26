@@ -198,6 +198,25 @@ mod check {
             ))
         }
     }
+
+    pub async fn access_key_does_not_exists(
+        ctx: &TestContext<'_>,
+        account_id: &AccountId,
+        public_key: &str,
+    ) -> anyhow::Result<()> {
+        let access_keys = ctx.worker.view_access_keys(account_id).await?;
+
+        if access_keys
+            .iter()
+            .any(|ak| ak.public_key.to_string() == public_key)
+        {
+            Err(anyhow::anyhow!(
+                "Access key {public_key} still added to the account {account_id}"
+            ))
+        } else {
+            Ok(())
+        }
+    }
 }
 
 trait MpcCheck {

@@ -86,7 +86,7 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             let bad_user_sk = key::random_sk();
 
             ctx.leader_node
-                .add_key(
+                .add_key_with_helper(
                     account_id.clone(),
                     oidc_token.clone(),
                     new_user_public_key.parse()?,
@@ -99,7 +99,7 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
 
             // Add key with proper FRP signature should succeed
             ctx.leader_node
-                .add_key(
+                .add_key_with_helper(
                     account_id.clone(),
                     oidc_token.clone(),
                     new_user_public_key.parse()?,
@@ -192,7 +192,7 @@ async fn add_pk_and_check_validity(
 ) -> anyhow::Result<String> {
     let new_user_pk = pk_to_add.unwrap_or_else(key::random_pk);
     ctx.leader_node
-        .add_key(
+        .add_key_with_helper(
             user_id.clone(),
             user_oidc,
             new_user_pk.parse()?,

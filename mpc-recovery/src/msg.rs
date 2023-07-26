@@ -93,7 +93,7 @@ pub struct NewAccountRequest {
     pub near_account_id: String,
     pub create_account_options: CreateAccountOptions,
     pub oidc_token: String,
-    pub frp_signature: Signature,
+    pub user_credentials_frp_signature: Signature,
     pub frp_public_key: String,
 }
 
@@ -122,6 +122,7 @@ pub struct SignRequest {
     pub delegate_action: DelegateAction,
     pub oidc_token: String,
     pub frp_signature: Signature,
+    pub user_credentials_frp_signature: Signature,
     pub frp_public_key: String,
 }
 
