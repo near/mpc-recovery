@@ -185,7 +185,7 @@ async fn process_commit<T: OAuthTokenVerifier>(
             // Save info about token in the database, if it's present, throw an error
             let oidc_digest = OidcDigest {
                 node_id: state.node_info.our_index,
-                digest: <[u8; 32]>::try_from(request.oidc_token_hash).expect("Hash was wrong size"),
+                digest: request.oidc_token_hash,
                 public_key,
             };
 
@@ -263,7 +263,7 @@ async fn process_commit<T: OAuthTokenVerifier>(
 
             let oidc_digest = OidcDigest {
                 node_id: state.node_info.our_index,
-                digest: <[u8; 32]>::try_from(oidc_hash).expect("Hash was wrong size"),
+                digest: oidc_hash,
                 public_key: frp_pk,
             };
 
@@ -525,7 +525,7 @@ async fn process_public_key<T: OAuthTokenVerifier>(
 
     let oidc_digest = OidcDigest {
         node_id: state.node_info.our_index,
-        digest: <[u8; 32]>::try_from(oidc_hash).expect("Hash was wrong size"),
+        digest: oidc_hash,
         public_key: frp_pk,
     };
 
