@@ -305,10 +305,7 @@ async fn user_credentials<T: OAuthTokenVerifier>(
             NodeCallError::ClientError(e, status_code),
         ))) => {
             tracing::error!(err = ?e);
-            (
-                status_code,
-                Json(UserCredentialsResponse::Err { msg: e.to_string() }),
-            )
+            (status_code, Json(UserCredentialsResponse::Err { msg: e }))
         }
         Err(e) => {
             tracing::error!(err = ?e);
@@ -531,7 +528,7 @@ async fn new_account<T: OAuthTokenVerifier>(
             NodeCallError::ClientError(e, status_code),
         ))) => {
             tracing::error!(err = ?e);
-            (status_code, Json(NewAccountResponse::err(e.to_string())))
+            (status_code, Json(NewAccountResponse::err(e)))
         }
         Err(e) => {
             tracing::error!(err = ?e);
@@ -601,7 +598,7 @@ async fn sign<T: OAuthTokenVerifier>(
             status_code,
         )))) => {
             tracing::error!(err = ?e);
-            (status_code, Json(SignResponse::err(e.to_string())))
+            (status_code, Json(SignResponse::err(e)))
         }
         Err(e) => {
             tracing::error!(err = ?e);

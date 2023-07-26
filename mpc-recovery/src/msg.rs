@@ -24,7 +24,7 @@ impl TryInto<PublicKey> for MpcPkResponse {
             MpcPkResponse::Err { msg } => anyhow::bail!("error response: {}", msg),
         };
 
-        let decoded_mpc_pk = match hex::decode(mpc_pk.clone()) {
+        let decoded_mpc_pk = match hex::decode(mpc_pk) {
             Ok(v) => v,
             Err(e) => anyhow::bail!("failed to decode mpc pk: {}", e),
         };
