@@ -114,8 +114,6 @@ pub enum CommitError {
     OidcVerificationFailed(anyhow::Error),
     #[error("failed to verify signature: {0}")]
     SignatureVerificationFailed(anyhow::Error),
-    #[error("oidc token {0:?} already claimed")]
-    OidcTokenAlreadyClaimed(OidcDigest),
     #[error("oidc token {0:?} was not claimed")]
     OidcTokenNotClaimed(OidcDigest),
     #[error("This kind of action can not be performed")]
@@ -190,11 +188,8 @@ async fn process_commit<T: OAuthTokenVerifier>(
                 .get::<_, OidcDigest>(oidc_digest.to_name())
                 .await
             {
-                Ok(Some(_stored_digest)) => {
-                    // TODO: Should we throw this error in case we use the same token but different public key?
-                    // TODO: should we throw this error at all?
-                    tracing::info!(?oidc_digest, "oidc token already claimed");
-                    return Err(CommitError::OidcTokenAlreadyClaimed(oidc_digest));
+                Ok(Some(stored_digest)) => {
+                    tracing::info!(?stored_digest, "oidc token already claimed");
                 }
                 Ok(None) => {
                     tracing::info!(?oidc_digest, "adding oidc token digest to the database");

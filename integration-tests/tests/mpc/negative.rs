@@ -329,11 +329,11 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
                 .assert_ok()?
                 .try_into()?;
 
-            // Making the same claiming request should fail
+            // Making the same claiming request should NOT fail
             ctx.leader_node
                 .claim_oidc(oidc_request.clone())
                 .await?
-                .assert_bad_request_contains("already claimed")?;
+                .assert_ok()?;
 
             // Verify signature with wrong digest
             let wrong_response_digest = claim_oidc_response_digest(bad_oidc_request.frp_signature)?;
