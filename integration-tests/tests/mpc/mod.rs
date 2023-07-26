@@ -11,6 +11,45 @@ use crate::{account, check, key, token, MpcCheck, TestContext};
 mod negative;
 mod positive;
 
+pub async fn register_account(
+    ctx: &TestContext<'_>,
+    user_id: &AccountId,
+    user_sk: &SecretKey,
+    user_pk: &PublicKey,
+    user_oidc: String,
+    user_lak: Option<LimitedAccessKey>,
+) -> anyhow::Result<()> {
+    // Claim OIDC token
+    ctx.leader_node
+        .claim_oidc_with_helper(user_oidc.clone(), user_pk.clone(), user_sk.clone())
+        .await?;
+
+    // Create account
+    let new_acc_response = ctx
+        .leader_node
+        .new_account_with_helper(
+            user_id.to_string(),
+            user_pk.clone(),
+            user_lak,
+            user_sk.clone(),
+            user_oidc,
+        )
+        .await?
+        .assert_ok()?;
+
+    assert!(matches!(new_acc_response, NewAccountResponse::Ok {
+            create_account_options: _,
+            user_recovery_public_key: _,
+            near_account_id: acc_id,
+        } if acc_id == user_id.to_string()
+    ));
+
+    tokio::time::sleep(Duration::from_millis(2000)).await;
+    check::access_key_exists(ctx, &user_id, &user_pk).await?;
+
+    Ok(())
+}
+
 pub async fn new_random_account(
     ctx: &TestContext<'_>,
     user_lak: Option<LimitedAccessKey>,
@@ -20,38 +59,15 @@ pub async fn new_random_account(
     let user_public_key = user_secret_key.public_key();
     let oidc_token = token::valid_random();
 
-    // Claim OIDC token
-    ctx.leader_node
-        .claim_oidc_with_helper(
-            oidc_token.clone(),
-            user_public_key.clone(),
-            user_secret_key.clone(),
-        )
-        .await?;
-
-    // Create account
-    let new_acc_response = ctx
-        .leader_node
-        .new_account_with_helper(
-            account_id.to_string(),
-            user_public_key.clone(),
-            user_lak,
-            user_secret_key.clone(),
-            oidc_token.clone(),
-        )
-        .await?
-        .assert_ok()?;
-
-    assert!(matches!(new_acc_response, NewAccountResponse::Ok {
-            create_account_options: _,
-            user_recovery_public_key: _,
-            near_account_id: acc_id,
-        } if acc_id == account_id.to_string()
-    ));
-
-    tokio::time::sleep(Duration::from_millis(2000)).await;
-    check::access_key_exists(ctx, &account_id, &user_public_key).await?;
-
+    register_account(
+        ctx,
+        &account_id,
+        &user_secret_key,
+        &user_public_key,
+        oidc_token.clone(),
+        user_lak,
+    )
+    .await?;
     Ok((account_id, user_secret_key, oidc_token))
 }
 
