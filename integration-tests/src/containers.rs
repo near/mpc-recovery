@@ -769,7 +769,7 @@ impl LeaderNodeApi {
         self.user_credentials(UserCredentialsRequest {
             oidc_token: oidc_token.clone(),
             frp_signature,
-            frp_public_key: client_pk.clone().to_string(),
+            frp_public_key: client_pk.to_string(),
         })
         .await
     }

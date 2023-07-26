@@ -30,7 +30,7 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
             // Relayer is wasting a token even if account was not created
             // ctx.leader_node
             //     .new_account_with_helper(
-            //         account_id.clone().to_string(),
+            //         account_id.to_string(),
             //         user_public_key.clone(),
             //         None,
             //         user_secret_key.clone(),
@@ -103,13 +103,13 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
 
             let oidc_request = ClaimOidcRequest {
                 oidc_token_hash,
-                public_key: user_public_key.clone().to_string(),
+                public_key: user_public_key.to_string(),
                 frp_signature: request_digest_signature,
             };
 
             let bad_oidc_request = ClaimOidcRequest {
                 oidc_token_hash,
-                public_key: user_public_key.clone().to_string(),
+                public_key: user_public_key.to_string(),
                 frp_signature: wrong_request_digest_signature,
             };
 
@@ -173,7 +173,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
             // Try to create an account with invalid token
             ctx.leader_node
                 .new_account_with_helper(
-                    account_id.clone().to_string(),
+                    account_id.to_string(),
                     user_public_key.clone(),
                     None,
                     user_secret_key.clone(),
@@ -186,7 +186,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
             let new_acc_response = ctx
                 .leader_node
                 .new_account_with_helper(
-                    account_id.clone().to_string(),
+                    account_id.to_string(),
                     user_public_key.clone(),
                     None,
                     user_secret_key.clone(),
@@ -288,7 +288,7 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
             let new_acc_response = ctx
                 .leader_node
                 .new_account_with_helper(
-                    account_id.clone().to_string(),
+                    account_id.to_string(),
                     user_public_key.clone(),
                     None,
                     user_secret_key.clone(),
