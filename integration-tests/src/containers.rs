@@ -309,6 +309,7 @@ impl<'a> Relayer<'a> {
 pub struct Datastore<'a> {
     pub container: Container<'a, GenericImage>,
     pub address: String,
+    pub local_address: String,
 }
 
 impl<'a> Datastore<'a> {
@@ -351,11 +352,14 @@ impl<'a> Datastore<'a> {
         let ip_address = docker_client
             .get_network_ip_address(&container, network)
             .await?;
+        let host_port = container.get_host_port_ipv4(Self::CONTAINER_PORT);
 
         let full_address = format!("http://{}:{}/", ip_address, Self::CONTAINER_PORT);
+        let local_address = format!("http://localhost:{}/", host_port);
         tracing::info!("Datastore container is running at {}", full_address);
         Ok(Datastore {
             container,
+            local_address,
             address: full_address,
         })
     }
@@ -369,7 +373,7 @@ pub struct SignerNode<'a> {
     sk_share: ExpandedKeyPair,
     cipher_key: GenericArray<u8, U32>,
     gcp_project_id: String,
-    gcp_datastore_url: String,
+    gcp_datastore_local_url: String,
 }
 
 pub struct SignerNodeApi {
@@ -378,7 +382,7 @@ pub struct SignerNodeApi {
     pub sk_share: ExpandedKeyPair,
     pub cipher_key: Aes256Gcm,
     pub gcp_project_id: String,
-    pub gcp_datastore_url: String,
+    pub gcp_datastore_local_url: String,
 }
 
 impl<'a> SignerNode<'a> {
@@ -392,6 +396,7 @@ impl<'a> SignerNode<'a> {
         sk_share: &ExpandedKeyPair,
         cipher_key: &GenericArray<u8, U32>,
         datastore_url: &str,
+        datastore_local_url: &str,
         gcp_project_id: &str,
         firebase_audience_id: &str,
     ) -> anyhow::Result<SignerNode<'a>> {
@@ -448,7 +453,7 @@ impl<'a> SignerNode<'a> {
             sk_share: sk_share.clone(),
             cipher_key: *cipher_key,
             gcp_project_id: gcp_project_id.to_string(),
-            gcp_datastore_url: datastore_url.to_string(),
+            gcp_datastore_local_url: datastore_local_url.to_string(),
         })
     }
 
@@ -459,7 +464,7 @@ impl<'a> SignerNode<'a> {
             sk_share: self.sk_share.clone(),
             cipher_key: Aes256Gcm::new(&self.cipher_key),
             gcp_project_id: self.gcp_project_id.clone(),
-            gcp_datastore_url: self.gcp_datastore_url.clone(),
+            gcp_datastore_local_url: self.gcp_datastore_local_url.clone(),
         }
     }
 }
@@ -480,7 +485,7 @@ impl SignerNodeApi {
         let gcp_service = mpc_recovery::gcp::GcpService::new(
             env.clone(),
             self.gcp_project_id.clone(),
-            Some(self.gcp_datastore_url.clone()),
+            Some(self.gcp_datastore_local_url.clone()),
         )
         .await?;
 

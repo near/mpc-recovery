@@ -47,6 +47,7 @@ async fn main() -> anyhow::Result<()> {
                     share,
                     cipher_key,
                     &datastore.address,
+                    &datastore.local_address,
                     GCP_PROJECT_ID,
                     FIREBASE_AUDIENCE_ID,
                 );

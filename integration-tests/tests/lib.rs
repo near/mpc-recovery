@@ -63,6 +63,7 @@ where
             share,
             cipher_key,
             &datastore.address,
+            &datastore.local_address,
             GCP_PROJECT_ID,
             FIREBASE_AUDIENCE_ID,
         );
@@ -98,7 +99,7 @@ where
         pk_set: &pk_set,
         signer_nodes: &signer_nodes.iter().map(|n| n.api()).collect(),
         worker: &relayer_ctx.worker,
-        gcp_datastore_url: datastore.address,
+        gcp_datastore_url: datastore.local_address,
     })
     .await?;
 
