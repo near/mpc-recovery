@@ -9,7 +9,7 @@ use crate::{primitives::HashSalt, sign_node::CommitError};
 
 pub fn claim_oidc_request_digest(
     oidc_token_hash: [u8; 32],
-    frp_public_key: PublicKey,
+    frp_public_key: &PublicKey,
 ) -> anyhow::Result<Vec<u8>> {
     // As per the readme
     // To verify the signature of the message verify:
@@ -18,7 +18,7 @@ pub fn claim_oidc_request_digest(
     BorshSerialize::serialize(&HashSalt::ClaimOidcRequest.get_salt(), &mut hasher)
         .context("Serialization failed")?;
     BorshSerialize::serialize(&oidc_token_hash, &mut hasher).context("Serialization failed")?;
-    BorshSerialize::serialize(&frp_public_key, &mut hasher).context("Serialization failed")?;
+    BorshSerialize::serialize(frp_public_key, &mut hasher).context("Serialization failed")?;
     Ok(hasher.finalize().to_vec())
 }
 
@@ -35,28 +35,28 @@ pub fn claim_oidc_response_digest(users_signature: Signature) -> Result<Vec<u8>,
 }
 
 pub fn sign_request_digest(
-    delegate_action: DelegateAction,
-    oidc_token: String,
-    frp_public_key: PublicKey,
+    delegate_action: &DelegateAction,
+    oidc_token: &str,
+    frp_public_key: &PublicKey,
 ) -> Result<Vec<u8>, CommitError> {
     let mut hasher = Sha256::default();
     BorshSerialize::serialize(&HashSalt::SignRequest.get_salt(), &mut hasher)
         .context("Serialization failed")?;
-    BorshSerialize::serialize(&delegate_action, &mut hasher).context("Serialization failed")?;
-    BorshSerialize::serialize(&oidc_token, &mut hasher).context("Serialization failed")?;
-    BorshSerialize::serialize(&frp_public_key, &mut hasher).context("Serialization failed")?;
+    BorshSerialize::serialize(delegate_action, &mut hasher).context("Serialization failed")?;
+    BorshSerialize::serialize(oidc_token, &mut hasher).context("Serialization failed")?;
+    BorshSerialize::serialize(frp_public_key, &mut hasher).context("Serialization failed")?;
     Ok(hasher.finalize().to_vec())
 }
 
 pub fn user_credentials_request_digest(
-    oidc_token: String,
-    frp_public_key: PublicKey,
+    oidc_token: &str,
+    frp_public_key: &PublicKey,
 ) -> anyhow::Result<Vec<u8>> {
     let mut hasher = Sha256::default();
     BorshSerialize::serialize(&HashSalt::UserCredentialsRequest.get_salt(), &mut hasher)
         .context("Serialization failed")?;
-    BorshSerialize::serialize(&oidc_token, &mut hasher).context("Serialization failed")?;
-    BorshSerialize::serialize(&frp_public_key, &mut hasher).context("Serialization failed")?;
+    BorshSerialize::serialize(oidc_token, &mut hasher).context("Serialization failed")?;
+    BorshSerialize::serialize(frp_public_key, &mut hasher).context("Serialization failed")?;
     Ok(hasher.finalize().to_vec())
 }
 

@@ -11,6 +11,7 @@ use crate::utils::{
     sign_request_digest, user_credentials_request_digest,
 };
 use crate::NodeId;
+
 use aes_gcm::Aes256Gcm;
 use axum::routing::get;
 use axum::{http::StatusCode, routing::post, Extension, Json, Router};
@@ -29,6 +30,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub mod aggregate_signer;
+pub mod migration;
 pub mod oidc;
 pub mod pk_set;
 pub mod user_credentials;
@@ -174,8 +176,7 @@ async fn process_commit<T: OAuthTokenVerifier>(
                 .parse()
                 .map_err(|e| CommitError::MalformedPublicKey(request.public_key.clone(), e))?;
 
-            let request_digest =
-                claim_oidc_request_digest(request.oidc_token_hash, public_key.clone())?;
+            let request_digest = claim_oidc_request_digest(request.oidc_token_hash, &public_key)?;
 
             match check_digest_signature(&public_key, &request.signature, &request_digest) {
                 Ok(()) => tracing::debug!("claim oidc token digest signature verified"),
@@ -247,11 +248,8 @@ async fn process_commit<T: OAuthTokenVerifier>(
             let frp_pk = PublicKey::from_str(&request.frp_public_key)
                 .map_err(|e| CommitError::MalformedPublicKey(request.frp_public_key.clone(), e))?;
 
-            let digest = sign_request_digest(
-                request.delegate_action.clone(),
-                request.oidc_token.clone(),
-                frp_pk.clone(),
-            )?;
+            let digest =
+                sign_request_digest(&request.delegate_action, &request.oidc_token, &frp_pk)?;
 
             match check_digest_signature(&frp_pk, &request.frp_signature, &digest) {
                 Ok(()) => tracing::debug!("sign request digest signature verified"),
@@ -511,7 +509,7 @@ async fn process_public_key<T: OAuthTokenVerifier>(
         PublicKeyRequestError::MalformedPublicKey(request.frp_public_key.clone(), e)
     })?;
 
-    let digest = user_credentials_request_digest(request.oidc_token.clone(), frp_pk.clone())?;
+    let digest = user_credentials_request_digest(&request.oidc_token, &frp_pk)?;
 
     match check_digest_signature(&frp_pk, &request.frp_signature, &digest) {
         Ok(()) => tracing::debug!("user credentials digest signature verified"),

@@ -307,10 +307,7 @@ async fn user_credentials<T: OAuthTokenVerifier>(
             NodeCallError::ClientError(e, status_code),
         ))) => {
             tracing::error!(err = ?e);
-            (
-                status_code,
-                Json(UserCredentialsResponse::Err { msg: e.to_string() }),
-            )
+            (status_code, Json(UserCredentialsResponse::Err { msg: e }))
         }
         Err(e) => {
             tracing::error!(err = ?e);
@@ -346,7 +343,7 @@ async fn process_user_credentials<T: OAuthTokenVerifier>(
         let mpc_user_recovery_pk = get_user_recovery_pk(
             &state.reqwest_client,
             &state.sign_nodes,
-            request.oidc_token.clone(),
+            &request.oidc_token,
             request.frp_signature,
             request.frp_public_key.clone(),
         )
@@ -410,7 +407,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         let mpc_user_recovery_pk = get_user_recovery_pk(
             &state.reqwest_client,
             &state.sign_nodes,
-            request.oidc_token.clone(),
+            &request.oidc_token,
             request.user_credentials_frp_signature,
             request.frp_public_key.clone(),
         )
@@ -424,11 +421,11 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         }
 
         let delegate_action = get_create_account_delegate_action(
-            state.account_creator_id.clone(),
-            state.account_creator_sk.public_key(),
-            new_user_account_id.clone(),
+            &state.account_creator_id,
+            &state.account_creator_sk.public_key(),
+            &new_user_account_id,
             new_account_options.clone(),
-            state.near_root_account.clone(),
+            &state.near_root_account,
             nonce,
             block_height + 100,
         )?;
@@ -536,7 +533,7 @@ async fn new_account<T: OAuthTokenVerifier>(
             NodeCallError::ClientError(e, status_code),
         ))) => {
             tracing::error!(err = ?e);
-            (status_code, Json(NewAccountResponse::err(e.to_string())))
+            (status_code, Json(NewAccountResponse::err(e)))
         }
         Err(e) => {
             tracing::error!(err = ?e);
@@ -589,7 +586,7 @@ async fn process_sign<T: OAuthTokenVerifier>(
         let mpc_user_recovery_pk = get_user_recovery_pk(
             &state.reqwest_client,
             &state.sign_nodes,
-            request.oidc_token.clone(),
+            &request.oidc_token,
             request.user_credentials_frp_signature,
             request.frp_public_key.clone(),
         )
@@ -624,7 +621,7 @@ async fn process_sign<T: OAuthTokenVerifier>(
         let signature = get_mpc_signature(
             &state.reqwest_client,
             &state.sign_nodes,
-            request.oidc_token.clone(),
+            &request.oidc_token,
             request.delegate_action.clone(),
             request.frp_signature,
             request.frp_public_key.clone(),
@@ -671,7 +668,7 @@ async fn sign<T: OAuthTokenVerifier>(
             status_code,
         )))) => {
             tracing::error!(err = ?e);
-            (status_code, Json(SignResponse::err(e.to_string())))
+            (status_code, Json(SignResponse::err(e)))
         }
         Err(e) => {
             tracing::error!(err = ?e);

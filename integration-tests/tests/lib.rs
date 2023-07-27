@@ -4,6 +4,7 @@ use curv::elliptic::curves::{Ed25519, Point};
 use futures::future::BoxFuture;
 use hyper::StatusCode;
 use mpc_recovery::{
+    gcp::GcpService,
     msg::{
         ClaimOidcResponse, MpcPkResponse, NewAccountResponse, SignResponse, UserCredentialsResponse,
     },
@@ -22,6 +23,18 @@ pub struct TestContext<'a> {
     pk_set: &'a Vec<Point<Ed25519>>,
     worker: &'a Worker<Sandbox>,
     signer_nodes: &'a Vec<containers::SignerNodeApi>,
+    gcp_datastore_url: String,
+}
+
+impl<'a> TestContext<'a> {
+    pub async fn gcp_service(&self) -> anyhow::Result<GcpService> {
+        GcpService::new(
+            "dev".into(),
+            GCP_PROJECT_ID.into(),
+            Some(self.gcp_datastore_url.clone()),
+        )
+        .await
+    }
 }
 
 async fn with_nodes<F>(nodes: usize, f: F) -> anyhow::Result<()>
@@ -50,6 +63,7 @@ where
             share,
             cipher_key,
             &datastore.address,
+            &datastore.local_address,
             GCP_PROJECT_ID,
             FIREBASE_AUDIENCE_ID,
         );
@@ -85,8 +99,11 @@ where
         pk_set: &pk_set,
         signer_nodes: &signer_nodes.iter().map(|n| n.api()).collect(),
         worker: &relayer_ctx.worker,
+        gcp_datastore_url: datastore.local_address,
     })
-    .await
+    .await?;
+
+    Ok(())
 }
 
 mod account {
@@ -118,17 +135,15 @@ mod account {
 }
 
 mod key {
-    use near_crypto::SecretKey;
+    use near_crypto::{PublicKey, SecretKey};
     use rand::{distributions::Alphanumeric, Rng};
 
     pub fn random_sk() -> SecretKey {
         near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519)
     }
 
-    pub fn random_pk() -> String {
-        near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519)
-            .public_key()
-            .to_string()
+    pub fn random_pk() -> PublicKey {
+        near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519).public_key()
     }
 
     #[allow(dead_code)]
@@ -161,18 +176,19 @@ mod token {
 
 mod check {
     use crate::TestContext;
+    use near_crypto::PublicKey;
     use workspaces::AccountId;
 
     pub async fn access_key_exists(
         ctx: &TestContext<'_>,
         account_id: &AccountId,
-        public_key: &str,
+        public_key: &PublicKey,
     ) -> anyhow::Result<()> {
         let access_keys = ctx.worker.view_access_keys(account_id).await?;
 
         if access_keys
             .iter()
-            .any(|ak| ak.public_key.to_string() == public_key)
+            .any(|ak| ak.public_key.key_data() == public_key.key_data())
         {
             Ok(())
         } else {

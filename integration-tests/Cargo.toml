@@ -5,6 +5,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
+aes-gcm = "0.10"
 anyhow = { version = "1.0", features = ["backtrace"] }
 bollard = "0.11"
 clap = { version = "4.2", features = ["derive", "env"] }
@@ -20,7 +21,6 @@ near-jsonrpc-client = "0.5.1"
 near-primitives = "0.16.1"
 near-units = "0.2.0"
 once_cell = "1"
-portpicker = "0.1"
 serde = "1"
 serde_json = "1"
 testcontainers = { version = "0.14", features = ["experimental"] }

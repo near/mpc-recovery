@@ -1,4 +1,6 @@
 #![allow(clippy::too_many_arguments)]
+
+use aes_gcm::{Aes256Gcm, KeyInit};
 use anyhow::{anyhow, Ok};
 use bollard::{container::LogsOptions, network::CreateNetworkOptions, service::Ipam, Docker};
 use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::GenericArray};
@@ -309,6 +311,7 @@ impl<'a> Relayer<'a> {
 pub struct Datastore<'a> {
     pub container: Container<'a, GenericImage>,
     pub address: String,
+    pub local_address: String,
 }
 
 impl<'a> Datastore<'a> {
@@ -351,11 +354,14 @@ impl<'a> Datastore<'a> {
         let ip_address = docker_client
             .get_network_ip_address(&container, network)
             .await?;
+        let host_port = container.get_host_port_ipv4(Self::CONTAINER_PORT);
 
         let full_address = format!("http://{}:{}/", ip_address, Self::CONTAINER_PORT);
+        let local_address = format!("http://localhost:{}/", host_port);
         tracing::info!("Datastore container is running at {}", full_address);
         Ok(Datastore {
             container,
+            local_address,
             address: full_address,
         })
     }
@@ -365,10 +371,20 @@ pub struct SignerNode<'a> {
     pub container: Container<'a, GenericImage>,
     pub address: String,
     pub local_address: String,
+    node_id: usize,
+    sk_share: ExpandedKeyPair,
+    cipher_key: GenericArray<u8, U32>,
+    gcp_project_id: String,
+    gcp_datastore_local_url: String,
 }
 
 pub struct SignerNodeApi {
     pub address: String,
+    pub node_id: usize,
+    pub sk_share: ExpandedKeyPair,
+    pub cipher_key: Aes256Gcm,
+    pub gcp_project_id: String,
+    pub gcp_datastore_local_url: String,
 }
 
 impl<'a> SignerNode<'a> {
@@ -382,6 +398,7 @@ impl<'a> SignerNode<'a> {
         sk_share: &ExpandedKeyPair,
         cipher_key: &GenericArray<u8, U32>,
         datastore_url: &str,
+        datastore_local_url: &str,
         gcp_project_id: &str,
         firebase_audience_id: &str,
     ) -> anyhow::Result<SignerNode<'a>> {
@@ -434,12 +451,22 @@ impl<'a> SignerNode<'a> {
             container,
             address: full_address,
             local_address: format!("http://localhost:{host_port}"),
+            node_id: node_id as usize,
+            sk_share: sk_share.clone(),
+            cipher_key: *cipher_key,
+            gcp_project_id: gcp_project_id.to_string(),
+            gcp_datastore_local_url: datastore_local_url.to_string(),
         })
     }
 
     pub fn api(&self) -> SignerNodeApi {
         SignerNodeApi {
             address: self.local_address.clone(),
+            node_id: self.node_id,
+            sk_share: self.sk_share.clone(),
+            cipher_key: Aes256Gcm::new(&self.cipher_key),
+            gcp_project_id: self.gcp_project_id.clone(),
+            gcp_datastore_local_url: self.gcp_datastore_local_url.clone(),
         }
     }
 }
@@ -450,6 +477,34 @@ impl SignerNodeApi {
         request: AcceptNodePublicKeysRequest,
     ) -> anyhow::Result<(StatusCode, Result<String, String>)> {
         util::post(format!("{}/accept_pk_set", self.address), request).await
+    }
+
+    pub async fn run_rotate_node_key(
+        &self,
+        new_cipher_key: &GenericArray<u8, U32>,
+    ) -> anyhow::Result<(Aes256Gcm, Aes256Gcm)> {
+        let env = "dev".to_string();
+        let gcp_service = mpc_recovery::gcp::GcpService::new(
+            env,
+            self.gcp_project_id.clone(),
+            Some(self.gcp_datastore_local_url.clone()),
+        )
+        .await?;
+
+        let new_cipher = Aes256Gcm::new(new_cipher_key);
+        let old_cipher = &self.cipher_key;
+
+        // Do inplace rotation of node key
+        mpc_recovery::sign_node::migration::rotate_cipher(
+            self.node_id,
+            old_cipher,
+            &new_cipher,
+            &gcp_service,
+            &gcp_service,
+        )
+        .await?;
+
+        Ok((old_cipher.clone(), new_cipher))
     }
 }
 
@@ -580,11 +635,11 @@ impl LeaderNodeApi {
     // TODO: I would say this need to replace the regular `new_account` once FRP is enforced
     pub async fn new_account_with_helper(
         &self,
-        account_id: String,
-        user_fa_public_key: PublicKey,
+        account_id: &str,
+        user_fa_public_key: &PublicKey,
         user_la_public_key: Option<LimitedAccessKey>,
-        user_secret_key: SecretKey,
-        oidc_token: String,
+        user_secret_key: &SecretKey,
+        oidc_token: &str,
     ) -> anyhow::Result<(StatusCode, NewAccountResponse)> {
         let user_pk = user_secret_key.public_key();
 
@@ -598,7 +653,7 @@ impl LeaderNodeApi {
 
         // By signing this digest we are giving the leader node permission to get user recovery pk
         let user_credentials_request_digest =
-            user_credentials_request_digest(oidc_token.clone(), user_pk.clone())?;
+            user_credentials_request_digest(oidc_token, &user_pk)?;
 
         let frp_signature = match user_secret_key.sign(&user_credentials_request_digest) {
             near_crypto::Signature::ED25519(k) => k,
@@ -608,7 +663,7 @@ impl LeaderNodeApi {
         let new_account_request = NewAccountRequest {
             near_account_id: account_id.to_string(),
             create_account_options,
-            oidc_token: oidc_token.clone(),
+            oidc_token: oidc_token.to_string(),
             user_credentials_frp_signature: frp_signature,
             frp_public_key: user_pk.clone().to_string(),
         };
@@ -619,46 +674,39 @@ impl LeaderNodeApi {
     // TODO: add_key should me moved to utils in the future, it is not a part of the API
     pub async fn add_key_with_helper(
         &self,
-        account_id: AccountId,
-        oidc_token: String,
-        public_key: PublicKey,
-        recovery_pk: PublicKey,
-        frp_sk: SecretKey,
-        frp_pk: PublicKey,
+        account_id: &AccountId,
+        oidc_token: &str,
+        public_key: &PublicKey,
+        recovery_pk: &PublicKey,
+        frp_sk: &SecretKey,
+        frp_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
         let (block_height, nonce) = self
-            .get_key_info_with_helper(account_id.clone(), recovery_pk.clone())
+            .get_key_info_with_helper(account_id, recovery_pk)
             .await?;
 
         let add_key_delegate_action = self.get_add_key_delegate_action(
-            account_id.clone(),
-            public_key.clone(),
-            recovery_pk.clone(),
+            account_id,
+            public_key,
+            recovery_pk,
             nonce,
             block_height,
         )?;
 
-        let sign_request_digest = sign_request_digest(
-            add_key_delegate_action.clone(),
-            oidc_token.clone(),
-            frp_pk.clone(),
-        )?;
+        let sign_request_digest: Vec<u8> =
+            sign_request_digest(&add_key_delegate_action, oidc_token, frp_pk)?;
 
-        let frp_signature = sign_digest(&sign_request_digest, &frp_sk)?;
-
-        let user_credentials_request_digest =
-            user_credentials_request_digest(oidc_token.clone(), frp_sk.public_key())?;
-
-        let user_credentials_frp_signature =
-            sign_digest(&user_credentials_request_digest, &frp_sk)?;
+        let frp_signature = sign_digest(&sign_request_digest, frp_sk)?;
+        let user_credentials_request_digest = user_credentials_request_digest(oidc_token, frp_pk)?;
+        let user_credentials_frp_signature = sign_digest(&user_credentials_request_digest, frp_sk)?;
 
         let sign_request = SignRequest {
             delegate_action: add_key_delegate_action.clone(),
-            oidc_token,
+            oidc_token: oidc_token.to_string(),
             frp_signature,
             user_credentials_frp_signature,
-            frp_public_key: frp_sk.public_key().to_string(),
+            frp_public_key: frp_pk.to_string(),
         };
         // Send SignRequest to leader node
         let (status_code, sign_response): (_, SignResponse) = self.sign(sign_request).await?;
@@ -682,46 +730,39 @@ impl LeaderNodeApi {
 
     pub async fn delete_key_with_helper(
         &self,
-        account_id: AccountId,
-        oidc_token: String,
-        public_key: PublicKey,
-        recovery_pk: PublicKey,
-        frp_sk: SecretKey,
-        frp_pk: PublicKey,
+        account_id: &AccountId,
+        oidc_token: &str,
+        public_key: &PublicKey,
+        recovery_pk: &PublicKey,
+        frp_sk: &SecretKey,
+        frp_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
         let (block_height, nonce) = self
-            .get_key_info_with_helper(account_id.clone(), recovery_pk.clone())
+            .get_key_info_with_helper(account_id, recovery_pk)
             .await?;
 
         let delete_key_delegate_action = self.get_delete_key_delegate_action(
-            account_id.clone(),
-            public_key.clone(),
-            recovery_pk.clone(),
+            account_id,
+            public_key,
+            recovery_pk,
             nonce,
             block_height,
         )?;
 
-        let sign_request_digest = sign_request_digest(
-            delete_key_delegate_action.clone(),
-            oidc_token.clone(),
-            frp_pk.clone(),
-        )?;
+        let sign_request_digest =
+            sign_request_digest(&delete_key_delegate_action, oidc_token, frp_pk)?;
 
-        let frp_signature = sign_digest(&sign_request_digest, &frp_sk)?;
-
-        let user_credentials_request_digest =
-            user_credentials_request_digest(oidc_token.clone(), frp_sk.public_key())?;
-
-        let user_credentials_frp_signature =
-            sign_digest(&user_credentials_request_digest, &frp_sk)?;
+        let frp_signature = sign_digest(&sign_request_digest, frp_sk)?;
+        let user_credentials_request_digest = user_credentials_request_digest(oidc_token, frp_pk)?;
+        let user_credentials_frp_signature = sign_digest(&user_credentials_request_digest, frp_sk)?;
 
         let sign_request = SignRequest {
             delegate_action: delete_key_delegate_action.clone(),
-            oidc_token,
+            oidc_token: oidc_token.to_string(),
             frp_signature,
             user_credentials_frp_signature,
-            frp_public_key: frp_sk.public_key().to_string(),
+            frp_public_key: frp_pk.to_string(),
         };
         // Send SignRequest to leader node
         let (status_code, sign_response): (_, SignResponse) = self.sign(sign_request).await?;
@@ -748,28 +789,23 @@ impl LeaderNodeApi {
 
     pub async fn perform_delegate_action_with_helper(
         &self,
-        delegate_action: DelegateAction,
-        oidc_token: String,
-        frp_sk: SecretKey,
-        frp_pk: PublicKey,
+        delegate_action: &DelegateAction,
+        oidc_token: &str,
+        frp_sk: &SecretKey,
+        frp_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
-        let sign_request_digest =
-            sign_request_digest(delegate_action.clone(), oidc_token.clone(), frp_pk.clone())?;
+        let sign_request_digest = sign_request_digest(delegate_action, oidc_token, frp_pk)?;
+        let frp_signature = sign_digest(&sign_request_digest, frp_sk)?;
 
-        let frp_signature = sign_digest(&sign_request_digest, &frp_sk)?;
-
-        let user_credentials_request_digest =
-            user_credentials_request_digest(oidc_token.clone(), frp_sk.public_key())?;
-
-        let user_credentials_frp_signature =
-            sign_digest(&user_credentials_request_digest, &frp_sk)?;
+        let user_credentials_request_digest = user_credentials_request_digest(oidc_token, frp_pk)?;
+        let user_credentials_frp_signature = sign_digest(&user_credentials_request_digest, frp_sk)?;
 
         let sign_request = SignRequest {
             delegate_action: delegate_action.clone(),
-            oidc_token,
+            oidc_token: oidc_token.to_string(),
             frp_signature,
             user_credentials_frp_signature,
-            frp_public_key: frp_sk.public_key().to_string(),
+            frp_public_key: frp_pk.to_string(),
         };
         // Send SignRequest to leader node
         let (status_code, sign_response): (_, SignResponse) = self.sign(sign_request).await?;
@@ -779,20 +815,18 @@ impl LeaderNodeApi {
     // TODO: move to utils
     pub async fn claim_oidc_with_helper(
         &self,
-        oidc_token: String,
-        user_public_key: PublicKey,
-        user_secret_key: near_crypto::SecretKey,
+        oidc_token: &str,
+        user_public_key: &PublicKey,
+        user_secret_key: &SecretKey,
     ) -> anyhow::Result<(StatusCode, ClaimOidcResponse)> {
-        let oidc_token_hash = oidc_digest(&oidc_token);
+        let oidc_token_hash = oidc_digest(oidc_token);
 
-        let request_digest =
-            claim_oidc_request_digest(oidc_token_hash, user_public_key.clone()).unwrap();
-
-        let request_digest_signature = sign_digest(&request_digest, &user_secret_key)?;
+        let request_digest = claim_oidc_request_digest(oidc_token_hash, user_public_key).unwrap();
+        let request_digest_signature = sign_digest(&request_digest, user_secret_key)?;
 
         let oidc_request = ClaimOidcRequest {
             oidc_token_hash,
-            public_key: user_public_key.clone().to_string(),
+            public_key: user_public_key.to_string(),
             frp_signature: request_digest_signature,
         };
 
@@ -814,12 +848,12 @@ impl LeaderNodeApi {
 
     pub async fn user_credentials_with_helper(
         &self,
-        oidc_token: String,
-        client_sk: SecretKey,
-        client_pk: PublicKey,
+        oidc_token: &str,
+        client_sk: &SecretKey,
+        client_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, UserCredentialsResponse)> {
         let user_credentials_request_digest =
-            user_credentials_request_digest(oidc_token.clone(), client_pk.clone())?;
+            user_credentials_request_digest(oidc_token, client_pk)?;
 
         let frp_signature = match client_sk.sign(&user_credentials_request_digest) {
             near_crypto::Signature::ED25519(k) => k,
@@ -827,26 +861,26 @@ impl LeaderNodeApi {
         };
 
         self.user_credentials(UserCredentialsRequest {
-            oidc_token: oidc_token.clone(),
+            oidc_token: oidc_token.to_string(),
             frp_signature,
-            frp_public_key: client_pk.clone().to_string(),
+            frp_public_key: client_pk.to_string(),
         })
         .await
     }
 
     pub fn get_add_key_delegate_action(
         &self,
-        account_id: AccountId,
-        public_key: PublicKey,
-        recovery_pk: PublicKey,
+        account_id: &AccountId,
+        public_key: &PublicKey,
+        recovery_pk: &PublicKey,
         nonce: u64,
         block_height: u64,
     ) -> anyhow::Result<DelegateAction> {
         Ok(DelegateAction {
             sender_id: account_id.clone(),
-            receiver_id: account_id,
+            receiver_id: account_id.clone(),
             actions: vec![Action::AddKey(AddKeyAction {
-                public_key,
+                public_key: public_key.clone(),
                 access_key: AccessKey {
                     nonce: 0,
                     permission: AccessKeyPermission::FullAccess,
@@ -855,32 +889,35 @@ impl LeaderNodeApi {
             .try_into()?],
             nonce,
             max_block_height: block_height + 100,
-            public_key: recovery_pk,
+            public_key: recovery_pk.clone(),
         })
     }
 
     pub fn get_delete_key_delegate_action(
         &self,
-        account_id: AccountId,
-        public_key: PublicKey,
-        recovery_pk: PublicKey,
+        account_id: &AccountId,
+        public_key: &PublicKey,
+        recovery_pk: &PublicKey,
         nonce: u64,
         block_height: u64,
     ) -> anyhow::Result<DelegateAction> {
         Ok(DelegateAction {
             sender_id: account_id.clone(),
-            receiver_id: account_id,
-            actions: vec![Action::DeleteKey(DeleteKeyAction { public_key }).try_into()?],
+            receiver_id: account_id.clone(),
+            actions: vec![Action::DeleteKey(DeleteKeyAction {
+                public_key: public_key.clone(),
+            })
+            .try_into()?],
             nonce,
             max_block_height: block_height + 100,
-            public_key: recovery_pk,
+            public_key: recovery_pk.clone(),
         })
     }
 
     pub async fn get_key_info_with_helper(
         &self,
-        account_id: AccountId,
-        pk: PublicKey,
+        account_id: &AccountId,
+        pk: &PublicKey,
     ) -> anyhow::Result<(BlockHeight, Nonce)> {
         let (_, block_height, nonce) = self
             .client

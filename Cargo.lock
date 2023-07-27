@@ -2458,6 +2458,7 @@ dependencies = [
 name = "mpc-recovery-integration-tests"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
  "anyhow",
  "bollard",
  "clap 4.3.5",
@@ -2474,7 +2475,6 @@ dependencies = [
  "near-primitives",
  "near-units",
  "once_cell",
- "portpicker",
  "rand 0.7.3",
  "rand 0.8.5",
  "reqwest",
@@ -3363,7 +3363,7 @@ dependencies = [
  "byteorder",
  "hex 0.4.3",
  "lazy_static",
- "rustix 0.36.14",
+ "rustix 0.36.15",
 ]
 
 [[package]]
@@ -3872,9 +3872,9 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.36.14"
+version = "0.36.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14e4d67015953998ad0eb82887a0eb0129e18a7e2f3b7b0f6c422fddcd503d62"
+checksum = "c37f1bd5ef1b5422177b7646cba67430579cfe2ace80f284fee876bca52ad941"
 dependencies = [
  "bitflags 1.3.2",
  "errno",
