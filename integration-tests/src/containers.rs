@@ -796,9 +796,9 @@ impl LeaderNodeApi {
             frp_signature: request_digest_signature,
         };
 
-        let responce = self.claim_oidc(oidc_request.clone()).await?;
+        let response = self.claim_oidc(oidc_request.clone()).await?;
 
-        match responce.1 {
+        match response.1 {
             ClaimOidcResponse::Ok { mpc_signature } => {
                 let mpc_pk: PublicKeyEd25519 =
                     self.get_mpc_pk(MpcPkRequest {}).await?.1.try_into()?;
@@ -806,9 +806,9 @@ impl LeaderNodeApi {
                 // Verify signature
                 let response_digest = claim_oidc_response_digest(oidc_request.frp_signature)?;
                 mpc_pk.verify(&response_digest, &mpc_signature)?;
-                Ok(responce)
+                Ok(response)
             }
-            ClaimOidcResponse::Err { .. } => Ok(responce),
+            ClaimOidcResponse::Err { .. } => Ok(response),
         }
     }
 
