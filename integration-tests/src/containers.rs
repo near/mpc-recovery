@@ -734,9 +734,9 @@ impl LeaderNodeApi {
 
     pub async fn delete_key_with_helper(
         &self,
-        account_id: AccountId,
+        account_id: &AccountId,
         oidc_token: String,
-        public_key: PublicKey,
+        public_key: &PublicKey,
         recovery_pk: PublicKey,
         frp_sk: SecretKey,
         frp_pk: PublicKey,
@@ -922,10 +922,7 @@ impl LeaderNodeApi {
         account_id: AccountId,
         pk: PublicKey,
     ) -> anyhow::Result<(BlockHeight, Nonce)> {
-        let (_, block_height, nonce) = self
-            .client
-            .access_key(account_id.clone(), pk.clone())
-            .await?;
+        let (_, block_height, nonce) = self.client.access_key(account_id, pk).await?;
         Ok((block_height, nonce))
     }
 }
