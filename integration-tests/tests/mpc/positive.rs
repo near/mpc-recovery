@@ -26,17 +26,17 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
             // TODO: add front running protection signature
 
             // Get recovery PK with proper FRP signature
-            let recovery_pk = fetch_recovery_pk(&ctx, &user_secret_key, oidc_token.clone()).await?;
+            let recovery_pk = fetch_recovery_pk(&ctx, &user_secret_key, &oidc_token).await?;
 
             // Add key with bad FRP signature should fail
             let new_user_public_key = key::random_pk();
             let bad_user_sk = key::random_sk();
             ctx.leader_node
                 .add_key_with_helper(
-                    account_id.clone(),
-                    oidc_token.clone(),
-                    new_user_public_key.clone(),
-                    recovery_pk.clone(),
+                    &account_id,
+                    &oidc_token,
+                    &new_user_public_key,
+                    &recovery_pk,
                     &bad_user_sk,
                     &user_secret_key.public_key(),
                 )
@@ -48,7 +48,7 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
                 &ctx,
                 &account_id,
                 &user_secret_key,
-                oidc_token.clone(),
+                &oidc_token,
                 &recovery_pk,
                 Some(new_user_public_key),
             )
@@ -67,12 +67,12 @@ async fn test_basic_action() -> anyhow::Result<()> {
             let (account_id, user_secret_key, oidc_token) = new_random_account(&ctx, None).await?;
 
             // Add key
-            let recovery_pk = fetch_recovery_pk(&ctx, &user_secret_key, oidc_token.clone()).await?;
+            let recovery_pk = fetch_recovery_pk(&ctx, &user_secret_key, &oidc_token).await?;
             let new_user_public_key = add_pk_and_check_validity(
                 &ctx,
                 &account_id,
                 &user_secret_key,
-                oidc_token.clone(),
+                &oidc_token,
                 &recovery_pk,
                 None,
             )
@@ -83,7 +83,7 @@ async fn test_basic_action() -> anyhow::Result<()> {
                 &ctx,
                 &account_id,
                 &user_secret_key,
-                oidc_token.clone(),
+                &oidc_token,
                 &recovery_pk,
                 Some(new_user_public_key),
             )
@@ -199,12 +199,12 @@ async fn test_rotate_node_keys() -> anyhow::Result<()> {
             let (account_id, user_sk, oidc_token) = new_random_account(&ctx, None).await?;
 
             // Add key
-            let recovery_pk = fetch_recovery_pk(&ctx, &user_sk, oidc_token.clone()).await?;
+            let recovery_pk = fetch_recovery_pk(&ctx, &user_sk, &oidc_token).await?;
             add_pk_and_check_validity(
                 &ctx,
                 &account_id,
                 &user_sk,
-                oidc_token.clone(),
+                &oidc_token,
                 &recovery_pk,
                 None,
             )

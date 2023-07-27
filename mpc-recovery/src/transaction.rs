@@ -45,11 +45,11 @@ pub struct LimitedAccessKey {
 
 #[allow(clippy::too_many_arguments)]
 pub fn get_create_account_delegate_action(
-    signer_id: AccountId,
-    signer_pk: PublicKey,
-    new_account_id: AccountId,
+    signer_id: &AccountId,
+    signer_pk: &PublicKey,
+    new_account_id: &AccountId,
     new_account_options: CreateAccountOptions,
-    near_root_account: AccountId,
+    near_root_account: &AccountId,
     nonce: Nonce,
     max_block_height: u64,
 ) -> anyhow::Result<DelegateAction> {
@@ -68,12 +68,12 @@ pub fn get_create_account_delegate_action(
     let delegate_create_acc_action = NonDelegateAction::try_from(create_acc_action)?;
 
     let delegate_action = DelegateAction {
-        sender_id: signer_id,
-        receiver_id: near_root_account,
+        sender_id: signer_id.clone(),
+        receiver_id: near_root_account.clone(),
         actions: vec![delegate_create_acc_action],
         nonce,
         max_block_height,
-        public_key: signer_pk,
+        public_key: signer_pk.clone(),
     };
 
     Ok(delegate_action)
@@ -98,13 +98,13 @@ pub fn get_local_signed_delegated_action(
 pub async fn get_mpc_signature(
     client: &reqwest::Client,
     sign_nodes: &[String],
-    oidc_token: String,
+    oidc_token: &str,
     delegate_action: DelegateAction,
     frp_signature: Signature,
     frp_public_key: String,
 ) -> Result<Signature, NodeSignError> {
     let sig_share_request = SignNodeRequest::SignShare(SignShareNodeRequest {
-        oidc_token,
+        oidc_token: oidc_token.to_string(),
         delegate_action,
         frp_signature,
         frp_public_key,

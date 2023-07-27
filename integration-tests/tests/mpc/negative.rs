@@ -40,11 +40,11 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
             // Create account with claimed OIDC token
             ctx.leader_node
                 .new_account_with_helper(
-                    account_id.to_string(),
-                    user_public_key.clone(),
+                    &account_id,
+                    &user_public_key,
                     None,
                     &user_secret_key,
-                    oidc_token.clone(),
+                    &oidc_token,
                 )
                 .await?
                 .assert_ok()?;
@@ -56,7 +56,7 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
                 ctx.leader_node
                     .perform_delegate_action_with_helper(
                         &get_stub_delegate_action(whitelisted_action)?,
-                        oidc_token.clone(),
+                        &oidc_token,
                         &user_secret_key,
                         &user_public_key,
                     )
@@ -78,7 +78,7 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
                 ctx.leader_node
                     .perform_delegate_action_with_helper(
                         &get_stub_delegate_action(blacklisted_action)?,
-                        oidc_token.clone(),
+                        &oidc_token,
                         &user_secret_key,
                         &user_public_key,
                     )
@@ -90,7 +90,7 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
             let recovery_pk = match ctx
                 .leader_node
                 .user_credentials_with_helper(
-                    oidc_token.clone(),
+                    &oidc_token,
                     &user_secret_key,
                     &user_secret_key.public_key(),
                 )
@@ -106,7 +106,7 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
             ctx.leader_node
                 .delete_key_with_helper(
                     &account_id,
-                    oidc_token.clone(),
+                    &oidc_token,
                     &recovery_pk,
                     recovery_pk.clone(),
                     &user_secret_key,
@@ -124,7 +124,7 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
             ctx.leader_node
                 .delete_key_with_helper(
                     &account_id,
-                    oidc_token.clone(),
+                    &oidc_token,
                     &user_public_key,
                     recovery_pk.clone(),
                     &user_secret_key,
@@ -219,11 +219,7 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
 
             // Get user recovery PK before claiming OIDC token
             ctx.leader_node
-                .user_credentials_with_helper(
-                    oidc_token_1.clone(),
-                    &user_secret_key,
-                    &user_public_key,
-                )
+                .user_credentials_with_helper(&oidc_token_1, &user_secret_key, &user_public_key)
                 .await?
                 .assert_unauthorized_contains("was not claimed")?;
 
@@ -232,23 +228,22 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
                 &account_id,
                 &user_secret_key,
                 &user_public_key,
-                oidc_token_1.clone(),
+                &oidc_token_1,
                 None,
             )
             .await?;
 
             // Making a sign request with unclaimed OIDC token
-            let recovery_pk =
-                fetch_recovery_pk(&ctx, &user_secret_key, oidc_token_1.clone()).await?;
+            let recovery_pk = fetch_recovery_pk(&ctx, &user_secret_key, &oidc_token_1).await?;
 
             let new_user_public_key = key::random_pk();
 
             ctx.leader_node
                 .add_key_with_helper(
-                    account_id.clone(),
-                    oidc_token_2.clone(),
-                    new_user_public_key.clone(),
-                    recovery_pk.clone(),
+                    &account_id,
+                    &oidc_token_2,
+                    &new_user_public_key,
+                    &recovery_pk,
                     &user_secret_key,
                     &user_public_key,
                 )
@@ -351,11 +346,11 @@ async fn test_invalid_token() -> anyhow::Result<()> {
             // Try to create an account with invalid token
             ctx.leader_node
                 .new_account_with_helper(
-                    account_id.to_string(),
-                    user_public_key.clone(),
+                    &account_id,
+                    &user_public_key,
                     None,
                     &user_secret_key,
-                    invalid_oidc_token.clone(),
+                    &invalid_oidc_token,
                 )
                 .await?
                 .assert_unauthorized()?;
@@ -364,11 +359,11 @@ async fn test_invalid_token() -> anyhow::Result<()> {
             let new_acc_response = ctx
                 .leader_node
                 .new_account_with_helper(
-                    account_id.to_string(),
-                    user_public_key.clone(),
+                    &account_id,
+                    &user_public_key,
                     None,
                     &user_secret_key,
-                    oidc_token.clone(),
+                    &oidc_token,
                 )
                 .await?
                 .assert_ok()?;
@@ -386,11 +381,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
 
             let recovery_pk = match ctx
                 .leader_node
-                .user_credentials_with_helper(
-                    oidc_token.clone(),
-                    &user_secret_key,
-                    &user_public_key,
-                )
+                .user_credentials_with_helper(&oidc_token, &user_secret_key, &user_public_key)
                 .await?
                 .assert_ok()?
             {
@@ -403,10 +394,10 @@ async fn test_invalid_token() -> anyhow::Result<()> {
             // Try to add a key with invalid token
             ctx.leader_node
                 .add_key_with_helper(
-                    account_id.clone(),
-                    invalid_oidc_token.clone(),
-                    new_user_public_key.clone(),
-                    recovery_pk.clone(),
+                    &account_id,
+                    &invalid_oidc_token,
+                    &new_user_public_key,
+                    &recovery_pk,
                     &user_secret_key,
                     &user_public_key,
                 )
@@ -416,10 +407,10 @@ async fn test_invalid_token() -> anyhow::Result<()> {
             // Try to add a key with valid token
             ctx.leader_node
                 .add_key_with_helper(
-                    account_id.clone(),
-                    oidc_token,
-                    new_user_public_key.clone(),
-                    recovery_pk.clone(),
+                    &account_id,
+                    &oidc_token,
+                    &new_user_public_key,
+                    &recovery_pk,
                     &user_secret_key,
                     &user_public_key,
                 )
@@ -451,26 +442,27 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
 
             ctx.leader_node
                 .new_account_with_helper(
-                    malformed_account_id,
-                    user_public_key.clone(),
+                    &malformed_account_id,
+                    &user_public_key,
                     None,
                     &user_secret_key,
-                    oidc_token.clone(),
+                    &oidc_token,
                 )
                 .await?
                 .assert_bad_request()?;
 
             let account_id = account::random(ctx.worker)?;
+            let account_id_repr = account_id.to_string();
 
             // Check that the service is still available
             let new_acc_response = ctx
                 .leader_node
                 .new_account_with_helper(
-                    account_id.to_string(),
-                    user_public_key.clone(),
+                    &account_id_repr,
+                    &user_public_key,
                     None,
                     &user_secret_key,
-                    oidc_token.clone(),
+                    &oidc_token,
                 )
                 .await?
                 .assert_ok()?;
@@ -479,7 +471,7 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
                     create_account_options: _,
                     user_recovery_public_key: _,
                     near_account_id: acc_id,
-                } if acc_id == account_id.to_string()
+                } if acc_id == account_id_repr
             ));
 
             tokio::time::sleep(Duration::from_millis(2000)).await;

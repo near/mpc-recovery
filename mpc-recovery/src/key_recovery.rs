@@ -18,12 +18,12 @@ pub enum NodeRecoveryError {
 pub async fn get_user_recovery_pk(
     client: &reqwest::Client,
     sign_nodes: &[String],
-    oidc_token: String,
+    oidc_token: &str,
     frp_signature: Signature,
     frp_public_key: String,
 ) -> anyhow::Result<PublicKey, NodeRecoveryError> {
     let request = PublicKeyNodeRequest {
-        oidc_token,
+        oidc_token: oidc_token.to_string(),
         frp_signature,
         frp_public_key,
     };

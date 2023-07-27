@@ -16,7 +16,7 @@ pub async fn register_account(
     user_id: &AccountId,
     user_sk: &SecretKey,
     user_pk: &PublicKey,
-    user_oidc: String,
+    user_oidc: &str,
     user_lak: Option<LimitedAccessKey>,
 ) -> anyhow::Result<()> {
     // Claim OIDC token
@@ -28,8 +28,8 @@ pub async fn register_account(
     let new_acc_response = ctx
         .leader_node
         .new_account_with_helper(
-            user_id.to_string(),
-            user_pk.clone(),
+            user_id,
+            user_pk,
             user_lak,
             user_sk,
             user_oidc,
@@ -64,7 +64,7 @@ pub async fn new_random_account(
         &account_id,
         &user_secret_key,
         &user_public_key,
-        oidc_token.clone(),
+        &oidc_token,
         user_lak,
     )
     .await?;
@@ -74,11 +74,11 @@ pub async fn new_random_account(
 pub async fn fetch_recovery_pk(
     ctx: &TestContext<'_>,
     user_sk: &SecretKey,
-    user_oidc: String,
+    user_oidc: &str,
 ) -> anyhow::Result<PublicKey> {
     let recovery_pk = match ctx
         .leader_node
-        .user_credentials_with_helper(user_oidc.clone(), &user_sk, &user_sk.public_key())
+        .user_credentials_with_helper(user_oidc, &user_sk, &user_sk.public_key())
         .await?
         .assert_ok()?
     {
@@ -93,17 +93,17 @@ pub async fn add_pk_and_check_validity(
     ctx: &TestContext<'_>,
     user_id: &AccountId,
     user_sk: &SecretKey,
-    user_oidc: String,
+    user_oidc: &str,
     user_recovery_pk: &PublicKey,
     pk_to_add: Option<PublicKey>,
 ) -> anyhow::Result<PublicKey> {
     let new_user_pk = pk_to_add.unwrap_or_else(key::random_pk);
     ctx.leader_node
         .add_key_with_helper(
-            user_id.clone(),
+            user_id,
             user_oidc,
-            new_user_pk.clone(),
-            user_recovery_pk.clone(),
+            &new_user_pk,
+            user_recovery_pk,
             &user_sk,
             &user_sk.public_key(),
         )
