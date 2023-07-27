@@ -21,19 +21,13 @@ pub async fn register_account(
 ) -> anyhow::Result<()> {
     // Claim OIDC token
     ctx.leader_node
-        .claim_oidc_with_helper(&user_oidc, &user_pk, &user_sk)
+        .claim_oidc_with_helper(user_oidc, user_pk, user_sk)
         .await?;
 
     // Create account
     let new_acc_response = ctx
         .leader_node
-        .new_account_with_helper(
-            user_id,
-            user_pk,
-            user_lak,
-            user_sk,
-            user_oidc,
-        )
+        .new_account_with_helper(user_id, user_pk, user_lak, user_sk, user_oidc)
         .await?
         .assert_ok()?;
 
@@ -78,7 +72,7 @@ pub async fn fetch_recovery_pk(
 ) -> anyhow::Result<PublicKey> {
     let recovery_pk = match ctx
         .leader_node
-        .user_credentials_with_helper(user_oidc, &user_sk, &user_sk.public_key())
+        .user_credentials_with_helper(user_oidc, user_sk, &user_sk.public_key())
         .await?
         .assert_ok()?
     {
@@ -104,7 +98,7 @@ pub async fn add_pk_and_check_validity(
             user_oidc,
             &new_user_pk,
             user_recovery_pk,
-            &user_sk,
+            user_sk,
             &user_sk.public_key(),
         )
         .await?

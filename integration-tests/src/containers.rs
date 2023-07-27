@@ -683,7 +683,7 @@ impl LeaderNodeApi {
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
         let (block_height, nonce) = self
-            .get_key_info_with_helper(&account_id, &recovery_pk)
+            .get_key_info_with_helper(account_id, recovery_pk)
             .await?;
 
         let add_key_delegate_action = self.get_add_key_delegate_action(
@@ -699,8 +699,7 @@ impl LeaderNodeApi {
 
         let frp_signature = sign_digest(&sign_request_digest, frp_sk)?;
         let user_credentials_request_digest = user_credentials_request_digest(oidc_token, frp_pk)?;
-        let user_credentials_frp_signature =
-            sign_digest(&user_credentials_request_digest, &frp_sk)?;
+        let user_credentials_frp_signature = sign_digest(&user_credentials_request_digest, frp_sk)?;
 
         let sign_request = SignRequest {
             delegate_action: add_key_delegate_action.clone(),
@@ -734,19 +733,19 @@ impl LeaderNodeApi {
         account_id: &AccountId,
         oidc_token: &str,
         public_key: &PublicKey,
-        recovery_pk: PublicKey,
+        recovery_pk: &PublicKey,
         frp_sk: &SecretKey,
         frp_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
         let (block_height, nonce) = self
-            .get_key_info_with_helper(&account_id, &recovery_pk)
+            .get_key_info_with_helper(account_id, recovery_pk)
             .await?;
 
         let delete_key_delegate_action = self.get_delete_key_delegate_action(
-            &account_id,
-            &public_key,
-            &recovery_pk,
+            account_id,
+            public_key,
+            recovery_pk,
             nonce,
             block_height,
         )?;
@@ -795,8 +794,8 @@ impl LeaderNodeApi {
         frp_sk: &SecretKey,
         frp_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
-        let sign_request_digest = sign_request_digest(delegate_action, oidc_token, &frp_pk)?;
-        let frp_signature = sign_digest(&sign_request_digest, &frp_sk)?;
+        let sign_request_digest = sign_request_digest(delegate_action, oidc_token, frp_pk)?;
+        let frp_signature = sign_digest(&sign_request_digest, frp_sk)?;
 
         let user_credentials_request_digest = user_credentials_request_digest(oidc_token, frp_pk)?;
         let user_credentials_frp_signature = sign_digest(&user_credentials_request_digest, frp_sk)?;
@@ -848,7 +847,7 @@ impl LeaderNodeApi {
         client_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, UserCredentialsResponse)> {
         let user_credentials_request_digest =
-            user_credentials_request_digest(&oidc_token, client_pk)?;
+            user_credentials_request_digest(oidc_token, client_pk)?;
 
         let frp_signature = match client_sk.sign(&user_credentials_request_digest) {
             near_crypto::Signature::ED25519(k) => k,

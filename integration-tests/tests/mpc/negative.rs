@@ -108,7 +108,7 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
                     &account_id,
                     &oidc_token,
                     &recovery_pk,
-                    recovery_pk.clone(),
+                    &recovery_pk,
                     &user_secret_key,
                     &user_public_key,
                 )
@@ -126,7 +126,7 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
                     &account_id,
                     &oidc_token,
                     &user_public_key,
-                    recovery_pk.clone(),
+                    &recovery_pk,
                     &user_secret_key,
                     &user_public_key,
                 )
