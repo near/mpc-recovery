@@ -738,8 +738,8 @@ impl LeaderNodeApi {
         oidc_token: String,
         public_key: &PublicKey,
         recovery_pk: PublicKey,
-        frp_sk: SecretKey,
-        frp_pk: PublicKey,
+        frp_sk: &SecretKey,
+        frp_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
         let (block_height, nonce) = self
@@ -755,22 +755,20 @@ impl LeaderNodeApi {
         )?;
 
         let sign_request_digest =
-            sign_request_digest(&delete_key_delegate_action, &oidc_token, &frp_pk)?;
+            sign_request_digest(&delete_key_delegate_action, &oidc_token, frp_pk)?;
 
-        let frp_signature = sign_digest(&sign_request_digest, &frp_sk)?;
+        let frp_signature = sign_digest(&sign_request_digest, frp_sk)?;
 
-        let user_credentials_request_digest =
-            user_credentials_request_digest(&oidc_token, &frp_sk.public_key())?;
+        let user_credentials_request_digest = user_credentials_request_digest(&oidc_token, frp_pk)?;
 
-        let user_credentials_frp_signature =
-            sign_digest(&user_credentials_request_digest, &frp_sk)?;
+        let user_credentials_frp_signature = sign_digest(&user_credentials_request_digest, frp_sk)?;
 
         let sign_request = SignRequest {
             delegate_action: delete_key_delegate_action.clone(),
             oidc_token,
             frp_signature,
             user_credentials_frp_signature,
-            frp_public_key: frp_sk.public_key().to_string(),
+            frp_public_key: frp_pk.to_string(),
         };
         // Send SignRequest to leader node
         let (status_code, sign_response): (_, SignResponse) = self.sign(sign_request).await?;

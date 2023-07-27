@@ -28,7 +28,7 @@ pub async fn register_account(
     let new_acc_response = ctx
         .leader_node
         .new_account_with_helper(
-            user_id.to_string(), // ??
+            user_id.to_string(),
             user_pk.clone(),
             user_lak,
             user_sk,

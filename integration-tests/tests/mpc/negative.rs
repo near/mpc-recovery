@@ -34,20 +34,16 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
 
             // Claim OIDC token
             ctx.leader_node
-                .claim_oidc_with_helper(
-                    oidc_token.clone(),
-                    user_public_key.clone(),
-                    user_secret_key.clone(),
-                )
+                .claim_oidc_with_helper(&oidc_token, &user_public_key, &user_secret_key)
                 .await?;
 
             // Create account with claimed OIDC token
             ctx.leader_node
                 .new_account_with_helper(
-                    account_id.clone().to_string(),
+                    account_id.to_string(),
                     user_public_key.clone(),
                     None,
-                    user_secret_key.clone(),
+                    &user_secret_key,
                     oidc_token.clone(),
                 )
                 .await?
@@ -95,8 +91,8 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
                 .leader_node
                 .user_credentials_with_helper(
                     oidc_token.clone(),
-                    user_secret_key.clone(),
-                    user_secret_key.clone().public_key(),
+                    &user_secret_key,
+                    &user_secret_key.public_key(),
                 )
                 .await?
                 .assert_ok()?
@@ -109,12 +105,12 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
 
             ctx.leader_node
                 .delete_key_with_helper(
-                    account_id.clone(),
+                    &account_id,
                     oidc_token.clone(),
+                    &recovery_pk,
                     recovery_pk.clone(),
-                    recovery_pk.clone(),
-                    user_secret_key.clone(),
-                    user_public_key.clone(),
+                    &user_secret_key,
+                    &user_public_key,
                 )
                 .await?
                 .assert_bad_request_contains("Recovery key can not be deleted")?;
@@ -127,12 +123,12 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
 
             ctx.leader_node
                 .delete_key_with_helper(
-                    account_id.clone(),
+                    &account_id,
                     oidc_token.clone(),
-                    user_public_key.clone(),
+                    &user_public_key,
                     recovery_pk.clone(),
-                    user_secret_key.clone(),
-                    user_public_key.clone(),
+                    &user_secret_key,
+                    &user_public_key,
                 )
                 .await?
                 .assert_ok()?;
