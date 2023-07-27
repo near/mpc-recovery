@@ -27,8 +27,6 @@ The recovery service is currently hosted at https://near.org
         msg: String
     }
 
-Before transmitting your OIDC Id Token to the recovery service you must first claim the ownership of the token. This prevents a rogue node from taking your token and using it to sign another request.
-
 The frp_signature you send must be an Ed22519 signature of the hash:
 
     SALT = 3177899144
@@ -42,11 +40,7 @@ If you successfully claim the token you will receive a signature in return of:
 
     sha256.hash(Borsh.serialize<u32>(SALT + 1) ++ Borsh.serialize<[u8]>(signature))
 
-This will be signed by the nodes combined Ed22519 signature. MPC PK that you will use to check it should be hard coded in your validation code NOT fetched from the nodes themselves.
-
-If this repeatedly fails, you should discard your oidc token, generate a new one and try again.
-
-Registered ID Token will be added to the persistent DB on each Signing node and saved until expiration. Regstered Id Tokens are tied to the provided PK.
+This will be signed by the nodes combined Ed22519 signature.
 
 ### MPC Public Key
 
@@ -147,6 +141,23 @@ The user_credentials_frp_signature is needed to get user recovery PK. It is the 
 
 We are using OpenID Connect (OIDC) standard to authenticate users (built on top of OAuth 2.0).
 Check OIDC standard docs [here](https://openid.net/specs/openid-connect-core-1_0.html#IDToken) and Google OIDC docs [here](https://developers.google.com/identity/protocols/oauth2/openid-connect)
+
+## Front-runnig protection flow
+Before transmitting your OIDC Id Token to the recovery service you must first claim the ownership of the token. This prevents a rogue node from taking your Id Token and using it to sign another request.
+
+The expected flow for the client is next:
+1. Client-side developer hardcodes the MPC PK in the client code. It should be provided by MPC Recovery service developers and compared to the one that is returned by `/mpc_public_key` endpoint. You MUST NOT fetch the MPC PK from the nodes themselves in production env.
+2. Client generates a key pair that is stored in their device. It can be same key pair that is used to sign the transactions.
+3. Client recieves an OIDC Id Token from the authentication provider.
+4. Client claims the ownership of the token by sending a request to the `/claim_oidc_token` endpoint.
+5. In reponce to the claim request, user recieves a signature that is signed by the MPC system.
+6. User verifies that the signature is valid. It garantees that each node in the system has seen the token and will not accept it again with another key.
+7. Now client can safely send their Id Token with `/sign` or other requests.
+8. Once the token is expaired, client can claim a new one and continue using the MPC Recovery service.
+
+Check our integration tests to see how it works in practice.
+
+Registered ID Token will be added to the persistent DB on each Signing node and saved until expiration. Registered Id Tokens are tied to the provided PK.
 
 ### Client integration
 
