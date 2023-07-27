@@ -96,7 +96,7 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
             let user_limited_access_key = LimitedAccessKey {
                 public_key: key::random_pk(),
                 allowance: "100".to_string(),
-                receiver_id: account::random(&ctx.worker)?,
+                receiver_id: account::random(ctx.worker)?,
                 method_names: "method_names".to_string(),
             };
 
