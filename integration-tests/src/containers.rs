@@ -665,7 +665,7 @@ impl LeaderNodeApi {
             create_account_options,
             oidc_token: oidc_token.to_string(),
             user_credentials_frp_signature: frp_signature,
-            frp_public_key: user_pk.clone().to_string(),
+            frp_public_key: user_pk.clone(),
         };
 
         self.new_account(new_account_request).await
@@ -706,7 +706,7 @@ impl LeaderNodeApi {
             oidc_token: oidc_token.to_string(),
             frp_signature,
             user_credentials_frp_signature,
-            frp_public_key: frp_pk.to_string(),
+            frp_public_key: frp_pk.clone(),
         };
         // Send SignRequest to leader node
         let (status_code, sign_response): (_, SignResponse) = self.sign(sign_request).await?;
@@ -762,7 +762,7 @@ impl LeaderNodeApi {
             oidc_token: oidc_token.to_string(),
             frp_signature,
             user_credentials_frp_signature,
-            frp_public_key: frp_pk.to_string(),
+            frp_public_key: frp_pk.clone(),
         };
         // Send SignRequest to leader node
         let (status_code, sign_response): (_, SignResponse) = self.sign(sign_request).await?;
@@ -805,7 +805,7 @@ impl LeaderNodeApi {
             oidc_token: oidc_token.to_string(),
             frp_signature,
             user_credentials_frp_signature,
-            frp_public_key: frp_pk.to_string(),
+            frp_public_key: frp_pk.clone(),
         };
         // Send SignRequest to leader node
         let (status_code, sign_response): (_, SignResponse) = self.sign(sign_request).await?;
@@ -863,7 +863,7 @@ impl LeaderNodeApi {
         self.user_credentials(UserCredentialsRequest {
             oidc_token: oidc_token.to_string(),
             frp_signature,
-            frp_public_key: client_pk.to_string(),
+            frp_public_key: client_pk.clone(),
         })
         .await
     }

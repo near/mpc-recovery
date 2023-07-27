@@ -20,12 +20,12 @@ pub async fn get_user_recovery_pk(
     sign_nodes: &[String],
     oidc_token: &str,
     frp_signature: Signature,
-    frp_public_key: String,
+    frp_public_key: &PublicKey,
 ) -> anyhow::Result<PublicKey, NodeRecoveryError> {
     let request = PublicKeyNodeRequest {
         oidc_token: oidc_token.to_string(),
         frp_signature,
-        frp_public_key,
+        frp_public_key: frp_public_key.clone(),
     };
     let res = call_all_nodes(client, sign_nodes, "public_key", request).await?;
 

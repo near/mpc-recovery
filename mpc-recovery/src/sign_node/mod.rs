@@ -25,7 +25,6 @@ use near_primitives::hash::hash;
 use near_primitives::signable_message::{SignableMessage, SignableMessageType};
 use near_primitives::transaction::{Action, AddKeyAction, DeleteKeyAction};
 use std::net::SocketAddr;
-use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -244,13 +243,11 @@ async fn process_commit<T: OAuthTokenVerifier>(
                     .map_err(CommitError::OidcVerificationFailed)?;
             tracing::debug!(?oidc_token_claims, "oidc token verified");
 
-            // Check request FRP signature
-            let frp_pk = PublicKey::from_str(&request.frp_public_key)
-                .map_err(|e| CommitError::MalformedPublicKey(request.frp_public_key.clone(), e))?;
+            let frp_pk = request.frp_public_key;
 
+            // Check request FRP signature
             let digest =
                 sign_request_digest(&request.delegate_action, &request.oidc_token, &frp_pk)?;
-
             match check_digest_signature(&frp_pk, &request.frp_signature, &digest) {
                 Ok(()) => tracing::debug!("sign request digest signature verified"),
                 Err(e) => return Err(CommitError::SignatureVerificationFailed(e)),
@@ -481,7 +478,7 @@ async fn signature_share(
 #[derive(thiserror::Error, Debug)]
 pub enum PublicKeyRequestError {
     #[error("malformed public key {0}: {1}")]
-    MalformedPublicKey(String, ParseKeyError),
+    MalformedPublicKey(near_crypto::PublicKey, ParseKeyError),
     #[error("failed to verify oidc token: {0}")]
     OidcVerificationFailed(anyhow::Error),
     #[error("oidc token {0:?} was not claimed")]
@@ -504,13 +501,9 @@ async fn process_public_key<T: OAuthTokenVerifier>(
             .await
             .map_err(PublicKeyRequestError::OidcVerificationFailed)?;
 
+    let frp_pk = request.frp_public_key;
     // Check the request signature
-    let frp_pk = PublicKey::from_str(&request.frp_public_key).map_err(|e| {
-        PublicKeyRequestError::MalformedPublicKey(request.frp_public_key.clone(), e)
-    })?;
-
     let digest = user_credentials_request_digest(&request.oidc_token, &frp_pk)?;
-
     match check_digest_signature(&frp_pk, &request.frp_signature, &digest) {
         Ok(()) => tracing::debug!("user credentials digest signature verified"),
         Err(e) => return Err(PublicKeyRequestError::SignatureVerificationFailed(e)),

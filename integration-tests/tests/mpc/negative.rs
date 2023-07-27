@@ -8,7 +8,6 @@ use mpc_recovery::{
     utils::{claim_oidc_request_digest, claim_oidc_response_digest, oidc_digest, sign_digest},
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
-use near_crypto::PublicKey;
 use near_primitives::{
     account::AccessKey,
     delegate_action::DelegateAction,
@@ -97,7 +96,7 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
                 .await?
                 .assert_ok()?
             {
-                UserCredentialsResponse::Ok { recovery_pk } => PublicKey::from_str(&recovery_pk)?,
+                UserCredentialsResponse::Ok { recovery_pk } => recovery_pk,
                 UserCredentialsResponse::Err { msg } => {
                     return Err(anyhow::anyhow!("error response: {}", msg))
                 }
@@ -423,7 +422,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                 .await?
                 .assert_ok()?
             {
-                UserCredentialsResponse::Ok { recovery_pk } => PublicKey::from_str(&recovery_pk)?,
+                UserCredentialsResponse::Ok { recovery_pk } => recovery_pk,
                 UserCredentialsResponse::Err { msg } => anyhow::bail!("error response: {}", msg),
             };
 

@@ -1,4 +1,3 @@
-use std::str::FromStr;
 use std::time::Duration;
 
 use mpc_recovery::msg::{NewAccountResponse, UserCredentialsResponse};
@@ -76,7 +75,7 @@ pub async fn fetch_recovery_pk(
         .await?
         .assert_ok()?
     {
-        UserCredentialsResponse::Ok { recovery_pk } => PublicKey::from_str(&recovery_pk)?,
+        UserCredentialsResponse::Ok { recovery_pk } => recovery_pk,
         UserCredentialsResponse::Err { msg } => anyhow::bail!("error response: {}", msg),
     };
     Ok(recovery_pk)

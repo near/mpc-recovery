@@ -345,12 +345,12 @@ async fn process_user_credentials<T: OAuthTokenVerifier>(
             &state.sign_nodes,
             &request.oidc_token,
             request.frp_signature,
-            request.frp_public_key.clone(),
+            &request.frp_public_key,
         )
         .await?;
 
         Ok(UserCredentialsResponse::Ok {
-            recovery_pk: mpc_user_recovery_pk.to_string(),
+            recovery_pk: mpc_user_recovery_pk,
         })
     })
     .await
@@ -409,7 +409,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             &state.sign_nodes,
             &request.oidc_token,
             request.user_credentials_frp_signature,
-            request.frp_public_key.clone(),
+            &request.frp_public_key,
         )
         .await?;
 
@@ -588,7 +588,7 @@ async fn process_sign<T: OAuthTokenVerifier>(
             &state.sign_nodes,
             &request.oidc_token,
             request.user_credentials_frp_signature,
-            request.frp_public_key.clone(),
+            &request.frp_public_key,
         )
         .await?;
 
@@ -624,7 +624,7 @@ async fn process_sign<T: OAuthTokenVerifier>(
             &request.oidc_token,
             request.delegate_action.clone(),
             request.frp_signature,
-            request.frp_public_key.clone(),
+            &request.frp_public_key,
         )
         .await?;
 

@@ -101,13 +101,13 @@ pub async fn get_mpc_signature(
     oidc_token: &str,
     delegate_action: DelegateAction,
     frp_signature: Signature,
-    frp_public_key: String,
+    frp_public_key: &near_crypto::PublicKey,
 ) -> Result<Signature, NodeSignError> {
     let sig_share_request = SignNodeRequest::SignShare(SignShareNodeRequest {
         oidc_token: oidc_token.to_string(),
         delegate_action,
         frp_signature,
-        frp_public_key,
+        frp_public_key: frp_public_key.clone(),
     });
 
     let signature = sign_payload_with_mpc(client, sign_nodes, sig_share_request).await?;

@@ -71,14 +71,14 @@ impl TryInto<Signature> for ClaimOidcResponse {
 pub struct UserCredentialsRequest {
     pub oidc_token: String,
     pub frp_signature: Signature,
-    pub frp_public_key: String,
+    pub frp_public_key: near_crypto::PublicKey,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum UserCredentialsResponse {
-    Ok { recovery_pk: String },
+    Ok { recovery_pk: near_crypto::PublicKey },
     Err { msg: String },
 }
 
@@ -94,7 +94,7 @@ pub struct NewAccountRequest {
     pub create_account_options: CreateAccountOptions,
     pub oidc_token: String,
     pub user_credentials_frp_signature: Signature,
-    pub frp_public_key: String,
+    pub frp_public_key: near_crypto::PublicKey,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -123,7 +123,7 @@ pub struct SignRequest {
     pub oidc_token: String,
     pub frp_signature: Signature,
     pub user_credentials_frp_signature: Signature,
-    pub frp_public_key: String,
+    pub frp_public_key: near_crypto::PublicKey,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -152,7 +152,7 @@ pub struct SignShareNodeRequest {
     pub oidc_token: String,
     pub delegate_action: DelegateAction,
     pub frp_signature: Signature,
-    pub frp_public_key: String,
+    pub frp_public_key: near_crypto::PublicKey,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -167,7 +167,7 @@ pub struct ClaimOidcNodeRequest {
 pub struct PublicKeyNodeRequest {
     pub oidc_token: String,
     pub frp_signature: Signature,
-    pub frp_public_key: String,
+    pub frp_public_key: near_crypto::PublicKey,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
