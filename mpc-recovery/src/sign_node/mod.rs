@@ -1,6 +1,7 @@
 use self::aggregate_signer::{NodeInfo, Reveal, SignedCommitment, SigningState};
 use self::oidc::OidcDigest;
 use self::user_credentials::EncryptedUserCredentials;
+use crate::error::MpcError;
 use crate::gcp::GcpService;
 use crate::msg::{AcceptNodePublicKeysRequest, PublicKeyNodeRequest, SignNodeRequest};
 use crate::oauth::OAuthTokenVerifier;
@@ -15,6 +16,7 @@ use crate::NodeId;
 use aes_gcm::Aes256Gcm;
 use axum::routing::get;
 use axum::{http::StatusCode, routing::post, Extension, Json, Router};
+use axum_extra::extract::WithRejection;
 use borsh::BorshSerialize;
 use curv::elliptic::curves::{Ed25519, Point};
 use multi_party_eddsa::protocols::{self, ExpandedKeyPair};
@@ -350,7 +352,7 @@ async fn process_commit<T: OAuthTokenVerifier>(
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn commit<T: OAuthTokenVerifier>(
     Extension(state): Extension<SignNodeState>,
-    Json(request): Json<SignNodeRequest>,
+    WithRejection(Json(request), _): WithRejection<Json<SignNodeRequest>, MpcError>,
 ) -> (StatusCode, Json<Result<SignedCommitment, String>>) {
     if let Err(msg) = check_if_ready(&state).await {
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(Err(msg)));
@@ -428,7 +430,7 @@ async fn commit<T: OAuthTokenVerifier>(
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn reveal(
     Extension(state): Extension<SignNodeState>,
-    Json(request): Json<Vec<SignedCommitment>>,
+    WithRejection(Json(request), _): WithRejection<Json<Vec<SignedCommitment>>, MpcError>,
 ) -> (StatusCode, Json<Result<Reveal, String>>) {
     if let Err(msg) = check_if_ready(&state).await {
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(Err(msg)));
@@ -455,7 +457,7 @@ async fn reveal(
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn signature_share(
     Extension(state): Extension<SignNodeState>,
-    Json(request): Json<Vec<Reveal>>,
+    WithRejection(Json(request), _): WithRejection<Json<Vec<Reveal>>, MpcError>,
 ) -> (StatusCode, Json<Result<protocols::Signature, String>>) {
     if let Err(msg) = check_if_ready(&state).await {
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(Err(msg)));
@@ -563,7 +565,7 @@ async fn process_public_key<T: OAuthTokenVerifier>(
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn public_key<T: OAuthTokenVerifier>(
     Extension(state): Extension<SignNodeState>,
-    Json(request): Json<PublicKeyNodeRequest>,
+    WithRejection(Json(request), _): WithRejection<Json<PublicKeyNodeRequest>, MpcError>,
 ) -> (StatusCode, Json<Result<Point<Ed25519>, String>>) {
     match process_public_key::<T>(state, request).await {
         Ok(pk_point) => (StatusCode::OK, Json(Ok(pk_point))),
@@ -629,7 +631,7 @@ async fn public_key<T: OAuthTokenVerifier>(
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn public_key_node(
     Extension(state): Extension<SignNodeState>,
-    Json(_): Json<()>,
+    WithRejection(Json(_), _): WithRejection<Json<()>, MpcError>,
 ) -> (StatusCode, Json<Result<(usize, Point<Ed25519>), String>>) {
     (
         StatusCode::OK,
@@ -640,7 +642,7 @@ async fn public_key_node(
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn accept_pk_set(
     Extension(state): Extension<SignNodeState>,
-    Json(request): Json<AcceptNodePublicKeysRequest>,
+    WithRejection(Json(request), _): WithRejection<Json<AcceptNodePublicKeysRequest>, MpcError>,
 ) -> (StatusCode, Json<Result<String, String>>) {
     let index = state.node_info.our_index;
     if request.public_keys.get(index) != Some(&state.node_key.public_key) {

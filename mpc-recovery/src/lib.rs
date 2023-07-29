@@ -19,6 +19,7 @@ pub mod relayer;
 pub mod sign_node;
 pub mod transaction;
 pub mod utils;
+pub mod error;
 
 type NodeId = u64;
 

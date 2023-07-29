@@ -1,3 +1,4 @@
+use crate::error::MpcError;
 use crate::key_recovery::{get_user_recovery_pk, NodeRecoveryError};
 use crate::msg::{
     AcceptNodePublicKeysRequest, ClaimOidcNodeRequest, ClaimOidcRequest, ClaimOidcResponse,
@@ -23,6 +24,7 @@ use axum::{
     routing::post,
     Extension, Json, Router,
 };
+use axum_extra::extract::WithRejection;
 use curv::elliptic::curves::{Ed25519, Point};
 use near_crypto::{PublicKey, SecretKey};
 use near_primitives::account::id::ParseAccountError;
@@ -215,7 +217,7 @@ struct LeaderState {
 
 async fn mpc_public_key(
     Extension(state): Extension<LeaderState>,
-    Json(_request): Json<MpcPkRequest>,
+    WithRejection(Json(_), _): WithRejection<Json<MpcPkRequest>, MpcError>,
 ) -> (StatusCode, Json<MpcPkResponse>) {
     // Getting MPC PK from sign nodes
     let pk_set = match gather_sign_node_pk_shares(&state).await {
@@ -248,7 +250,7 @@ async fn mpc_public_key(
 #[tracing::instrument(level = "info", skip_all, fields(env = state.env))]
 async fn claim_oidc(
     Extension(state): Extension<LeaderState>,
-    Json(claim_oidc_request): Json<ClaimOidcRequest>,
+    WithRejection(Json(claim_oidc_request), _): WithRejection<Json<ClaimOidcRequest>, MpcError>,
 ) -> (StatusCode, Json<ClaimOidcResponse>) {
     tracing::info!(
         oidc_hash = hex::encode(claim_oidc_request.oidc_token_hash),
@@ -282,7 +284,7 @@ async fn claim_oidc(
 #[tracing::instrument(level = "info", skip_all, fields(env = state.env))]
 async fn user_credentials<T: OAuthTokenVerifier>(
     Extension(state): Extension<LeaderState>,
-    Json(request): Json<UserCredentialsRequest>,
+    WithRejection(Json(request), _): WithRejection<Json<UserCredentialsRequest>, MpcError>,
 ) -> (StatusCode, Json<UserCredentialsResponse>) {
     tracing::info!(
         oidc_token = format!("{:.5}...", request.oidc_token),
@@ -507,7 +509,7 @@ mod response {
 #[tracing::instrument(level = "info", skip_all, fields(env = state.env))]
 async fn new_account<T: OAuthTokenVerifier>(
     Extension(state): Extension<LeaderState>,
-    Json(request): Json<NewAccountRequest>,
+    WithRejection(Json(request), _): WithRejection<Json<NewAccountRequest>, MpcError>,
 ) -> (StatusCode, Json<NewAccountResponse>) {
     tracing::info!(
         near_account_id = request.near_account_id.clone(),
@@ -636,7 +638,7 @@ async fn process_sign<T: OAuthTokenVerifier>(
 #[tracing::instrument(level = "info", skip_all, fields(env = state.env))]
 async fn sign<T: OAuthTokenVerifier>(
     Extension(state): Extension<LeaderState>,
-    Json(request): Json<SignRequest>,
+    WithRejection(Json(request), _): WithRejection<Json<SignRequest>, MpcError>,
 ) -> (StatusCode, Json<SignResponse>) {
     tracing::info!(
         oidc_token = format!("{:.5}...", request.oidc_token),
