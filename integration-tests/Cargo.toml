@@ -11,22 +11,22 @@ bollard = "0.11"
 clap = { version = "4.2", features = ["derive", "env"] }
 ed25519-dalek = {version = "1.0.1", features = ["serde"]}
 futures = "0.3"
-hex = "0.4"
+hex = "0.4.3"
 hyper = { version = "0.14", features = ["full"] }
 mpc-recovery = { path = "../mpc-recovery" }
 multi-party-eddsa = { git = "https://github.com/DavidM-D/multi-party-eddsa.git", rev = "25ae4fdc5ff7819ae70e73ab4afacf1c24fc4da1" }
 tracing = "0.1"
-near-crypto = "0.16.1"
-near-jsonrpc-client = "0.5.1"
-near-primitives = "0.16.1"
+near-crypto = "0.17"
+near-jsonrpc-client = "0.6"
+near-primitives = "0.17"
 near-units = "0.2.0"
 once_cell = "1"
 serde = "1"
 serde_json = "1"
 testcontainers = { version = "0.14", features = ["experimental"] }
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.28", features = ["full"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-workspaces = { git = "https://github.com/near/workspaces-rs", branch = "main" }
+workspaces = { git = "https://github.com/near/workspaces-rs", branch = "phuong/update-near-deps" }
 
 [dev-dependencies]
 rand = "0.7"
