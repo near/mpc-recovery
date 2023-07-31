@@ -74,6 +74,7 @@ impl TryInto<Signature> for ClaimOidcResponse {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UserCredentialsRequest {
     pub oidc_token: String,
+    #[serde(with = "hex_sig_share")]
     pub frp_signature: Signature,
     pub frp_public_key: near_crypto::PublicKey,
 }
