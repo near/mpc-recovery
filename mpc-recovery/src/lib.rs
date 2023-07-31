@@ -7,6 +7,7 @@ use curv::elliptic::curves::Ed25519;
 use curv::elliptic::curves::Point;
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 
+pub mod error;
 pub mod gcp;
 pub mod key_recovery;
 pub mod leader_node;
@@ -19,7 +20,6 @@ pub mod relayer;
 pub mod sign_node;
 pub mod transaction;
 pub mod utils;
-pub mod error;
 
 type NodeId = u64;
 
