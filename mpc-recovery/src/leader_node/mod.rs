@@ -252,7 +252,7 @@ async fn claim_oidc(
 ) -> (StatusCode, Json<ClaimOidcResponse>) {
     tracing::info!(
         oidc_hash = hex::encode(claim_oidc_request.oidc_token_hash),
-        pk = claim_oidc_request.public_key,
+        pk = claim_oidc_request.frp_public_key,
         sig = claim_oidc_request.frp_signature.to_string(),
         "claim_oidc request"
     );
@@ -260,7 +260,7 @@ async fn claim_oidc(
     // Calim OIDC ID Token and get MPC signature from sign nodes
     let sig_share_request = SignNodeRequest::ClaimOidc(ClaimOidcNodeRequest {
         oidc_token_hash: claim_oidc_request.oidc_token_hash,
-        public_key: claim_oidc_request.public_key,
+        public_key: claim_oidc_request.frp_public_key,
         signature: claim_oidc_request.frp_signature,
     });
 
