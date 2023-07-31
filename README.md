@@ -77,7 +77,7 @@ Returns the MPC public key that is used to sign the OIDC claiming response. Shou
 Returns the recovery public key associated with the provided OIDC token.
 The frp_signature you send must be an Ed22519 signature of the hash:
 
-    sha256.hash(Borsh.serialize<u32>(SALT + 2) ++ Borsh.serialize<[u8]>(oidc_token_hash) ++ [0] ++ Borsh.serialize<[u8]>(frp_public_key))
+    sha256.hash(Borsh.serialize<u32>(SALT + 2) ++ Borsh.serialize<[u8]>(oidc_token) ++ [0] ++ Borsh.serialize<[u8]>(frp_public_key))
 
 ### Create New Account
 
@@ -109,7 +109,7 @@ In the future, MPC Service will disallow creating account with ID Tokes that wer
 
 The user_credentials_frp_signature you send must be an Ed22519 signature of the hash:
 
-    sha256.hash(Borsh.serialize<u32>(SALT + 3) ++ Borsh.serialize<[u8]>(oidc_token_hash) ++ [0] ++ Borsh.serialize<[u8]>(frp_public_key))
+    sha256.hash(Borsh.serialize<u32>(SALT + 2) ++ Borsh.serialize<[u8]>(oidc_token) ++ [0] ++ Borsh.serialize<[u8]>(frp_public_key))
 
 signed by the key you used to claim the oidc token. This does not have to be the same as the key in the public key field. This digest is the same as the one used in the user_credentials endpoint, because new_account request needs to get the recovery public key of the user that is creating the account.
 
