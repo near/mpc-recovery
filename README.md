@@ -15,15 +15,15 @@ The recovery service is currently hosted at https://near.org
 
 ### Claim OIDC Id Token ownership
 
-    URL: /claim_oidc_token
+    URL: /claim_oidc
     Request parameters: {
         oidc_token_hash: [u8; 32],
-        public_key: String,
+        frp_public_key: String,
         frp_signature: [u8; 64],
     }
     Response: Ok {
         mpc_signature: String,
-    } / Err{
+    } / Err {
         msg: String
     }
 
@@ -32,7 +32,7 @@ Before transmitting your OIDC Id Token to the recovery service you must first cl
 The frp_signature you send must be an Ed22519 signature of the hash:
 
     SALT = 3177899144
-    sha256.hash(Borsh.serialize<u32>(SALT + 0) ++ Borsh.serialize<[u8]>(oidc_token_hash))
+    sha256.hash(Borsh.serialize<u32>(SALT + 0) ++ Borsh.serialize<[u8]>(oidc_token_hash) ++ [0] ++ Borsh.serialize<[u8]>(frp_public_key))
 
 signed with your on device public key.
 
@@ -54,7 +54,7 @@ Registered ID Token will be added to the persistent DB on each Signing node and 
     Request parameters: {}
     Response: Ok {
         mpc_pk: String,
-    } / Err{
+    } / Err {
         msg: String
     }
 
@@ -70,14 +70,14 @@ Returns the MPC public key that is used to sign the OIDC claiming response. Shou
     }
     Response: Ok {
         public_key: String,
-    } / Err{
+    } / Err {
         msg: String
     }
 
 Returns the recovery public key associated with the provided OIDC token.
 The frp_signature you send must be an Ed22519 signature of the hash:
 
-    sha256.hash(Borsh.serialize<u32>(SALT + 2) ++ Borsh.serialize<[u8]>(oidc_token_hash, frp_public_key))
+    sha256.hash(Borsh.serialize<u32>(SALT + 2) ++ Borsh.serialize<[u8]>(oidc_token_hash) ++ [0] ++ Borsh.serialize<[u8]>(frp_public_key))
 
 ### Create New Account
 
@@ -109,7 +109,7 @@ In the future, MPC Service will disallow creating account with ID Tokes that wer
 
 The user_credentials_frp_signature you send must be an Ed22519 signature of the hash:
 
-    sha256.hash(Borsh.serialize<u32>(SALT + 3) ++ Borsh.serialize<[u8]>(oidc_token_hash, frp_public_key))
+    sha256.hash(Borsh.serialize<u32>(SALT + 3) ++ Borsh.serialize<[u8]>(oidc_token_hash) ++ [0] ++ Borsh.serialize<[u8]>(frp_public_key))
 
 signed by the key you used to claim the oidc token. This does not have to be the same as the key in the public key field. This digest is the same as the one used in the user_credentials endpoint, because new_account request needs to get the recovery public key of the user that is creating the account.
 
@@ -127,7 +127,7 @@ signed by the key you used to claim the oidc token. This does not have to be the
     Ok {
         signature: Signature,
     } /
-    Err{
+    Err {
         msg: String
     }
 
@@ -138,8 +138,7 @@ The frp_signature you send must be an Ed22519 signature of the hash:
     sha256.hash(Borsh.serialize<u32>(SALT + 3) ++ Borsh.serialize<[u8]>(
         delegate_action,
         oidc_token_hash,
-        frp_public_key,
-    ))
+    ) ++ [0] ++ Borsh.serialize<[u8]>(frp_public_key))
 
 The user_credentials_frp_signature is needed to get user recovery PK. It is the same as in user_credentials endpoint.
 
