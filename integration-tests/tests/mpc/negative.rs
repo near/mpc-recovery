@@ -1,8 +1,10 @@
 use crate::mpc::{fetch_recovery_pk, register_account};
 use crate::{account, check, key, token, with_nodes, MpcCheck};
 
+use anyhow::Context;
 use ed25519_dalek::{PublicKey as PublicKeyEd25519, Signature, Verifier};
 use hyper::StatusCode;
+use mpc_recovery::utils::user_credentials_request_digest;
 use mpc_recovery::{
     msg::{ClaimOidcRequest, MpcPkRequest, NewAccountResponse, UserCredentialsResponse},
     utils::{claim_oidc_request_digest, claim_oidc_response_digest, oidc_digest, sign_digest},
@@ -521,92 +523,6 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
     .await
 }
 
-// TODO: uncomment once we can malformed payloads again
-
-// #[tokio::test]
-// async fn test_malformed_public_key() -> anyhow::Result<()> {
-//     with_nodes(1, |ctx| {
-//         Box::pin(async move {
-//             let account_id = account::random(ctx.worker)?;
-//             let malformed_public_key = key::malformed();
-//             let oidc_token = token::valid_random();
-//             let user_public_key = key::random();
-
-//             let create_account_options = CreateAccountOptions {
-//                 full_access_keys: Some(vec![user_public_key.clone().parse().unwrap()]),
-//                 limited_access_keys: None,
-//                 contract_bytes: None,
-//             };
-
-//             // Check that the service is still available
-//             let (status_code, new_acc_response) = ctx
-//                 .leader_node
-//                 .new_account(NewAccountRequest {
-//                     near_account_id: account_id.to_string(),
-//                     create_account_options,
-//                     oidc_token: oidc_token.clone(),
-//                 })
-//                 .await?;
-//             assert_eq!(status_code, StatusCode::OK);
-//             assert!(matches!(new_acc_response, NewAccountResponse::Ok {
-//                     create_account_options: _,
-//                     user_recovery_public_key: _,
-//                     near_account_id: acc_id,
-//                 } if acc_id == account_id.to_string()
-//             ));
-
-//             tokio::time::sleep(Duration::from_millis(2000)).await;
-
-//             check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
-
-//             let (status_code, add_key_response) = ctx
-//                 .leader_node
-//                 .add_key(AddKeyRequest {
-//                     near_account_id: Some(account_id.to_string()),
-//                     oidc_token: oidc_token.clone(),
-//                     public_key: malformed_public_key.clone(),
-//                 })
-//                 .await?;
-//             assert_eq!(status_code, StatusCode::BAD_REQUEST);
-//             assert!(matches!(add_key_response, AddKeyResponse::Err { .. }));
-
-//             // Check that the service is still available
-//             let new_user_public_key = key::random();
-
-//             let (status_code, add_key_response) = ctx
-//                 .leader_node
-//                 .add_key(AddKeyRequest {
-//                     near_account_id: Some(account_id.to_string()),
-//                     oidc_token,
-//                     create_account_options: CreateAccountOptions {
-//                         full_access_keys: Some(vec![new_user_public_key.parse()?]),
-//                         limited_access_keys: None,
-//                         contract_bytes: None,
-//                     },
-//                 })
-//                 .await?;
-
-//             assert_eq!(status_code, StatusCode::OK);
-
-//             let AddKeyResponse::Ok {
-//                 full_access_keys,
-//                 limited_access_keys,
-//                 near_account_id,
-//             } = add_key_response;
-//             assert_eq!(full_access_keys, vec![new_user_public_key]);
-//             assert_eq!(limited_access_keys, Vec::<String>::new());
-//             assert_eq!(near_account_id, account_id.to_string());
-
-//             tokio::time::sleep(Duration::from_millis(2000)).await;
-
-//             check::access_key_exists(&ctx, &account_id, &new_user_public_key).await?;
-
-//             Ok(())
-//         })
-//     })
-//     .await
-// }
-
 #[test(tokio::test)]
 async fn test_reject_new_pk_set() -> anyhow::Result<()> {
     with_nodes(2, |ctx| {
@@ -621,6 +537,96 @@ async fn test_reject_new_pk_set() -> anyhow::Result<()> {
                 .await?;
             assert_eq!(status_code, StatusCode::BAD_REQUEST);
             assert!(matches!(result, Err(_)));
+
+            Ok(())
+        })
+    })
+    .await
+}
+
+#[tokio::test]
+async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
+    let user_oidc = token::valid_random();
+    let (user_sk, user_pk) = key::random();
+    let digest = user_credentials_request_digest(&user_oidc, &user_pk)?;
+    let near_crypto::Signature::ED25519(frp_signature) = user_sk.sign(&digest) else {
+        anyhow::bail!("Wrong signature type");
+    };
+
+    let template_new_account = serde_json::json!({
+        "near_account_id": "groot",
+        "create_account_options": {
+            "full_access_keys": Some(vec![&user_pk]),
+            "limited_access_keys": serde_json::Value::Null,
+            "contract_bytes": serde_json::Value::Null,
+        },
+        "user_credentials_frp_signature": frp_signature.clone(),
+        "oidc_token": user_oidc,
+        "frp_public_key": user_pk,
+    });
+
+    let malformed_cases = {
+        let mut invalid_account_req = template_new_account.clone();
+        invalid_account_req["near_account_id"] = "groot++".into();
+
+        let mut invalid_user_key_req = template_new_account.clone();
+        let malformed_key = key::malformed_pk();
+        invalid_user_key_req["create_account_options"]["full_access_keys"] =
+            malformed_key.clone().into();
+        invalid_user_key_req["frp_public_key"] = malformed_key.into();
+
+        let mut invalid_oidc_token_req = template_new_account.clone();
+        invalid_oidc_token_req["oidc_token"] = token::invalid().into();
+
+        let mut invalid_frp_signature_req = template_new_account.clone();
+        // create invalid sig by having the first 16 bytes of the signature be 0:
+        let mut invalid_sig = frp_signature.to_bytes();
+        invalid_sig[0..16].copy_from_slice(&[0; 16]);
+        invalid_frp_signature_req["user_credentials_frp_signature"] =
+            serde_json::to_value(ed25519_dalek::Signature::from_bytes(&invalid_sig)?)?;
+
+        [
+            (
+                invalid_account_req,
+                (400, "bad near_account_id: groot++")),
+            (
+                invalid_user_key_req,
+                (422, "Failed to deserialize the JSON body into the target type: create_account_options.full_access_keys")
+            ),
+            (
+                invalid_oidc_token_req,
+                (401, "failed to verify oidc token: Invalid token"),
+            ),
+            (
+                invalid_frp_signature_req,
+                (401, "signer failed to verify signature"),
+            )
+        ]
+    };
+
+    with_nodes(1, |ctx| {
+        Box::pin(async move {
+            ctx.leader_node
+                .claim_oidc_with_helper(&user_oidc, &user_pk, &user_sk)
+                .await?;
+
+            for (invalid_req, (expected_status_code, expected_msg)) in malformed_cases {
+                let (code, msg): (StatusCode, serde_json::Value) =
+                    mpc_recovery_integration_tests::util::post(
+                        format!("{}/new_account", ctx.leader_node.address),
+                        invalid_req,
+                    )
+                    .await
+                    .context("failed to send request")?;
+
+                assert_eq!(code, expected_status_code, "wrong status code");
+                assert!(
+                    msg.to_string().contains(expected_msg),
+                    "wrong error message: `{}` not in `{}`",
+                    expected_msg,
+                    msg,
+                );
+            }
 
             Ok(())
         })

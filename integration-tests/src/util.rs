@@ -1,4 +1,4 @@
-use anyhow::Ok;
+use anyhow::{Context, Ok};
 use hyper::{Body, Client, Method, Request, StatusCode, Uri};
 use serde::{Deserialize, Serialize};
 
@@ -15,14 +15,23 @@ where
         .method(Method::POST)
         .uri(uri)
         .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_string(&request)?))?;
+        .body(Body::from(
+            serde_json::to_string(&request).context("failed to serialize the request body")?,
+        ))
+        .context("failed to build the request")?;
 
     let client = Client::new();
-    let response = client.request(req).await?;
+    let response = client
+        .request(req)
+        .await
+        .context("failed to send the request")?;
     let status = response.status();
 
-    let data = hyper::body::to_bytes(response).await?;
-    let response: Resp = serde_json::from_slice(&data)?;
+    let data = hyper::body::to_bytes(response)
+        .await
+        .context("failed to read the response body")?;
+    let response: Resp =
+        serde_json::from_slice(&data).context("failed to deserialize the response body")?;
 
     Ok((status, response))
 }

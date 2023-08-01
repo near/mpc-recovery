@@ -138,6 +138,12 @@ mod key {
     use near_crypto::{PublicKey, SecretKey};
     use rand::{distributions::Alphanumeric, Rng};
 
+    pub fn random() -> (SecretKey, PublicKey) {
+        let sk = random_sk();
+        let pk = sk.public_key();
+        (sk, pk)
+    }
+
     pub fn random_sk() -> SecretKey {
         near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519)
     }
