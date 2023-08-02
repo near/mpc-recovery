@@ -218,7 +218,22 @@ async fn test_rotate_node_keys() -> anyhow::Result<()> {
                 .collect::<HashMap<_, _>>();
 
             // Generate a new set of ciphers to rotate out each node:
-            let mpc_recovery::GenerateResult { secrets, .. } = mpc_recovery::generate(3);
+            let mut counter = 0;
+            let mpc_recovery::GenerateResult { secrets, .. } = loop {
+                let result = mpc_recovery::generate(3);
+                let all_diff = result.secrets.iter().zip(ctx.signer_nodes.iter()).all(|((_, new_cipher), signer_node)| {
+                    signer_node.cipher_key != *new_cipher
+                });
+
+                if all_diff {
+                    break result;
+                }
+
+                counter += 1;
+                if counter == 5 {
+                    panic!("Failed to generate a new set of ciphers after 5 tries");
+                }
+            };
 
             let mut ciphers = HashMap::new();
             // Rotate out with new the cipher.
