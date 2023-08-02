@@ -1,14 +1,74 @@
 use std::collections::HashMap;
 
+use borsh::{self, BorshDeserialize, BorshSerialize};
 use google_datastore1::api::{Key, PathElement};
-use near_crypto::PublicKey;
+use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
 
-use crate::gcp::{
-    error::ConvertError,
-    value::{FromValue, IntoValue, Value},
-    KeyKind,
+use near_crypto::PublicKey;
+
+use crate::{
+    error::MpcError,
+    gcp::{
+        error::ConvertError,
+        value::{FromValue, IntoValue, Value},
+        KeyKind,
+    },
 };
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+pub struct OidcToken {
+    data: String,
+}
+
+impl OidcToken {
+    pub fn new(data: &str) -> Self {
+        Self { data: data.into() }
+    }
+
+    pub fn digest_hash(&self) -> [u8; 32] {
+        let hasher = sha2::Digest::chain(sha2::Sha256::default(), self.data.as_bytes());
+        <[u8; 32]>::try_from(sha2::Digest::finalize(hasher).as_slice())
+            .expect("Hash is the wrong size")
+    }
+
+    pub fn random() -> Self {
+        let random: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(10)
+            .map(char::from)
+            .collect();
+        Self {
+            data: format!("validToken:{}", random),
+        }
+    }
+
+    pub fn invalid() -> Self {
+        Self {
+            data: "invalidToken".to_string(),
+        }
+    }
+}
+
+impl std::str::FromStr for OidcToken {
+    type Err = MpcError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::new(s))
+    }
+}
+
+impl std::fmt::Display for OidcToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.data)
+    }
+}
+
+impl AsRef<str> for OidcToken {
+    fn as_ref(&self) -> &str {
+        &self.data
+    }
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct OidcDigest {
@@ -100,20 +160,18 @@ impl OidcDigest {
 mod tests {
     use std::str::FromStr;
 
-    use crate::utils::{claim_oidc_request_digest, oidc_digest};
+    use crate::utils::claim_oidc_request_digest;
 
     use super::*;
 
     #[test]
     fn test_oidc_digest_from_and_to_value() {
-        let public_key = "ed25519:J75xXmF7WUPS3xCm3hy2tgwLCKdYM1iJd4BWF8sWVnae".to_string();
-        let oidc_token = "validToken:oR8hig9XkU".to_string();
+        let oidc_token = OidcToken::new("validToken:oR8hig9XkU");
+        let oidc_token_hash = oidc_token.digest_hash();
+        let user_pk =
+            PublicKey::from_str("ed25519:J75xXmF7WUPS3xCm3hy2tgwLCKdYM1iJd4BWF8sWVnae").unwrap();
 
-        let oidc_token_hash = oidc_digest(&oidc_token);
-
-        let user_pk: PublicKey = PublicKey::from_str(&public_key).unwrap();
-
-        let oidc_request_digest = match claim_oidc_request_digest(oidc_token_hash, &user_pk) {
+        let oidc_request_digest = match claim_oidc_request_digest(&oidc_token_hash, &user_pk) {
             Ok(digest) => digest,
             Err(err) => panic!("Failed to create digest: {:?}", err),
         };
@@ -123,7 +181,7 @@ mod tests {
         let oidc_digest = OidcDigest {
             node_id: 1,
             digest: digest_32,
-            public_key: public_key.parse().expect("Failed to parse public key"),
+            public_key: user_pk,
         };
 
         let val = oidc_digest.clone().into_value();
@@ -147,13 +205,12 @@ mod tests {
 
     #[test]
     fn test_oidc_to_name() {
-        let public_key = "ed25519:J75xXmF7WUPS3xCm3hy2tgwLCKdYM1iJd4BWF8sWVnae".to_string();
-        let oidc_token = "validToken:oR8hig9XkU".to_string();
-        let user_pk: PublicKey = PublicKey::from_str(&public_key).unwrap();
+        let oidc_token = OidcToken::new("validToken:oR8hig9XkU");
+        let user_pk =
+            PublicKey::from_str("ed25519:J75xXmF7WUPS3xCm3hy2tgwLCKdYM1iJd4BWF8sWVnae").unwrap();
+        let oidc_token_hash = oidc_token.digest_hash();
 
-        let oidc_token_hash = oidc_digest(&oidc_token);
-
-        let digest = match claim_oidc_request_digest(oidc_token_hash, &user_pk) {
+        let digest = match claim_oidc_request_digest(&oidc_token_hash, &user_pk) {
             Ok(digest) => digest,
             Err(err) => panic!("Failed to create digest: {:?}", err),
         };
@@ -163,7 +220,7 @@ mod tests {
         let oidc_digest = OidcDigest {
             node_id: 1,
             digest: digest_32,
-            public_key: public_key.parse().expect("Failed to parse public key"),
+            public_key: user_pk,
         };
 
         let name = oidc_digest.to_name();

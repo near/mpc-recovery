@@ -1,5 +1,6 @@
 use crate::msg::{SignNodeRequest, SignShareNodeRequest};
 use crate::sign_node::aggregate_signer::{Reveal, SignedCommitment};
+use crate::sign_node::oidc::OidcToken;
 use anyhow::{anyhow, Context};
 use curv::elliptic::curves::{Ed25519, Point};
 use ed25519_dalek::Signature;
@@ -98,13 +99,13 @@ pub fn get_local_signed_delegated_action(
 pub async fn get_mpc_signature(
     client: &reqwest::Client,
     sign_nodes: &[String],
-    oidc_token: &str,
+    oidc_token: &OidcToken,
     delegate_action: DelegateAction,
     frp_signature: Signature,
     frp_public_key: &near_crypto::PublicKey,
 ) -> Result<Signature, NodeSignError> {
     let sig_share_request = SignNodeRequest::SignShare(SignShareNodeRequest {
-        oidc_token: oidc_token.to_string(),
+        oidc_token: oidc_token.clone(),
         delegate_action,
         frp_signature,
         frp_public_key: frp_public_key.clone(),

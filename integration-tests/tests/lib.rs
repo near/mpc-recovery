@@ -163,23 +163,6 @@ mod key {
     }
 }
 
-mod token {
-    use rand::{distributions::Alphanumeric, Rng};
-
-    pub fn valid_random() -> String {
-        let random: String = rand::thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(10)
-            .map(char::from)
-            .collect();
-        format!("validToken:{}", random)
-    }
-
-    pub fn invalid() -> String {
-        "invalidToken".to_string()
-    }
-}
-
 mod check {
     use crate::TestContext;
     use near_crypto::PublicKey;

@@ -1,13 +1,14 @@
 use crate::mpc::{fetch_recovery_pk, register_account};
-use crate::{account, check, key, token, with_nodes, MpcCheck};
+use crate::{account, check, key, with_nodes, MpcCheck};
 
 use anyhow::Context;
 use ed25519_dalek::{PublicKey as PublicKeyEd25519, Signature, Verifier};
 use hyper::StatusCode;
+use mpc_recovery::sign_node::oidc::OidcToken;
 use mpc_recovery::utils::user_credentials_request_digest;
 use mpc_recovery::{
     msg::{ClaimOidcRequest, MpcPkRequest, NewAccountResponse, UserCredentialsResponse},
-    utils::{claim_oidc_request_digest, claim_oidc_response_digest, oidc_digest, sign_digest},
+    utils::{claim_oidc_request_digest, claim_oidc_response_digest, sign_digest},
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_primitives::{
@@ -31,7 +32,7 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
             let user_secret_key =
                 near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519);
             let user_public_key = user_secret_key.public_key();
-            let oidc_token = token::valid_random();
+            let oidc_token = OidcToken::random();
 
             // Claim OIDC token
             ctx.leader_node
@@ -200,9 +201,9 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
             let user_secret_key =
                 near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519);
             let user_public_key = user_secret_key.public_key();
-            let oidc_token_1 = token::valid_random();
-            let oidc_token_2 = token::valid_random();
-            let wrong_oidc_token = token::valid_random();
+            let oidc_token_1 = OidcToken::random();
+            let oidc_token_2 = OidcToken::random();
+            let wrong_oidc_token = OidcToken::random();
 
             // Create account before claiming OIDC token
             // This part of the test is commented since account creation is not atomic (known issue)
@@ -260,13 +261,13 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
                 .try_into()?;
 
             // Prepare the oidc claiming request
-            let oidc_token_hash = oidc_digest(&oidc_token_2);
-            let wrong_oidc_token_hash = oidc_digest(&wrong_oidc_token);
+            let oidc_token_hash = oidc_token_2.digest_hash();
+            let wrong_oidc_token_hash = wrong_oidc_token.digest_hash();
 
             let request_digest =
-                claim_oidc_request_digest(oidc_token_hash, &user_public_key).unwrap();
+                claim_oidc_request_digest(&oidc_token_hash, &user_public_key).unwrap();
             let wrong_digest =
-                claim_oidc_request_digest(wrong_oidc_token_hash, &user_public_key).unwrap();
+                claim_oidc_request_digest(&wrong_oidc_token_hash, &user_public_key).unwrap();
 
             let request_digest_signature = sign_digest(&request_digest, &user_secret_key)?;
 
@@ -319,7 +320,7 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
             }
 
             // It should not be possible to make the claiming with another key
-            let new_oidc_token = token::valid_random();
+            let new_oidc_token = OidcToken::random();
             let user_sk = key::random_sk();
             let user_pk = user_sk.public_key();
             let atacker_sk = key::random_sk();
@@ -369,8 +370,8 @@ async fn test_invalid_token() -> anyhow::Result<()> {
             let account_id = account::random(ctx.worker)?;
             let user_secret_key = key::random_sk();
             let user_public_key = user_secret_key.public_key();
-            let oidc_token = token::valid_random();
-            let invalid_oidc_token = token::invalid();
+            let oidc_token = OidcToken::random();
+            let invalid_oidc_token = OidcToken::invalid();
 
             // Claim OIDC token
             ctx.leader_node
@@ -473,7 +474,7 @@ async fn test_malformed_account_id() -> anyhow::Result<()> {
             let malformed_account_id = account::malformed();
             let user_secret_key = key::random_sk();
             let user_public_key = user_secret_key.public_key();
-            let oidc_token = token::valid_random();
+            let oidc_token = OidcToken::random();
 
             ctx.leader_node
                 .claim_oidc_with_helper(&oidc_token, &user_public_key, &user_secret_key)
@@ -546,7 +547,7 @@ async fn test_reject_new_pk_set() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
-    let user_oidc = token::valid_random();
+    let user_oidc = OidcToken::random();
     let (user_sk, user_pk) = key::random();
     let digest = user_credentials_request_digest(&user_oidc, &user_pk)?;
     let near_crypto::Signature::ED25519(frp_signature) = user_sk.sign(&digest) else {
@@ -576,7 +577,7 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
         invalid_user_key_req["frp_public_key"] = malformed_key.into();
 
         let mut invalid_oidc_token_req = template_new_account.clone();
-        invalid_oidc_token_req["oidc_token"] = token::invalid().into();
+        invalid_oidc_token_req["oidc_token"] = OidcToken::invalid().as_ref().into();
 
         let mut invalid_frp_signature_req = template_new_account.clone();
         // create invalid sig by having the first 16 bytes of the signature be 0:

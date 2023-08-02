@@ -1,5 +1,6 @@
 use crate::{
     msg::PublicKeyNodeRequest,
+    sign_node::oidc::OidcToken,
     transaction::{call_all_nodes, to_dalek_public_key, NodeCallError},
 };
 use ed25519_dalek::Signature;
@@ -18,12 +19,12 @@ pub enum NodeRecoveryError {
 pub async fn get_user_recovery_pk(
     client: &reqwest::Client,
     sign_nodes: &[String],
-    oidc_token: &str,
+    oidc_token: &OidcToken,
     frp_signature: Signature,
     frp_public_key: &PublicKey,
 ) -> anyhow::Result<PublicKey, NodeRecoveryError> {
     let request = PublicKeyNodeRequest {
-        oidc_token: oidc_token.to_string(),
+        oidc_token: oidc_token.clone(),
         frp_signature,
         frp_public_key: frp_public_key.clone(),
     };

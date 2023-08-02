@@ -8,7 +8,7 @@ use crate::oauth::OAuthTokenVerifier;
 use crate::primitives::InternalAccountId;
 use crate::sign_node::pk_set::SignerNodePkSet;
 use crate::utils::{
-    check_digest_signature, claim_oidc_request_digest, claim_oidc_response_digest, oidc_digest,
+    check_digest_signature, claim_oidc_request_digest, claim_oidc_response_digest,
     sign_request_digest, user_credentials_request_digest,
 };
 use crate::NodeId;
@@ -177,7 +177,7 @@ async fn process_commit<T: OAuthTokenVerifier>(
                 .parse()
                 .map_err(|e| CommitError::MalformedPublicKey(request.public_key.clone(), e))?;
 
-            let request_digest = claim_oidc_request_digest(request.oidc_token_hash, &public_key)?;
+            let request_digest = claim_oidc_request_digest(&request.oidc_token_hash, &public_key)?;
 
             match check_digest_signature(&public_key, &request.signature, &request_digest) {
                 Ok(()) => tracing::debug!("claim oidc token digest signature verified"),
@@ -256,7 +256,7 @@ async fn process_commit<T: OAuthTokenVerifier>(
             };
 
             // Check if this OIDC token was claimed
-            let oidc_hash = oidc_digest(&request.oidc_token);
+            let oidc_hash = request.oidc_token.digest_hash();
 
             let oidc_digest = OidcDigest {
                 node_id: state.node_info.our_index,
@@ -512,7 +512,7 @@ async fn process_public_key<T: OAuthTokenVerifier>(
     };
 
     // Check if this OIDC token was claimed
-    let oidc_hash = oidc_digest(&request.oidc_token);
+    let oidc_hash = request.oidc_token.digest_hash();
 
     let oidc_digest = OidcDigest {
         node_id: state.node_info.our_index,
