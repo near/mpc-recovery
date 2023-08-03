@@ -1,7 +1,7 @@
 use self::aggregate_signer::{NodeInfo, Reveal, SignedCommitment, SigningState};
 use self::oidc::OidcDigest;
 use self::user_credentials::EncryptedUserCredentials;
-use crate::error::{CommitError, MpcError, PublicKeyRequestError};
+use crate::error::{CommitRequestError, MpcError, PublicKeyRequestError};
 use crate::gcp::GcpService;
 use crate::msg::{AcceptNodePublicKeysRequest, PublicKeyNodeRequest, SignNodeRequest};
 use crate::oauth::OAuthTokenVerifier;
@@ -145,22 +145,21 @@ async fn get_or_generate_user_creds(
 async fn process_commit<T: OAuthTokenVerifier>(
     state: SignNodeState,
     request: SignNodeRequest,
-) -> Result<SignedCommitment, CommitError> {
+) -> Result<SignedCommitment, CommitRequestError> {
     tracing::info!(?request, "processing commit request");
     match request {
         SignNodeRequest::ClaimOidc(request) => {
             tracing::debug!(?request, "processing oidc claim request");
             // Check ID token hash signature
-            let public_key: PublicKey = request
-                .public_key
-                .parse()
-                .map_err(|e| CommitError::MalformedPublicKey(request.public_key.clone(), e))?;
+            let public_key: PublicKey = request.public_key.parse().map_err(|e| {
+                CommitRequestError::MalformedPublicKey(request.public_key.clone(), e)
+            })?;
 
             let request_digest = claim_oidc_request_digest(request.oidc_token_hash, &public_key)?;
 
             match check_digest_signature(&public_key, &request.signature, &request_digest) {
                 Ok(()) => tracing::debug!("claim oidc token digest signature verified"),
-                Err(e) => return Err(CommitError::SignatureVerificationFailed(e)),
+                Err(e) => return Err(CommitRequestError::SignatureVerificationFailed(e)),
             };
 
             // Save info about token in the database, if it's present, throw an error
@@ -184,7 +183,7 @@ async fn process_commit<T: OAuthTokenVerifier>(
                             ?stored_digest,
                             "oidc token already claimed with another key"
                         );
-                        return Err(CommitError::OidcTokenAlreadyClaimed(oidc_digest));
+                        return Err(CommitRequestError::OidcTokenAlreadyClaimed(oidc_digest));
                     }
                 }
                 Ok(None) => {
@@ -196,7 +195,7 @@ async fn process_commit<T: OAuthTokenVerifier>(
                         ?oidc_digest,
                         "failed to get oidc token digest from the database"
                     );
-                    return Err(CommitError::Other(e));
+                    return Err(CommitRequestError::Other(e));
                 }
             };
 
@@ -221,7 +220,7 @@ async fn process_commit<T: OAuthTokenVerifier>(
             let oidc_token_claims =
                 T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
                     .await
-                    .map_err(CommitError::OidcVerificationFailed)?;
+                    .map_err(CommitRequestError::OidcVerificationFailed)?;
             tracing::debug!(?oidc_token_claims, "oidc token verified");
 
             let frp_pk = request.frp_public_key;
@@ -231,7 +230,7 @@ async fn process_commit<T: OAuthTokenVerifier>(
                 sign_request_digest(&request.delegate_action, &request.oidc_token, &frp_pk)?;
             match check_digest_signature(&frp_pk, &request.frp_signature, &digest) {
                 Ok(()) => tracing::debug!("sign request digest signature verified"),
-                Err(e) => return Err(CommitError::SignatureVerificationFailed(e)),
+                Err(e) => return Err(CommitRequestError::SignatureVerificationFailed(e)),
             };
 
             // Check if this OIDC token was claimed
@@ -253,19 +252,21 @@ async fn process_commit<T: OAuthTokenVerifier>(
                         tracing::info!(?oidc_digest, "oidc token was claimed with provided pk");
                     } else {
                         tracing::error!(?oidc_digest, "oidc token was claimed with another key");
-                        return Err(CommitError::OidcTokenClaimedWithAnotherKey(oidc_digest));
+                        return Err(CommitRequestError::OidcTokenClaimedWithAnotherKey(
+                            oidc_digest,
+                        ));
                     }
                 }
                 Ok(None) => {
                     tracing::info!(?oidc_digest, "oidc token was not claimed");
-                    return Err(CommitError::OidcTokenNotClaimed(oidc_digest));
+                    return Err(CommitRequestError::OidcTokenNotClaimed(oidc_digest));
                 }
                 Err(e) => {
                     tracing::error!(
                         ?oidc_digest,
                         "failed to get oidc token digest from the database"
                     );
-                    return Err(CommitError::Other(e));
+                    return Err(CommitRequestError::Other(e));
                 }
             };
 
@@ -288,7 +289,7 @@ async fn process_commit<T: OAuthTokenVerifier>(
                     }
                     _ => {
                         tracing::error!("Unsupported action: {:?}", action);
-                        return Err(CommitError::UnsupportedAction);
+                        return Err(CommitRequestError::UnsupportedAction);
                     }
                 }
             }
@@ -305,7 +306,7 @@ async fn process_commit<T: OAuthTokenVerifier>(
             );
             let bytes = match signable_message.try_to_vec() {
                 Ok(bytes) => bytes,
-                Err(e) => return Err(CommitError::Other(e.into())),
+                Err(e) => return Err(CommitRequestError::Other(e.into())),
             };
             let hash = hash(&bytes).as_bytes().to_vec();
 

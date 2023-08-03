@@ -5,7 +5,7 @@ use near_crypto::PublicKey;
 use near_primitives::delegate_action::DelegateAction;
 use sha2::{Digest, Sha256};
 
-use crate::error::CommitError;
+use crate::error::CommitRequestError;
 use crate::primitives::HashSalt;
 
 pub fn claim_oidc_request_digest(
@@ -23,7 +23,9 @@ pub fn claim_oidc_request_digest(
     Ok(hasher.finalize().to_vec())
 }
 
-pub fn claim_oidc_response_digest(users_signature: Signature) -> Result<Vec<u8>, CommitError> {
+pub fn claim_oidc_response_digest(
+    users_signature: Signature,
+) -> Result<Vec<u8>, CommitRequestError> {
     // As per the readme
     // If you successfully claim the token you will receive a signature in return of:
     // sha256.hash(Borsh.serialize<u32>(SALT + 1) ++ Borsh.serialize<[u8]>(signature))
@@ -39,7 +41,7 @@ pub fn sign_request_digest(
     delegate_action: &DelegateAction,
     oidc_token: &str,
     frp_public_key: &PublicKey,
-) -> Result<Vec<u8>, CommitError> {
+) -> Result<Vec<u8>, CommitRequestError> {
     let mut hasher = Sha256::default();
     BorshSerialize::serialize(&HashSalt::SignRequest.get_salt(), &mut hasher)
         .context("Serialization failed")?;

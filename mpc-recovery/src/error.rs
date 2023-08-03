@@ -36,7 +36,7 @@ pub enum UserCredentialsError {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommitError {
+pub enum CommitRequestError {
     #[error("malformed account id: {0}")]
     MalformedAccountId(String, ParseAccountError),
     #[error("malformed public key {0}: {1}")]
@@ -57,7 +57,7 @@ pub enum CommitError {
     Other(#[from] anyhow::Error),
 }
 
-impl CommitError {
+impl CommitRequestError {
     pub fn code(&self) -> StatusCode {
         match self {
             // TODO: this case was not speicifically handled before. Check if it is the right code
@@ -102,7 +102,7 @@ impl PublicKeyRequestError {
             // TODO: check if this is the right code
             Self::SignatureVerificationFailed(_) => StatusCode::UNAUTHORIZED,
 
-            // TODO: check if this is the right code. Inconsistent w/ CommitError
+            // TODO: check if this is the right code. Inconsistent w/ CommitRequestError
             Self::OidcVerificationFailed(_) => StatusCode::UNAUTHORIZED,
 
             Self::OidcTokenNotClaimed(_) => StatusCode::UNAUTHORIZED,
