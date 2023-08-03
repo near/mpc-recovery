@@ -336,70 +336,7 @@ async fn commit<T: OAuthTokenVerifier>(
 
     match process_commit::<T>(state, request).await {
         Ok(signed_commitment) => (StatusCode::OK, Json(Ok(signed_commitment))),
-        Err(ref e @ CommitError::OidcVerificationFailed(ref err_msg)) => {
-            tracing::error!(err = ?e);
-            (
-                StatusCode::BAD_REQUEST,
-                Json(Err(format!(
-                    "signer failed to verify oidc token: {}",
-                    err_msg
-                ))),
-            )
-        }
-        Err(ref e @ CommitError::SignatureVerificationFailed(ref err_msg)) => {
-            tracing::error!(err = ?e);
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(Err(format!(
-                    "signer failed to verify signature: {}",
-                    err_msg
-                ))),
-            )
-        }
-        Err(ref e @ CommitError::OidcTokenNotClaimed(ref _err_msg)) => {
-            tracing::error!(err = ?e);
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(Err(format!("OIDC Token was not claimed: {}", e))),
-            )
-        }
-        Err(ref e @ CommitError::OidcTokenAlreadyClaimed(ref _err_msg)) => {
-            tracing::error!(err = ?e);
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(Err(format!(
-                    "OIDC Token was already claimed with another key: {}",
-                    e
-                ))),
-            )
-        }
-        Err(ref e @ CommitError::OidcTokenClaimedWithAnotherKey(ref _err_msg)) => {
-            tracing::error!(err = ?e);
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(Err(format!(
-                    "OIDC Token was claimed with another key: {}",
-                    e
-                ))),
-            )
-        }
-        Err(ref e @ CommitError::UnsupportedAction) => {
-            tracing::error!(err = ?e);
-            (
-                StatusCode::BAD_REQUEST,
-                Json(Err(format!(
-                    "You are trying to perform an action that is not supported: {}",
-                    e
-                ))),
-            )
-        }
-        Err(e) => {
-            tracing::error!(err = ?e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(Err(format!("failed to process commit call: {}", e))),
-            )
-        }
+        Err(e) => (e.code(), Json(Err(e.to_string()))),
     }
 }
 
@@ -523,62 +460,10 @@ async fn public_key<T: OAuthTokenVerifier>(
     Extension(state): Extension<SignNodeState>,
     WithRejection(Json(request), _): WithRejection<Json<PublicKeyNodeRequest>, MpcError>,
 ) -> (StatusCode, Json<Result<Point<Ed25519>, String>>) {
-    match process_public_key::<T>(state, request).await {
+    let result = process_public_key::<T>(state, request).await;
+    match result {
         Ok(pk_point) => (StatusCode::OK, Json(Ok(pk_point))),
-        Err(ref e @ PublicKeyRequestError::OidcVerificationFailed(ref err_msg)) => {
-            tracing::error!(err = ?e);
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(Err(format!(
-                    "signer failed to verify oidc token: {}",
-                    err_msg
-                ))),
-            )
-        }
-        Err(ref e @ PublicKeyRequestError::SignatureVerificationFailed(ref err_msg)) => {
-            tracing::error!(err = ?e);
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(Err(format!(
-                    "signer failed to verify signature: {}",
-                    err_msg
-                ))),
-            )
-        }
-        Err(ref e @ PublicKeyRequestError::MalformedPublicKey(ref err_msg, ref error)) => {
-            tracing::error!(err = ?e);
-            (
-                StatusCode::BAD_REQUEST,
-                Json(Err(format!("bad public key: {}, {}", err_msg, error))),
-            )
-        }
-        Err(ref e @ PublicKeyRequestError::OidcTokenNotClaimed(ref _err_msg)) => {
-            tracing::error!(err = ?e);
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(Err(format!("OIDC Token was not claimed: {}", e))),
-            )
-        }
-        Err(ref e @ PublicKeyRequestError::OidcTokenClaimedWithAnotherKey(ref _err_msg)) => {
-            tracing::error!(err = ?e);
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(Err(format!(
-                    "OIDC Token was claimed with another key: {}",
-                    e
-                ))),
-            )
-        }
-        Err(ref e @ PublicKeyRequestError::Other(ref err_msg)) => {
-            tracing::error!(err = ?e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(Err(format!(
-                    "signer failed to verify signature: {}",
-                    err_msg
-                ))),
-            )
-        }
+        Err(e) => (e.code(), Json(Err(e.to_string()))),
     }
 }
 
