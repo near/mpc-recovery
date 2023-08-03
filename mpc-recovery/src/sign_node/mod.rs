@@ -1,7 +1,7 @@
 use self::aggregate_signer::{NodeInfo, Reveal, SignedCommitment, SigningState};
 use self::oidc::OidcDigest;
 use self::user_credentials::EncryptedUserCredentials;
-use crate::error::MpcError;
+use crate::error::{CommitError, MpcError, PublicKeyRequestError};
 use crate::gcp::GcpService;
 use crate::msg::{AcceptNodePublicKeysRequest, PublicKeyNodeRequest, SignNodeRequest};
 use crate::oauth::OAuthTokenVerifier;
@@ -20,15 +20,16 @@ use axum_extra::extract::WithRejection;
 use borsh::BorshSerialize;
 use curv::elliptic::curves::{Ed25519, Point};
 use multi_party_eddsa::protocols::{self, ExpandedKeyPair};
-use near_crypto::{ParseKeyError, PublicKey};
-use near_primitives::account::id::ParseAccountError;
+use tokio::sync::RwLock;
+
+use near_crypto::PublicKey;
 use near_primitives::delegate_action::NonDelegateAction;
 use near_primitives::hash::hash;
 use near_primitives::signable_message::{SignableMessage, SignableMessageType};
 use near_primitives::transaction::{Action, AddKeyAction, DeleteKeyAction};
+
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 pub mod aggregate_signer;
 pub mod migration;
@@ -105,28 +106,6 @@ struct SignNodeState {
     cipher: Aes256Gcm,
     signing_state: Arc<RwLock<SigningState>>,
     node_info: NodeInfo,
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum CommitError {
-    #[error("malformed account id: {0}")]
-    MalformedAccountId(String, ParseAccountError),
-    #[error("malformed public key {0}: {1}")]
-    MalformedPublicKey(String, ParseKeyError),
-    #[error("failed to verify oidc token: {0}")]
-    OidcVerificationFailed(anyhow::Error),
-    #[error("failed to verify signature: {0}")]
-    SignatureVerificationFailed(anyhow::Error),
-    #[error("oidc token {0:?} already claimed with another key")]
-    OidcTokenAlreadyClaimed(OidcDigest),
-    #[error("oidc token {0:?} was claimed with another key")]
-    OidcTokenClaimedWithAnotherKey(OidcDigest),
-    #[error("oidc token {0:?} was not claimed")]
-    OidcTokenNotClaimed(OidcDigest),
-    #[error("This kind of action can not be performed")]
-    UnsupportedAction,
-    #[error("{0}")]
-    Other(#[from] anyhow::Error),
 }
 
 async fn get_or_generate_user_creds(
@@ -475,22 +454,6 @@ async fn signature_share(
             (StatusCode::BAD_REQUEST, Json(Err(e)))
         }
     }
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum PublicKeyRequestError {
-    #[error("malformed public key {0}: {1}")]
-    MalformedPublicKey(near_crypto::PublicKey, ParseKeyError),
-    #[error("failed to verify oidc token: {0}")]
-    OidcVerificationFailed(anyhow::Error),
-    #[error("oidc token {0:?} was not claimed")]
-    OidcTokenNotClaimed(OidcDigest),
-    #[error("oidc token {0:?} was claimed with another key")]
-    OidcTokenClaimedWithAnotherKey(OidcDigest),
-    #[error("failed to verify signature: {0}")]
-    SignatureVerificationFailed(anyhow::Error),
-    #[error("{0}")]
-    Other(#[from] anyhow::Error),
 }
 
 async fn process_public_key<T: OAuthTokenVerifier>(

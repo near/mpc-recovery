@@ -5,7 +5,8 @@ use near_crypto::PublicKey;
 use near_primitives::delegate_action::DelegateAction;
 use sha2::{Digest, Sha256};
 
-use crate::{primitives::HashSalt, sign_node::CommitError};
+use crate::error::CommitError;
+use crate::primitives::HashSalt;
 
 pub fn claim_oidc_request_digest(
     oidc_token_hash: [u8; 32],

@@ -1,4 +1,4 @@
-use crate::error::MpcError;
+use crate::error::{MpcError, UserCredentialsError};
 use crate::key_recovery::{get_user_recovery_pk, NodeRecoveryError};
 use crate::msg::{
     AcceptNodePublicKeysRequest, ClaimOidcNodeRequest, ClaimOidcRequest, ClaimOidcResponse,
@@ -321,16 +321,6 @@ async fn user_credentials<T: OAuthTokenVerifier>(
             )
         }
     }
-}
-
-#[derive(thiserror::Error, Debug)]
-enum UserCredentialsError {
-    #[error("failed to verify oidc token: {0}")]
-    OidcVerificationFailed(anyhow::Error),
-    #[error("failed to fetch recovery key: {0}")]
-    RecoveryKeyError(#[from] NodeRecoveryError),
-    #[error("{0}")]
-    Other(#[from] anyhow::Error),
 }
 
 async fn process_user_credentials<T: OAuthTokenVerifier>(
