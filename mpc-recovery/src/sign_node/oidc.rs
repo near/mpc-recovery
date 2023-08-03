@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use borsh::{self, BorshDeserialize, BorshSerialize};
 use google_datastore1::api::{Key, PathElement};
+use hex::FromHex;
 use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
 
@@ -17,6 +18,24 @@ use crate::{
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+pub struct OidcHash([u8; 32]);
+
+impl AsRef<[u8]> for OidcHash {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl FromHex for OidcHash {
+    type Error = anyhow::Error;
+
+    fn from_hex<T: AsRef<[u8]>>(hex: T) -> anyhow::Result<Self> {
+        let bytes = <[u8; 32]>::from_hex(hex)?;
+        Ok(Self(bytes))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct OidcToken {
     data: String,
 }
@@ -26,10 +45,11 @@ impl OidcToken {
         Self { data: data.into() }
     }
 
-    pub fn digest_hash(&self) -> [u8; 32] {
+    pub fn digest_hash(&self) -> OidcHash {
         let hasher = sha2::Digest::chain(sha2::Sha256::default(), self.data.as_bytes());
-        <[u8; 32]>::try_from(sha2::Digest::finalize(hasher).as_slice())
-            .expect("Hash is the wrong size")
+        let hash = <[u8; 32]>::try_from(sha2::Digest::finalize(hasher).as_slice())
+            .expect("Hash is the wrong size");
+        OidcHash(hash)
     }
 
     pub fn random() -> Self {
@@ -73,7 +93,7 @@ impl AsRef<str> for OidcToken {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct OidcDigest {
     pub node_id: usize,
-    pub digest: [u8; 32],
+    pub digest: OidcHash,
     pub public_key: PublicKey,
 }
 
@@ -92,7 +112,7 @@ impl IntoValue for OidcDigest {
         );
         properties.insert(
             "digest".to_string(),
-            Value::StringValue(hex::encode(self.digest)),
+            Value::StringValue(hex::encode(&self.digest)),
         );
         properties.insert(
             "public_key".to_string(),
@@ -128,6 +148,7 @@ impl FromValue for OidcDigest {
                     .map_err(|_| ConvertError::MalformedProperty("digest".to_string()))?;
                 let digest = <[u8; 32]>::try_from(digest)
                     .map_err(|_| ConvertError::MalformedProperty("digest".to_string()))?;
+                let digest = OidcHash(digest);
 
                 let (_, public_key) = properties
                     .remove_entry("public_key")
@@ -152,7 +173,7 @@ impl FromValue for OidcDigest {
 
 impl OidcDigest {
     pub fn to_name(&self) -> String {
-        format!("{}/{}", self.node_id, hex::encode(self.digest))
+        format!("{}/{}", self.node_id, hex::encode(&self.digest))
     }
 }
 
@@ -176,11 +197,12 @@ mod tests {
             Err(err) => panic!("Failed to create digest: {:?}", err),
         };
 
-        let digest_32 = <[u8; 32]>::try_from(oidc_request_digest).expect("Hash was wrong size");
+        let digest = <[u8; 32]>::try_from(oidc_request_digest).expect("Hash was wrong size");
+        let digest = OidcHash(digest);
 
         let oidc_digest = OidcDigest {
             node_id: 1,
-            digest: digest_32,
+            digest: digest.clone(),
             public_key: user_pk,
         };
 
@@ -195,7 +217,7 @@ mod tests {
         let public_key_2 = "ed25519:EBNJGHctB2LuDsCyMWrfwW87QrAob2kKzoS98PR5vjJn";
         let oidc_digest_2 = OidcDigest {
             node_id: 1,
-            digest: digest_32,
+            digest,
             public_key: public_key_2.parse().expect("Failed to parse public key"),
         };
 
@@ -215,11 +237,12 @@ mod tests {
             Err(err) => panic!("Failed to create digest: {:?}", err),
         };
 
-        let digest_32 = <[u8; 32]>::try_from(digest).expect("Hash was wrong size");
+        let digest = <[u8; 32]>::try_from(digest).expect("Hash was wrong size");
+        let digest = OidcHash(digest);
 
         let oidc_digest = OidcDigest {
             node_id: 1,
-            digest: digest_32,
+            digest,
             public_key: user_pk,
         };
 

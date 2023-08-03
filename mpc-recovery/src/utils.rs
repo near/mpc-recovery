@@ -5,11 +5,11 @@ use near_crypto::PublicKey;
 use near_primitives::delegate_action::DelegateAction;
 use sha2::{Digest, Sha256};
 
-use crate::sign_node::oidc::OidcToken;
+use crate::sign_node::oidc::{OidcHash, OidcToken};
 use crate::{primitives::HashSalt, sign_node::CommitError};
 
 pub fn claim_oidc_request_digest(
-    oidc_token_hash: &[u8; 32],
+    oidc_token_hash: &OidcHash,
     frp_public_key: &PublicKey,
 ) -> anyhow::Result<Vec<u8>> {
     // As per the readme

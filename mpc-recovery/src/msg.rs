@@ -4,7 +4,7 @@ use ed25519_dalek::{PublicKey, Signature};
 use near_primitives::delegate_action::DelegateAction;
 use serde::{Deserialize, Serialize};
 
-use crate::sign_node::oidc::OidcToken;
+use crate::sign_node::oidc::{OidcHash, OidcToken};
 use crate::transaction::CreateAccountOptions;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -40,7 +40,7 @@ impl TryInto<PublicKey> for MpcPkResponse {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ClaimOidcRequest {
     #[serde(with = "hex::serde")]
-    pub oidc_token_hash: [u8; 32],
+    pub oidc_token_hash: OidcHash,
     pub frp_public_key: String,
     #[serde(with = "hex_sig_share")]
     pub frp_signature: Signature,
@@ -164,7 +164,7 @@ pub struct SignShareNodeRequest {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ClaimOidcNodeRequest {
     #[serde(with = "hex::serde")]
-    pub oidc_token_hash: [u8; 32],
+    pub oidc_token_hash: OidcHash,
     pub public_key: String,
     #[serde(with = "hex_sig_share")]
     pub signature: Signature,

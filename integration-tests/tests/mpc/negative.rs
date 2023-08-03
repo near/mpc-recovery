@@ -277,7 +277,7 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
             };
 
             let oidc_request = ClaimOidcRequest {
-                oidc_token_hash,
+                oidc_token_hash: oidc_token_hash.clone(),
                 frp_public_key: user_public_key.to_string(),
                 frp_signature: request_digest_signature,
             };
