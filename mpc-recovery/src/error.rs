@@ -12,6 +12,8 @@ use crate::sign_node::oidc::OidcDigest;
 pub enum MpcError {
     #[error(transparent)]
     JsonExtractorRejection(#[from] JsonRejection),
+    #[error(transparent)]
+    SignNodeRejection(NodeRejectionError),
 }
 
 // We implement `IntoResponse` so ApiError can be used as a response
@@ -21,6 +23,7 @@ impl axum::response::IntoResponse for MpcError {
             Self::JsonExtractorRejection(json_rejection) => {
                 (json_rejection.status(), json_rejection.body_text())
             }
+            Self::SignNodeRejection(error) => (error.code(), error.to_string()),
         };
 
         (status, axum::Json(message)).into_response()
@@ -36,7 +39,7 @@ pub enum UserCredentialsError {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum CommitRequestError {
+pub enum NodeRejectionError {
     #[error("malformed account id: {0}")]
     MalformedAccountId(String, ParseAccountError),
     #[error("malformed public key {0}: {1}")]
@@ -57,7 +60,7 @@ pub enum CommitRequestError {
     Other(#[from] anyhow::Error),
 }
 
-impl CommitRequestError {
+impl NodeRejectionError {
     pub fn code(&self) -> StatusCode {
         match self {
             // TODO: this case was not speicifically handled before. Check if it is the right code
@@ -70,35 +73,6 @@ impl CommitRequestError {
             Self::OidcTokenClaimedWithAnotherKey(_) => StatusCode::UNAUTHORIZED,
             Self::OidcTokenNotClaimed(_) => StatusCode::UNAUTHORIZED,
             Self::UnsupportedAction => StatusCode::BAD_REQUEST,
-            Self::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
-        }
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum PublicKeyRequestError {
-    #[error("malformed public key {0}: {1}")]
-    MalformedPublicKey(near_crypto::PublicKey, ParseKeyError),
-    #[error("failed to verify signature: {0}")]
-    SignatureVerificationFailed(anyhow::Error),
-    #[error("failed to verify oidc token: {0}")]
-    OidcVerificationFailed(anyhow::Error),
-    #[error("oidc token {0:?} was not claimed")]
-    OidcTokenNotClaimed(OidcDigest),
-    #[error("oidc token {0:?} was claimed with another key")]
-    OidcTokenClaimedWithAnotherKey(OidcDigest),
-    #[error("{0}")]
-    Other(#[from] anyhow::Error),
-}
-
-impl PublicKeyRequestError {
-    pub fn code(&self) -> StatusCode {
-        match self {
-            Self::MalformedPublicKey(_, _) => StatusCode::BAD_REQUEST,
-            Self::SignatureVerificationFailed(_) => StatusCode::BAD_REQUEST,
-            Self::OidcVerificationFailed(_) => StatusCode::BAD_REQUEST,
-            Self::OidcTokenNotClaimed(_) => StatusCode::UNAUTHORIZED,
-            Self::OidcTokenClaimedWithAnotherKey(_) => StatusCode::UNAUTHORIZED,
             Self::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
