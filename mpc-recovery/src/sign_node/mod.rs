@@ -363,7 +363,7 @@ async fn reveal(
         }
         Err(e) => {
             tracing::error!("Reveal failed: {}", e);
-            (StatusCode::BAD_REQUEST, Json(Err(e)))
+            (e.code(), Json(Err(e.to_string())))
         }
     }
 }
@@ -389,7 +389,7 @@ async fn signature_share(
         }
         Err(e) => {
             tracing::error!("Signature share failed: {}", e);
-            (StatusCode::BAD_REQUEST, Json(Err(e)))
+            (e.code(), Json(Err(e.to_string())))
         }
     }
 }

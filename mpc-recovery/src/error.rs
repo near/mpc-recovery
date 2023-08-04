@@ -1,5 +1,7 @@
 use axum::extract::rejection::JsonRejection;
 use axum::http::StatusCode;
+use curv::elliptic::curves::{Ed25519, Point};
+use curv::BigInt;
 use near_crypto::ParseKeyError;
 use near_primitives::account::id::ParseAccountError;
 
@@ -54,6 +56,8 @@ pub enum NodeRejectionError {
     OidcTokenClaimedWithAnotherKey(OidcDigest),
     #[error("oidc token {0:?} was not claimed")]
     OidcTokenNotClaimed(OidcDigest),
+    #[error("aggregate signing failed: {0}")]
+    AggregateSigningFailed(#[from] AggregateSigningError),
     #[error("This kind of action can not be performed")]
     UnsupportedAction,
     #[error("{0}")]
@@ -72,8 +76,46 @@ impl NodeRejectionError {
             Self::OidcTokenAlreadyClaimed(_) => StatusCode::UNAUTHORIZED,
             Self::OidcTokenClaimedWithAnotherKey(_) => StatusCode::UNAUTHORIZED,
             Self::OidcTokenNotClaimed(_) => StatusCode::UNAUTHORIZED,
+            Self::AggregateSigningFailed(err) => err.code(),
+
             Self::UnsupportedAction => StatusCode::BAD_REQUEST,
             Self::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum AggregateSigningError {
+    #[error("invalid number of commitments: trying to fetch id={0} in {1} commitments")]
+    InvalidCommitmentNumbers(usize, usize),
+    #[error("invalid number of reveals: trying to fetch id={0} in {1} reveals")]
+    InvalidRevealNumbers(usize, usize),
+    #[error("commitment not found: {0}")]
+    CommitmentNotFound(String),
+    #[error("reveal not found: {0}")]
+    RevealNotFound(String),
+    #[error("in a commitment r={0:?}, blind={1}; expected {2} but found {3}")]
+    InvalidCommitment(Point<Ed25519>, BigInt, BigInt, BigInt),
+    #[error("no node public keys available to sign")]
+    NodeKeysUnavailable,
+    #[error("failed to verify signature: {0}")]
+    SignatureVerificationFailed(anyhow::Error),
+
+    #[error(transparent)]
+    DataConversionFailure(anyhow::Error),
+}
+
+impl AggregateSigningError {
+    pub fn code(&self) -> StatusCode {
+        match self {
+            Self::InvalidCommitmentNumbers(_, _) => StatusCode::BAD_REQUEST,
+            Self::InvalidRevealNumbers(_, _) => StatusCode::BAD_REQUEST,
+            Self::CommitmentNotFound(_) => StatusCode::BAD_REQUEST,
+            Self::RevealNotFound(_) => StatusCode::BAD_REQUEST,
+            Self::InvalidCommitment(_, _, _, _) => StatusCode::BAD_REQUEST,
+            Self::NodeKeysUnavailable => StatusCode::BAD_REQUEST,
+            Self::SignatureVerificationFailed(_) => StatusCode::BAD_REQUEST,
+            Self::DataConversionFailure(_) => StatusCode::BAD_REQUEST,
         }
     }
 }
