@@ -10,6 +10,10 @@ jobs:
   terraform_dev:
     name: Checks & Plan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
     defaults:
       run:
         working-directory: ./infra

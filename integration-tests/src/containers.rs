@@ -383,7 +383,7 @@ pub struct SignerNodeApi {
     pub address: String,
     pub node_id: usize,
     pub sk_share: ExpandedKeyPair,
-    pub cipher_key: Aes256Gcm,
+    pub cipher_key: GenericArray<u8, U32>,
     pub gcp_project_id: String,
     pub gcp_datastore_local_url: String,
 }
@@ -465,7 +465,7 @@ impl<'a> SignerNode<'a> {
             address: self.local_address.clone(),
             node_id: self.node_id,
             sk_share: self.sk_share.clone(),
-            cipher_key: Aes256Gcm::new(&self.cipher_key),
+            cipher_key: self.cipher_key,
             gcp_project_id: self.gcp_project_id.clone(),
             gcp_datastore_local_url: self.gcp_datastore_local_url.clone(),
         }
@@ -493,12 +493,12 @@ impl SignerNodeApi {
         .await?;
 
         let new_cipher = Aes256Gcm::new(new_cipher_key);
-        let old_cipher = &self.cipher_key;
+        let old_cipher = Aes256Gcm::new(&self.cipher_key);
 
         // Do inplace rotation of node key
         mpc_recovery::sign_node::migration::rotate_cipher(
             self.node_id,
-            old_cipher,
+            &old_cipher,
             &new_cipher,
             &gcp_service,
             &gcp_service,
