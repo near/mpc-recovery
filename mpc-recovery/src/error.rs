@@ -64,10 +64,7 @@ impl CommitRequestError {
             Self::MalformedAccountId(_, _) => StatusCode::INTERNAL_SERVER_ERROR,
 
             Self::MalformedPublicKey(_, _) => StatusCode::BAD_REQUEST,
-
-            // TODO: check if this is the right code
-            Self::SignatureVerificationFailed(_) => StatusCode::UNAUTHORIZED,
-
+            Self::SignatureVerificationFailed(_) => StatusCode::BAD_REQUEST,
             Self::OidcVerificationFailed(_) => StatusCode::BAD_REQUEST,
             Self::OidcTokenAlreadyClaimed(_) => StatusCode::UNAUTHORIZED,
             Self::OidcTokenClaimedWithAnotherKey(_) => StatusCode::UNAUTHORIZED,
@@ -98,13 +95,8 @@ impl PublicKeyRequestError {
     pub fn code(&self) -> StatusCode {
         match self {
             Self::MalformedPublicKey(_, _) => StatusCode::BAD_REQUEST,
-
-            // TODO: check if this is the right code
-            Self::SignatureVerificationFailed(_) => StatusCode::UNAUTHORIZED,
-
-            // TODO: check if this is the right code. Inconsistent w/ CommitRequestError
-            Self::OidcVerificationFailed(_) => StatusCode::UNAUTHORIZED,
-
+            Self::SignatureVerificationFailed(_) => StatusCode::BAD_REQUEST,
+            Self::OidcVerificationFailed(_) => StatusCode::BAD_REQUEST,
             Self::OidcTokenNotClaimed(_) => StatusCode::UNAUTHORIZED,
             Self::OidcTokenClaimedWithAnotherKey(_) => StatusCode::UNAUTHORIZED,
             Self::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
