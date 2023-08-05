@@ -1,3 +1,6 @@
+// TODO: FIXME: Remove this once we have a better way to handle these large errors
+#![allow(clippy::result_large_err)]
+
 use aes_gcm::aead::consts::U32;
 use aes_gcm::aead::generic_array::GenericArray;
 use aes_gcm::aead::OsRng;

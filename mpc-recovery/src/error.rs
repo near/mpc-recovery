@@ -1,13 +1,15 @@
 use axum::extract::rejection::JsonRejection;
 use axum::http::StatusCode;
+use axum::response::Response;
 use curv::elliptic::curves::{Ed25519, Point};
 use curv::BigInt;
-use near_crypto::ParseKeyError;
+use near_crypto::{ParseKeyError, PublicKey};
 use near_primitives::account::id::ParseAccountError;
 
-use crate::key_recovery::NodeRecoveryError;
+use crate::relayer::error::RelayerError;
 use crate::sign_node::oidc::OidcDigest;
 
+// TODO: maybe want to flatten out the error types to be ErrorCode + ErrorData
 /// This enum error type serves as one true source of all futures in mpc-recovery
 /// crate. It is used to unify all errors that can happen in the application.
 #[derive(Debug, thiserror::Error)]
@@ -15,16 +17,29 @@ pub enum MpcError {
     #[error(transparent)]
     JsonExtractorRejection(#[from] JsonRejection),
     #[error(transparent)]
-    SignNodeRejection(NodeRejectionError),
+    SignNodeRejection(#[from] NodeRejectionError),
+    #[error(transparent)]
+    LeaderNodeRejection(#[from] LeaderNodeError),
+}
+
+impl MpcError {
+    pub fn code(&self) -> StatusCode {
+        match self {
+            Self::JsonExtractorRejection(json_rejection) => json_rejection.status(),
+            Self::LeaderNodeRejection(error) => error.code(),
+            Self::SignNodeRejection(error) => error.code(),
+        }
+    }
 }
 
 // We implement `IntoResponse` so ApiError can be used as a response
 impl axum::response::IntoResponse for MpcError {
-    fn into_response(self) -> axum::response::Response {
+    fn into_response(self) -> Response {
         let (status, message) = match self {
             Self::JsonExtractorRejection(json_rejection) => {
                 (json_rejection.status(), json_rejection.body_text())
             }
+            Self::LeaderNodeRejection(error) => (error.code(), error.to_string()),
             Self::SignNodeRejection(error) => (error.code(), error.to_string()),
         };
 
@@ -33,11 +48,52 @@ impl axum::response::IntoResponse for MpcError {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum UserCredentialsError {
+pub enum LeaderNodeError {
+    #[error("client error: {0}")]
+    ClientError(String, StatusCode),
+    #[error("server error: {0}")]
+    ServerError(String),
+    #[error(transparent)]
+    DataConversionFailure(anyhow::Error),
+    #[error(transparent)]
+    AggregateSigningFailed(#[from] AggregateSigningError),
+    #[error("malformed account id: {0}")]
+    MalformedAccountId(String, ParseAccountError),
     #[error("failed to verify oidc token: {0}")]
     OidcVerificationFailed(anyhow::Error),
-    #[error("failed to fetch recovery key: {0}")]
-    RecoveryKeyError(#[from] NodeRecoveryError),
+    #[error("relayer error: {0}")]
+    RelayerError(#[from] RelayerError),
+    #[error("Recovery key can not be deleted: {0}")]
+    RecoveryKeyCanNotBeDeleted(PublicKey),
+    #[error("Failed to retrieve recovery pk, check digest signature")]
+    FailedToRetrieveRecoveryPk(anyhow::Error),
+    #[error("timeout gathering sign node pks")]
+    TimeoutGatheringPublicKeys,
+    #[error("network error: {0}")]
+    NetworkRejection(#[from] reqwest::Error),
+    #[error("{0}")]
+    Other(#[from] anyhow::Error),
+}
+
+impl LeaderNodeError {
+    pub fn code(&self) -> StatusCode {
+        match self {
+            LeaderNodeError::ClientError(_, code) => *code,
+            LeaderNodeError::ServerError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            LeaderNodeError::DataConversionFailure(_) => StatusCode::BAD_REQUEST,
+            LeaderNodeError::AggregateSigningFailed(err) => err.code(),
+            LeaderNodeError::OidcVerificationFailed(_) => StatusCode::UNAUTHORIZED,
+            LeaderNodeError::MalformedAccountId(_, _) => StatusCode::BAD_REQUEST,
+            LeaderNodeError::RelayerError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            LeaderNodeError::TimeoutGatheringPublicKeys => StatusCode::INTERNAL_SERVER_ERROR,
+            LeaderNodeError::RecoveryKeyCanNotBeDeleted(_) => StatusCode::BAD_REQUEST,
+            LeaderNodeError::FailedToRetrieveRecoveryPk(_) => StatusCode::UNAUTHORIZED,
+            LeaderNodeError::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            LeaderNodeError::NetworkRejection(err) => {
+                err.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+            }
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
