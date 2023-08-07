@@ -55,7 +55,10 @@ impl NearRpcAndRelayerClient {
     }
 
     #[tracing::instrument(level = "debug", skip_all, fields(account_id = request.account_id.to_string()))]
-    pub async fn register_account(&self, request: RegisterAccountRequest) -> anyhow::Result<()> {
+    pub async fn register_account(
+        &self,
+        request: RegisterAccountRequest,
+    ) -> Result<(), RelayerError> {
         let mut req = Request::builder()
             .method(Method::POST)
             .uri(format!("{}/register_account", self.relayer_url))
@@ -65,22 +68,32 @@ impl NearRpcAndRelayerClient {
             req = req.header("x-api-key", api_key);
         };
 
-        let request = req.body(Body::from(serde_json::to_vec(&request)?)).unwrap();
+        let request = req
+            .body(Body::from(
+                serde_json::to_vec(&request)
+                    .map_err(|e| RelayerError::DataConversionFailure(e.into()))?,
+            ))
+            .map_err(|e| RelayerError::NetworkFailure(e.into()))?;
 
         tracing::debug!("constructed http request to {}", self.relayer_url);
         let client = Client::new();
-        let response = client.request(request).await?;
+        let response = client
+            .request(request)
+            .await
+            .map_err(|e| RelayerError::NetworkFailure(e.into()))?;
 
-        if response.status().is_success() {
-            let response_body = hyper::body::to_bytes(response.into_body()).await?;
-            tracing::debug!("success: {}", std::str::from_utf8(&response_body)?);
+        let status = response.status();
+        let response_body = hyper::body::to_bytes(response.into_body())
+            .await
+            .map_err(|e| RelayerError::NetworkFailure(e.into()))?;
+        let msg = std::str::from_utf8(&response_body)
+            .map_err(|e| RelayerError::DataConversionFailure(e.into()))?;
+
+        if status.is_success() {
+            tracing::debug!("success: {msg}");
             Ok(())
         } else {
-            let response_body = hyper::body::to_bytes(response.into_body()).await?;
-            Err(anyhow::anyhow!(
-                "fail: {}",
-                std::str::from_utf8(&response_body)?
-            ))
+            Err(RelayerError::RequestFailure(status, msg.to_string()))
         }
     }
 

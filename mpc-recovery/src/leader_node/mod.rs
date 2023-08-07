@@ -353,8 +353,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             allowance: 300_000_000_000_000,
             oauth_token: internal_acc_id.clone(),
         })
-        .await
-        .map_err(LeaderNodeError::Other)?;
+        .await?;
 
     nar::retry(|| async {
         // Get nonce and recent block hash
