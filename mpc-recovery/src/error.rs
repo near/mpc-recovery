@@ -32,7 +32,7 @@ impl MpcError {
     }
 }
 
-// We implement `IntoResponse` so ApiError can be used as a response
+// We implement `IntoResponse` so MpcError can be used as a response
 impl axum::response::IntoResponse for MpcError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
@@ -63,9 +63,9 @@ pub enum LeaderNodeError {
     OidcVerificationFailed(anyhow::Error),
     #[error("relayer error: {0}")]
     RelayerError(#[from] RelayerError),
-    #[error("Recovery key can not be deleted: {0}")]
+    #[error("recovery key can not be deleted: {0}")]
     RecoveryKeyCanNotBeDeleted(PublicKey),
-    #[error("Failed to retrieve recovery pk, check digest signature")]
+    #[error("failed to retrieve recovery pk, check digest signature: {0}")]
     FailedToRetrieveRecoveryPk(anyhow::Error),
     #[error("timeout gathering sign node pks")]
     TimeoutGatheringPublicKeys,
@@ -125,7 +125,6 @@ impl NodeRejectionError {
         match self {
             // TODO: this case was not speicifically handled before. Check if it is the right code
             Self::MalformedAccountId(_, _) => StatusCode::INTERNAL_SERVER_ERROR,
-
             Self::MalformedPublicKey(_, _) => StatusCode::BAD_REQUEST,
             Self::SignatureVerificationFailed(_) => StatusCode::BAD_REQUEST,
             Self::OidcVerificationFailed(_) => StatusCode::BAD_REQUEST,
@@ -133,7 +132,6 @@ impl NodeRejectionError {
             Self::OidcTokenClaimedWithAnotherKey(_) => StatusCode::UNAUTHORIZED,
             Self::OidcTokenNotClaimed(_) => StatusCode::UNAUTHORIZED,
             Self::AggregateSigningFailed(err) => err.code(),
-
             Self::UnsupportedAction => StatusCode::BAD_REQUEST,
             Self::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }

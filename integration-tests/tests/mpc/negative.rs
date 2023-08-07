@@ -588,7 +588,7 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
         [
             (
                 invalid_account_req,
-                (400, "bad near_account_id: groot++")),
+                (400, "malformed near_account_id: groot++")),
             (
                 invalid_user_key_req,
                 (422, "Failed to deserialize the JSON body into the target type: create_account_options.full_access_keys")
