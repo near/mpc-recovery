@@ -1,6 +1,7 @@
 pub mod error;
 pub mod msg;
 
+use anyhow::Context;
 use hyper::{Body, Client, Method, Request};
 use near_crypto::PublicKey;
 use near_jsonrpc_client::JsonRpcClient;
@@ -101,33 +102,40 @@ impl NearRpcAndRelayerClient {
     pub async fn send_meta_tx(
         &self,
         request: SendMetaTxRequest,
-    ) -> anyhow::Result<SendMetaTxResponse> {
+    ) -> Result<SendMetaTxResponse, RelayerError> {
         let request = Request::builder()
             .method(Method::POST)
             .uri(format!("{}/send_meta_tx", self.relayer_url))
             .header("content-type", "application/json")
-            .body(Body::from(serde_json::to_vec(&request)?))
-            .map_err(|err| anyhow::anyhow!("Failed to construct send_meta_tx request {err}"))?;
+            .body(Body::from(
+                serde_json::to_vec(&request)
+                    .map_err(|e| RelayerError::DataConversionFailure(e.into()))?,
+            ))
+            .context("failed to construct send_meta_tx request")
+            .map_err(RelayerError::NetworkFailure)?;
 
         tracing::debug!("constructed http request to {}", self.relayer_url);
         let client = Client::new();
-        let response = client.request(request).await.map_err(|err| {
-            anyhow::anyhow!("Failed to send send_meta_tx request to relayer: {err}")
-        })?;
+        let response = client
+            .request(request)
+            .await
+            .context("failed to send send_meta_tx request to relayer")
+            .map_err(RelayerError::NetworkFailure)?;
+        let status = response.status();
+        let response_body = hyper::body::to_bytes(response.into_body())
+            .await
+            .map_err(|e| RelayerError::NetworkFailure(e.into()))?;
+        let msg = std::str::from_utf8(&response_body)
+            .map_err(|e| RelayerError::DataConversionFailure(e.into()))?;
 
-        if response.status().is_success() {
-            let response_body = hyper::body::to_bytes(response.into_body()).await?;
-            tracing::debug!("body: {}", std::str::from_utf8(&response_body)?);
-            let response: SendMetaTxResponse = serde_json::from_slice(&response_body)?;
+        if status.is_success() {
+            tracing::debug!("body: {}", msg);
+            let response: SendMetaTxResponse = serde_json::from_slice(&response_body)
+                .map_err(|e| RelayerError::DataConversionFailure(e.into()))?;
             tracing::debug!("success: {:?}", response);
-
             Ok(response)
         } else {
-            let response_body = hyper::body::to_bytes(response.into_body()).await?;
-            Err(anyhow::anyhow!(
-                "fail: {}",
-                std::str::from_utf8(&response_body)?
-            ))
+            Err(RelayerError::RequestFailure(status, msg.to_string()))
         }
     }
 

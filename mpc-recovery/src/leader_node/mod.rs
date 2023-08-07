@@ -414,7 +414,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
                 )
                 .await;
         }
-        let response = result.map_err(LeaderNodeError::Other)?;
+        let response = result?;
 
         // TODO: Probably need to check more fields
         if matches!(response.status, FinalExecutionStatus::SuccessValue(_)) {
