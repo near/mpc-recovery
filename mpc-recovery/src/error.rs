@@ -53,9 +53,9 @@ pub enum LeaderNodeError {
     ClientError(String, StatusCode),
     #[error("server error: {0}")]
     ServerError(String),
-    #[error(transparent)]
+    #[error("{0}")]
     DataConversionFailure(anyhow::Error),
-    #[error(transparent)]
+    #[error("aggregate signing failed: {0}")]
     AggregateSigningFailed(#[from] AggregateSigningError),
     #[error("malformed account id: {0}")]
     MalformedAccountId(String, ParseAccountError),
@@ -71,7 +71,7 @@ pub enum LeaderNodeError {
     TimeoutGatheringPublicKeys,
     #[error("network error: {0}")]
     NetworkRejection(#[from] reqwest::Error),
-    #[error("{0}")]
+    #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
 
@@ -116,7 +116,7 @@ pub enum SignNodeError {
     AggregateSigningFailed(#[from] AggregateSigningError),
     #[error("This kind of action can not be performed")]
     UnsupportedAction,
-    #[error("{0}")]
+    #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
 
@@ -154,8 +154,7 @@ pub enum AggregateSigningError {
     NodeKeysUnavailable,
     #[error("failed to verify signature: {0}")]
     SignatureVerificationFailed(anyhow::Error),
-
-    #[error(transparent)]
+    #[error("{0}")]
     DataConversionFailure(anyhow::Error),
 }
 
