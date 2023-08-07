@@ -10,14 +10,14 @@ use crate::relayer::error::RelayerError;
 use crate::sign_node::oidc::OidcDigest;
 
 // TODO: maybe want to flatten out the error types to be ErrorCode + ErrorData
-/// This enum error type serves as one true source of all futures in mpc-recovery
+/// This enum error type serves as one true source of all errors in mpc-recovery
 /// crate. It is used to unify all errors that can happen in the application.
 #[derive(Debug, thiserror::Error)]
 pub enum MpcError {
     #[error(transparent)]
     JsonExtractorRejection(#[from] JsonRejection),
     #[error(transparent)]
-    SignNodeRejection(#[from] NodeRejectionError),
+    SignNodeRejection(#[from] SignNodeError),
     #[error(transparent)]
     LeaderNodeRejection(#[from] LeaderNodeError),
 }
@@ -97,7 +97,7 @@ impl LeaderNodeError {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum NodeRejectionError {
+pub enum SignNodeError {
     #[error("malformed account id: {0}")]
     MalformedAccountId(String, ParseAccountError),
     #[error("malformed public key {0}: {1}")]
@@ -120,7 +120,7 @@ pub enum NodeRejectionError {
     Other(#[from] anyhow::Error),
 }
 
-impl NodeRejectionError {
+impl SignNodeError {
     pub fn code(&self) -> StatusCode {
         match self {
             // TODO: this case was not speicifically handled before. Check if it is the right code
