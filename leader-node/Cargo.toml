@@ -13,6 +13,8 @@ axum = { version = "0.6.19" }
 axum-client-ip = "0.4.1"
 axum-extra = "0.7"
 clap = { version = "4.2", features = ["derive", "env"] }
+hex = "0.4.3"
+k256 = { version = "0.13.1", features = ["sha256", "ecdsa", "serde"] }
 reqwest = { version = "0.11.16", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -2730,6 +2730,8 @@ dependencies = [
  "axum-client-ip",
  "axum-extra",
  "clap 4.3.19",
+ "hex 0.4.3",
+ "k256",
  "mpc-recovery-common",
  "reqwest",
  "serde",

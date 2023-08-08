@@ -68,7 +68,7 @@ pub async fn connect<U: IntoUrl>(
     url: U,
     me: Participant,
     my_address: U,
-) -> Result<(), SendError> {
+) -> Result<LeaderNodeState, SendError> {
     let mut url = url.into_url().unwrap();
     url.set_path("connect");
     let my_address = my_address.into_url().unwrap();
@@ -84,15 +84,19 @@ pub async fn connect<U: IntoUrl>(
             .await
             .map_err(|e| SendError::ReqwestClientError(e))?;
         let status = response.status();
-        let response_bytes = response
-            .bytes()
-            .await
-            .map_err(|e| SendError::ReqwestBodyError(e))?;
-        let response_str =
-            std::str::from_utf8(&response_bytes).map_err(|e| SendError::MalformedResponse(e))?;
         if status.is_success() {
-            Ok(())
+            let response = response
+                .json()
+                .await
+                .map_err(|e| SendError::ReqwestBodyError(e))?;
+            Ok(response)
         } else {
+            let response_bytes = response
+                .bytes()
+                .await
+                .map_err(|e| SendError::ReqwestBodyError(e))?;
+            let response_str = std::str::from_utf8(&response_bytes)
+                .map_err(|e| SendError::MalformedResponse(e))?;
             tracing::error!("failed to connect to {}: {}", url, response_str);
             Err(SendError::Unsuccessful(response_str.into()))
         }
@@ -100,31 +104,4 @@ pub async fn connect<U: IntoUrl>(
 
     let retry_strategy = ExponentialBackoff::from_millis(10).map(jitter).take(3);
     Retry::spawn(retry_strategy, action).await
-}
-
-pub async fn state<U: IntoUrl>(client: &Client, url: U) -> Result<LeaderNodeState, SendError> {
-    let mut url = url.into_url().unwrap();
-    url.set_path("state");
-    let response = client
-        .post(url.clone())
-        .send()
-        .await
-        .map_err(|e| SendError::ReqwestClientError(e))?;
-    let status = response.status();
-    if status.is_success() {
-        let response = response
-            .json()
-            .await
-            .map_err(|e| SendError::ReqwestBodyError(e))?;
-        Ok(response)
-    } else {
-        let response_bytes = response
-            .bytes()
-            .await
-            .map_err(|e| SendError::ReqwestBodyError(e))?;
-        let response_str =
-            std::str::from_utf8(&response_bytes).map_err(|e| SendError::MalformedResponse(e))?;
-        tracing::error!("failed to get state from {}: {}", url, response_str);
-        Err(SendError::Unsuccessful(response_str.into()))
-    }
 }

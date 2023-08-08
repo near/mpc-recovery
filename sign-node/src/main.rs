@@ -46,7 +46,7 @@ async fn main() -> anyhow::Result<()> {
             leader_url,
             web_port,
         } => {
-            let (sender, receiver) = mpsc::channel(8);
+            let (sender, receiver) = mpsc::channel(16384);
 
             let my_ip = local_ip()?;
             let my_address = Url::parse(&format!("http://{my_ip}:{web_port}"))?;

@@ -93,14 +93,7 @@ async fn state(Extension(state): Extension<AxumState>) -> (StatusCode, Json<Sign
                 public_key: public_key.clone(),
             }),
         ),
-        ProtocolState::PreGeneration { .. } => (
-            StatusCode::OK,
-            Json(SignNodeState {
-                participants: HashMap::new(),
-                public_key: None,
-            }),
-        ),
-        ProtocolState::InitialKeygen { participants, .. } => (
+        ProtocolState::Generating { participants, .. } => (
             StatusCode::OK,
             Json(SignNodeState {
                 participants: participants.clone(),
@@ -108,6 +101,17 @@ async fn state(Extension(state): Extension<AxumState>) -> (StatusCode, Json<Sign
             }),
         ),
         ProtocolState::Running {
+            participants,
+            public_key,
+            ..
+        } => (
+            StatusCode::OK,
+            Json(SignNodeState {
+                participants: participants.clone(),
+                public_key: Some(public_key.clone()),
+            }),
+        ),
+        ProtocolState::Resharing {
             participants,
             public_key,
             ..

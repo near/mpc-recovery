@@ -6,8 +6,9 @@ use axum::{
     Extension, Json, Router,
 };
 use axum_extra::extract::WithRejection;
+use k256::elliptic_curve::group::GroupEncoding;
 use mpc_recovery_common::leader::{ConnectRequest, LeaderNodeState};
-use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::sync::RwLock;
 
 mod error;
@@ -19,12 +20,8 @@ struct State {
 
 pub async fn run(port: u16, threshold: usize) -> anyhow::Result<()> {
     tracing::debug!("running a leader node");
-    let protocol_state = LeaderNodeState {
-        participants: HashMap::new(),
-        public_key: None,
-        threshold,
-        joining: HashMap::new(),
-    };
+    // TODO: restore state from persistent storage
+    let protocol_state = LeaderNodeState::default();
     let protocol_state = Arc::new(RwLock::new(protocol_state));
     let axum_state = State {
         protocol_state: protocol_state.clone(),
@@ -38,13 +35,25 @@ pub async fn run(port: u16, threshold: usize) -> anyhow::Result<()> {
             tracing::info!("updating protocol state");
             let mut protocol_state_guard = protocol_state.write().await;
             let mut protocol_state = std::mem::take(&mut *protocol_state_guard);
-            if protocol_state.participants.is_empty() {
-                tracing::info!("there are no participants yet, trying joining nodes");
-                if protocol_state.joining.is_empty() {
-                    tracing::info!("no one is pending to join, skipping");
-                } else {
+            protocol_state = match protocol_state {
+                LeaderNodeState::Discovering { joining } => {
+                    if joining.len() >= threshold {
+                        tracing::debug!("we have enough sign nodes, moving to key generation");
+                        LeaderNodeState::Generating {
+                            participants: joining,
+                            threshold,
+                        }
+                    } else {
+                        tracing::debug!("still discovering");
+                        LeaderNodeState::Discovering { joining }
+                    }
+                }
+                LeaderNodeState::Generating {
+                    participants,
+                    threshold,
+                } => {
                     let mut responses = Vec::new();
-                    for (_, url) in &protocol_state.joining {
+                    for (_, url) in &participants {
                         match client::state(&client, url.clone()).await {
                             Ok(response) => {
                                 tracing::info!("node {} is reachable", url);
@@ -57,58 +66,111 @@ pub async fn run(port: u16, threshold: usize) -> anyhow::Result<()> {
                     }
                     responses.dedup();
                     if responses.len() == 0 {
-                        tracing::warn!("there are no reachable joining participants");
+                        tracing::warn!("there are no reachable keygen participants");
+                        LeaderNodeState::Generating {
+                            participants,
+                            threshold,
+                        }
                     } else if responses.len() == 1 {
                         let consensus = responses.into_iter().next().unwrap();
-                        tracing::info!(?consensus, "joining participants have a consensus");
-                        let joining = protocol_state
-                            .joining
-                            .into_iter()
-                            .filter(|(p, _)| !consensus.participants.contains_key(p))
-                            .collect();
-                        protocol_state = LeaderNodeState {
-                            participants: consensus.participants,
-                            public_key: consensus.public_key,
-                            threshold: protocol_state.threshold,
-                            joining,
-                        };
+                        tracing::debug!(?consensus, "keygen participants have a consensus");
+                        match consensus.public_key {
+                            Some(public_key) => {
+                                tracing::info!(
+                                    public_key = hex::encode(public_key.to_bytes()),
+                                    "key generation has finished successfully"
+                                );
+                                LeaderNodeState::Running {
+                                    participants: consensus.participants,
+                                    public_key,
+                                    threshold,
+                                }
+                            }
+                            None => {
+                                tracing::debug!("still generating");
+                                LeaderNodeState::Generating {
+                                    participants,
+                                    threshold,
+                                }
+                            }
+                        }
                     } else {
-                        tracing::warn!("joining participants have not reached a consensus yet");
-                    }
-                }
-            } else {
-                let mut responses = Vec::new();
-                for (_, url) in &protocol_state.participants {
-                    match client::state(&client, url.clone()).await {
-                        Ok(response) => {
-                            responses.push(response);
-                        }
-                        Err(e) => {
-                            tracing::warn!("node {} is not reachable: {}", url, e);
+                        tracing::warn!("keygen participants have not reached a consensus yet");
+                        LeaderNodeState::Generating {
+                            participants,
+                            threshold,
                         }
                     }
                 }
-                responses.dedup();
-                if responses.len() == 0 {
-                    tracing::warn!("there are no reachable participants, waiting for them to come back up online");
-                } else if responses.len() == 1 {
-                    let consensus = responses.into_iter().next().unwrap();
-                    tracing::info!(?consensus, "participants have a consensus");
-                    let joining = protocol_state
-                        .joining
-                        .into_iter()
-                        .filter(|(p, _)| !consensus.participants.contains_key(p))
-                        .collect();
-                    protocol_state = LeaderNodeState {
-                        participants: consensus.participants,
-                        public_key: consensus.public_key,
-                        threshold: protocol_state.threshold,
-                        joining,
-                    };
-                } else {
-                    tracing::warn!("participants have not reached a consensus yet");
+                LeaderNodeState::Running { .. } => {
+                    tracing::debug!("still running");
+                    protocol_state
                 }
-            }
+                LeaderNodeState::Resharing {
+                    old_participants,
+                    new_participants,
+                    public_key,
+                    threshold,
+                } => {
+                    let mut responses = Vec::new();
+                    for (_, url) in &new_participants {
+                        match client::state(&client, url.clone()).await {
+                            Ok(response) => {
+                                tracing::info!("node {} is reachable", url);
+                                responses.push(response);
+                            }
+                            Err(e) => {
+                                tracing::warn!("node {} is not reachable: {}", url, e);
+                            }
+                        }
+                    }
+                    responses.dedup();
+                    if responses.len() == 0 {
+                        tracing::warn!("there are no reachable keyshare participants");
+                        LeaderNodeState::Resharing {
+                            old_participants,
+                            new_participants,
+                            public_key,
+                            threshold,
+                        }
+                    } else if responses.len() == 1 {
+                        let consensus = responses.into_iter().next().unwrap();
+                        tracing::info!(?consensus, "keyshare participants have a consensus");
+                        if consensus.participants == old_participants {
+                            tracing::info!("keyshare has not been completed yet");
+                            LeaderNodeState::Resharing {
+                                old_participants,
+                                new_participants,
+                                public_key,
+                                threshold,
+                            }
+                        } else if consensus.participants == new_participants {
+                            tracing::info!("keyshare has been completed");
+                            LeaderNodeState::Running {
+                                participants: new_participants,
+                                public_key,
+                                threshold,
+                            }
+                        } else {
+                            tracing::error!("unexpected consensus state");
+                            LeaderNodeState::Resharing {
+                                old_participants,
+                                new_participants,
+                                public_key,
+                                threshold,
+                            }
+                        }
+                    } else {
+                        tracing::warn!("keyshare participants have not reached a consensus yet");
+                        LeaderNodeState::Resharing {
+                            old_participants,
+                            new_participants,
+                            public_key,
+                            threshold,
+                        }
+                    }
+                }
+            };
             *protocol_state_guard = protocol_state;
         }
     });
@@ -137,25 +199,53 @@ pub async fn run(port: u16, threshold: usize) -> anyhow::Result<()> {
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
+async fn state(Extension(state): Extension<State>) -> (StatusCode, Json<LeaderNodeState>) {
+    tracing::debug!("fetching state");
+    let protocol_state = state.protocol_state.read().await;
+    (StatusCode::OK, Json(protocol_state.clone()))
+}
+
+#[tracing::instrument(level = "debug", skip_all)]
 async fn connect(
     Extension(state): Extension<State>,
     WithRejection(Json(request), _): WithRejection<Json<ConnectRequest>, MpcLeaderError>,
-) -> StatusCode {
+) -> (StatusCode, Json<LeaderNodeState>) {
     tracing::debug!(
         participant = ?request.participant,
         address = %request.address,
         "connecting"
     );
-    let mut protocol_state = state.protocol_state.write().await;
-    protocol_state
-        .joining
-        .insert(request.participant, request.address);
-    StatusCode::OK
-}
-
-#[tracing::instrument(level = "debug", skip_all)]
-async fn state(Extension(state): Extension<State>) -> (StatusCode, Json<LeaderNodeState>) {
-    tracing::debug!("fetching state");
-    let protocol_state = state.protocol_state.read().await;
-    (StatusCode::OK, Json(protocol_state.clone()))
+    let mut protocol_state_guard = state.protocol_state.write().await;
+    let mut protocol_state = std::mem::take(&mut *protocol_state_guard);
+    protocol_state = match protocol_state {
+        LeaderNodeState::Discovering { mut joining } => {
+            joining.insert(request.participant, request.address);
+            LeaderNodeState::Discovering { joining }
+        }
+        LeaderNodeState::Running {
+            participants,
+            public_key,
+            threshold,
+        } => {
+            if participants.contains_key(&request.participant) {
+                LeaderNodeState::Running {
+                    participants,
+                    public_key,
+                    threshold,
+                }
+            } else {
+                let mut new_participants = participants.clone();
+                new_participants.insert(request.participant, request.address);
+                LeaderNodeState::Resharing {
+                    old_participants: participants,
+                    new_participants,
+                    public_key,
+                    threshold,
+                }
+            }
+        }
+        LeaderNodeState::Generating { .. } | LeaderNodeState::Resharing { .. } => protocol_state,
+    };
+    *protocol_state_guard = protocol_state.clone();
+    (StatusCode::OK, Json(protocol_state))
 }
