@@ -1,0 +1,29 @@
+[package]
+name = "sign-node"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "sign-node"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { version = "1", features = ["backtrace"] }
+axum = { version = "0.6.19" }
+axum-extra = "0.7"
+cait-sith = { version = "0.7", features = ["k256"] }
+clap = { version = "4.2", features = ["derive", "env"] }
+hex = "0.4.3"
+k256 = { version = "0.13.1", features = ["sha256", "ecdsa", "serde"] }
+local-ip-address = "0.5.4"
+reqwest = { version = "0.11.16", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+tokio = { version = "1.28", features = ["full"] }
+tokio-retry = "0.3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = { version = "2.4.0", features = ["serde"] }
+
+mpc-recovery-common = { path = "../common" }
