@@ -561,8 +561,8 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
             "limited_access_keys": serde_json::Value::Null,
             "contract_bytes": serde_json::Value::Null,
         },
-        "user_credentials_frp_signature": frp_signature.clone(),
         "oidc_token": user_oidc,
+        "user_credentials_frp_signature": frp_signature.clone(),
         "frp_public_key": user_pk,
     });
 
@@ -577,7 +577,7 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
         invalid_user_key_req["frp_public_key"] = malformed_key.into();
 
         let mut invalid_oidc_token_req = template_new_account.clone();
-        invalid_oidc_token_req["oidc_token"] = OidcToken::invalid().as_ref().into();
+        invalid_oidc_token_req["oidc_token"] = serde_json::to_value(&OidcToken::invalid())?;
 
         let mut invalid_frp_signature_req = template_new_account.clone();
         // create invalid sig by having the first 16 bytes of the signature be 0:
@@ -611,7 +611,9 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
                 .claim_oidc_with_helper(&user_oidc, &user_pk, &user_sk)
                 .await?;
 
-            for (invalid_req, (expected_status_code, expected_msg)) in malformed_cases {
+            for (case_idx, (invalid_req, (expected_status_code, expected_msg))) in
+                malformed_cases.into_iter().enumerate()
+            {
                 let (code, msg): (StatusCode, serde_json::Value) =
                     mpc_recovery_integration_tests::util::post(
                         format!("{}/new_account", ctx.leader_node.address),
@@ -620,12 +622,13 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
                     .await
                     .context("failed to send request")?;
 
-                assert_eq!(code, expected_status_code, "wrong status code");
+                assert_eq!(
+                    code, expected_status_code,
+                    "wrong status code [case={case_idx}]:\n   expected: `{expected_msg}`\n     actual: `{msg}`"
+                );
                 assert!(
                     msg.to_string().contains(expected_msg),
-                    "wrong error message: `{}` not in `{}`",
-                    expected_msg,
-                    msg,
+                    "wrong error message [case={case_idx}]: `{expected_msg}` not in `{msg}`",
                 );
             }
 

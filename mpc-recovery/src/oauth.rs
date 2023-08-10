@@ -278,8 +278,7 @@ mod tests {
     #[tokio::test]
     async fn test_verify_token_invalid_with_test_verifier() {
         let token = OidcToken::invalid();
-        let result: Result<IdTokenClaims, anyhow::Error> =
-            TestTokenVerifier::verify_token(&token, "rand").await;
+        let result = TestTokenVerifier::verify_token(&token, "rand").await;
         match result {
             Ok(_) => panic!("Token verification should fail"),
             Err(e) => assert_eq!(e.to_string(), "Invalid token"),
