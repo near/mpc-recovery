@@ -114,7 +114,7 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
                     &user_public_key,
                 )
                 .await?
-                .assert_bad_request_contains("Recovery key can not be deleted")?;
+                .assert_bad_request_contains("recovery key can not be deleted")?;
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
             check::access_key_exists(&ctx, &account_id, &recovery_pk).await?;
