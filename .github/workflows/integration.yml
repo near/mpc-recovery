@@ -11,7 +11,8 @@ jobs:
   test:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest-xl]
+        # FIXME: macos-latest-xl is disabled since colima is erroring out right now
+        os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     name: Test
     steps:
