@@ -596,11 +596,11 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
             ),
             (
                 invalid_oidc_token_req,
-                (401, "failed to verify oidc token: Invalid token"),
+                (400, "failed to verify oidc token: Invalid token"),
             ),
             (
                 invalid_frp_signature_req,
-                (401, "signer failed to verify signature"),
+                (400, "client error: failed to verify signature: Public key "),
             )
         ]
     };

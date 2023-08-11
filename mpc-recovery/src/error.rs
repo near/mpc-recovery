@@ -23,7 +23,7 @@ pub enum MpcError {
 }
 
 impl MpcError {
-    pub fn code(&self) -> StatusCode {
+    pub fn status(&self) -> StatusCode {
         match self {
             Self::JsonExtractorRejection(json_rejection) => json_rejection.status(),
             Self::LeaderNodeRejection(error) => error.code(),
@@ -82,7 +82,7 @@ impl LeaderNodeError {
             LeaderNodeError::ServerError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             LeaderNodeError::DataConversionFailure(_) => StatusCode::BAD_REQUEST,
             LeaderNodeError::AggregateSigningFailed(err) => err.code(),
-            LeaderNodeError::OidcVerificationFailed(_) => StatusCode::UNAUTHORIZED,
+            LeaderNodeError::OidcVerificationFailed(_) => StatusCode::BAD_REQUEST,
             LeaderNodeError::MalformedAccountId(_, _) => StatusCode::BAD_REQUEST,
             LeaderNodeError::RelayerError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             LeaderNodeError::TimeoutGatheringPublicKeys => StatusCode::INTERNAL_SERVER_ERROR,
