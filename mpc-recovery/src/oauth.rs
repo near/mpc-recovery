@@ -5,15 +5,16 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 use crate::primitives::InternalAccountId;
+use crate::sign_node::oidc::OidcToken;
 
 #[async_trait::async_trait]
 pub trait OAuthTokenVerifier {
-    async fn verify_token(token: &str, audience: &str) -> anyhow::Result<IdTokenClaims>;
+    async fn verify_token(token: &OidcToken, audience: &str) -> anyhow::Result<IdTokenClaims>;
 
     /// This function validates JWT (OIDC ID token) by checking the signature received
     /// from the issuer, issuer, audience, and expiration time.
     fn validate_jwt(
-        token: &str,
+        token: &OidcToken,
         public_key: &[u8],
         issuer: &str,
         audience: &str,
@@ -31,8 +32,8 @@ pub trait OAuthTokenVerifier {
 
         let decoding_key = DecodingKey::from_rsa_pem(public_key)?;
 
-        let claims =
-            decode::<IdTokenClaims>(token, &decoding_key, &validation).map(|t| t.claims)?;
+        let claims = decode::<IdTokenClaims>(token.as_ref(), &decoding_key, &validation)
+            .map(|t| t.claims)?;
 
         tracing::info!(
             claims = format!("{:?}", claims),
@@ -53,7 +54,7 @@ pub struct UniversalTokenVerifier {}
 
 #[async_trait::async_trait]
 impl OAuthTokenVerifier for UniversalTokenVerifier {
-    async fn verify_token(token: &str, audience: &str) -> anyhow::Result<IdTokenClaims> {
+    async fn verify_token(token: &OidcToken, audience: &str) -> anyhow::Result<IdTokenClaims> {
         match get_token_verifier_type(token) {
             SupportedTokenVerifiers::PagodaFirebaseTokenVerifier => {
                 return PagodaFirebaseTokenVerifier::verify_token(token, audience).await;
@@ -65,8 +66,8 @@ impl OAuthTokenVerifier for UniversalTokenVerifier {
     }
 }
 
-fn get_token_verifier_type(token: &str) -> SupportedTokenVerifiers {
-    match token.len() > 30 {
+fn get_token_verifier_type(token: &OidcToken) -> SupportedTokenVerifiers {
+    match token.as_ref().len() > 30 {
         // TODO: add real token type detection, now the system can be bypassed by passing a short token
         true => {
             tracing::info!("Using PagodaFirebaseTokenVerifier");
@@ -87,7 +88,7 @@ impl OAuthTokenVerifier for PagodaFirebaseTokenVerifier {
     // Specs for ID token verification:
     // Google: https://developers.google.com/identity/openid-connect/openid-connect#validatinganidtoken
     // Firebase: https://firebase.google.com/docs/auth/admin/verify-id-tokens#verify_id_tokens_using_a_third-party_jwt_library
-    async fn verify_token(token: &str, audience: &str) -> anyhow::Result<IdTokenClaims> {
+    async fn verify_token(token: &OidcToken, audience: &str) -> anyhow::Result<IdTokenClaims> {
         let public_keys = get_pagoda_firebase_public_keys()
             .map_err(|e| anyhow::anyhow!("failed to get Firebase public key: {e}"))?;
 
@@ -122,8 +123,8 @@ pub struct TestTokenVerifier {}
 
 #[async_trait::async_trait]
 impl OAuthTokenVerifier for TestTokenVerifier {
-    async fn verify_token(token: &str, _audience: &str) -> anyhow::Result<IdTokenClaims> {
-        if let Some(aud) = token.strip_prefix("validToken:") {
+    async fn verify_token(token: &OidcToken, _audience: &str) -> anyhow::Result<IdTokenClaims> {
+        if let Some(aud) = token.as_ref().strip_prefix("validToken:") {
             tracing::info!(target: "test-token-verifier", "access token is valid");
             Ok(get_test_claims(aud.to_string()))
         } else {
@@ -216,7 +217,7 @@ mod tests {
             &my_claims,
             &EncodingKey::from_rsa_pem(&private_key_der).unwrap(),
         ) {
-            Ok(t) => t,
+            Ok(t) => OidcToken::new(t.as_str()),
             Err(e) => panic!("Failed to encode token: {}", e),
         };
 
@@ -266,9 +267,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_verify_token_valid() {
-        let token = "validToken:test-subject";
+        let token = OidcToken::new("validToken:test-subject");
         let test_claims = get_test_claims("test-subject".to_string());
-        let claims = TestTokenVerifier::verify_token(token, &test_claims.aud)
+        let claims = TestTokenVerifier::verify_token(&token, &test_claims.aud)
             .await
             .unwrap();
         assert!(compare_claims(claims, test_claims));
@@ -276,8 +277,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_verify_token_invalid_with_test_verifier() {
-        let token = "invalid";
-        let result = TestTokenVerifier::verify_token(token, "rand").await;
+        let token = OidcToken::invalid();
+        let result = TestTokenVerifier::verify_token(&token, "rand").await;
         match result {
             Ok(_) => panic!("Token verification should fail"),
             Err(e) => assert_eq!(e.to_string(), "Invalid token"),
@@ -286,9 +287,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_verify_token_valid_with_test_verifier() {
-        let token = "validToken:test-subject";
+        let token = OidcToken::new("validToken:test-subject");
         let test_claims = get_test_claims("test-subject".to_string());
-        let claims = TestTokenVerifier::verify_token(token, &test_claims.aud)
+        let claims = TestTokenVerifier::verify_token(&token, &test_claims.aud)
             .await
             .unwrap();
         assert!(compare_claims(claims, test_claims));
@@ -296,8 +297,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_verify_token_invalid_with_universal_verifier() {
-        let token = "invalid";
-        let result = UniversalTokenVerifier::verify_token(token, "rand").await;
+        let token = OidcToken::invalid();
+        let result = UniversalTokenVerifier::verify_token(&token, "rand").await;
         match result {
             Ok(_) => panic!("Token verification should fail"),
             Err(e) => assert_eq!(e.to_string(), "Invalid token"),
@@ -306,9 +307,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_verify_token_valid_with_universal_verifier() {
-        let token = "validToken:test-subject";
+        let token = OidcToken::new("validToken:test-subject");
         let test_claims = get_test_claims("test-subject".to_string());
-        let claims = UniversalTokenVerifier::verify_token(token, &test_claims.aud)
+        let claims = UniversalTokenVerifier::verify_token(&token, &test_claims.aud)
             .await
             .unwrap();
         assert!(compare_claims(claims, test_claims));

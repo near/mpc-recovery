@@ -4,6 +4,7 @@ use ed25519_dalek::{PublicKey, Signature};
 use near_primitives::delegate_action::DelegateAction;
 use serde::{Deserialize, Serialize};
 
+use crate::sign_node::oidc::{OidcHash, OidcToken};
 use crate::transaction::CreateAccountOptions;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -39,7 +40,7 @@ impl TryInto<PublicKey> for MpcPkResponse {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ClaimOidcRequest {
     #[serde(with = "hex::serde")]
-    pub oidc_token_hash: [u8; 32],
+    pub oidc_token_hash: OidcHash,
     pub frp_public_key: String,
     #[serde(with = "hex_sig_share")]
     pub frp_signature: Signature,
@@ -73,7 +74,7 @@ impl TryInto<Signature> for ClaimOidcResponse {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UserCredentialsRequest {
-    pub oidc_token: String,
+    pub oidc_token: OidcToken,
     #[serde(with = "hex_sig_share")]
     pub frp_signature: Signature,
     pub frp_public_key: near_crypto::PublicKey,
@@ -97,7 +98,7 @@ impl UserCredentialsResponse {
 pub struct NewAccountRequest {
     pub near_account_id: String,
     pub create_account_options: CreateAccountOptions,
-    pub oidc_token: String,
+    pub oidc_token: OidcToken,
     pub user_credentials_frp_signature: Signature,
     pub frp_public_key: near_crypto::PublicKey,
 }
@@ -125,7 +126,7 @@ impl NewAccountResponse {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SignRequest {
     pub delegate_action: DelegateAction,
-    pub oidc_token: String,
+    pub oidc_token: OidcToken,
     pub frp_signature: Signature,
     pub user_credentials_frp_signature: Signature,
     pub frp_public_key: near_crypto::PublicKey,
@@ -154,7 +155,7 @@ pub enum SignNodeRequest {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SignShareNodeRequest {
-    pub oidc_token: String,
+    pub oidc_token: OidcToken,
     pub delegate_action: DelegateAction,
     pub frp_signature: Signature,
     pub frp_public_key: near_crypto::PublicKey,
@@ -163,14 +164,14 @@ pub struct SignShareNodeRequest {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ClaimOidcNodeRequest {
     #[serde(with = "hex::serde")]
-    pub oidc_token_hash: [u8; 32],
+    pub oidc_token_hash: OidcHash,
     pub public_key: String,
     #[serde(with = "hex_sig_share")]
     pub signature: Signature,
 }
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PublicKeyNodeRequest {
-    pub oidc_token: String,
+    pub oidc_token: OidcToken,
     pub frp_signature: Signature,
     pub frp_public_key: near_crypto::PublicKey,
 }
