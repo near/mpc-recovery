@@ -209,11 +209,11 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
             // Relayer is wasting a token even if account was not created
             // ctx.leader_node
             //     .new_account_with_helper(
-            //         account_id.to_string(),
-            //         user_public_key.clone(),
+            //         &account_id.to_string(),
+            //         &user_public_key,
             //         None,
-            //         user_secret_key.clone(),
-            //         oidc_token_1.clone(),
+            //         &user_secret_key,
+            //         &oidc_token_1,
             //     )
             //     .await?
             //     .assert_unauthorized_contains("was not claimed")?;
@@ -627,6 +627,80 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
                     msg,
                 );
             }
+
+            Ok(())
+        })
+    })
+    .await
+}
+
+#[test(tokio::test)]
+async fn test_account_creation_should_work_on_second_attempt() -> anyhow::Result<()> {
+    with_nodes(2, |ctx| {
+        Box::pin(async move {
+            let account_id = account::random(ctx.worker)?;
+            let user_secret_key = key::random_sk();
+            let user_public_key = user_secret_key.public_key();
+            let oidc_token = token::valid_random();
+
+            ctx.leader_node
+                .new_account_with_helper(
+                    &account_id.to_string(),
+                    &user_public_key,
+                    None,
+                    &user_secret_key,
+                    &oidc_token,
+                )
+                .await?
+                .assert_unauthorized_contains("was not claimed")?;
+
+            register_account(
+                &ctx,
+                &account_id,
+                &user_secret_key,
+                &user_public_key,
+                &oidc_token,
+                None,
+            )
+            .await?;
+
+            Ok(())
+        })
+    })
+    .await
+}
+
+#[test(tokio::test)]
+async fn test_creation_of_two_account_with_the_same_oidc_should_not_be_possible(
+) -> anyhow::Result<()> {
+    with_nodes(2, |ctx| {
+        Box::pin(async move {
+            let account_id = account::random(ctx.worker)?;
+            let account_id_2 = account::random(ctx.worker)?;
+            let user_secret_key = key::random_sk();
+            let user_public_key = user_secret_key.public_key();
+            let oidc_token = token::valid_random();
+
+            register_account(
+                &ctx,
+                &account_id,
+                &user_secret_key,
+                &user_public_key,
+                &oidc_token,
+                None,
+            )
+            .await?;
+
+            ctx.leader_node
+                .new_account_with_helper(
+                    &account_id_2.to_string(),
+                    &user_public_key,
+                    None,
+                    &user_secret_key,
+                    &oidc_token,
+                )
+                .await?
+                .assert_internal_error_contains("Yu can only register 1 account per oath_token")?;
 
             Ok(())
         })
