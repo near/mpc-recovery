@@ -577,7 +577,7 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
         invalid_user_key_req["frp_public_key"] = malformed_key.into();
 
         let mut invalid_oidc_token_req = template_new_account.clone();
-        invalid_oidc_token_req["oidc_token"] = serde_json::to_value(&OidcToken::invalid())?;
+        invalid_oidc_token_req["oidc_token"] = serde_json::to_value(OidcToken::invalid())?;
 
         let mut invalid_frp_signature_req = template_new_account.clone();
         // create invalid sig by having the first 16 bytes of the signature be 0:
