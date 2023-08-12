@@ -393,7 +393,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                     &invalid_oidc_token,
                 )
                 .await?
-                .assert_unauthorized()?;
+                .assert_bad_request()?;
 
             // Try to create an account with valid token
             let new_acc_response = ctx
@@ -442,7 +442,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                     &user_public_key,
                 )
                 .await?
-                .assert_unauthorized()?;
+                .assert_bad_request()?;
 
             // Try to add a key with valid token
             ctx.leader_node
