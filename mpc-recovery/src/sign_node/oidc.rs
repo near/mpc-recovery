@@ -36,6 +36,7 @@ impl FromHex for OidcHash {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[serde(transparent)]
 pub struct OidcToken {
     data: String,
 }

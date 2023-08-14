@@ -42,7 +42,7 @@ pub struct ClaimOidcRequest {
     #[serde(with = "hex::serde")]
     pub oidc_token_hash: OidcHash,
     pub frp_public_key: String,
-    #[serde(with = "hex_sig_share")]
+    #[serde(with = "hex_signature")]
     pub frp_signature: Signature,
 }
 
@@ -51,7 +51,7 @@ pub struct ClaimOidcRequest {
 #[serde(rename_all = "snake_case")]
 pub enum ClaimOidcResponse {
     Ok {
-        #[serde(with = "hex_sig_share")]
+        #[serde(with = "hex_signature")]
         mpc_signature: Signature,
     },
     Err {
@@ -75,7 +75,7 @@ impl TryInto<Signature> for ClaimOidcResponse {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UserCredentialsRequest {
     pub oidc_token: OidcToken,
-    #[serde(with = "hex_sig_share")]
+    #[serde(with = "hex_signature")]
     pub frp_signature: Signature,
     pub frp_public_key: near_crypto::PublicKey,
 }
@@ -99,6 +99,7 @@ pub struct NewAccountRequest {
     pub near_account_id: String,
     pub create_account_options: CreateAccountOptions,
     pub oidc_token: OidcToken,
+    #[serde(with = "hex_signature")]
     pub user_credentials_frp_signature: Signature,
     pub frp_public_key: near_crypto::PublicKey,
 }
@@ -127,7 +128,9 @@ impl NewAccountResponse {
 pub struct SignRequest {
     pub delegate_action: DelegateAction,
     pub oidc_token: OidcToken,
+    #[serde(with = "hex_signature")]
     pub frp_signature: Signature,
+    #[serde(with = "hex_signature")]
     pub user_credentials_frp_signature: Signature,
     pub frp_public_key: near_crypto::PublicKey,
 }
@@ -136,8 +139,13 @@ pub struct SignRequest {
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum SignResponse {
-    Ok { signature: Signature },
-    Err { msg: String },
+    Ok {
+        #[serde(with = "hex_signature")]
+        signature: Signature,
+    },
+    Err {
+        msg: String,
+    },
 }
 
 impl SignResponse {
@@ -157,6 +165,7 @@ pub enum SignNodeRequest {
 pub struct SignShareNodeRequest {
     pub oidc_token: OidcToken,
     pub delegate_action: DelegateAction,
+    #[serde(with = "hex_signature")]
     pub frp_signature: Signature,
     pub frp_public_key: near_crypto::PublicKey,
 }
@@ -166,12 +175,13 @@ pub struct ClaimOidcNodeRequest {
     #[serde(with = "hex::serde")]
     pub oidc_token_hash: OidcHash,
     pub public_key: String,
-    #[serde(with = "hex_sig_share")]
+    #[serde(with = "hex_signature")]
     pub signature: Signature,
 }
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PublicKeyNodeRequest {
     pub oidc_token: OidcToken,
+    #[serde(with = "hex_signature")]
     pub frp_signature: Signature,
     pub frp_public_key: near_crypto::PublicKey,
 }
@@ -181,7 +191,7 @@ pub struct AcceptNodePublicKeysRequest {
     pub public_keys: Vec<Point<Ed25519>>,
 }
 
-mod hex_sig_share {
+mod hex_signature {
     use ed25519_dalek::Signature;
     use serde::{Deserialize, Deserializer, Serializer};
 
