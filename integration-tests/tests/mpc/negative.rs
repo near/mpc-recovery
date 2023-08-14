@@ -562,7 +562,7 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
             "contract_bytes": serde_json::Value::Null,
         },
         "oidc_token": user_oidc,
-        "user_credentials_frp_signature": frp_signature.clone(),
+        "user_credentials_frp_signature": hex::encode(frp_signature),
         "frp_public_key": user_pk,
     });
 
@@ -583,8 +583,9 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
         // create invalid sig by having the first 16 bytes of the signature be 0:
         let mut invalid_sig = frp_signature.to_bytes();
         invalid_sig[0..16].copy_from_slice(&[0; 16]);
-        invalid_frp_signature_req["user_credentials_frp_signature"] =
-            serde_json::to_value(ed25519_dalek::Signature::from_bytes(&invalid_sig)?)?;
+        invalid_frp_signature_req["user_credentials_frp_signature"] = serde_json::to_value(
+            hex::encode(ed25519_dalek::Signature::from_bytes(&invalid_sig)?),
+        )?;
 
         [
             (
