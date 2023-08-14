@@ -1,14 +1,13 @@
 use cait_sith::protocol::Participant;
-use mpc_recovery_common::{
-    leader::{ConnectRequest, LeaderNodeState},
-    sign::MsgRequest,
-};
+use near_primitives::types::AccountId;
 use reqwest::{Client, IntoUrl};
 use std::str::Utf8Error;
 use tokio_retry::{
     strategy::{jitter, ExponentialBackoff},
     Retry,
 };
+
+use crate::web::{JoinRequest, MsgRequest};
 
 #[derive(Debug, thiserror::Error)]
 pub enum SendError {
@@ -63,12 +62,13 @@ pub async fn message<U: IntoUrl>(
     Retry::spawn(retry_strategy, action).await
 }
 
-pub async fn connect<U: IntoUrl>(
+pub async fn join<U: IntoUrl>(
     client: &Client,
     url: U,
     me: Participant,
+    my_account: AccountId,
     my_address: U,
-) -> Result<LeaderNodeState, SendError> {
+) -> Result<(), SendError> {
     let mut url = url.into_url().unwrap();
     url.set_path("connect");
     let my_address = my_address.into_url().unwrap();
@@ -76,9 +76,10 @@ pub async fn connect<U: IntoUrl>(
         let response = client
             .post(url.clone())
             .header("content-type", "application/json")
-            .json(&ConnectRequest {
-                participant: me,
-                address: my_address.clone(),
+            .json(&JoinRequest {
+                id: me,
+                account_id: my_account.clone(),
+                url: my_address.clone(),
             })
             .send()
             .await

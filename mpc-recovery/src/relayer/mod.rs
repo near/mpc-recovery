@@ -4,6 +4,7 @@ pub mod msg;
 use hyper::{Body, Client, Method, Request};
 use near_crypto::PublicKey;
 use near_jsonrpc_client::JsonRpcClient;
+use near_primitives::delegate_action::DelegateAction;
 use near_primitives::hash::CryptoHash;
 use near_primitives::types::{AccountId, BlockHeight, Nonce};
 

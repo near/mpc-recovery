@@ -1,4 +1,7 @@
 mod mpc;
+mod multichain;
+
+use std::collections::HashMap;
 
 use curv::elliptic::curves::{Ed25519, Point};
 use futures::future::BoxFuture;
@@ -10,8 +13,13 @@ use mpc_recovery::{
     },
     GenerateResult,
 };
-use mpc_recovery_integration_tests::containers;
-use workspaces::{network::Sandbox, Worker};
+use mpc_recovery_integration_tests::containers::{self, Node};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use workspaces::{
+    network::{Sandbox, Testnet},
+    AccountId, Contract, Worker,
+};
 
 const NETWORK: &str = "mpc_it_network";
 const GCP_PROJECT_ID: &str = "mpc-recovery-gcp-project";
@@ -100,6 +108,88 @@ where
         signer_nodes: &signer_nodes.iter().map(|n| n.api()).collect(),
         worker: &relayer_ctx.worker,
         gcp_datastore_url: datastore.local_address,
+    })
+    .await?;
+
+    Ok(())
+}
+
+pub struct MultichainTestContext<'a> {
+    worker: &'a Worker<Testnet>,
+    mpc_contract: &'a Contract,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Participant {
+    id: u32,
+    account_id: AccountId,
+    url: String,
+}
+
+async fn with_multichain_nodes<F>(nodes: usize, f: F) -> anyhow::Result<()>
+where
+    F: for<'a> FnOnce(MultichainTestContext<'a>) -> BoxFuture<'a, anyhow::Result<()>>,
+{
+    let docker_client = containers::DockerClient::default();
+    docker_client.create_network(NETWORK).await?;
+    let worker = workspaces::testnet().await?;
+    tracing::info!("deploying mpc contract");
+    let mpc_contract = worker
+        .dev_deploy(include_bytes!(
+            "../../target/wasm32-unknown-unknown/release/mpc_contract.wasm"
+        ))
+        .await?;
+    tracing::info!("deployed mpc contract");
+
+    let accounts = futures::future::join_all((0..nodes).map(|_| worker.dev_create_account()))
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut node_futures = Vec::new();
+    for (i, account) in accounts.iter().enumerate() {
+        let node = containers::Node::run(
+            &docker_client,
+            NETWORK,
+            i as u64,
+            mpc_contract.id(),
+            account.id(),
+            account.secret_key(),
+        );
+        node_futures.push(node);
+    }
+    let nodes = futures::future::join_all(node_futures)
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
+    let participants: HashMap<AccountId, Participant> = accounts
+        .iter()
+        .cloned()
+        .enumerate()
+        .zip(&nodes)
+        .map(|((i, account), node)| {
+            (
+                account.id().clone(),
+                Participant {
+                    id: i as u32,
+                    account_id: account.id().clone(),
+                    url: node.address.clone(),
+                },
+            )
+        })
+        .collect();
+    mpc_contract
+        .call("init")
+        .args_json(json!({
+            "threshold": 2,
+            "participants": participants
+        }))
+        .transact()
+        .await?
+        .into_result()?;
+
+    f(MultichainTestContext {
+        worker: &worker,
+        mpc_contract: &mpc_contract,
     })
     .await?;
 

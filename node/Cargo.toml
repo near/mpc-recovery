@@ -1,10 +1,10 @@
 [package]
-name = "sign-node"
+name = "mpc-recovery-node"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "sign-node"
+name = "mpc-recovery-node"
 path = "src/main.rs"
 
 [dependencies]
@@ -26,4 +26,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = { version = "2.4.0", features = ["serde"] }
 
-mpc-recovery-common = { path = "../common" }
+near-crypto = "0.17"
+near-fetch = "0.0.12"
+near-primitives = "0.17"
+near-lake-framework = "0.8.0-beta.2"
+near-lake-primitives = "0.8.0-beta.2"
