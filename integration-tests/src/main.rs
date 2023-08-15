@@ -109,7 +109,7 @@ async fn main() -> anyhow::Result<()> {
 
             tracing::info!("Please run the command below to start a leader node:");
             tracing::info!(
-                "RUST_LOG=mpc_recovery=debug cargo run --bin mpc-recovery -- {}",
+                "RUST_BACKTRACE=1 RUST_LOG=mpc_recovery=debug cargo run --bin mpc-recovery -- {}",
                 cmd.join(" ")
             );
             tracing::info!("====================================");

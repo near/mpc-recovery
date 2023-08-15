@@ -3,6 +3,9 @@ use aes_gcm::{
     Aes256Gcm,
 };
 use clap::Parser;
+use init_tracing_opentelemetry::tracing_subscriber_ext::{
+    build_loglevel_filter_layer, build_otel_layer,
+};
 use mpc_recovery::{
     gcp::GcpService,
     oauth::{PagodaFirebaseTokenVerifier, UniversalTokenVerifier},
@@ -11,7 +14,10 @@ use mpc_recovery::{
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_primitives::types::AccountId;
-use tracing_subscriber::EnvFilter;
+use tracing::Subscriber;
+use tracing_subscriber::{
+    fmt::format::FmtSpan, prelude::__tracing_subscriber_SubscriberExt, registry::LookupSpan, Layer,
+};
 
 #[derive(Parser, Debug)]
 enum Cli {
@@ -165,20 +171,45 @@ async fn load_account_creator_sk(
     }
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    // Install global collector configured based on RUST_LOG env var.
-    let mut subscriber = tracing_subscriber::fmt()
-        .with_thread_ids(true)
-        .with_env_filter(EnvFilter::from_default_env());
+fn build_tracing_layer<S>() -> Box<dyn Layer<S> + Send + Sync + 'static>
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+{
+    let mut layer = tracing_subscriber::fmt::layer()
+        .pretty()
+        .with_line_number(true)
+        .with_thread_names(true)
+        .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+        .with_timer(tracing_subscriber::fmt::time::uptime());
     // Check if running in Google Cloud Run: https://cloud.google.com/run/docs/container-contract#services-env-vars
     if std::env::var("K_SERVICE").is_ok() {
         // Disable colored logging as it messes up Google's log formatting
-        subscriber = subscriber.with_ansi(false);
+        layer = layer.with_ansi(false);
     }
-    subscriber.init();
-    let _span = tracing::trace_span!("cli").entered();
+    Box::new(layer)
+}
 
+fn init_subscribers() -> anyhow::Result<()> {
+    // Setup a temporary subscriber to log output during setup
+    let subscriber = tracing_subscriber::registry()
+        .with(build_loglevel_filter_layer())
+        .with(build_tracing_layer());
+    let _guard = tracing::subscriber::set_default(subscriber);
+    tracing::info!("init logging & tracing");
+
+    let subscriber = tracing_subscriber::registry()
+        .with(build_otel_layer()?)
+        .with(build_loglevel_filter_layer())
+        .with(build_tracing_layer());
+    tracing::subscriber::set_global_default(subscriber)?;
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    init_subscribers()?;
+
+    let _span = tracing::trace_span!("cli").entered();
     match Cli::parse() {
         Cli::Generate { n } => {
             let GenerateResult { pk_set, secrets } = mpc_recovery::generate(n);
