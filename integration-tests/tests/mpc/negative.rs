@@ -292,7 +292,7 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
             ctx.leader_node
                 .claim_oidc(bad_oidc_request.clone())
                 .await?
-                .assert_bad_request_contains("failed to verify signature")?;
+                .assert_unauthorized_contains("failed to verify signature")?;
 
             // Making the claiming request with correct signature
             let mpc_signature: Signature = ctx
@@ -393,7 +393,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                     &invalid_oidc_token,
                 )
                 .await?
-                .assert_bad_request()?;
+                .assert_unauthorized()?;
 
             // Try to create an account with valid token
             let new_acc_response = ctx
@@ -442,7 +442,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                     &user_public_key,
                 )
                 .await?
-                .assert_bad_request()?;
+                .assert_unauthorized()?;
 
             // Try to add a key with valid token
             ctx.leader_node
@@ -597,7 +597,7 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
             ),
             (
                 invalid_oidc_token_req,
-                (400, "failed to verify oidc token: Invalid token"),
+                (401, "failed to verify oidc token: Invalid token"),
             ),
             (
                 invalid_frp_signature_req,
