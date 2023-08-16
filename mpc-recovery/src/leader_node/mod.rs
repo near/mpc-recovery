@@ -336,10 +336,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
     request: NewAccountRequest,
 ) -> Result<NewAccountResponse, LeaderNodeError> {
     // Create a transaction to create new NEAR account
-    let new_user_account_id: AccountId = request
-        .near_account_id
-        .parse()
-        .map_err(|e| LeaderNodeError::MalformedAccountId(request.near_account_id, e))?;
+    let new_user_account_id = request.near_account_id;
     let oidc_token_claims =
         T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
             .await
@@ -421,7 +418,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             Ok(NewAccountResponse::Ok {
                 create_account_options: new_account_options,
                 user_recovery_public_key: mpc_user_recovery_pk.to_string(),
-                near_account_id: new_user_account_id.to_string(),
+                near_account_id: new_user_account_id.clone(),
             })
         } else {
             Err(LeaderNodeError::Other(anyhow::anyhow!(
@@ -439,7 +436,7 @@ async fn new_account<T: OAuthTokenVerifier>(
     WithRejection(Json(request), _): WithRejection<Json<NewAccountRequest>, MpcError>,
 ) -> (StatusCode, Json<NewAccountResponse>) {
     tracing::info!(
-        near_account_id = request.near_account_id.clone(),
+        near_account_id = request.near_account_id.to_string(),
         create_account_options = request.create_account_options.to_string(),
         oidc_token = format!("{:.5}...", request.oidc_token),
         "new_account request"

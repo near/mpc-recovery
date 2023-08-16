@@ -412,7 +412,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                     create_account_options: _,
                     user_recovery_public_key: _,
                     near_account_id: acc_id,
-                } if acc_id == account_id.to_string()
+                } if acc_id == account_id
             ));
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
@@ -468,63 +468,6 @@ async fn test_invalid_token() -> anyhow::Result<()> {
 }
 
 #[test(tokio::test)]
-async fn test_malformed_account_id() -> anyhow::Result<()> {
-    with_nodes(1, |ctx| {
-        Box::pin(async move {
-            let malformed_account_id = account::malformed();
-            let user_secret_key = key::random_sk();
-            let user_public_key = user_secret_key.public_key();
-            let oidc_token = OidcToken::random();
-
-            ctx.leader_node
-                .claim_oidc_with_helper(&oidc_token, &user_public_key, &user_secret_key)
-                .await?;
-
-            ctx.leader_node
-                .new_account_with_helper(
-                    &malformed_account_id,
-                    &user_public_key,
-                    None,
-                    &user_secret_key,
-                    &oidc_token,
-                )
-                .await?
-                .assert_bad_request()?;
-
-            let account_id = account::random(ctx.worker)?;
-            let account_id_repr = account_id.to_string();
-
-            // Check that the service is still available
-            let new_acc_response = ctx
-                .leader_node
-                .new_account_with_helper(
-                    &account_id_repr,
-                    &user_public_key,
-                    None,
-                    &user_secret_key,
-                    &oidc_token,
-                )
-                .await?
-                .assert_ok()?;
-
-            assert!(matches!(new_acc_response, NewAccountResponse::Ok {
-                    create_account_options: _,
-                    user_recovery_public_key: _,
-                    near_account_id: acc_id,
-                } if acc_id == account_id_repr
-            ));
-
-            tokio::time::sleep(Duration::from_millis(2000)).await;
-
-            check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
-
-            Ok(())
-        })
-    })
-    .await
-}
-
-#[test(tokio::test)]
 async fn test_reject_new_pk_set() -> anyhow::Result<()> {
     with_nodes(2, |ctx| {
         Box::pin(async move {
@@ -568,7 +511,7 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
 
     let malformed_cases = {
         let mut invalid_account_req = template_new_account.clone();
-        invalid_account_req["near_account_id"] = "groot++".into();
+        invalid_account_req["near_account_id"] = account::malformed().into();
 
         let mut invalid_user_key_req = template_new_account.clone();
         let malformed_key = key::malformed_pk();
@@ -590,18 +533,18 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
         [
             (
                 invalid_account_req,
-                (400, "malformed account id: groot++")),
+                (StatusCode::UNPROCESSABLE_ENTITY, "Failed to deserialize the JSON body into the target type: near_account_id: invalid value:")),
             (
                 invalid_user_key_req,
-                (422, "Failed to deserialize the JSON body into the target type: create_account_options.full_access_keys")
+                (StatusCode::UNPROCESSABLE_ENTITY, "Failed to deserialize the JSON body into the target type: create_account_options.full_access_keys")
             ),
             (
                 invalid_oidc_token_req,
-                (400, "failed to verify oidc token: Invalid token"),
+                (StatusCode::UNAUTHORIZED, "failed to verify oidc token: Invalid token"),
             ),
             (
                 invalid_frp_signature_req,
-                (400, "client error: failed to verify signature: Public key "),
+                (StatusCode::UNAUTHORIZED, "client error: failed to verify signature: Public key "),
             )
         ]
     };
@@ -632,6 +575,30 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
                     "wrong error message [case={case_idx}]: `{expected_msg}` not in `{msg}`",
                 );
             }
+
+            // Check that the service is still available
+            let account_id = account::random(ctx.worker)?;
+            let new_acc_response = ctx
+                .leader_node
+                .new_account_with_helper(
+                    &account_id,
+                    &user_pk,
+                    None,
+                    &user_sk,
+                    &user_oidc,
+                )
+                .await?
+                .assert_ok()?;
+
+            assert!(matches!(new_acc_response, NewAccountResponse::Ok {
+                    create_account_options: _,
+                    user_recovery_public_key: _,
+                    near_account_id,
+                } if near_account_id == account_id
+            ));
+
+            tokio::time::sleep(Duration::from_millis(2000)).await;
+            check::access_key_exists(&ctx, &account_id, &user_pk).await?;
 
             Ok(())
         })

@@ -2,6 +2,7 @@ use anyhow::Context;
 use curv::elliptic::curves::{Ed25519, Point};
 use ed25519_dalek::{PublicKey, Signature};
 use near_primitives::delegate_action::DelegateAction;
+use near_primitives::types::AccountId;
 use serde::{Deserialize, Serialize};
 
 use crate::sign_node::oidc::{OidcHash, OidcToken};
@@ -96,7 +97,7 @@ impl UserCredentialsResponse {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NewAccountRequest {
-    pub near_account_id: String,
+    pub near_account_id: AccountId,
     pub create_account_options: CreateAccountOptions,
     pub oidc_token: OidcToken,
     #[serde(with = "hex_signature")]
@@ -111,7 +112,7 @@ pub enum NewAccountResponse {
     Ok {
         create_account_options: CreateAccountOptions,
         user_recovery_public_key: String,
-        near_account_id: String,
+        near_account_id: AccountId,
     },
     Err {
         msg: String,
