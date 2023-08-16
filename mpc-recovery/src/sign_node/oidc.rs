@@ -4,6 +4,7 @@ use borsh::{self, BorshDeserialize, BorshSerialize};
 use google_datastore1::api::{Key, PathElement};
 use hex::FromHex;
 use jsonwebtoken as jwt;
+use jwt::DecodingKey;
 use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
 
@@ -72,19 +73,27 @@ impl OidcToken {
         }
     }
 
-    // NOTE: code taken directly from jsonwebtoken::verify_signature
-    pub fn decode(&self) -> anyhow::Result<(jwt::Header, IdTokenClaims, String)> {
-        let mut parts = self.as_ref().split('.');
-        let size_hint = parts.size_hint();
-        let (Some(header), Some(payload), Some(signature)) = (parts.next(), parts.next(), parts.next()) else {
-            panic!("could not retrieve header, payload, signature: {:?}", size_hint);
+    // NOTE: code taken directly from jsonwebtoken::verify_signature and modified to suit
+    // our needs (i.e. not knowing audience and issuer ahead of time).
+    pub fn decode(
+        &self,
+        key: &DecodingKey,
+    ) -> anyhow::Result<(jwt::Header, IdTokenClaims, String)> {
+        let mut parts = self.as_ref().rsplitn(2, '.');
+        let (Some(signature), Some(message)) = (parts.next(), parts.next()) else {
+            anyhow::bail!("could not split into signature and message for OIDC token");
         };
-        if let Some(_remainder) = parts.next() {
-            panic!("Unexpected extra part: {:?}", size_hint);
+        let mut parts = message.rsplitn(2, '.');
+        let (Some(payload), Some(header)) = (parts.next(), parts.next()) else {
+            anyhow::bail!("could not split into payload and header for OIDC token");
+        };
+        let header: jwt::Header = serde_json::from_slice(&b64_decode(header)?)?;
+        let claims: IdTokenClaims = serde_json::from_slice(&b64_decode(payload)?)?;
+
+        if !jwt::crypto::verify(signature, message.as_bytes(), key, header.alg)? {
+            anyhow::bail!("InvalidSignature");
         }
 
-        let header: jwt::Header = serde_json::from_slice(&b64_decode(header)?).unwrap();
-        let claims: IdTokenClaims = serde_json::from_slice(&b64_decode(payload)?).unwrap();
         Ok((header, claims, signature.into()))
     }
 }

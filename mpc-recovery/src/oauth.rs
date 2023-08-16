@@ -1,5 +1,5 @@
 use chrono::Utc;
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -13,27 +13,32 @@ pub trait OAuthTokenVerifier {
 
     /// This function validates JWT (OIDC ID token) by checking the signature received
     /// from the issuer, issuer, audience, and expiration time.
-    fn validate_jwt(
-        token: &OidcToken,
-        public_key: &[u8],
-        issuer: &str,
-        audience: &str,
-    ) -> anyhow::Result<IdTokenClaims> {
+    fn validate_jwt(token: &OidcToken, public_key: &[u8]) -> anyhow::Result<IdTokenClaims> {
         tracing::info!(
             oidc_token = format!("{:.5}...", token),
             public_key = String::from_utf8(public_key.to_vec()).unwrap_or_default(),
-            issuer = issuer,
-            audience = audience,
             "validate_jwt call"
         );
-        let mut validation = Validation::new(Algorithm::RS256);
-        validation.set_issuer(&[issuer]);
-        validation.set_audience(&[audience]);
 
         let decoding_key = DecodingKey::from_rsa_pem(public_key)?;
+        let (header, claims, _sig) = token.decode(&decoding_key)?;
+        let IdTokenClaims {
+            iss: issuer,
+            aud: audience,
+            ..
+        } = &claims;
 
-        let claims = decode::<IdTokenClaims>(token.as_ref(), &decoding_key, &validation)
-            .map(|t| t.claims)?;
+        tracing::info!(
+            oidc_token = format!("{:.5}...", token),
+            issuer = issuer,
+            audience = audience,
+            "validate_jwt call decoded"
+        );
+
+        // algorithm used by jsonwebtoken library
+        if header.alg != Algorithm::RS256 {
+            anyhow::bail!("InvalidAlgorithm: {:?}", header.alg);
+        }
 
         tracing::info!(
             claims = format!("{:?}", claims),
@@ -89,20 +94,13 @@ impl OAuthTokenVerifier for PagodaFirebaseTokenVerifier {
     // Google: https://developers.google.com/identity/openid-connect/openid-connect#validatinganidtoken
     // Firebase: https://firebase.google.com/docs/auth/admin/verify-id-tokens#verify_id_tokens_using_a_third-party_jwt_library
     async fn verify_token(token: &OidcToken) -> anyhow::Result<IdTokenClaims> {
-        let (_header, claims, _sig) = token.decode()?;
-        let IdTokenClaims {
-            iss: issuer_id,
-            aud: audience,
-            ..
-        } = claims;
-
         let public_keys = get_pagoda_firebase_public_keys()
             .map_err(|e| anyhow::anyhow!("failed to get Firebase public key: {e}"))?;
 
         let mut last_occured_error =
             anyhow::anyhow!("Unexpected error. Firebase public keys not found");
         for public_key in public_keys {
-            match Self::validate_jwt(token, public_key.as_bytes(), &issuer_id, &audience) {
+            match Self::validate_jwt(token, public_key.as_bytes()) {
                 Ok(claims) => {
                     tracing::info!(target: "pagoda-firebase-token-verifier", "access token is valid");
                     return Ok(claims);
@@ -221,44 +219,23 @@ mod tests {
         };
 
         // Valid token and claims
-        PagodaFirebaseTokenVerifier::validate_jwt(
-            &token,
-            &public_key_der,
-            &my_claims.iss,
-            &my_claims.aud,
-        )
-        .unwrap();
+        PagodaFirebaseTokenVerifier::validate_jwt(&token, &public_key_der).unwrap();
 
         // Invalid public key
         let (invalid_public_key, _invalid_private_key) = get_rsa_pem_key_pair();
-        match PagodaFirebaseTokenVerifier::validate_jwt(
-            &token,
-            &invalid_public_key,
-            &my_claims.iss,
-            &my_claims.aud,
-        ) {
+        match PagodaFirebaseTokenVerifier::validate_jwt(&token, &invalid_public_key) {
             Ok(_) => panic!("Token validation should fail"),
             Err(e) => assert_eq!(e.to_string(), "InvalidSignature"),
         }
 
         // Invalid issuer
-        match PagodaFirebaseTokenVerifier::validate_jwt(
-            &token,
-            &public_key_der,
-            "invalid_issuer",
-            &my_claims.aud,
-        ) {
+        match PagodaFirebaseTokenVerifier::validate_jwt(&token, &public_key_der) {
             Ok(_) => panic!("Token validation should fail"),
             Err(e) => assert_eq!(e.to_string(), "InvalidIssuer"),
         }
 
         // Invalid audience
-        match PagodaFirebaseTokenVerifier::validate_jwt(
-            &token,
-            &public_key_der,
-            &my_claims.iss,
-            "invalid_audience",
-        ) {
+        match PagodaFirebaseTokenVerifier::validate_jwt(&token, &public_key_der) {
             Ok(_) => panic!("Token validation should fail"),
             Err(e) => assert_eq!(e.to_string(), "InvalidAudience"),
         }
