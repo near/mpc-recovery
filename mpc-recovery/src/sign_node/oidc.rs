@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use borsh::{self, BorshDeserialize, BorshSerialize};
 use google_datastore1::api::{Key, PathElement};
 use hex::FromHex;
+use jsonwebtoken as jwt;
 use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
 
@@ -15,6 +16,7 @@ use crate::{
         value::{FromValue, IntoValue, Value},
         KeyKind,
     },
+    oauth::IdTokenClaims,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
@@ -69,6 +71,27 @@ impl OidcToken {
             data: "invalidToken".to_string(),
         }
     }
+
+    // NOTE: code taken directly from jsonwebtoken::verify_signature
+    pub fn decode(&self) -> anyhow::Result<(jwt::Header, IdTokenClaims, String)> {
+        let mut parts = self.as_ref().split('.');
+        let size_hint = parts.size_hint();
+        let (Some(header), Some(payload), Some(signature)) = (parts.next(), parts.next(), parts.next()) else {
+            panic!("could not retrieve header, payload, signature: {:?}", size_hint);
+        };
+        if let Some(_remainder) = parts.next() {
+            panic!("Unexpected extra part: {:?}", size_hint);
+        }
+
+        let header: jwt::Header = serde_json::from_slice(&b64_decode(header)?).unwrap();
+        let claims: IdTokenClaims = serde_json::from_slice(&b64_decode(payload)?).unwrap();
+        Ok((header, claims, signature.into()))
+    }
+}
+
+fn b64_decode<T: AsRef<[u8]>>(input: T) -> anyhow::Result<Vec<u8>> {
+    base64::Engine::decode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, input)
+        .map_err(Into::into)
 }
 
 impl std::str::FromStr for OidcToken {

@@ -2734,6 +2734,7 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-extra",
+ "base64 0.21.2",
  "borsh 0.10.3",
  "chrono",
  "clap 4.3.19",

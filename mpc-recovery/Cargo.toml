@@ -14,6 +14,7 @@ anyhow = "1"
 async-trait = "0.1"
 axum = "0.6.19"
 axum-extra = "0.7"
+base64 = "0.21"
 borsh = "0.10.3"
 chrono = "0.4.24"
 clap = { version = "4.2", features = ["derive", "env"] }

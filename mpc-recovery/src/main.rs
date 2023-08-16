@@ -56,7 +56,7 @@ enum Cli {
         account_creator_sk: Option<String>,
         /// Firebase Audience ID
         #[arg(long, env("PAGODA_FIREBASE_AUDIENCE_ID"))]
-        pagoda_firebase_audience_id: String,
+        pagoda_firebase_audience_id: Option<String>,
         /// GCP project ID
         #[arg(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
         gcp_project_id: String,
@@ -85,7 +85,7 @@ enum Cli {
         web_port: u16,
         /// Firebase Audience ID
         #[arg(long, env("PAGODA_FIREBASE_AUDIENCE_ID"))]
-        pagoda_firebase_audience_id: String,
+        pagoda_firebase_audience_id: Option<String>,
         /// GCP project ID
         #[arg(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
         gcp_project_id: String,
@@ -207,6 +207,12 @@ async fn main() -> anyhow::Result<()> {
             gcp_datastore_url,
             test,
         } => {
+            if pagoda_firebase_audience_id.is_some() {
+                tracing::warn!(
+                    "Firebase Audience ID is deprecated. Consider no longer suppylying it"
+                );
+            }
+
             let gcp_service =
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
             let account_creator_sk =
@@ -225,7 +231,6 @@ async fn main() -> anyhow::Result<()> {
                 // TODO: Create such an account for testnet and mainnet in a secure way
                 account_creator_id,
                 account_creator_sk,
-                pagoda_firebase_audience_id,
             };
 
             if test {
@@ -245,6 +250,12 @@ async fn main() -> anyhow::Result<()> {
             gcp_datastore_url,
             test,
         } => {
+            if pagoda_firebase_audience_id.is_some() {
+                tracing::warn!(
+                    "Firebase Audience ID is deprecated. Consider no longer suppylying it"
+                );
+            }
+
             let gcp_service =
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
             let cipher_key = load_cipher_key(&gcp_service, &env, node_id, cipher_key).await?;
@@ -263,7 +274,6 @@ async fn main() -> anyhow::Result<()> {
                 node_key: sk_share,
                 cipher,
                 port: web_port,
-                pagoda_firebase_audience_id,
             };
             if test {
                 mpc_recovery::run_sign_node::<UniversalTokenVerifier>(config).await;
