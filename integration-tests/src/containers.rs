@@ -420,8 +420,16 @@ impl<'a> SignerNode<'a> {
                 hex::encode(cipher_key),
                 "--web-port".to_string(),
                 Self::CONTAINER_PORT.to_string(),
-                "--pagoda-firebase-audience-id".to_string(),
-                firebase_audience_id.to_string(),
+                "--pagoda-allowlist".to_string(),
+                serde_json::json!({
+                    "entries": [
+                        {
+                            "issuer": format!("https://securetoken.google.com/{firebase_audience_id}"),
+                            "audience": firebase_audience_id,
+                        }
+                    ]
+                })
+                .to_string(),
                 "--gcp-project-id".to_string(),
                 gcp_project_id.to_string(),
                 "--gcp-datastore-url".to_string(),
@@ -557,8 +565,16 @@ impl<'a> LeaderNode<'a> {
             account_creator_id.to_string(),
             "--account-creator-sk".to_string(),
             account_creator_sk.to_string(),
-            "--pagoda-firebase-audience-id".to_string(),
-            firebase_audience_id.to_string(),
+            "--pagoda-allowlist".to_string(),
+            serde_json::json!({
+                "entries": [
+                    {
+                        "issuer": format!("https://securetoken.google.com/{firebase_audience_id}"),
+                        "audience": firebase_audience_id,
+                    }
+                ]
+            })
+            .to_string(),
             "--gcp-project-id".to_string(),
             gcp_project_id.to_string(),
             "--gcp-datastore-url".to_string(),
