@@ -1,4 +1,5 @@
 use crate::error::{LeaderNodeError, MpcError};
+use crate::firewall::allowlist::AllowList;
 use crate::key_recovery::get_user_recovery_pk;
 use crate::msg::{
     AcceptNodePublicKeysRequest, ClaimOidcNodeRequest, ClaimOidcRequest, ClaimOidcResponse,
@@ -46,6 +47,7 @@ pub struct Config {
     pub account_creator_id: AccountId,
     // TODO: temporary solution
     pub account_creator_sk: SecretKey,
+    pub allowlist: AllowList,
 }
 
 pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
@@ -59,6 +61,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         near_root_account,
         account_creator_id,
         account_creator_sk,
+        allowlist,
     } = config;
     let _span = tracing::debug_span!("run", env, port);
     tracing::debug!(?sign_nodes, "running a leader node");
@@ -90,6 +93,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         near_root_account: near_root_account.parse().unwrap(),
         account_creator_id,
         account_creator_sk,
+        allowlist,
     };
 
     // Get keys from all sign nodes, and broadcast them out as a set.
@@ -207,6 +211,7 @@ struct LeaderState {
     account_creator_id: AccountId,
     // TODO: temporary solution
     account_creator_sk: SecretKey,
+    allowlist: AllowList,
 }
 
 async fn mpc_public_key(
@@ -306,7 +311,7 @@ async fn process_user_credentials<T: OAuthTokenVerifier>(
     state: LeaderState,
     request: UserCredentialsRequest,
 ) -> Result<UserCredentialsResponse, LeaderNodeError> {
-    T::verify_token(&request.oidc_token)
+    T::verify_token(&request.oidc_token, &state.allowlist)
         .await
         .map_err(LeaderNodeError::OidcVerificationFailed)?;
 
@@ -336,7 +341,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         .near_account_id
         .parse()
         .map_err(|e| LeaderNodeError::MalformedAccountId(request.near_account_id, e))?;
-    let oidc_token_claims = T::verify_token(&request.oidc_token)
+    let oidc_token_claims = T::verify_token(&request.oidc_token, &state.allowlist)
         .await
         .map_err(LeaderNodeError::OidcVerificationFailed)?;
     let internal_acc_id = oidc_token_claims.get_internal_account_id();
@@ -457,7 +462,7 @@ async fn process_sign<T: OAuthTokenVerifier>(
     request: SignRequest,
 ) -> Result<SignResponse, LeaderNodeError> {
     // Check OIDC token
-    T::verify_token(&request.oidc_token)
+    T::verify_token(&request.oidc_token, &state.allowlist)
         .await
         .map_err(LeaderNodeError::OidcVerificationFailed)?;
 

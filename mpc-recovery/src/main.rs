@@ -1,9 +1,12 @@
+use std::path::PathBuf;
+
 use aes_gcm::{
     aead::{consts::U32, generic_array::GenericArray, KeyInit},
     Aes256Gcm,
 };
 use clap::Parser;
 use mpc_recovery::{
+    firewall::allowlist::AllowList,
     gcp::GcpService,
     oauth::{PagodaFirebaseTokenVerifier, UniversalTokenVerifier},
     sign_node::migration,
@@ -54,9 +57,9 @@ enum Cli {
         /// TEMPORARY - Account creator ed25519 secret key
         #[arg(long, env("MPC_RECOVERY_ACCOUNT_CREATOR_SK"))]
         account_creator_sk: Option<String>,
-        /// Firebase Audience ID
-        #[arg(long, env("PAGODA_FIREBASE_AUDIENCE_ID"))]
-        pagoda_firebase_audience_id: Option<String>,
+        /// Filepath to a list of related items to be used to verify OIDC tokens.
+        #[arg(long, value_parser, env("PAGODA_ALLOWLIST_FILEPATH"))]
+        pagoda_allowlist_filepath: Option<PathBuf>,
         /// GCP project ID
         #[arg(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
         gcp_project_id: String,
@@ -83,9 +86,9 @@ enum Cli {
         /// The web port for this server
         #[arg(long, env("MPC_RECOVERY_WEB_PORT"))]
         web_port: u16,
-        /// Firebase Audience ID
-        #[arg(long, env("PAGODA_FIREBASE_AUDIENCE_ID"))]
-        pagoda_firebase_audience_id: Option<String>,
+        /// Filepath to a list of related items to be used to verify OIDC tokens.
+        #[arg(long, value_parser)]
+        pagoda_allowlist_filepath: Option<PathBuf>,
         /// GCP project ID
         #[arg(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
         gcp_project_id: String,
@@ -165,6 +168,26 @@ async fn load_account_creator_sk(
     }
 }
 
+async fn load_allowlist(
+    gcp_service: &GcpService,
+    env: &str,
+    allowlist_path: Option<PathBuf>,
+) -> anyhow::Result<AllowList> {
+    match allowlist_path {
+        Some(path) => {
+            let file = std::fs::File::open(path)?;
+            let reader = std::io::BufReader::new(file);
+            Ok(serde_json::from_reader(reader)?)
+        }
+        None => {
+            let name = format!("mpc-recovery-account-allowlist-{env}/versions/latest");
+            Ok(serde_json::from_slice(
+                &gcp_service.load_secret(name).await?,
+            )?)
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Install global collector configured based on RUST_LOG env var.
@@ -202,21 +225,16 @@ async fn main() -> anyhow::Result<()> {
             near_root_account,
             account_creator_id,
             account_creator_sk,
-            pagoda_firebase_audience_id,
+            pagoda_allowlist_filepath,
             gcp_project_id,
             gcp_datastore_url,
             test,
         } => {
-            if pagoda_firebase_audience_id.is_some() {
-                tracing::warn!(
-                    "Firebase Audience ID is deprecated. Consider no longer suppylying it"
-                );
-            }
-
             let gcp_service =
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
             let account_creator_sk =
                 load_account_creator_sk(&gcp_service, &env, account_creator_sk).await?;
+            let allowlist = load_allowlist(&gcp_service, &env, pagoda_allowlist_filepath).await?;
 
             let account_creator_sk = account_creator_sk.parse()?;
 
@@ -231,6 +249,7 @@ async fn main() -> anyhow::Result<()> {
                 // TODO: Create such an account for testnet and mainnet in a secure way
                 account_creator_id,
                 account_creator_sk,
+                allowlist,
             };
 
             if test {
@@ -245,19 +264,14 @@ async fn main() -> anyhow::Result<()> {
             sk_share,
             cipher_key,
             web_port,
-            pagoda_firebase_audience_id,
+            pagoda_allowlist_filepath,
             gcp_project_id,
             gcp_datastore_url,
             test,
         } => {
-            if pagoda_firebase_audience_id.is_some() {
-                tracing::warn!(
-                    "Firebase Audience ID is deprecated. Consider no longer suppylying it"
-                );
-            }
-
             let gcp_service =
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
+            let allowlist = load_allowlist(&gcp_service, &env, pagoda_allowlist_filepath).await?;
             let cipher_key = load_cipher_key(&gcp_service, &env, node_id, cipher_key).await?;
             let cipher_key = hex::decode(cipher_key)?;
             let cipher_key = GenericArray::<u8, U32>::clone_from_slice(&cipher_key);
@@ -274,6 +288,7 @@ async fn main() -> anyhow::Result<()> {
                 node_key: sk_share,
                 cipher,
                 port: web_port,
+                allowlist,
             };
             if test {
                 mpc_recovery::run_sign_node::<UniversalTokenVerifier>(config).await;

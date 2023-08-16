@@ -2,6 +2,7 @@ use self::aggregate_signer::{NodeInfo, Reveal, SignedCommitment, SigningState};
 use self::oidc::OidcDigest;
 use self::user_credentials::EncryptedUserCredentials;
 use crate::error::{MpcError, SignNodeError};
+use crate::firewall::allowlist::AllowList;
 use crate::gcp::GcpService;
 use crate::msg::{AcceptNodePublicKeysRequest, PublicKeyNodeRequest, SignNodeRequest};
 use crate::oauth::OAuthTokenVerifier;
@@ -43,6 +44,7 @@ pub struct Config {
     pub node_key: ExpandedKeyPair,
     pub cipher: Aes256Gcm,
     pub port: u16,
+    pub allowlist: AllowList,
 }
 
 pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
@@ -53,6 +55,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         node_key,
         cipher,
         port,
+        allowlist,
     } = config;
     let our_index = usize::try_from(our_index).expect("This index is way to big");
 
@@ -68,6 +71,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         cipher,
         signing_state,
         node_info: NodeInfo::new(our_index, pk_set.map(|set| set.public_keys)),
+        allowlist,
     };
 
     let app = Router::new()
@@ -102,6 +106,7 @@ struct SignNodeState {
     cipher: Aes256Gcm,
     signing_state: Arc<RwLock<SigningState>>,
     node_info: NodeInfo,
+    allowlist: AllowList,
 }
 
 async fn get_or_generate_user_creds(
@@ -214,7 +219,7 @@ async fn process_commit<T: OAuthTokenVerifier>(
             tracing::debug!(?request, "processing sign share request");
 
             // Check OIDC Token
-            let oidc_token_claims = T::verify_token(&request.oidc_token)
+            let oidc_token_claims = T::verify_token(&request.oidc_token, &state.allowlist)
                 .await
                 .map_err(SignNodeError::OidcVerificationFailed)?;
             tracing::debug!(?oidc_token_claims, "oidc token verified");
@@ -393,7 +398,7 @@ async fn process_public_key<T: OAuthTokenVerifier>(
     request: PublicKeyNodeRequest,
 ) -> Result<Point<Ed25519>, SignNodeError> {
     // Check OIDC Token
-    let oidc_token_claims = T::verify_token(&request.oidc_token)
+    let oidc_token_claims = T::verify_token(&request.oidc_token, &state.allowlist)
         .await
         .map_err(SignNodeError::OidcVerificationFailed)?;
 
