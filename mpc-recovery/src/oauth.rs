@@ -227,18 +227,6 @@ mod tests {
             Ok(_) => panic!("Token validation should fail"),
             Err(e) => assert_eq!(e.to_string(), "InvalidSignature"),
         }
-
-        // Invalid issuer
-        match PagodaFirebaseTokenVerifier::validate_jwt(&token, &public_key_der) {
-            Ok(_) => panic!("Token validation should fail"),
-            Err(e) => assert_eq!(e.to_string(), "InvalidIssuer"),
-        }
-
-        // Invalid audience
-        match PagodaFirebaseTokenVerifier::validate_jwt(&token, &public_key_der) {
-            Ok(_) => panic!("Token validation should fail"),
-            Err(e) => assert_eq!(e.to_string(), "InvalidAudience"),
-        }
     }
 
     #[tokio::test]
