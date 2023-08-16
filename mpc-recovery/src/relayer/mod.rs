@@ -7,6 +7,7 @@ use near_crypto::PublicKey;
 use near_jsonrpc_client::JsonRpcClient;
 use near_primitives::hash::CryptoHash;
 use near_primitives::types::{AccountId, BlockHeight, Nonce};
+use near_primitives::views::FinalExecutionStatus;
 
 use self::error::RelayerError;
 use self::msg::{RegisterAccountRequest, SendMetaTxRequest, SendMetaTxResponse};
@@ -129,11 +130,23 @@ impl NearRpcAndRelayerClient {
             .map_err(|e| RelayerError::DataConversionFailure(e.into()))?;
 
         if status.is_success() {
-            tracing::debug!("body: {}", msg);
+            tracing::debug!(response_body = msg, "got response");
             let response: SendMetaTxResponse = serde_json::from_slice(&response_body)
                 .map_err(|e| RelayerError::DataConversionFailure(e.into()))?;
-            tracing::debug!("success: {:?}", response);
-            Ok(response)
+            match response.status {
+                FinalExecutionStatus::NotStarted | FinalExecutionStatus::Started => {
+                    Err(RelayerError::TxNotReady)
+                }
+                FinalExecutionStatus::Failure(e) => Err(RelayerError::TxExecutionFailure(e)),
+                FinalExecutionStatus::SuccessValue(ref value) => {
+                    tracing::debug!(
+                        value = std::str::from_utf8(value)
+                            .map_err(|e| RelayerError::DataConversionFailure(e.into()))?,
+                        "success"
+                    );
+                    Ok(response)
+                }
+            }
         } else {
             Err(RelayerError::RequestFailure(status, msg.to_string()))
         }
