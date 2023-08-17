@@ -428,7 +428,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         if matches!(response.status, FinalExecutionStatus::SuccessValue(_)) {
             Ok(NewAccountResponse::Ok {
                 create_account_options: new_account_options,
-                user_recovery_public_key: mpc_user_recovery_pk.to_string(),
+                user_recovery_public_key: mpc_user_recovery_pk,
                 near_account_id: new_user_account_id.clone(),
             })
         } else {

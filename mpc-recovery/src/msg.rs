@@ -102,7 +102,7 @@ pub struct NewAccountRequest {
 pub enum NewAccountResponse {
     Ok {
         create_account_options: CreateAccountOptions,
-        user_recovery_public_key: String,
+        user_recovery_public_key: near_crypto::PublicKey,
         near_account_id: AccountId,
     },
     Err {
