@@ -56,9 +56,14 @@ jobs:
       # Generates an execution plan for Terraform
       - name: Terraform Plan
         id: plan
-        run: terraform plan -input=false -no-color -lock-timeout=1h -var-file terraform-dev.tfvars -var "credentials=$GOOGLE_CREDENTIALS"
+        run: |
+          terraform plan -input=false -no-color -lock-timeout=1h -var-file terraform-dev.tfvars \
+            -var "credentials=$GOOGLE_CREDENTIALS" \
+            -var "account_creator_id=mpc-recovery-dev-creator.testnet" \
+            -var "account_creator_sk=$ACCOUNT_CREATOR_SK"
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
+          ACCOUNT_CREATOR_SK: ${{ secrets.ACCOUNT_CREATOR_SK_DEV }}
 
       - uses: actions/github-script@v6
         if: github.event_name == 'pull_request'
@@ -130,6 +135,11 @@ jobs:
         # On push to "develop", build or change infrastructure according to Terraform configuration files
       - name: Terraform Apply
         if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
-        run: terraform apply -auto-approve -input=false -lock-timeout=1h -var-file terraform-dev.tfvars -var "credentials=$GOOGLE_CREDENTIALS"
+        run: |
+          terraform apply -auto-approve -input=false -lock-timeout=1h -var-file terraform-dev.tfvars \
+            -var "credentials=$GOOGLE_CREDENTIALS" \
+            -var "account_creator_id=mpc-recovery-dev-creator.testnet" \
+            -var "account_creator_sk=$ACCOUNT_CREATOR_SK"
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
+          ACCOUNT_CREATOR_SK: ${{ secrets.ACCOUNT_CREATOR_SK_DEV }}
