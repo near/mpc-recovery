@@ -292,7 +292,7 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
             ctx.leader_node
                 .claim_oidc(bad_oidc_request.clone())
                 .await?
-                .assert_unauthorized_contains("failed to verify signature")?;
+                .assert_bad_request_contains("failed to verify signature")?;
 
             // Making the claiming request with correct signature
             let mpc_signature: Signature = ctx
