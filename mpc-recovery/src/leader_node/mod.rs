@@ -253,7 +253,7 @@ async fn claim_oidc(
 ) -> (StatusCode, Json<ClaimOidcResponse>) {
     tracing::info!(
         oidc_hash = hex::encode(&claim_oidc_request.oidc_token_hash),
-        pk = claim_oidc_request.frp_public_key,
+        pk = claim_oidc_request.frp_public_key.to_string(),
         sig = claim_oidc_request.frp_signature.to_string(),
         "claim_oidc request"
     );

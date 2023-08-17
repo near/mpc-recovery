@@ -33,7 +33,7 @@ impl TryInto<ed25519_dalek::PublicKey> for MpcPkResponse {
 pub struct ClaimOidcRequest {
     #[serde(with = "hex::serde")]
     pub oidc_token_hash: OidcHash,
-    pub frp_public_key: String,
+    pub frp_public_key: near_crypto::PublicKey,
     #[serde(with = "hex_signature")]
     pub frp_signature: Signature,
 }
@@ -166,7 +166,7 @@ pub struct SignShareNodeRequest {
 pub struct ClaimOidcNodeRequest {
     #[serde(with = "hex::serde")]
     pub oidc_token_hash: OidcHash,
-    pub public_key: String,
+    pub public_key: near_crypto::PublicKey,
     #[serde(with = "hex_signature")]
     pub signature: Signature,
 }
