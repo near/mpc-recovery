@@ -1,6 +1,5 @@
-use anyhow::Context;
 use curv::elliptic::curves::{Ed25519, Point};
-use ed25519_dalek::{PublicKey, Signature};
+use ed25519_dalek::Signature;
 use near_primitives::delegate_action::DelegateAction;
 use near_primitives::types::AccountId;
 use serde::{Deserialize, Serialize};
@@ -15,26 +14,18 @@ pub struct MpcPkRequest {}
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum MpcPkResponse {
-    Ok { mpc_pk: String },
+    Ok { mpc_pk: ed25519_dalek::PublicKey },
     Err { msg: String },
 }
 
-impl TryInto<PublicKey> for MpcPkResponse {
+impl TryInto<ed25519_dalek::PublicKey> for MpcPkResponse {
     type Error = anyhow::Error;
 
-    fn try_into(self) -> Result<PublicKey, Self::Error> {
-        let mpc_pk = match self {
-            MpcPkResponse::Ok { mpc_pk } => mpc_pk,
+    fn try_into(self) -> Result<ed25519_dalek::PublicKey, Self::Error> {
+        match self {
+            MpcPkResponse::Ok { mpc_pk } => Ok(mpc_pk),
             MpcPkResponse::Err { msg } => anyhow::bail!("error response: {}", msg),
-        };
-
-        let decoded_mpc_pk = match hex::decode(mpc_pk) {
-            Ok(v) => v,
-            Err(e) => anyhow::bail!("failed to decode mpc pk: {}", e),
-        };
-
-        ed25519_dalek::PublicKey::from_bytes(&decoded_mpc_pk)
-            .with_context(|| "failed to construct public key")
+        }
     }
 }
 

@@ -232,7 +232,7 @@ async fn mpc_public_key(
     };
 
     let mpc_pk = match to_dalek_combined_public_key(&pk_set) {
-        Ok(mpc_pk) => hex::encode(mpc_pk.to_bytes()),
+        Ok(mpc_pk) => mpc_pk,
         Err(err) => {
             return (
                 err.code(),
