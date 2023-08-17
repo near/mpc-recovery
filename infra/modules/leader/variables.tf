@@ -36,7 +36,7 @@ variable "near_root_account" {
 variable "account_creator_id" {
 }
 
-variable "firebase_audience_id" {
+variable "allowlist" {
 }
 
 # Secrets

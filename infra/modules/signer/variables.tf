@@ -20,7 +20,7 @@ variable "docker_image" {
 variable "node_id" {
 }
 
-variable "firebase_audience_id" {
+variable "allowlist" {
 }
 
 # Secrets

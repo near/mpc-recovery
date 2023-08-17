@@ -34,6 +34,24 @@ resource "google_secret_manager_secret_iam_member" "secret_share_secret_access" 
   member    = "serviceAccount:${var.service_account_email}"
 }
 
+resource "google_secret_manager_secret" "allowlist" {
+  secret_id = "mpc-recovery-allowlist-${var.node_id}-${var.env}"
+  replication {
+    automatic = true
+  }
+}
+
+resource "google_secret_manager_secret_version" "allowlist_data" {
+  secret      = google_secret_manager_secret.allowlist.name
+  secret_data = var.allowlist
+}
+
+resource "google_secret_manager_secret_iam_member" "allowlist_secret_access" {
+  secret_id = google_secret_manager_secret.allowlist.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${var.service_account_email}"
+}
+
 resource "google_cloud_run_v2_service" "signer" {
   name     = "mpc-recovery-signer-${var.node_id}-${var.env}"
   location = var.region
@@ -60,8 +78,8 @@ resource "google_cloud_run_v2_service" "signer" {
         value = var.node_id
       }
       env {
-        name  = "PAGODA_FIREBASE_AUDIENCE_ID"
-        value = var.firebase_audience_id
+        name  = "PAGODA_ALLOWLIST"
+        value = var.allowlist
       }
       env {
         name  = "MPC_RECOVERY_GCP_PROJECT_ID"
@@ -93,8 +111,10 @@ resource "google_cloud_run_v2_service" "signer" {
   depends_on = [
     google_secret_manager_secret_version.cipher_key_data,
     google_secret_manager_secret_version.secret_share_data,
+    google_secret_manager_secret_version.allowlist_data,
     google_secret_manager_secret_iam_member.cipher_key_secret_access,
-    google_secret_manager_secret_iam_member.secret_share_secret_access
+    google_secret_manager_secret_iam_member.secret_share_secret_access,
+    google_secret_manager_secret_iam_member.allowlist_secret_access
   ]
 }
 

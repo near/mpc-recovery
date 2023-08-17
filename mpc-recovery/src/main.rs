@@ -177,6 +177,7 @@ async fn load_account_creator_sk(
 async fn load_allowlist(
     gcp_service: &GcpService,
     env: &str,
+    node_id: &str,
     allowlist: Option<String>,
     allowlist_path: Option<PathBuf>,
 ) -> anyhow::Result<AllowList> {
@@ -191,7 +192,7 @@ async fn load_allowlist(
             Ok(serde_json::from_reader(reader)?)
         }
         None => {
-            let name = format!("mpc-recovery-allowlist-{env}/versions/latest");
+            let name = format!("mpc-recovery-allowlist-{node_id}-{env}/versions/latest");
             Ok(serde_json::from_slice(
                 &gcp_service.load_secret(name).await?,
             )?)
@@ -249,6 +250,7 @@ async fn main() -> anyhow::Result<()> {
             let allowlist = load_allowlist(
                 &gcp_service,
                 &env,
+                "leader",
                 pagoda_allowlist,
                 pagoda_allowlist_filepath,
             )
@@ -293,6 +295,7 @@ async fn main() -> anyhow::Result<()> {
             let allowlist = load_allowlist(
                 &gcp_service,
                 &env,
+                node_id.to_string().as_str(),
                 pagoda_allowlist,
                 pagoda_allowlist_filepath,
             )

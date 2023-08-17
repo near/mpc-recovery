@@ -25,8 +25,9 @@ variable "account_creator_id" {
   default = "tmp_acount_creator.serhii.testnet"
 }
 
-variable "firebase_audience_id" {
-  default = "pagoda-oboarding-dev"
+variable "allowlist" {
+  type    = list(string)
+  default = []
 }
 
 variable "external_signer_node_urls" {
