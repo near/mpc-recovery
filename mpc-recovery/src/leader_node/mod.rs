@@ -113,7 +113,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
     };
     tracing::debug!(?messages, "broadcasted public key statuses");
 
-    //TODO: not secure, allow only for testnet, whitelist endpoint etc. for mainnet
+    // Cors layer is move to load balancer
     let cors_layer = tower_http::cors::CorsLayer::permissive();
 
     let app = Router::new()
