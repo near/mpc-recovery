@@ -30,20 +30,24 @@ impl MpcError {
             Self::SignNodeRejection(error) => error.code(),
         }
     }
+
+    pub fn safe_error_message(&self) -> String {
+        if self.status() == StatusCode::INTERNAL_SERVER_ERROR {
+            "Internal Server Error: Unexpected issue occurred. The backend team was notified.".to_string()
+        } else {
+            match self {
+                Self::JsonExtractorRejection(json_rejection) => json_rejection.body_text(),
+                Self::LeaderNodeRejection(error) => error.to_string(),
+                Self::SignNodeRejection(error) => error.to_string(),
+            }
+        }
+    }
 }
 
 // We implement `IntoResponse` so MpcError can be used as a response
 impl axum::response::IntoResponse for MpcError {
     fn into_response(self) -> Response {
-        let (status, message) = match self {
-            Self::JsonExtractorRejection(json_rejection) => {
-                (json_rejection.status(), json_rejection.body_text())
-            }
-            Self::LeaderNodeRejection(error) => (error.code(), error.to_string()),
-            Self::SignNodeRejection(error) => (error.code(), error.to_string()),
-        };
-
-        (status, axum::Json(message)).into_response()
+        (self.status(), axum::Json(self.safe_error_message())).into_response()
     }
 }
 
