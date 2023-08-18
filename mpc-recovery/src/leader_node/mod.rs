@@ -12,6 +12,7 @@ use crate::transaction::{
     get_create_account_delegate_action, get_local_signed_delegated_action, get_mpc_signature,
     sign_payload_with_mpc, to_dalek_combined_public_key,
 };
+use crate::utils::{check_digest_signature, user_credentials_request_digest};
 use crate::{metrics, nar};
 use anyhow::Context;
 use axum::extract::MatchedPath;
@@ -342,6 +343,13 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             .await
             .map_err(LeaderNodeError::OidcVerificationFailed)?;
     let internal_acc_id = oidc_token_claims.get_internal_account_id();
+
+    // Check the request signature
+    let frp_pk = &request.frp_public_key;
+    let digest = user_credentials_request_digest(&request.oidc_token, frp_pk)?;
+    check_digest_signature(frp_pk, &request.user_credentials_frp_signature, &digest)
+        .map_err(LeaderNodeError::SignatureVerificationFailed)?;
+    tracing::debug!("user credentials digest signature verified for {new_user_account_id:?}");
 
     state
         .client
