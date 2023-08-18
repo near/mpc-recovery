@@ -32,7 +32,7 @@ impl MpcError {
     }
 
     pub fn safe_error_message(&self) -> String {
-        if self.status() == StatusCode::INTERNAL_SERVER_ERROR {
+        if self.status().is_server_error() {
             "Internal Server Error: Unexpected issue occurred. The backend team was notified."
                 .to_string()
         } else {
