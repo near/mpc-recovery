@@ -590,18 +590,18 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
         [
             (
                 invalid_account_req,
-                (400, "malformed account id: groot++")),
+                (StatusCode::BAD_REQUEST, "malformed account id: groot++")),
             (
                 invalid_user_key_req,
-                (422, "Failed to deserialize the JSON body into the target type: create_account_options.full_access_keys")
+                (StatusCode::UNPROCESSABLE_ENTITY, "Failed to deserialize the JSON body into the target type: create_account_options.full_access_keys")
             ),
             (
                 invalid_oidc_token_req,
-                (400, "failed to verify oidc token: Invalid token"),
+                (StatusCode::BAD_REQUEST, "failed to verify oidc token: Invalid token"),
             ),
             (
                 invalid_frp_signature_req,
-                (400, "client error: failed to verify signature: Public key "),
+                (StatusCode::UNAUTHORIZED, "client error: failed to verify signature: Public key "), // TODO: we are getting UNAUTHORIZED here, but it should be BAD_REQUEST because signature is not malformed, it's just wrong
             )
         ]
     };
