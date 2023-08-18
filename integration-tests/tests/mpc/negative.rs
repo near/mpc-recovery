@@ -601,7 +601,7 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
             ),
             (
                 invalid_frp_signature_req,
-                (StatusCode::UNAUTHORIZED, "client error: failed to verify signature: Public key "), // TODO: we are getting UNAUTHORIZED here, but it should be BAD_REQUEST because signature is not malformed, it's just wrong
+                (StatusCode::UNAUTHORIZED, "client error: failed to verify signature: Public key "),
             )
         ]
     };
