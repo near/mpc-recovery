@@ -34,8 +34,8 @@ pub async fn register_account(
     assert!(matches!(new_acc_response, NewAccountResponse::Ok {
             create_account_options: _,
             user_recovery_public_key: _,
-            near_account_id: acc_id,
-        } if acc_id == user_id.to_string()
+            near_account_id,
+        } if &near_account_id == user_id
     ));
 
     tokio::time::sleep(Duration::from_millis(2000)).await;

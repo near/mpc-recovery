@@ -636,7 +636,7 @@ impl LeaderNodeApi {
     // TODO: I would say this need to replace the regular `new_account` once FRP is enforced
     pub async fn new_account_with_helper(
         &self,
-        account_id: &str,
+        account_id: &AccountId,
         user_fa_public_key: &PublicKey,
         user_la_public_key: Option<LimitedAccessKey>,
         user_secret_key: &SecretKey,
@@ -662,7 +662,7 @@ impl LeaderNodeApi {
         };
 
         let new_account_request = NewAccountRequest {
-            near_account_id: account_id.to_string(),
+            near_account_id: account_id.clone(),
             create_account_options,
             oidc_token: oidc_token.clone(),
             user_credentials_frp_signature: frp_signature,
@@ -827,7 +827,7 @@ impl LeaderNodeApi {
 
         let oidc_request = ClaimOidcRequest {
             oidc_token_hash,
-            frp_public_key: user_public_key.to_string(),
+            frp_public_key: user_public_key.clone(),
             frp_signature: request_digest_signature,
         };
 

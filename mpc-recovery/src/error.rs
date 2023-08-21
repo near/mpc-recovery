@@ -64,6 +64,8 @@ pub enum LeaderNodeError {
     AggregateSigningFailed(#[from] AggregateSigningError),
     #[error("malformed account id: {0}")]
     MalformedAccountId(String, ParseAccountError),
+    #[error("failed to verify signature: {0}")]
+    SignatureVerificationFailed(anyhow::Error),
     #[error("failed to verify oidc token: {0}")]
     OidcVerificationFailed(anyhow::Error),
     #[error("relayer error: {0}")]
@@ -87,7 +89,8 @@ impl LeaderNodeError {
             LeaderNodeError::ServerError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             LeaderNodeError::DataConversionFailure(_) => StatusCode::BAD_REQUEST,
             LeaderNodeError::AggregateSigningFailed(err) => err.code(),
-            LeaderNodeError::OidcVerificationFailed(_) => StatusCode::BAD_REQUEST,
+            LeaderNodeError::SignatureVerificationFailed(_) => StatusCode::BAD_REQUEST,
+            LeaderNodeError::OidcVerificationFailed(_) => StatusCode::UNAUTHORIZED,
             LeaderNodeError::MalformedAccountId(_, _) => StatusCode::BAD_REQUEST,
             LeaderNodeError::RelayerError(_) => StatusCode::FAILED_DEPENDENCY,
             LeaderNodeError::TimeoutGatheringPublicKeys => StatusCode::INTERNAL_SERVER_ERROR,
