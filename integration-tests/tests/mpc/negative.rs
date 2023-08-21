@@ -544,7 +544,7 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
             ),
             (
                 invalid_frp_signature_req,
-                (StatusCode::BAD_REQUEST, "failed to verify signature: Public key "),
+                (StatusCode::BAD_REQUEST, "failed to verify signature: Public key"),
             )
         ]
     };
