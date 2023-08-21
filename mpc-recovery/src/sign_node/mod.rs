@@ -22,7 +22,6 @@ use curv::elliptic::curves::{Ed25519, Point};
 use multi_party_eddsa::protocols::{self, ExpandedKeyPair};
 use tokio::sync::RwLock;
 
-use near_crypto::PublicKey;
 use near_primitives::delegate_action::NonDelegateAction;
 use near_primitives::hash::hash;
 use near_primitives::signable_message::{SignableMessage, SignableMessageType};
@@ -151,11 +150,7 @@ async fn process_commit<T: OAuthTokenVerifier>(
         SignNodeRequest::ClaimOidc(request) => {
             tracing::debug!(?request, "processing oidc claim request");
             // Check ID token hash signature
-            let public_key: PublicKey = request
-                .public_key
-                .parse()
-                .map_err(|e| SignNodeError::MalformedPublicKey(request.public_key.clone(), e))?;
-
+            let public_key = request.public_key;
             let request_digest = claim_oidc_request_digest(&request.oidc_token_hash, &public_key)?;
 
             match check_digest_signature(&public_key, &request.signature, &request_digest) {

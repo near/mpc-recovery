@@ -232,7 +232,7 @@ async fn mpc_public_key(
     };
 
     let mpc_pk = match to_dalek_combined_public_key(&pk_set) {
-        Ok(mpc_pk) => hex::encode(mpc_pk.to_bytes()),
+        Ok(mpc_pk) => mpc_pk,
         Err(err) => {
             return (
                 err.code(),
@@ -253,7 +253,7 @@ async fn claim_oidc(
 ) -> (StatusCode, Json<ClaimOidcResponse>) {
     tracing::info!(
         oidc_hash = hex::encode(&claim_oidc_request.oidc_token_hash),
-        pk = claim_oidc_request.frp_public_key,
+        pk = claim_oidc_request.frp_public_key.to_string(),
         sig = claim_oidc_request.frp_signature.to_string(),
         "claim_oidc request"
     );
@@ -428,7 +428,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         if matches!(response.status, FinalExecutionStatus::SuccessValue(_)) {
             Ok(NewAccountResponse::Ok {
                 create_account_options: new_account_options,
-                user_recovery_public_key: mpc_user_recovery_pk.to_string(),
+                user_recovery_public_key: mpc_user_recovery_pk,
                 near_account_id: new_user_account_id.clone(),
             })
         } else {

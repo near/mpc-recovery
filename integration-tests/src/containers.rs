@@ -827,7 +827,7 @@ impl LeaderNodeApi {
 
         let oidc_request = ClaimOidcRequest {
             oidc_token_hash,
-            frp_public_key: user_public_key.to_string(),
+            frp_public_key: user_public_key.clone(),
             frp_signature: request_digest_signature,
         };
 
