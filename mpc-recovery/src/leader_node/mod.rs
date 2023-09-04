@@ -25,9 +25,10 @@ use axum::{
     Extension, Json, Router,
 };
 use axum_extra::extract::WithRejection;
+use borsh::BorshDeserialize;
 use curv::elliptic::curves::{Ed25519, Point};
 use near_crypto::SecretKey;
-use near_primitives::delegate_action::NonDelegateAction;
+use near_primitives::delegate_action::{DelegateAction, NonDelegateAction};
 use near_primitives::transaction::{Action, DeleteKeyAction};
 use near_primitives::types::AccountId;
 use near_primitives::views::FinalExecutionStatus;
@@ -469,13 +470,17 @@ async fn process_sign<T: OAuthTokenVerifier>(
     state: LeaderState,
     request: SignRequest,
 ) -> Result<SignResponse, LeaderNodeError> {
+    // Deserialize the included delegate action via borsh
+    let delegate_action = DelegateAction::try_from_slice(&request.delegate_action)
+        .map_err(LeaderNodeError::MalformedDelegateAction)?;
+
     // Check OIDC token
     T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
         .await
         .map_err(LeaderNodeError::OidcVerificationFailed)?;
 
     // Prevent recovery key delition
-    let requested_delegate_actions: &Vec<NonDelegateAction> = &request.delegate_action.actions;
+    let requested_delegate_actions: &Vec<NonDelegateAction> = &delegate_action.actions;
 
     let requested_actions: &Vec<Action> = &requested_delegate_actions
         .iter()
@@ -527,7 +532,7 @@ async fn process_sign<T: OAuthTokenVerifier>(
             &state.reqwest_client,
             &state.sign_nodes,
             &request.oidc_token,
-            request.delegate_action.clone(),
+            delegate_action.clone(),
             request.frp_signature,
             &request.frp_public_key,
         )

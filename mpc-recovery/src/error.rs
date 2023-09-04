@@ -64,6 +64,8 @@ pub enum LeaderNodeError {
     AggregateSigningFailed(#[from] AggregateSigningError),
     #[error("malformed account id: {0}")]
     MalformedAccountId(String, ParseAccountError),
+    #[error("malformed delegate action: {0}")]
+    MalformedDelegateAction(std::io::Error),
     #[error("failed to verify signature: {0}")]
     SignatureVerificationFailed(anyhow::Error),
     #[error("failed to verify oidc token: {0}")]
@@ -92,6 +94,7 @@ impl LeaderNodeError {
             LeaderNodeError::SignatureVerificationFailed(_) => StatusCode::BAD_REQUEST,
             LeaderNodeError::OidcVerificationFailed(_) => StatusCode::UNAUTHORIZED,
             LeaderNodeError::MalformedAccountId(_, _) => StatusCode::BAD_REQUEST,
+            LeaderNodeError::MalformedDelegateAction(_) => StatusCode::BAD_REQUEST,
             LeaderNodeError::RelayerError(_) => StatusCode::FAILED_DEPENDENCY,
             LeaderNodeError::TimeoutGatheringPublicKeys => StatusCode::INTERNAL_SERVER_ERROR,
             LeaderNodeError::RecoveryKeyCanNotBeDeleted(_) => StatusCode::BAD_REQUEST,
