@@ -249,7 +249,9 @@ macro_rules! impl_mpc_check {
                     let $response::Err { .. } = response else {
                         anyhow::bail!("unexpected Ok with a non-200 http code ({status_code})");
                     };
-                    anyhow::bail!("expected 200, but got {status_code} with response: {response:?}");
+                    anyhow::bail!(
+                        "expected 200, but got {status_code} with response: {response:?}"
+                    );
                 }
             }
 
@@ -265,11 +267,16 @@ macro_rules! impl_mpc_check {
 
                     Ok(response)
                 } else {
-                    anyhow::bail!("expected 400, but got {status_code} with response: {response:?}");
+                    anyhow::bail!(
+                        "expected 400, but got {status_code} with response: {response:?}"
+                    );
                 }
             }
 
-            fn assert_unauthorized_contains(self, expected: &str) -> anyhow::Result<Self::Response> {
+            fn assert_unauthorized_contains(
+                self,
+                expected: &str,
+            ) -> anyhow::Result<Self::Response> {
                 let status_code = self.0;
                 let response = self.1;
 
@@ -281,7 +288,9 @@ macro_rules! impl_mpc_check {
 
                     Ok(response)
                 } else {
-                    anyhow::bail!("expected 401, but got {status_code} with response: {response:?}");
+                    anyhow::bail!(
+                        "expected 401, but got {status_code} with response: {response:?}"
+                    );
                 }
             }
         }
