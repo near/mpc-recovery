@@ -1,6 +1,7 @@
 env     = "dev"
 project = "pagoda-discovery-platform-dev"
 
+account_creator_id = "tmp_acount_creator.serhii.testnet"
 account_creator_sk = "ed25519:5pFJN3czPAHFWHZYjD4oTtnJE7PshLMeTkSU7CmWkvLaQWchCLgXGF1wwcJmh2AQChGH85EwcL5VW7tUavcAZDSG"
 cipher_keys        = ["ea28abd17cb76924f62c99f6fd240985c16b9dc85187760c1487e64689d447f5", "cc7a448b28b2a58bada59770b6418ae75ade177abad216385e012805b9cfc8f9", "78be23c9400f4414c043aa966b51e44b3fa3ab790a1779d370d40589a7b02dd2"]
 sk_shares = [

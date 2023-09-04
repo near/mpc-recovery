@@ -22,7 +22,6 @@ variable "zone" {
 
 # Application variables
 variable "account_creator_id" {
-  default = "tmp_acount_creator.serhii.testnet"
 }
 
 variable "allowlist" {

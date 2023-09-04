@@ -242,6 +242,9 @@ async fn test_rotate_node_keys() -> anyhow::Result<()> {
                 ciphers.insert(sign_node.node_id, cipher_pair);
             }
 
+            // Sleep a little so that the entities are updated in the datastore.
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
             let mut new_entities = gcp_service
                 .fetch_entities::<mpc_recovery::sign_node::user_credentials::EncryptedUserCredentials>()
                 .await

@@ -158,6 +158,14 @@ Check our integration tests to see how it works in practice.
 
 Registered ID Token will be added to the persistent DB on each Signing node and saved until expiration. Registered Id Tokens are tied to the provided PK.
 
+## Sign flow
+The expected flow for the client is next:
+1. Client uses `/user_credentials` endpoint to get the recovery PK.
+2. Client fetches latest nonce, block hash using obtained recovery PK.
+3. Client creates a delegate action with desired actions, such as add or delete key.
+4. Client gets the signature from the MPC system using `/sign` endpoint.
+5. Client sends the same delegate action to the relayer with obtained signature.
+
 ### Client integration
 
 There are several ways to get and use the ID token. The flow that we are using is called the "server" flow, you can find more info [here](https://developers.google.com/identity/openid-connect/openid-connect#authenticatingtheuser). The system will be able to process any token that is following the core OpenID Connect standard. In order to receive the ID token from OpenID provider you will need to include the `openid` scope value to the Authorization Request.

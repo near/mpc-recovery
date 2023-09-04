@@ -65,3 +65,10 @@ We have a CLI tool that can instantiate a short-lived development environment th
 ```bash
 $ cargo run -p mpc-recovery-integration-tests -- test-leader 3
 ```
+
+### I'm getting "Error: error trying to connect: No such file or directory (os error 2)"
+It's a known issue on MacOS. Try executiong the following command:
+
+```bash
+sudo ln -s $HOME/.docker/run/docker.sock /var/run/docker.sock
+```

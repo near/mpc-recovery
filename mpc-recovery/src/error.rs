@@ -30,20 +30,25 @@ impl MpcError {
             Self::SignNodeRejection(error) => error.code(),
         }
     }
+
+    pub fn safe_error_message(&self) -> String {
+        if self.status().is_server_error() {
+            "Internal Server Error: Unexpected issue occurred. The backend team was notified."
+                .to_string()
+        } else {
+            match self {
+                Self::JsonExtractorRejection(json_rejection) => json_rejection.body_text(),
+                Self::LeaderNodeRejection(error) => error.to_string(),
+                Self::SignNodeRejection(error) => error.to_string(),
+            }
+        }
+    }
 }
 
 // We implement `IntoResponse` so MpcError can be used as a response
 impl axum::response::IntoResponse for MpcError {
     fn into_response(self) -> Response {
-        let (status, message) = match self {
-            Self::JsonExtractorRejection(json_rejection) => {
-                (json_rejection.status(), json_rejection.body_text())
-            }
-            Self::LeaderNodeRejection(error) => (error.code(), error.to_string()),
-            Self::SignNodeRejection(error) => (error.code(), error.to_string()),
-        };
-
-        (status, axum::Json(message)).into_response()
+        (self.status(), axum::Json(self.safe_error_message())).into_response()
     }
 }
 
@@ -59,6 +64,8 @@ pub enum LeaderNodeError {
     AggregateSigningFailed(#[from] AggregateSigningError),
     #[error("malformed account id: {0}")]
     MalformedAccountId(String, ParseAccountError),
+    #[error("failed to verify signature: {0}")]
+    SignatureVerificationFailed(anyhow::Error),
     #[error("failed to verify oidc token: {0}")]
     OidcVerificationFailed(anyhow::Error),
     #[error("relayer error: {0}")]
@@ -82,16 +89,17 @@ impl LeaderNodeError {
             LeaderNodeError::ServerError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             LeaderNodeError::DataConversionFailure(_) => StatusCode::BAD_REQUEST,
             LeaderNodeError::AggregateSigningFailed(err) => err.code(),
-            LeaderNodeError::OidcVerificationFailed(_) => StatusCode::BAD_REQUEST,
+            LeaderNodeError::SignatureVerificationFailed(_) => StatusCode::BAD_REQUEST,
+            LeaderNodeError::OidcVerificationFailed(_) => StatusCode::UNAUTHORIZED,
             LeaderNodeError::MalformedAccountId(_, _) => StatusCode::BAD_REQUEST,
-            LeaderNodeError::RelayerError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            LeaderNodeError::RelayerError(_) => StatusCode::FAILED_DEPENDENCY,
             LeaderNodeError::TimeoutGatheringPublicKeys => StatusCode::INTERNAL_SERVER_ERROR,
             LeaderNodeError::RecoveryKeyCanNotBeDeleted(_) => StatusCode::BAD_REQUEST,
             LeaderNodeError::FailedToRetrieveRecoveryPk(_) => StatusCode::UNAUTHORIZED,
-            LeaderNodeError::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
             LeaderNodeError::NetworkRejection(err) => {
-                err.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+                err.status().unwrap_or(StatusCode::REQUEST_TIMEOUT)
             }
+            LeaderNodeError::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
@@ -103,7 +111,7 @@ pub enum SignNodeError {
     #[error("malformed public key {0}: {1}")]
     MalformedPublicKey(String, ParseKeyError),
     #[error("failed to verify signature: {0}")]
-    SignatureVerificationFailed(anyhow::Error),
+    DigestSignatureVerificationFailed(anyhow::Error),
     #[error("failed to verify oidc token: {0}")]
     OidcVerificationFailed(anyhow::Error),
     #[error("oidc token {0:?} already claimed with another key")]
@@ -124,9 +132,9 @@ impl SignNodeError {
     pub fn code(&self) -> StatusCode {
         match self {
             // TODO: this case was not speicifically handled before. Check if it is the right code
-            Self::MalformedAccountId(_, _) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::MalformedAccountId(_, _) => StatusCode::BAD_REQUEST,
             Self::MalformedPublicKey(_, _) => StatusCode::BAD_REQUEST,
-            Self::SignatureVerificationFailed(_) => StatusCode::BAD_REQUEST,
+            Self::DigestSignatureVerificationFailed(_) => StatusCode::UNAUTHORIZED,
             Self::OidcVerificationFailed(_) => StatusCode::BAD_REQUEST,
             Self::OidcTokenAlreadyClaimed(_) => StatusCode::UNAUTHORIZED,
             Self::OidcTokenClaimedWithAnotherKey(_) => StatusCode::UNAUTHORIZED,

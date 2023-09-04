@@ -23,7 +23,6 @@ use curv::elliptic::curves::{Ed25519, Point};
 use multi_party_eddsa::protocols::{self, ExpandedKeyPair};
 use tokio::sync::RwLock;
 
-use near_crypto::PublicKey;
 use near_primitives::delegate_action::NonDelegateAction;
 use near_primitives::hash::hash;
 use near_primitives::signable_message::{SignableMessage, SignableMessageType};
@@ -152,16 +151,12 @@ async fn process_commit<T: OAuthTokenVerifier>(
         SignNodeRequest::ClaimOidc(request) => {
             tracing::debug!(?request, "processing oidc claim request");
             // Check ID token hash signature
-            let public_key: PublicKey = request
-                .public_key
-                .parse()
-                .map_err(|e| SignNodeError::MalformedPublicKey(request.public_key.clone(), e))?;
-
+            let public_key = request.public_key;
             let request_digest = claim_oidc_request_digest(&request.oidc_token_hash, &public_key)?;
 
             match check_digest_signature(&public_key, &request.signature, &request_digest) {
                 Ok(()) => tracing::debug!("claim oidc token digest signature verified"),
-                Err(e) => return Err(SignNodeError::SignatureVerificationFailed(e)),
+                Err(e) => return Err(SignNodeError::DigestSignatureVerificationFailed(e)),
             };
 
             // Save info about token in the database, if it's present, throw an error
@@ -231,7 +226,7 @@ async fn process_commit<T: OAuthTokenVerifier>(
                 sign_request_digest(&request.delegate_action, &request.oidc_token, &frp_pk)?;
             match check_digest_signature(&frp_pk, &request.frp_signature, &digest) {
                 Ok(()) => tracing::debug!("sign request digest signature verified"),
-                Err(e) => return Err(SignNodeError::SignatureVerificationFailed(e)),
+                Err(e) => return Err(SignNodeError::DigestSignatureVerificationFailed(e)),
             };
 
             // Check if this OIDC token was claimed
@@ -407,7 +402,7 @@ async fn process_public_key<T: OAuthTokenVerifier>(
     let digest = user_credentials_request_digest(&request.oidc_token, &frp_pk)?;
     match check_digest_signature(&frp_pk, &request.frp_signature, &digest) {
         Ok(()) => tracing::debug!("user credentials digest signature verified"),
-        Err(e) => return Err(SignNodeError::SignatureVerificationFailed(e)),
+        Err(e) => return Err(SignNodeError::DigestSignatureVerificationFailed(e)),
     };
 
     // Check if this OIDC token was claimed
