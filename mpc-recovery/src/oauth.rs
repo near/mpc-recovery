@@ -259,11 +259,16 @@ mod tests {
         };
 
         // Valid token and claims
-        PagodaFirebaseTokenVerifier::validate_jwt(&token, &public_key_der, &oidc_providers).unwrap();
+        PagodaFirebaseTokenVerifier::validate_jwt(&token, &public_key_der, &oidc_providers)
+            .unwrap();
 
         // Invalid public key
         let (invalid_public_key, _invalid_private_key) = get_rsa_pem_key_pair();
-        match PagodaFirebaseTokenVerifier::validate_jwt(&token, &invalid_public_key, &oidc_providers) {
+        match PagodaFirebaseTokenVerifier::validate_jwt(
+            &token,
+            &invalid_public_key,
+            &oidc_providers,
+        ) {
             Ok(_) => panic!("Token validation should fail"),
             Err(e) => assert_eq!(e.to_string(), "InvalidSignature"),
         }
