@@ -111,7 +111,7 @@ signed by the key you used to claim the oidc token. This does not have to be the
 
     URL: /sign
     Request parameters: {
-        delegate_action: DelegateAction,
+        delegate_action: String, // Base64-encoded borsh serialization of DelegateAction
         oidc_token: String,
         frp_signature: Signature,
         user_credentials_frp_signature: Signature,
@@ -163,8 +163,9 @@ The expected flow for the client is next:
 1. Client uses `/user_credentials` endpoint to get the recovery PK.
 2. Client fetches latest nonce, block hash using obtained recovery PK.
 3. Client creates a delegate action with desired actions, such as add or delete key.
-4. Client gets the signature from the MPC system using `/sign` endpoint.
-5. Client sends the same delegate action to the relayer with obtained signature.
+4. Client serializes the delegate action and encodes it into Base64.
+5. Client gets the signature from the MPC system using `/sign` endpoint.
+6. Client sends the same delegate action to the relayer with obtained signature.
 
 ### Client integration
 
