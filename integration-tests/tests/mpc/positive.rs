@@ -178,7 +178,7 @@ async fn test_accept_existing_pk_set() -> anyhow::Result<()> {
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
-            assert!(matches!(result, Ok(_)));
+            assert!(result.is_err());
 
             Ok(())
         })

@@ -480,7 +480,7 @@ async fn test_reject_new_pk_set() -> anyhow::Result<()> {
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::BAD_REQUEST);
-            assert!(matches!(result, Err(_)));
+            assert!(result.is_err());
 
             Ok(())
         })
