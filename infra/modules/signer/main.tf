@@ -34,20 +34,20 @@ resource "google_secret_manager_secret_iam_member" "secret_share_secret_access" 
   member    = "serviceAccount:${var.service_account_email}"
 }
 
-resource "google_secret_manager_secret" "allowlist" {
-  secret_id = "mpc-recovery-allowlist-${var.node_id}-${var.env}"
+resource "google_secret_manager_secret" "allowed_oidc_providers" {
+  secret_id = "mpc-recovery-allowed_oidc_providers-${var.node_id}-${var.env}"
   replication {
     automatic = true
   }
 }
 
-resource "google_secret_manager_secret_version" "allowlist_data" {
-  secret      = google_secret_manager_secret.allowlist.name
-  secret_data = jsonencode(var.allowlist)
+resource "google_secret_manager_secret_version" "allowed_oidc_providers_data" {
+  secret      = google_secret_manager_secret.allowed_oidc_providers.name
+  secret_data = jsonencode(var.allowed_oidc_providers)
 }
 
-resource "google_secret_manager_secret_iam_member" "allowlist_secret_access" {
-  secret_id = google_secret_manager_secret.allowlist.id
+resource "google_secret_manager_secret_iam_member" "allowed_oidc_providers_secret_access" {
+  secret_id = google_secret_manager_secret.allowed_oidc_providers.id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${var.service_account_email}"
 }
@@ -107,10 +107,10 @@ resource "google_cloud_run_v2_service" "signer" {
   depends_on = [
     google_secret_manager_secret_version.cipher_key_data,
     google_secret_manager_secret_version.secret_share_data,
-    google_secret_manager_secret_version.allowlist_data,
+    google_secret_manager_secret_version.allowed_oidc_providers_data,
     google_secret_manager_secret_iam_member.cipher_key_secret_access,
     google_secret_manager_secret_iam_member.secret_share_secret_access,
-    google_secret_manager_secret_iam_member.allowlist_secret_access
+    google_secret_manager_secret_iam_member.allowed_oidc_providers_secret_access
   ]
 }
 

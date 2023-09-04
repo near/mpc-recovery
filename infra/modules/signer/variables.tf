@@ -20,7 +20,7 @@ variable "docker_image" {
 variable "node_id" {
 }
 
-variable "allowlist" {
+variable "allowed_oidc_providers" {
 }
 
 # Secrets

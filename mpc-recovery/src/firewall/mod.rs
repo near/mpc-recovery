@@ -1,1 +1,1 @@
-pub mod allowlist;
+pub mod allowed;

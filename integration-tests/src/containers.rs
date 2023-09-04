@@ -420,7 +420,7 @@ impl<'a> SignerNode<'a> {
                 hex::encode(cipher_key),
                 "--web-port".to_string(),
                 Self::CONTAINER_PORT.to_string(),
-                "--pagoda-allowlist".to_string(),
+                "--allowed-oidc-providers".to_string(),
                 serde_json::json!({
                     "entries": [
                         {
@@ -565,7 +565,7 @@ impl<'a> LeaderNode<'a> {
             account_creator_id.to_string(),
             "--account-creator-sk".to_string(),
             account_creator_sk.to_string(),
-            "--pagoda-allowlist".to_string(),
+            "--allowed-oidc-providers".to_string(),
             serde_json::json!({
                 "entries": [
                     {

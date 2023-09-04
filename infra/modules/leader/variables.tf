@@ -36,7 +36,7 @@ variable "near_root_account" {
 variable "account_creator_id" {
 }
 
-variable "allowlist" {
+variable "allowed_oidc_providers" {
 }
 
 # Secrets

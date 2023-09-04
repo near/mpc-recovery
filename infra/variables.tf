@@ -24,7 +24,7 @@ variable "zone" {
 variable "account_creator_id" {
 }
 
-variable "allowlist" {
+variable "allowed_oidc_providers" {
   type    = list(string)
   default = []
 }

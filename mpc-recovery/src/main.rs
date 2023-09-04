@@ -6,7 +6,7 @@ use aes_gcm::{
 };
 use clap::Parser;
 use mpc_recovery::{
-    firewall::allowlist::AllowList,
+    firewall::allowed::AllowedOidcProviders,
     gcp::GcpService,
     oauth::{PagodaFirebaseTokenVerifier, UniversalTokenVerifier},
     sign_node::migration,
@@ -58,11 +58,11 @@ enum Cli {
         #[arg(long, env("MPC_RECOVERY_ACCOUNT_CREATOR_SK"))]
         account_creator_sk: Option<String>,
         /// JSON list of related items to be used to verify OIDC tokens.
-        #[arg(long, env("PAGODA_ALLOWLIST"))]
-        pagoda_allowlist: Option<String>,
+        #[arg(long, env("ALLOWED_OIDC_PROVIDERS"))]
+        allowed_oidc_providers: Option<String>,
         /// Filepath to a JSON list of related items to be used to verify OIDC tokens.
-        #[arg(long, value_parser, env("PAGODA_ALLOWLIST_FILEPATH"))]
-        pagoda_allowlist_filepath: Option<PathBuf>,
+        #[arg(long, value_parser, env("ALLOWED_OIDC_PROVIDERS_FILEPATH"))]
+        allowed_oidc_providers_filepath: Option<PathBuf>,
         /// GCP project ID
         #[arg(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
         gcp_project_id: String,
@@ -90,11 +90,11 @@ enum Cli {
         #[arg(long, env("MPC_RECOVERY_WEB_PORT"))]
         web_port: u16,
         /// JSON list of related items to be used to verify OIDC tokens.
-        #[arg(long, env("PAGODA_ALLOWLIST"))]
-        pagoda_allowlist: Option<String>,
+        #[arg(long, env("ALLOWED_OIDC_PROVIDERS"))]
+        allowed_oidc_providers: Option<String>,
         /// Filepath to a JSON list of related items to be used to verify OIDC tokens.
-        #[arg(long, value_parser, env("PAGODA_ALLOWLIST_FILEPATH"))]
-        pagoda_allowlist_filepath: Option<PathBuf>,
+        #[arg(long, value_parser, env("ALLOWED_OIDC_PROVIDERS_FILEPATH"))]
+        allowed_oidc_providers_filepath: Option<PathBuf>,
         /// GCP project ID
         #[arg(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
         gcp_project_id: String,
@@ -174,25 +174,26 @@ async fn load_account_creator_sk(
     }
 }
 
-async fn load_allowlist(
+async fn load_oidc_providers(
     gcp_service: &GcpService,
     env: &str,
     node_id: &str,
-    allowlist: Option<String>,
-    allowlist_path: Option<PathBuf>,
-) -> anyhow::Result<AllowList> {
-    if let Some(allowlist) = allowlist {
-        return Ok(serde_json::from_str(&allowlist)?);
+    oidc_providers: Option<String>,
+    oidc_providers_path: Option<PathBuf>,
+) -> anyhow::Result<AllowedOidcProviders> {
+    if let Some(oidc_providers) = oidc_providers {
+        return Ok(serde_json::from_str(&oidc_providers)?);
     }
 
-    match allowlist_path {
+    match oidc_providers_path {
         Some(path) => {
             let file = std::fs::File::open(path)?;
             let reader = std::io::BufReader::new(file);
             Ok(serde_json::from_reader(reader)?)
         }
         None => {
-            let name = format!("mpc-recovery-allowlist-{node_id}-{env}/versions/latest");
+            let name =
+                format!("mpc-recovery-allowed-oidc-providers-{node_id}-{env}/versions/latest");
             Ok(serde_json::from_slice(
                 &gcp_service.load_secret(name).await?,
             )?)
@@ -237,8 +238,8 @@ async fn main() -> anyhow::Result<()> {
             near_root_account,
             account_creator_id,
             account_creator_sk,
-            pagoda_allowlist,
-            pagoda_allowlist_filepath,
+            allowed_oidc_providers: oidc_providers,
+            allowed_oidc_providers_filepath: oidc_providers_filepath,
             gcp_project_id,
             gcp_datastore_url,
             test,
@@ -247,12 +248,12 @@ async fn main() -> anyhow::Result<()> {
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
             let account_creator_sk =
                 load_account_creator_sk(&gcp_service, &env, account_creator_sk).await?;
-            let allowlist = load_allowlist(
+            let oidc_providers = load_oidc_providers(
                 &gcp_service,
                 &env,
                 "leader",
-                pagoda_allowlist,
-                pagoda_allowlist_filepath,
+                oidc_providers,
+                oidc_providers_filepath,
             )
             .await?;
 
@@ -269,7 +270,7 @@ async fn main() -> anyhow::Result<()> {
                 // TODO: Create such an account for testnet and mainnet in a secure way
                 account_creator_id,
                 account_creator_sk,
-                allowlist,
+                oidc_providers,
             };
 
             if test {
@@ -284,20 +285,20 @@ async fn main() -> anyhow::Result<()> {
             sk_share,
             cipher_key,
             web_port,
-            pagoda_allowlist,
-            pagoda_allowlist_filepath,
+            allowed_oidc_providers,
+            allowed_oidc_providers_filepath,
             gcp_project_id,
             gcp_datastore_url,
             test,
         } => {
             let gcp_service =
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
-            let allowlist = load_allowlist(
+            let oidc_providers = load_oidc_providers(
                 &gcp_service,
                 &env,
                 node_id.to_string().as_str(),
-                pagoda_allowlist,
-                pagoda_allowlist_filepath,
+                allowed_oidc_providers,
+                allowed_oidc_providers_filepath,
             )
             .await?;
             let cipher_key = load_cipher_key(&gcp_service, &env, node_id, cipher_key).await?;
@@ -316,7 +317,7 @@ async fn main() -> anyhow::Result<()> {
                 node_key: sk_share,
                 cipher,
                 port: web_port,
-                allowlist,
+                oidc_providers,
             };
             if test {
                 mpc_recovery::run_sign_node::<UniversalTokenVerifier>(config).await;
