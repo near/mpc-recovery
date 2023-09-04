@@ -25,7 +25,7 @@ resource "google_secret_manager_secret" "allowlist" {
 
 resource "google_secret_manager_secret_version" "allowlist_data" {
   secret      = google_secret_manager_secret.allowlist.name
-  secret_data = var.allowlist
+  secret_data = jsonencode(var.allowlist)
 }
 
 resource "google_secret_manager_secret_iam_member" "allowlist_secret_access" {
@@ -81,10 +81,6 @@ resource "google_cloud_run_v2_service" "leader" {
       env {
         name  = "MPC_RECOVERY_ACCOUNT_CREATOR_ID"
         value = var.account_creator_id
-      }
-      env {
-        name  = "PAGODA_ALLOWLIST"
-        value = var.allowlist
       }
       env {
         name  = "MPC_RECOVERY_GCP_PROJECT_ID"
