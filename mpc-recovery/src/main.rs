@@ -194,9 +194,9 @@ async fn load_oidc_providers(
         None => {
             let name =
                 format!("mpc-recovery-allowed-oidc-providers-{node_id}-{env}/versions/latest");
-            Ok(serde_json::from_slice(
+            Ok(serde_json::from_str(std::str::from_utf8(
                 &gcp_service.load_secret(name).await?,
-            )?)
+            )?)?)
         }
     }
 }

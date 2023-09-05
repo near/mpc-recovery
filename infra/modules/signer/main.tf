@@ -43,9 +43,7 @@ resource "google_secret_manager_secret" "allowed_oidc_providers" {
 
 resource "google_secret_manager_secret_version" "allowed_oidc_providers_data" {
   secret      = google_secret_manager_secret.allowed_oidc_providers.name
-  secret_data = <<EOF
-${var.allowed_oidc_providers}
-EOF
+  secret_data = jsonencode(var.allowed_oidc_providers)
 }
 
 resource "google_secret_manager_secret_iam_member" "allowed_oidc_providers_secret_access" {
