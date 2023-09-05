@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{collections::HashSet, path::PathBuf};
 
 use aes_gcm::{
     aead::{consts::U32, generic_array::GenericArray, KeyInit},
@@ -196,11 +196,11 @@ async fn load_oidc_providers(
                 format!("mpc-recovery-allowed-oidc-providers-{node_id}-{env}/versions/latest");
             let x = std::str::from_utf8(&gcp_service.load_secret(name).await?)?.to_string();
             tracing::info!("Loaded OIDC providers: {x:?}");
-            let oidc_providers: Vec<mpc_recovery::firewall::allowed::OidcProvider> =
+            let oidc_providers: HashSet<mpc_recovery::firewall::allowed::OidcProvider> =
                 serde_json::from_str(&x)?;
 
             Ok(AllowedOidcProviders {
-                entries: oidc_providers.into_iter().collect(),
+                entries: oidc_providers,
             })
         }
     }
@@ -376,16 +376,4 @@ async fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod test {
-    use mpc_recovery::firewall::allowed::OidcProvider;
-
-    #[test]
-    fn test_() {
-        let x = "{\"issuer\":\"https://securetoken.google.com/pagoda-oboarding-dev\",\"audience\":\"pagoda-oboarding-dev\"}";
-        let y: OidcProvider = serde_json::from_str(&format!("\"{}\"", x)).unwrap();
-        println!("{:?}", y);
-    }
 }

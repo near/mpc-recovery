@@ -21,6 +21,7 @@ variable "node_id" {
 }
 
 variable "allowed_oidc_providers" {
+  type = list(map(string))
 }
 
 # Secrets

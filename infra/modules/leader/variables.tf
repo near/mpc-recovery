@@ -37,6 +37,7 @@ variable "account_creator_id" {
 }
 
 variable "allowed_oidc_providers" {
+  type = list(map(string))
 }
 
 # Secrets

@@ -25,7 +25,7 @@ variable "account_creator_id" {
 }
 
 variable "allowed_oidc_providers" {
-  type    = list(string)
+  type    = list(map(string))
   default = []
 }
 
