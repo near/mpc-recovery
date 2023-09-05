@@ -23,6 +23,7 @@ use mpc_recovery::{
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_crypto::{PublicKey, SecretKey};
+use near_primitives::borsh::BorshSerialize;
 use near_primitives::transaction::DeleteKeyAction;
 use near_primitives::types::{BlockHeight, Nonce};
 use near_primitives::{
@@ -719,7 +720,7 @@ impl LeaderNodeApi {
         let user_credentials_frp_signature = sign_digest(&user_credentials_request_digest, frp_sk)?;
 
         let sign_request = SignRequest {
-            delegate_action: add_key_delegate_action.clone(),
+            delegate_action: add_key_delegate_action.try_to_vec()?,
             oidc_token: oidc_token.clone(),
             frp_signature,
             user_credentials_frp_signature,
@@ -775,7 +776,7 @@ impl LeaderNodeApi {
         let user_credentials_frp_signature = sign_digest(&user_credentials_request_digest, frp_sk)?;
 
         let sign_request = SignRequest {
-            delegate_action: delete_key_delegate_action.clone(),
+            delegate_action: delete_key_delegate_action.try_to_vec()?,
             oidc_token: oidc_token.clone(),
             frp_signature,
             user_credentials_frp_signature,
@@ -818,7 +819,7 @@ impl LeaderNodeApi {
         let user_credentials_frp_signature = sign_digest(&user_credentials_request_digest, frp_sk)?;
 
         let sign_request = SignRequest {
-            delegate_action: delegate_action.clone(),
+            delegate_action: delegate_action.try_to_vec()?,
             oidc_token: oidc_token.clone(),
             frp_signature,
             user_credentials_frp_signature,

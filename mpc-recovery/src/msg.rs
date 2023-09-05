@@ -1,11 +1,12 @@
+use crate::sign_node::oidc::{OidcHash, OidcToken};
+use crate::transaction::CreateAccountOptions;
 use curv::elliptic::curves::{Ed25519, Point};
 use ed25519_dalek::Signature;
 use near_primitives::delegate_action::DelegateAction;
 use near_primitives::types::AccountId;
 use serde::{Deserialize, Serialize};
-
-use crate::sign_node::oidc::{OidcHash, OidcToken};
-use crate::transaction::CreateAccountOptions;
+use serde_with::base64::Base64;
+use serde_with::serde_as;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MpcPkRequest {}
@@ -116,9 +117,11 @@ impl NewAccountResponse {
     }
 }
 
+#[serde_as]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SignRequest {
-    pub delegate_action: DelegateAction,
+    #[serde_as(as = "Base64")]
+    pub delegate_action: Vec<u8>,
     pub oidc_token: OidcToken,
     #[serde(with = "hex_signature")]
     pub frp_signature: Signature,
