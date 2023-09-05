@@ -35,7 +35,7 @@ resource "google_secret_manager_secret_iam_member" "secret_share_secret_access" 
 }
 
 resource "google_secret_manager_secret" "allowed_oidc_providers" {
-  secret_id = "mpc-recovery-allowed_oidc_providers-${var.node_id}-${var.env}"
+  secret_id = "mpc-recovery-allowed-oidc-providers-${var.node_id}-${var.env}"
   replication {
     automatic = true
   }
