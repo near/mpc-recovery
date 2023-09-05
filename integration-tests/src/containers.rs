@@ -24,7 +24,6 @@ use mpc_recovery::{
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_crypto::{PublicKey, SecretKey};
 use near_primitives::borsh::BorshSerialize;
-use near_primitives::transaction::DeleteKeyAction;
 use near_primitives::types::{BlockHeight, Nonce};
 use near_primitives::{
     account::{AccessKey, AccessKeyPermission},
@@ -43,7 +42,7 @@ use tokio::io::AsyncWriteExt;
 use tracing;
 use workspaces::AccountId;
 
-use crate::util;
+use crate::util::{self, get_delete_key_delegate_action};
 
 static NETWORK_MUTEX: Lazy<Mutex<i32>> = Lazy::new(|| Mutex::new(0));
 
@@ -744,7 +743,7 @@ impl LeaderNodeApi {
             .get_key_info_with_helper(account_id, recovery_pk)
             .await?;
 
-        let delete_key_delegate_action = self.get_delete_key_delegate_action(
+        let delete_key_delegate_action = get_delete_key_delegate_action(
             account_id,
             public_key,
             recovery_pk,
@@ -887,27 +886,6 @@ impl LeaderNodeApi {
                     nonce: 0,
                     permission: AccessKeyPermission::FullAccess,
                 },
-            })
-            .try_into()?],
-            nonce,
-            max_block_height: block_height + 100,
-            public_key: recovery_pk.clone(),
-        })
-    }
-
-    pub fn get_delete_key_delegate_action(
-        &self,
-        account_id: &AccountId,
-        public_key: &PublicKey,
-        recovery_pk: &PublicKey,
-        nonce: u64,
-        block_height: u64,
-    ) -> anyhow::Result<DelegateAction> {
-        Ok(DelegateAction {
-            sender_id: account_id.clone(),
-            receiver_id: account_id.clone(),
-            actions: vec![Action::DeleteKey(DeleteKeyAction {
-                public_key: public_key.clone(),
             })
             .try_into()?],
             nonce,
