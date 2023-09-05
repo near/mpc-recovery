@@ -422,14 +422,12 @@ impl<'a> SignerNode<'a> {
                 "--web-port".to_string(),
                 Self::CONTAINER_PORT.to_string(),
                 "--allowed-oidc-providers".to_string(),
-                serde_json::json!({
-                    "entries": [
-                        {
-                            "issuer": format!("https://securetoken.google.com/{firebase_audience_id}"),
-                            "audience": firebase_audience_id,
-                        }
-                    ]
-                })
+                serde_json::json!([
+                    {
+                        "issuer": format!("https://securetoken.google.com/{firebase_audience_id}"),
+                        "audience": firebase_audience_id,
+                    },
+                ])
                 .to_string(),
                 "--gcp-project-id".to_string(),
                 gcp_project_id.to_string(),
@@ -567,14 +565,12 @@ impl<'a> LeaderNode<'a> {
             "--account-creator-sk".to_string(),
             account_creator_sk.to_string(),
             "--allowed-oidc-providers".to_string(),
-            serde_json::json!({
-                "entries": [
-                    {
-                        "issuer": format!("https://securetoken.google.com/{firebase_audience_id}"),
-                        "audience": firebase_audience_id,
-                    }
-                ]
-            })
+            serde_json::json!([
+                {
+                    "issuer": format!("https://securetoken.google.com/{firebase_audience_id}"),
+                    "audience": firebase_audience_id,
+                },
+            ])
             .to_string(),
             "--gcp-project-id".to_string(),
             gcp_project_id.to_string(),

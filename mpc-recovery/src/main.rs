@@ -1,4 +1,4 @@
-use std::{collections::HashSet, path::PathBuf};
+use std::path::PathBuf;
 
 use aes_gcm::{
     aead::{consts::U32, generic_array::GenericArray, KeyInit},
@@ -182,7 +182,9 @@ async fn load_oidc_providers(
     oidc_providers_path: Option<PathBuf>,
 ) -> anyhow::Result<AllowedOidcProviders> {
     if let Some(oidc_providers) = oidc_providers {
-        return Ok(serde_json::from_str(&oidc_providers)?);
+        return Ok(AllowedOidcProviders {
+            entries: serde_json::from_str(&oidc_providers)?,
+        });
     }
 
     match oidc_providers_path {
@@ -194,13 +196,10 @@ async fn load_oidc_providers(
         None => {
             let name =
                 format!("mpc-recovery-allowed-oidc-providers-{node_id}-{env}/versions/latest");
-            let x = std::str::from_utf8(&gcp_service.load_secret(name).await?)?.to_string();
-            tracing::info!("Loaded OIDC providers: {x:?}");
-            let oidc_providers: HashSet<mpc_recovery::firewall::allowed::OidcProvider> =
-                serde_json::from_str(&x)?;
-
             Ok(AllowedOidcProviders {
-                entries: oidc_providers,
+                entries: serde_json::from_str(std::str::from_utf8(
+                    &gcp_service.load_secret(name).await?,
+                )?)?,
             })
         }
     }
