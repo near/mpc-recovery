@@ -42,7 +42,7 @@ use tokio::io::AsyncWriteExt;
 use tracing;
 use workspaces::AccountId;
 
-use crate::util::{self, get_delete_key_delegate_action};
+use crate::util::{self, get_add_key_delegate_action, get_delete_key_delegate_action};
 
 static NETWORK_MUTEX: Lazy<Mutex<i32>> = Lazy::new(|| Mutex::new(0));
 
@@ -687,13 +687,8 @@ impl LeaderNodeApi {
             .get_key_info_with_helper(account_id, recovery_pk)
             .await?;
 
-        let add_key_delegate_action = self.get_add_key_delegate_action(
-            account_id,
-            public_key,
-            recovery_pk,
-            nonce,
-            block_height,
-        )?;
+        let add_key_delegate_action =
+            get_add_key_delegate_action(account_id, public_key, recovery_pk, nonce, block_height)?;
 
         let sign_request_digest: Vec<u8> =
             sign_request_digest(&add_key_delegate_action, oidc_token, frp_pk)?;
@@ -870,7 +865,6 @@ impl LeaderNodeApi {
     }
 
     pub fn get_add_key_delegate_action(
-        &self,
         account_id: &AccountId,
         public_key: &PublicKey,
         recovery_pk: &PublicKey,

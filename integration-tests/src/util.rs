@@ -2,8 +2,9 @@ use anyhow::{Context, Ok};
 use hyper::{Body, Client, Method, Request, StatusCode, Uri};
 use near_crypto::PublicKey;
 use near_primitives::{
+    account::{AccessKey, AccessKeyPermission},
     delegate_action::DelegateAction,
-    transaction::{Action, DeleteKeyAction},
+    transaction::{Action, AddKeyAction, DeleteKeyAction},
 };
 use serde::{Deserialize, Serialize};
 use workspaces::AccountId;
@@ -54,6 +55,30 @@ pub fn get_delete_key_delegate_action(
         receiver_id: account_id.clone(),
         actions: vec![Action::DeleteKey(DeleteKeyAction {
             public_key: public_key.clone(),
+        })
+        .try_into()?],
+        nonce,
+        max_block_height: block_height + 100,
+        public_key: recovery_pk.clone(),
+    })
+}
+
+pub fn get_add_key_delegate_action(
+    account_id: &AccountId,
+    public_key: &PublicKey,
+    recovery_pk: &PublicKey,
+    nonce: u64,
+    block_height: u64,
+) -> anyhow::Result<DelegateAction> {
+    Ok(DelegateAction {
+        sender_id: account_id.clone(),
+        receiver_id: account_id.clone(),
+        actions: vec![Action::AddKey(AddKeyAction {
+            public_key: public_key.clone(),
+            access_key: AccessKey {
+                nonce: 0,
+                permission: AccessKeyPermission::FullAccess,
+            },
         })
         .try_into()?],
         nonce,
