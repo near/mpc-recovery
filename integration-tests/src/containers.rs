@@ -629,8 +629,6 @@ impl LeaderNodeApi {
         util::post(format!("{}/new_account", self.address), request).await
     }
 
-    // TODO: move to utils
-    // TODO: I would say this need to replace the regular `new_account` once FRP is enforced
     pub async fn new_account_with_helper(
         &self,
         account_id: &AccountId,
@@ -669,7 +667,6 @@ impl LeaderNodeApi {
         self.new_account(new_account_request).await
     }
 
-    // TODO: add_key should me moved to utils in the future, it is not a part of the API
     pub async fn add_key_with_helper(
         &self,
         account_id: &AccountId,
@@ -782,7 +779,7 @@ impl LeaderNodeApi {
         }
     }
 
-    pub async fn perform_delegate_action_with_helper(
+    pub async fn sign_with_helper(
         &self,
         delegate_action: &DelegateAction,
         oidc_token: &OidcToken,
@@ -807,7 +804,6 @@ impl LeaderNodeApi {
         Ok((status_code, sign_response))
     }
 
-    // TODO: move to utils
     pub async fn claim_oidc_with_helper(
         &self,
         oidc_token: &OidcToken,

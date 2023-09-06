@@ -56,7 +56,7 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
 
             for whitelisted_action in whitelisted_actions {
                 ctx.leader_node
-                    .perform_delegate_action_with_helper(
+                    .sign_with_helper(
                         &get_stub_delegate_action(whitelisted_action)?,
                         &oidc_token,
                         &user_secret_key,
@@ -78,7 +78,7 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
 
             for blacklisted_action in blacklisted_actions {
                 ctx.leader_node
-                    .perform_delegate_action_with_helper(
+                    .sign_with_helper(
                         &get_stub_delegate_action(blacklisted_action)?,
                         &oidc_token,
                         &user_secret_key,
