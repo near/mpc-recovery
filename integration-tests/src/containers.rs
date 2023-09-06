@@ -24,11 +24,8 @@ use mpc_recovery::{
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_crypto::{PublicKey, SecretKey};
 use near_primitives::borsh::BorshSerialize;
-use near_primitives::types::{BlockHeight, Nonce};
 use near_primitives::{
-    account::{AccessKey, AccessKeyPermission},
     delegate_action::{DelegateAction, SignedDelegateAction},
-    transaction::{Action, AddKeyAction},
     views::FinalExecutionStatus,
 };
 use once_cell::sync::Lazy;
@@ -683,8 +680,9 @@ impl LeaderNodeApi {
         frp_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
-        let (block_height, nonce) = self
-            .get_key_info_with_helper(account_id, recovery_pk)
+        let (_, block_height, nonce) = self
+            .client
+            .access_key(account_id.clone(), recovery_pk.clone())
             .await?;
 
         let add_key_delegate_action =
@@ -734,8 +732,9 @@ impl LeaderNodeApi {
         frp_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
-        let (block_height, nonce) = self
-            .get_key_info_with_helper(account_id, recovery_pk)
+        let (_, block_height, nonce) = self
+            .client
+            .access_key(account_id.clone(), recovery_pk.clone())
             .await?;
 
         let delete_key_delegate_action = get_delete_key_delegate_action(
@@ -862,17 +861,5 @@ impl LeaderNodeApi {
             frp_public_key: client_pk.clone(),
         })
         .await
-    }
-
-    pub async fn get_key_info_with_helper(
-        &self,
-        account_id: &AccountId,
-        pk: &PublicKey,
-    ) -> anyhow::Result<(BlockHeight, Nonce)> {
-        let (_, block_height, nonce) = self
-            .client
-            .access_key(account_id.clone(), pk.clone())
-            .await?;
-        Ok((block_height, nonce))
     }
 }
