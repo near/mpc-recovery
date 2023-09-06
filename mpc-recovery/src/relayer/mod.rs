@@ -104,6 +104,11 @@ impl NearRpcAndRelayerClient {
         &self,
         request: SendMetaTxRequest,
     ) -> Result<SendMetaTxResponse, RelayerError> {
+        tracing::info!(
+            uri = format!("{}/send_meta_tx", self.relayer_url),
+            body = serde_json::to_string(&request).unwrap(),
+            "meta tx"
+        );
         let request = Request::builder()
             .method(Method::POST)
             .uri(format!("{}/send_meta_tx", self.relayer_url))
