@@ -153,6 +153,7 @@ impl NearRpcAndRelayerClient {
                 }
             }
         } else {
+            tracing::info!(%status, msg, "meta tx request failed");
             Err(RelayerError::RequestFailure(status, msg.to_string()))
         }
     }
