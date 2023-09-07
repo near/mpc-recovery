@@ -129,10 +129,10 @@ This endpoint can be used to sign a delegate action that can then be sent to the
 
 The frp_signature you send must be an Ed22519 signature of the hash:
 
-    sha256.hash(Borsh.serialize<u32>(SALT + 3) ++ Borsh.serialize<[u8]>(
-        delegate_action,
-        oidc_token_hash,
-    ) ++ [0] ++ Borsh.serialize<[u8]>(frp_public_key))
+    sha256.hash(Borsh.serialize<u32>(SALT + 3) ++
+    Borsh.serialize<[u8]>(delegate_action) ++
+    Borsh.serialize<[u8]>(oidc_token) ++
+    [0] ++ Borsh.serialize<[u8]>(frp_public_key))
 
 The user_credentials_frp_signature is needed to get user recovery PK. It is the same as in user_credentials endpoint.
 
