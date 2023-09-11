@@ -8,21 +8,42 @@ pub struct OidcProvider {
     pub audience: String,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct AllowedOidcProviders {
-    pub entries: HashSet<OidcProvider>,
+#[derive(Clone, Debug, Serialize, Deserialize, Hash, PartialEq, Eq)]
+
+pub struct DelegateActionRelayer {
+    pub url: String,
+    pub api_key: Option<String>,
 }
 
-impl AllowedOidcProviders {
+#[derive(Clone, Debug, Serialize, Deserialize, Hash, PartialEq, Eq)]
+pub struct FastAuhtPartner {
+    pub oidc_provider: OidcProvider,
+    pub relayer: DelegateActionRelayer,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct PartnerList {
+    pub entries: HashSet<FastAuhtPartner>,
+}
+
+impl PartnerList {
     pub fn contains(&self, issuer: &str, audience: &str) -> bool {
-        self.entries.contains(&OidcProvider {
-            issuer: issuer.into(),
-            audience: audience.into(),
+        self.entries.iter().any(|entry| {
+            entry.oidc_provider.issuer == issuer && entry.oidc_provider.audience == audience
         })
     }
 
+    pub fn find(&self, issuer: &str, audience: &str) -> Option<FastAuhtPartner> {
+        self.entries
+            .iter()
+            .find(|entry| {
+                entry.oidc_provider.issuer == issuer && entry.oidc_provider.audience == audience
+            })
+            .cloned()
+    }
+
     #[cfg(test)]
-    pub(crate) fn insert(&mut self, entry: OidcProvider) {
+    pub(crate) fn insert(&mut self, entry: FastAuhtPartner) {
         self.entries.insert(entry);
     }
 }

@@ -6,7 +6,7 @@ use aes_gcm::{
 };
 use clap::Parser;
 use mpc_recovery::{
-    firewall::allowed::AllowedOidcProviders,
+    firewall::allowed::PartnerList,
     gcp::GcpService,
     oauth::{PagodaFirebaseTokenVerifier, UniversalTokenVerifier},
     sign_node::migration,
@@ -38,16 +38,6 @@ enum Cli {
             default_value("https://rpc.testnet.near.org")
         )]
         near_rpc: String,
-        /// NEAR meta transaction relayer URL
-        #[arg(long, env("MPC_RECOVERY_RELAYER_API_KEY"))]
-        relayer_api_key: Option<String>,
-        /// NEAR meta transaction relayer URL
-        #[arg(
-            long,
-            env("MPC_RECOVERY_RELAYER_URL"),
-            default_value("http://34.70.226.83:3030")
-        )]
-        relayer_url: String,
         /// NEAR root account that has linkdrop contract deployed on it
         #[arg(long, env("MPC_RECOVERY_NEAR_ROOT_ACCOUNT"), default_value("testnet"))]
         near_root_account: String,
@@ -180,9 +170,9 @@ async fn load_oidc_providers(
     node_id: &str,
     oidc_providers: Option<String>,
     oidc_providers_path: Option<PathBuf>,
-) -> anyhow::Result<AllowedOidcProviders> {
+) -> anyhow::Result<PartnerList> {
     if let Some(oidc_providers) = oidc_providers {
-        return Ok(AllowedOidcProviders {
+        return Ok(PartnerList {
             entries: serde_json::from_str(&oidc_providers)?,
         });
     }
@@ -196,7 +186,7 @@ async fn load_oidc_providers(
         None => {
             let name =
                 format!("mpc-recovery-allowed-oidc-providers-{node_id}-{env}/versions/latest");
-            Ok(AllowedOidcProviders {
+            Ok(PartnerList {
                 entries: serde_json::from_str(std::str::from_utf8(
                     &gcp_service.load_secret(name).await?,
                 )?)?,
@@ -237,8 +227,6 @@ async fn main() -> anyhow::Result<()> {
             web_port,
             sign_nodes,
             near_rpc,
-            relayer_api_key,
-            relayer_url,
             near_root_account,
             account_creator_id,
             account_creator_sk,
@@ -268,8 +256,6 @@ async fn main() -> anyhow::Result<()> {
                 port: web_port,
                 sign_nodes,
                 near_rpc,
-                relayer_api_key,
-                relayer_url,
                 near_root_account,
                 // TODO: Create such an account for testnet and mainnet in a secure way
                 account_creator_id,

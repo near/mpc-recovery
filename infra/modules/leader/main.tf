@@ -63,17 +63,6 @@ resource "google_cloud_run_v2_service" "leader" {
         name  = "MPC_RECOVERY_NEAR_RPC"
         value = var.near_rpc
       }
-      dynamic "env" {
-        for_each = var.relayer_api_key == null ? [] : [1]
-        content {
-          name  = "MPC_RECOVERY_RELAYER_API_KEY"
-          value = var.relayer_api_key
-        }
-      }
-      env {
-        name  = "MPC_RECOVERY_RELAYER_URL"
-        value = var.relayer_url
-      }
       env {
         name  = "MPC_RECOVERY_NEAR_ROOT_ACCOUNT"
         value = var.near_root_account

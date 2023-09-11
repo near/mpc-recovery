@@ -4,6 +4,7 @@ use curv::elliptic::curves::{Ed25519, Point};
 use futures::future::BoxFuture;
 use hyper::StatusCode;
 use mpc_recovery::{
+    firewall::allowed::DelegateActionRelayer,
     gcp::GcpService,
     msg::{
         ClaimOidcResponse, MpcPkResponse, NewAccountResponse, SignResponse, UserCredentialsResponse,
@@ -94,7 +95,10 @@ where
     f(TestContext {
         leader_node: &leader_node.api(
             &relayer_ctx.sandbox.local_address,
-            &relayer_ctx.relayer.local_address,
+            &DelegateActionRelayer {
+                url: relayer_ctx.relayer.local_address.clone(),
+                api_key: None,
+            },
         ),
         pk_set: &pk_set,
         signer_nodes: &signer_nodes.iter().map(|n| n.api()).collect(),

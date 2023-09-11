@@ -23,17 +23,12 @@ locals {
   env = {
     defaults = {
       near_rpc          = "https://rpc.testnet.near.org"
-      relayer_api_key   = null
-      relayer_url       = "http://34.70.226.83:3030"
       near_root_account = "testnet"
     }
     testnet = {
     }
     mainnet = {
       near_rpc = "https://rpc.mainnet.near.org"
-      // TODO: move relayer API key to secrets
-      relayer_api_key   = "dfadcb16-2293-4649-896b-4bc4224adea0"
-      relayer_url       = "http://near-relayer-mainnet.api.pagoda.co"
       near_root_account = "near"
     }
   }
@@ -130,8 +125,6 @@ module "leader" {
 
   signer_node_urls       = concat(module.signer.*.node.uri, var.external_signer_node_urls)
   near_rpc               = local.workspace.near_rpc
-  relayer_api_key        = local.workspace.relayer_api_key
-  relayer_url            = local.workspace.relayer_url
   near_root_account      = local.workspace.near_root_account
   account_creator_id     = var.account_creator_id
   allowed_oidc_providers = var.allowed_oidc_providers

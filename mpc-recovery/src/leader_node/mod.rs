@@ -1,5 +1,5 @@
 use crate::error::{LeaderNodeError, MpcError};
-use crate::firewall::allowed::AllowedOidcProviders;
+use crate::firewall::allowed::PartnerList;
 use crate::key_recovery::get_user_recovery_pk;
 use crate::msg::{
     AcceptNodePublicKeysRequest, ClaimOidcNodeRequest, ClaimOidcRequest, ClaimOidcResponse,
@@ -43,13 +43,11 @@ pub struct Config {
     pub port: u16,
     pub sign_nodes: Vec<String>,
     pub near_rpc: String,
-    pub relayer_api_key: Option<String>,
-    pub relayer_url: String,
     pub near_root_account: String,
     pub account_creator_id: AccountId,
     // TODO: temporary solution
     pub account_creator_sk: SecretKey,
-    pub oidc_providers: AllowedOidcProviders,
+    pub oidc_providers: PartnerList,
 }
 
 pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
@@ -58,8 +56,6 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         port,
         sign_nodes,
         near_rpc,
-        relayer_api_key,
-        relayer_url,
         near_root_account,
         account_creator_id,
         account_creator_sk,
@@ -68,24 +64,29 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
     let _span = tracing::debug_span!("run", env, port);
     tracing::debug!(?sign_nodes, "running a leader node");
 
-    let client = NearRpcAndRelayerClient::connect(&near_rpc, relayer_url, relayer_api_key);
+    let client = NearRpcAndRelayerClient::connect(&near_rpc);
     // FIXME: Internal account id is retrieved from the ID token. We don't have a token for ourselves,
     // but are still forced to allocate allowance.
     // Using randomly generated internal account id ensures the uniqueness of user idenrifier on the relayer side so
     // we can update the allowance on each server run.
-    let fake_internal_account_id: String = rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(16)
-        .map(char::from)
-        .collect();
-    client
-        .register_account(RegisterAccountRequest {
-            account_id: account_creator_id.clone(),
-            allowance: 18_000_000_000_000_000_000, // should be enough to create 700_000+ accs
-            oauth_token: fake_internal_account_id,
-        })
-        .await
-        .unwrap();
+    for partner in oidc_providers.entries.iter() {
+        let fake_internal_account_id: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(16)
+            .map(char::from)
+            .collect();
+        client
+            .register_account(
+                RegisterAccountRequest {
+                    account_id: account_creator_id.clone(),
+                    allowance: 18_000_000_000_000_000_000, // should be enough to create 700_000+ accs
+                    oauth_token: fake_internal_account_id,
+                },
+                partner.relayer.clone(),
+            )
+            .await
+            .unwrap();
+    }
 
     let state = LeaderState {
         env,
@@ -213,7 +214,7 @@ struct LeaderState {
     account_creator_id: AccountId,
     // TODO: temporary solution
     account_creator_sk: SecretKey,
-    oidc_providers: AllowedOidcProviders,
+    oidc_providers: PartnerList,
 }
 
 async fn mpc_public_key(
@@ -355,13 +356,28 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         .map_err(LeaderNodeError::SignatureVerificationFailed)?;
     tracing::debug!("user credentials digest signature verified for {new_user_account_id:?}");
 
+    let relayer = state
+        .oidc_providers
+        .find(&oidc_token_claims.iss, &oidc_token_claims.aud)
+        .ok_or_else(|| {
+            LeaderNodeError::Other(anyhow::anyhow!(
+                "Failed to find relayer for given partner. Issuer: {}, Audience: {}",
+                oidc_token_claims.iss,
+                oidc_token_claims.aud,
+            ))
+        })?
+        .relayer;
+
     state
         .client
-        .register_account(RegisterAccountRequest {
-            account_id: new_user_account_id.clone(),
-            allowance: 300_000_000_000_000,
-            oauth_token: internal_acc_id.clone(),
-        })
+        .register_account(
+            RegisterAccountRequest {
+                account_id: new_user_account_id.clone(),
+                allowance: 300_000_000_000_000,
+                oauth_token: internal_acc_id.clone(),
+            },
+            relayer.clone(),
+        )
         .await?;
 
     nar::retry(|| async {
@@ -409,7 +425,21 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         );
 
         // Send delegate action to relayer
-        let result = state.client.send_meta_tx(signed_delegate_action).await;
+        let relayer = state
+            .oidc_providers
+            .find(&oidc_token_claims.iss, &oidc_token_claims.aud)
+            .ok_or_else(|| {
+                LeaderNodeError::Other(anyhow::anyhow!(
+                    "Failed to find relayer for given partner. Issuer: {}, Audience: {}",
+                    oidc_token_claims.iss,
+                    oidc_token_claims.aud,
+                ))
+            })?
+            .relayer;
+        let result = state
+            .client
+            .send_meta_tx(signed_delegate_action, relayer)
+            .await;
         if let Err(err) = &result {
             let err_str = format!("{:?}", err);
             state

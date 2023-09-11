@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-use crate::firewall::allowed::AllowedOidcProviders;
+use crate::firewall::allowed::PartnerList;
 use crate::primitives::InternalAccountId;
 use crate::sign_node::oidc::OidcToken;
 
@@ -12,7 +12,7 @@ use crate::sign_node::oidc::OidcToken;
 pub trait OAuthTokenVerifier {
     async fn verify_token(
         token: &OidcToken,
-        oidc_providers: &AllowedOidcProviders,
+        oidc_providers: &PartnerList,
     ) -> anyhow::Result<IdTokenClaims>;
 
     /// This function validates JWT (OIDC ID token) by checking the signature received
@@ -20,7 +20,7 @@ pub trait OAuthTokenVerifier {
     fn validate_jwt(
         token: &OidcToken,
         public_key: &[u8],
-        oidc_providers: &AllowedOidcProviders,
+        oidc_providers: &PartnerList,
     ) -> anyhow::Result<IdTokenClaims> {
         tracing::info!(
             oidc_token = format!("{:.5}...", token),
@@ -73,7 +73,7 @@ pub struct UniversalTokenVerifier {}
 impl OAuthTokenVerifier for UniversalTokenVerifier {
     async fn verify_token(
         token: &OidcToken,
-        oidc_providers: &AllowedOidcProviders,
+        oidc_providers: &PartnerList,
     ) -> anyhow::Result<IdTokenClaims> {
         match get_token_verifier_type(token) {
             SupportedTokenVerifiers::PagodaFirebaseTokenVerifier => {
@@ -110,7 +110,7 @@ impl OAuthTokenVerifier for PagodaFirebaseTokenVerifier {
     // Firebase: https://firebase.google.com/docs/auth/admin/verify-id-tokens#verify_id_tokens_using_a_third-party_jwt_library
     async fn verify_token(
         token: &OidcToken,
-        oidc_providers: &AllowedOidcProviders,
+        oidc_providers: &PartnerList,
     ) -> anyhow::Result<IdTokenClaims> {
         let public_keys = get_pagoda_firebase_public_keys()
             .map_err(|e| anyhow::anyhow!("failed to get Firebase public key: {e}"))?;
@@ -140,7 +140,7 @@ pub struct TestTokenVerifier {}
 impl OAuthTokenVerifier for TestTokenVerifier {
     async fn verify_token(
         token: &OidcToken,
-        _oidc_providers: &AllowedOidcProviders,
+        _oidc_providers: &PartnerList,
     ) -> anyhow::Result<IdTokenClaims> {
         if let Some(aud) = token.as_ref().strip_prefix("validToken:") {
             tracing::info!(target: "test-token-verifier", "access token is valid");
@@ -197,6 +197,8 @@ pub fn get_test_claims(sub: String) -> IdTokenClaims {
 
 #[cfg(test)]
 mod tests {
+    use crate::firewall::allowed::{DelegateActionRelayer, OidcProvider};
+
     use super::*;
     use chrono::{Duration, Utc};
     use jsonwebtoken::{encode, EncodingKey, Header};
@@ -206,16 +208,22 @@ mod tests {
         RsaPrivateKey, RsaPublicKey,
     };
 
-    fn allowlist_from_claims(claims: &IdTokenClaims) -> AllowedOidcProviders {
-        let mut oidc_providers = AllowedOidcProviders::default();
-        oidc_providers.insert(crate::firewall::allowed::OidcProvider {
-            issuer: claims.iss.clone(),
-            audience: claims.aud.clone(),
+    fn allowlist_from_claims(claims: &IdTokenClaims) -> PartnerList {
+        let mut oidc_providers = PartnerList::default();
+        oidc_providers.insert(crate::firewall::allowed::FastAuhtPartner {
+            oidc_provider: OidcProvider {
+                issuer: claims.iss.clone(),
+                audience: claims.aud.clone(),
+            },
+            relayer: DelegateActionRelayer {
+                url: "".into(), // not used
+                api_key: None,
+            },
         });
         oidc_providers
     }
 
-    fn allowlist_random() -> AllowedOidcProviders {
+    fn allowlist_random() -> PartnerList {
         allowlist_from_claims(&IdTokenClaims {
             iss: "rand".into(),
             sub: "rand".into(),

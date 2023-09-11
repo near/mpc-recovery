@@ -2,7 +2,7 @@ use self::aggregate_signer::{NodeInfo, Reveal, SignedCommitment, SigningState};
 use self::oidc::OidcDigest;
 use self::user_credentials::EncryptedUserCredentials;
 use crate::error::{MpcError, SignNodeError};
-use crate::firewall::allowed::AllowedOidcProviders;
+use crate::firewall::allowed::PartnerList;
 use crate::gcp::GcpService;
 use crate::msg::{AcceptNodePublicKeysRequest, PublicKeyNodeRequest, SignNodeRequest};
 use crate::oauth::OAuthTokenVerifier;
@@ -43,7 +43,7 @@ pub struct Config {
     pub node_key: ExpandedKeyPair,
     pub cipher: Aes256Gcm,
     pub port: u16,
-    pub oidc_providers: AllowedOidcProviders,
+    pub oidc_providers: PartnerList,
 }
 
 pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
@@ -105,7 +105,7 @@ struct SignNodeState {
     cipher: Aes256Gcm,
     signing_state: Arc<RwLock<SigningState>>,
     node_info: NodeInfo,
-    oidc_providers: AllowedOidcProviders,
+    oidc_providers: PartnerList,
 }
 
 async fn get_or_generate_user_creds(

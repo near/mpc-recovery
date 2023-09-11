@@ -7,6 +7,7 @@ use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::Gene
 use ed25519_dalek::{PublicKey as PublicKeyEd25519, Verifier};
 use futures::{lock::Mutex, StreamExt};
 use hyper::StatusCode;
+use mpc_recovery::firewall::allowed::DelegateActionRelayer;
 use mpc_recovery::sign_node::oidc::OidcToken;
 use mpc_recovery::{
     msg::{
@@ -524,6 +525,7 @@ pub struct LeaderNode<'a> {
 
 pub struct LeaderNodeApi {
     pub address: String,
+    pub relayer: DelegateActionRelayer,
     client: NearRpcAndRelayerClient,
 }
 
@@ -604,10 +606,11 @@ impl<'a> LeaderNode<'a> {
         })
     }
 
-    pub fn api(&self, near_rpc: &str, relayer_url: &str) -> LeaderNodeApi {
+    pub fn api(&self, near_rpc: &str, relayer: &DelegateActionRelayer) -> LeaderNodeApi {
         LeaderNodeApi {
             address: self.local_address.clone(),
-            client: NearRpcAndRelayerClient::connect(near_rpc, relayer_url.to_string(), None),
+            client: NearRpcAndRelayerClient::connect(near_rpc),
+            relayer: relayer.clone(),
         }
     }
 }
@@ -730,10 +733,13 @@ impl LeaderNodeApi {
         };
         let response = self
             .client
-            .send_meta_tx(SignedDelegateAction {
-                delegate_action: add_key_delegate_action,
-                signature: near_crypto::Signature::ED25519(*signature),
-            })
+            .send_meta_tx(
+                SignedDelegateAction {
+                    delegate_action: add_key_delegate_action,
+                    signature: near_crypto::Signature::ED25519(*signature),
+                },
+                self.relayer.clone(),
+            )
             .await?;
         if matches!(response.status, FinalExecutionStatus::SuccessValue(_)) {
             Ok((status_code, sign_response))
@@ -786,10 +792,13 @@ impl LeaderNodeApi {
         };
         let response = self
             .client
-            .send_meta_tx(SignedDelegateAction {
-                delegate_action: delete_key_delegate_action,
-                signature: near_crypto::Signature::ED25519(*signature),
-            })
+            .send_meta_tx(
+                SignedDelegateAction {
+                    delegate_action: delete_key_delegate_action,
+                    signature: near_crypto::Signature::ED25519(*signature),
+                },
+                self.relayer.clone(),
+            )
             .await?;
         if matches!(response.status, FinalExecutionStatus::SuccessValue(_)) {
             Ok((status_code, sign_response))
