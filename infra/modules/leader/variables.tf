@@ -30,7 +30,7 @@ variable "near_root_account" {
 variable "account_creator_id" {
 }
 
-variable "allowed_oidc_providers" {
+variable "fast_auth_partners" {
   type = list(object({
     oidc_provider = object({
       issuer   = string

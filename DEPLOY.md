@@ -99,7 +99,7 @@ $ gcloud run deploy <GCP_CLOUD_RUN_SERVICE> \
     --memory=2Gi \
     --min-instances=1 \
     --max-instances=1 \
-    --set-env-vars=MPC_RECOVERY_NODE_ID=<MPC_NODE_ID>,MPC_RECOVERY_GCP_PROJECT_ID=<GCP_PROJECT_ID>,MPC_RECOVERY_WEB_PORT=3000,RUST_LOG=mpc_recovery=debug,ALLOWED_OIDC_PROVIDERS='[{"issuer":"https://securetoken.google.com/near-fastauth-prod","audience":"near-fastauth-prod"}]' \
+    --set-env-vars=MPC_RECOVERY_NODE_ID=<MPC_NODE_ID>,MPC_RECOVERY_GCP_PROJECT_ID=<GCP_PROJECT_ID>,MPC_RECOVERY_WEB_PORT=3000,RUST_LOG=mpc_recovery=debug,FAST_AUTH_PARTNERS='[{"issuer":"https://securetoken.google.com/near-fastauth-prod","audience":"near-fastauth-prod"}]' \
     --set-secrets=MPC_RECOVERY_SK_SHARE=<GCP_SM_KEY_NAME>:latest,MPC_RECOVERY_CIPHER_KEY=<GCP_SM_CIPHER_NAME>:latest \
     --no-cpu-throttling \
     --region=<GCP_REGION> \

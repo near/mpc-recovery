@@ -105,7 +105,7 @@ module "signer" {
   docker_image          = docker_image.mpc_recovery.name
 
   node_id                = count.index
-  allowed_oidc_providers = var.allowed_oidc_providers
+  fast_auth_partners = var.fast_auth_partners
 
   cipher_key = var.cipher_keys[count.index]
   sk_share   = var.sk_shares[count.index]
@@ -127,7 +127,7 @@ module "leader" {
   near_rpc               = local.workspace.near_rpc
   near_root_account      = local.workspace.near_root_account
   account_creator_id     = var.account_creator_id
-  allowed_oidc_providers = var.allowed_oidc_providers
+  fast_auth_partners = var.fast_auth_partners
 
   account_creator_sk = var.account_creator_sk
 

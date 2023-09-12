@@ -48,11 +48,11 @@ enum Cli {
         #[arg(long, env("MPC_RECOVERY_ACCOUNT_CREATOR_SK"))]
         account_creator_sk: Option<String>,
         /// JSON list of related items to be used to verify OIDC tokens.
-        #[arg(long, env("ALLOWED_OIDC_PROVIDERS"))]
-        allowed_oidc_providers: Option<String>,
+        #[arg(long, env("FAST_AUTH_PARTNERS"))]
+        fast_auth_partners: Option<String>,
         /// Filepath to a JSON list of related items to be used to verify OIDC tokens.
-        #[arg(long, value_parser, env("ALLOWED_OIDC_PROVIDERS_FILEPATH"))]
-        allowed_oidc_providers_filepath: Option<PathBuf>,
+        #[arg(long, value_parser, env("FAST_AUTH_PARTNERS_FILEPATH"))]
+        fast_auth_partners_filepath: Option<PathBuf>,
         /// GCP project ID
         #[arg(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
         gcp_project_id: String,
@@ -80,11 +80,11 @@ enum Cli {
         #[arg(long, env("MPC_RECOVERY_WEB_PORT"))]
         web_port: u16,
         /// JSON list of related items to be used to verify OIDC tokens.
-        #[arg(long, env("ALLOWED_OIDC_PROVIDERS"))]
-        allowed_oidc_providers: Option<String>,
+        #[arg(long, env("FAST_AUTH_PARTNERS"))]
+        fast_auth_partners: Option<String>,
         /// Filepath to a JSON list of related items to be used to verify OIDC tokens.
-        #[arg(long, value_parser, env("ALLOWED_OIDC_PROVIDERS_FILEPATH"))]
-        allowed_oidc_providers_filepath: Option<PathBuf>,
+        #[arg(long, value_parser, env("FAST_AUTH_PARTNERS_FILEPATH"))]
+        fast_auth_partners_filepath: Option<PathBuf>,
         /// GCP project ID
         #[arg(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
         gcp_project_id: String,
@@ -230,8 +230,8 @@ async fn main() -> anyhow::Result<()> {
             near_root_account,
             account_creator_id,
             account_creator_sk,
-            allowed_oidc_providers: oidc_providers,
-            allowed_oidc_providers_filepath: oidc_providers_filepath,
+            fast_auth_partners: oidc_providers,
+            fast_auth_partners_filepath: oidc_providers_filepath,
             gcp_project_id,
             gcp_datastore_url,
             test,
@@ -275,8 +275,8 @@ async fn main() -> anyhow::Result<()> {
             sk_share,
             cipher_key,
             web_port,
-            allowed_oidc_providers,
-            allowed_oidc_providers_filepath,
+            fast_auth_partners,
+            fast_auth_partners_filepath,
             gcp_project_id,
             gcp_datastore_url,
             test,
@@ -287,8 +287,8 @@ async fn main() -> anyhow::Result<()> {
                 &gcp_service,
                 &env,
                 node_id.to_string().as_str(),
-                allowed_oidc_providers,
-                allowed_oidc_providers_filepath,
+                fast_auth_partners,
+                fast_auth_partners_filepath,
             )
             .await?;
             let cipher_key = load_cipher_key(&gcp_service, &env, node_id, cipher_key).await?;

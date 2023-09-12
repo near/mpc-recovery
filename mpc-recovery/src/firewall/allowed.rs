@@ -16,14 +16,14 @@ pub struct DelegateActionRelayer {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Hash, PartialEq, Eq)]
-pub struct FastAuhtPartner {
+pub struct FastAuthPartner {
     pub oidc_provider: OidcProvider,
     pub relayer: DelegateActionRelayer,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct PartnerList {
-    pub entries: HashSet<FastAuhtPartner>,
+    pub entries: HashSet<FastAuthPartner>,
 }
 
 impl PartnerList {
@@ -33,7 +33,7 @@ impl PartnerList {
         })
     }
 
-    pub fn find(&self, issuer: &str, audience: &str) -> anyhow::Result<FastAuhtPartner> {
+    pub fn find(&self, issuer: &str, audience: &str) -> anyhow::Result<FastAuthPartner> {
         match self
             .entries
             .iter()
@@ -52,7 +52,7 @@ impl PartnerList {
     }
 
     #[cfg(test)]
-    pub(crate) fn insert(&mut self, entry: FastAuhtPartner) {
+    pub(crate) fn insert(&mut self, entry: FastAuthPartner) {
         self.entries.insert(entry);
     }
 }

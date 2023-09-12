@@ -210,7 +210,7 @@ mod tests {
 
     fn allowlist_from_claims(claims: &IdTokenClaims) -> PartnerList {
         let mut oidc_providers = PartnerList::default();
-        oidc_providers.insert(crate::firewall::allowed::FastAuhtPartner {
+        oidc_providers.insert(crate::firewall::allowed::FastAuthPartner {
             oidc_provider: OidcProvider {
                 issuer: claims.iss.clone(),
                 audience: claims.aud.clone(),
