@@ -3,8 +3,7 @@ use axum::http::StatusCode;
 use axum::response::Response;
 use curv::elliptic::curves::{Ed25519, Point};
 use curv::BigInt;
-use near_crypto::{ParseKeyError, PublicKey};
-use near_primitives::account::id::ParseAccountError;
+use near_crypto::PublicKey;
 
 use crate::relayer::error::RelayerError;
 use crate::sign_node::oidc::OidcDigest;
@@ -62,8 +61,6 @@ pub enum LeaderNodeError {
     DataConversionFailure(anyhow::Error),
     #[error("aggregate signing failed: {0}")]
     AggregateSigningFailed(#[from] AggregateSigningError),
-    #[error("malformed account id: {0}")]
-    MalformedAccountId(String, ParseAccountError),
     #[error("malformed delegate action: {0}")]
     MalformedDelegateAction(std::io::Error),
     #[error("failed to verify signature: {0}")]
@@ -93,7 +90,6 @@ impl LeaderNodeError {
             LeaderNodeError::AggregateSigningFailed(err) => err.code(),
             LeaderNodeError::SignatureVerificationFailed(_) => StatusCode::BAD_REQUEST,
             LeaderNodeError::OidcVerificationFailed(_) => StatusCode::UNAUTHORIZED,
-            LeaderNodeError::MalformedAccountId(_, _) => StatusCode::BAD_REQUEST,
             LeaderNodeError::MalformedDelegateAction(_) => StatusCode::BAD_REQUEST,
             LeaderNodeError::RelayerError(_) => StatusCode::FAILED_DEPENDENCY,
             LeaderNodeError::TimeoutGatheringPublicKeys => StatusCode::INTERNAL_SERVER_ERROR,
@@ -109,10 +105,6 @@ impl LeaderNodeError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum SignNodeError {
-    #[error("malformed account id: {0}")]
-    MalformedAccountId(String, ParseAccountError),
-    #[error("malformed public key {0}: {1}")]
-    MalformedPublicKey(String, ParseKeyError),
     #[error("failed to verify signature: {0}")]
     DigestSignatureVerificationFailed(anyhow::Error),
     #[error("failed to verify oidc token: {0}")]
@@ -134,9 +126,6 @@ pub enum SignNodeError {
 impl SignNodeError {
     pub fn code(&self) -> StatusCode {
         match self {
-            // TODO: this case was not speicifically handled before. Check if it is the right code
-            Self::MalformedAccountId(_, _) => StatusCode::BAD_REQUEST,
-            Self::MalformedPublicKey(_, _) => StatusCode::BAD_REQUEST,
             Self::DigestSignatureVerificationFailed(_) => StatusCode::UNAUTHORIZED,
             Self::OidcVerificationFailed(_) => StatusCode::BAD_REQUEST,
             Self::OidcTokenAlreadyClaimed(_) => StatusCode::UNAUTHORIZED,
