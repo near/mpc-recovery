@@ -28,7 +28,7 @@ locals {
     testnet = {
     }
     mainnet = {
-      near_rpc = "https://rpc.mainnet.near.org"
+      near_rpc          = "https://rpc.mainnet.near.org"
       near_root_account = "near"
     }
   }
