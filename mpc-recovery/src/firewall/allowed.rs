@@ -33,13 +33,22 @@ impl PartnerList {
         })
     }
 
-    pub fn find(&self, issuer: &str, audience: &str) -> Option<FastAuhtPartner> {
-        self.entries
+    pub fn find(&self, issuer: &str, audience: &str) -> anyhow::Result<FastAuhtPartner> {
+        match self
+            .entries
             .iter()
             .find(|entry| {
                 entry.oidc_provider.issuer == issuer && entry.oidc_provider.audience == audience
             })
             .cloned()
+        {
+            Some(partner) => Ok(partner),
+            None => Err(anyhow::anyhow!(
+                "Failed to find relayer for given partner. Issuer: {}, Audience: {}",
+                issuer,
+                audience,
+            )),
+        }
     }
 
     #[cfg(test)]

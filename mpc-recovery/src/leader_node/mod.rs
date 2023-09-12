@@ -356,17 +356,9 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         .map_err(LeaderNodeError::SignatureVerificationFailed)?;
     tracing::debug!("user credentials digest signature verified for {new_user_account_id:?}");
 
-    let relayer = state
+    let partner = state
         .oidc_providers
-        .find(&oidc_token_claims.iss, &oidc_token_claims.aud)
-        .ok_or_else(|| {
-            LeaderNodeError::Other(anyhow::anyhow!(
-                "Failed to find relayer for given partner. Issuer: {}, Audience: {}",
-                oidc_token_claims.iss,
-                oidc_token_claims.aud,
-            ))
-        })?
-        .relayer;
+        .find(&oidc_token_claims.iss, &oidc_token_claims.aud)?;
 
     state
         .client
@@ -376,7 +368,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
                 allowance: 300_000_000_000_000,
                 oauth_token: internal_acc_id.clone(),
             },
-            relayer.clone(),
+            partner.relayer,
         )
         .await?;
 
@@ -425,20 +417,12 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         );
 
         // Send delegate action to relayer
-        let relayer = state
+        let partner = state
             .oidc_providers
-            .find(&oidc_token_claims.iss, &oidc_token_claims.aud)
-            .ok_or_else(|| {
-                LeaderNodeError::Other(anyhow::anyhow!(
-                    "Failed to find relayer for given partner. Issuer: {}, Audience: {}",
-                    oidc_token_claims.iss,
-                    oidc_token_claims.aud,
-                ))
-            })?
-            .relayer;
+            .find(&oidc_token_claims.iss, &oidc_token_claims.aud)?;
         let result = state
             .client
-            .send_meta_tx(signed_delegate_action, relayer)
+            .send_meta_tx(signed_delegate_action, partner.relayer)
             .await;
         if let Err(err) = &result {
             let err_str = format!("{:?}", err);
