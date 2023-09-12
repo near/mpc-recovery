@@ -10,5 +10,14 @@ sk_shares = [
   "{\"public_key\":{\"curve\":\"ed25519\",\"point\":[226,221,12,58,210,76,171,11,139,88,242,44,18,207,126,120,5,90,208,108,4,93,19,188,24,172,130,61,51,94,10,34]},\"expanded_private_key\":{\"prefix\":{\"curve\":\"ed25519\",\"scalar\":[72,32,251,204,100,91,164,82,140,231,84,166,176,30,167,99,107,71,71,195,83,40,241,205,6,89,122,227,140,146,82,4]},\"private_key\":{\"curve\":\"ed25519\",\"scalar\":[8,248,184,114,40,88,141,189,156,115,215,171,36,210,85,189,12,217,176,9,208,28,141,207,18,18,57,230,231,14,118,116]}}}"
 ]
 allowed_oidc_providers = [
-  { issuer = "https://securetoken.google.com/pagoda-oboarding-dev", audience = "pagoda-oboarding-dev" }
+  {
+    oidc_provider = {
+      issuer   = "https://securetoken.google.com/pagoda-oboarding-dev",
+      audience = "pagoda-oboarding-dev"
+    },
+    relayer = {
+      url     = "http://34.70.226.83:3030",
+      api_key = null,
+    },
+  }
 ]
