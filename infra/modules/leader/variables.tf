@@ -31,7 +31,7 @@ variable "account_creator_id" {
 }
 
 variable "allowed_oidc_providers" {
-  type = list(map(object({
+  type = list(object({
     oidc_provider = object({
       issuer   = string
       audience = string
@@ -40,7 +40,7 @@ variable "allowed_oidc_providers" {
       url     = string
       api_key = string
     })
-  })))
+  }))
   default = []
 }
 
