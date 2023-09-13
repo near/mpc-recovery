@@ -422,14 +422,19 @@ impl<'a> SignerNode<'a> {
                 hex::encode(cipher_key),
                 "--web-port".to_string(),
                 Self::CONTAINER_PORT.to_string(),
-                "--allowed-oidc-providers".to_string(),
+                "--fast-auth-partners".to_string(),
                 serde_json::json!([
                     {
-                        "issuer": format!("https://securetoken.google.com/{firebase_audience_id}"),
-                        "audience": firebase_audience_id,
+                        "oidc_provider": {
+                            "issuer": format!("https://securetoken.google.com/{}", firebase_audience_id),
+                            "audience": firebase_audience_id,
+                        },
+                        "relayer": {
+                            "url": "http://relayer:3000", // not used
+                            "api_key": serde_json::Value::Null,
+                        },
                     },
-                ])
-                .to_string(),
+                ]).to_string(),
                 "--gcp-project-id".to_string(),
                 gcp_project_id.to_string(),
                 "--gcp-datastore-url".to_string(),
@@ -558,22 +563,25 @@ impl<'a> LeaderNode<'a> {
             Self::CONTAINER_PORT.to_string(),
             "--near-rpc".to_string(),
             near_rpc.to_string(),
-            "--relayer-url".to_string(),
-            relayer_url.to_string(),
             "--near-root-account".to_string(),
             near_root_account.to_string(),
             "--account-creator-id".to_string(),
             account_creator_id.to_string(),
             "--account-creator-sk".to_string(),
             account_creator_sk.to_string(),
-            "--allowed-oidc-providers".to_string(),
+            "--fast-auth-partners".to_string(),
             serde_json::json!([
                 {
-                    "issuer": format!("https://securetoken.google.com/{firebase_audience_id}"),
-                    "audience": firebase_audience_id,
+                    "oidc_provider": {
+                        "issuer": format!("https://securetoken.google.com/{}", firebase_audience_id),
+                        "audience": firebase_audience_id,
+                    },
+                    "relayer": {
+                        "url": relayer_url.to_string(),
+                        "api_key": serde_json::Value::Null,
+                    },
                 },
-            ])
-            .to_string(),
+            ]).to_string(),
             "--gcp-project-id".to_string(),
             gcp_project_id.to_string(),
             "--gcp-datastore-url".to_string(),
