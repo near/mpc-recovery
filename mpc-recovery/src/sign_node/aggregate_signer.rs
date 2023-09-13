@@ -16,6 +16,7 @@ use rand8::Rng;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
+use crate::error::AggregateSigningError;
 use crate::transaction::{to_dalek_public_key, to_dalek_signature};
 
 pub struct SigningState {
@@ -42,7 +43,7 @@ impl SigningState {
         our_key: &protocols::ExpandedKeyPair,
         node_key: &protocols::ExpandedKeyPair,
         message: Vec<u8>,
-    ) -> Result<SignedCommitment, String> {
+    ) -> Result<SignedCommitment, AggregateSigningError> {
         // We use OSRng on it's own instead of thread_random() for commit padding and OsRng
         self.get_commitment_with_rng(our_key, node_key, message, &mut OsRng)
     }
@@ -55,7 +56,7 @@ impl SigningState {
         node_key: &protocols::ExpandedKeyPair,
         message: Vec<u8>,
         rng: &mut impl Rng,
-    ) -> Result<SignedCommitment, String> {
+    ) -> Result<SignedCommitment, AggregateSigningError> {
         let (commitment, state) = Committed::commit(our_key, node_key, message, rng)?;
         self.committed.insert(commitment.commitment.clone(), state);
         Ok(commitment)
@@ -65,21 +66,19 @@ impl SigningState {
         &mut self,
         node_info: NodeInfo,
         recieved_commitments: Vec<SignedCommitment>,
-    ) -> Result<Reveal, String> {
+    ) -> Result<Reveal, AggregateSigningError> {
         // TODO Factor this out
         let i = node_info.our_index;
         let our_c = recieved_commitments.get(i).ok_or_else(|| {
-            format!(
-                "This is node index {}, but you only gave us {} commitments",
-                i,
-                recieved_commitments.len()
+            AggregateSigningError::InvalidCommitmentNumbers(
+                node_info.our_index,
+                recieved_commitments.len(),
             )
         })?;
         // Don't readd this on failure, this commitment is now burnt
-        let state = self
-            .committed
-            .remove(&our_c.commitment)
-            .ok_or(format!("Committment {:?} not found", &our_c.commitment))?;
+        let state = self.committed.remove(&our_c.commitment).ok_or_else(|| {
+            AggregateSigningError::CommitmentNotFound(format!("{:?}", our_c.commitment))
+        })?;
 
         let (reveal, state) = state.reveal(&node_info, recieved_commitments).await?;
         let reveal = Reveal(reveal);
@@ -91,18 +90,17 @@ impl SigningState {
         &mut self,
         node_info: NodeInfo,
         signature_parts: Vec<Reveal>,
-    ) -> Result<protocols::Signature, String> {
+    ) -> Result<protocols::Signature, AggregateSigningError> {
         let i = node_info.our_index;
-        let our_r = signature_parts.get(i).ok_or(format!(
-            "This is node index {}, but you only gave us {} reveals",
-            i,
-            signature_parts.len()
-        ))?;
+        let our_r = signature_parts.get(i).ok_or_else(|| {
+            AggregateSigningError::InvalidRevealNumbers(node_info.our_index, signature_parts.len())
+        })?;
+
         // Don't readd this on failure, this commitment is now burnt
         let state = self
             .revealed
             .remove(our_r)
-            .ok_or(format!("Reveal {:?} not found", &our_r))?;
+            .ok_or_else(|| AggregateSigningError::RevealNotFound(format!("{:?}", our_r)))?;
 
         let signature_parts = signature_parts.into_iter().map(|s| s.0).collect();
 
@@ -151,7 +149,7 @@ impl Committed {
         node_key: &protocols::ExpandedKeyPair,
         message: Vec<u8>,
         rng: &mut impl Rng,
-    ) -> Result<(SignedCommitment, Self), String> {
+    ) -> Result<(SignedCommitment, Self), AggregateSigningError> {
         let (ephemeral_key, commit, our_signature) =
             aggsig::create_ephemeral_key_and_commit_rng(our_key, &message, rng);
         let s = Committed {
@@ -168,7 +166,7 @@ impl Committed {
         self,
         node_info: &NodeInfo,
         commitments: Vec<SignedCommitment>,
-    ) -> Result<(SignSecondMsg, Revealed), String> {
+    ) -> Result<(SignSecondMsg, Revealed), AggregateSigningError> {
         let (commitments, signing_public_keys) = node_info
             .signed_by_every_node(commitments)
             .await?
@@ -197,7 +195,7 @@ impl Revealed {
         self,
         signature_parts: Vec<SignSecondMsg>,
         node_info: &NodeInfo,
-    ) -> Result<protocols::Signature, String> {
+    ) -> Result<protocols::Signature, AggregateSigningError> {
         // Check the commitments have the correct signatures
         for (commit, partial_sig) in self.commitments.iter().zip(signature_parts.iter()) {
             check_commitment(&partial_sig.R, &partial_sig.blind_factor, &commit.0)?;
@@ -241,12 +239,12 @@ impl NodeInfo {
     async fn signed_by_every_node(
         &self,
         signed: Vec<SignedCommitment>,
-    ) -> Result<Vec<(AggrCommitment, Point<Ed25519>)>, String> {
+    ) -> Result<Vec<(AggrCommitment, Point<Ed25519>)>, AggregateSigningError> {
         self.nodes_public_keys
             .read()
             .await
             .as_ref()
-            .ok_or_else(|| "No nodes public keys available to sign".to_string())?
+            .ok_or(AggregateSigningError::NodeKeysUnavailable)?
             .iter()
             .zip(signed.iter())
             .map(|(public_key, signed)| signed.verify(public_key))
@@ -272,14 +270,14 @@ impl SignedCommitment {
         commitment: AggrCommitment,
         node_key: &protocols::ExpandedKeyPair,
         signing_keys: &protocols::ExpandedKeyPair,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, AggregateSigningError> {
         let to_sign = Self::serialize(&commitment, &signing_keys.public_key)?;
         let signature = aggsig::sign_single(b"", signing_keys);
-        let signing_public_key_sig = to_dalek_signature(&signature).map_err(|e| e.to_string())?;
+        let signing_public_key_sig = to_dalek_signature(&signature)?;
 
         // This is awkward, we should move more stuff over to dalek later on
         let signature = aggsig::sign_single(&to_sign, node_key);
-        let signature = to_dalek_signature(&signature).map_err(|e| e.to_string())?;
+        let signature = to_dalek_signature(&signature)?;
         Ok(SignedCommitment {
             commitment,
             signing_public_key: signing_keys.public_key.clone(),
@@ -291,24 +289,27 @@ impl SignedCommitment {
     pub fn verify(
         &self,
         public_key: &Point<Ed25519>,
-    ) -> Result<(AggrCommitment, Point<Ed25519>), String> {
-        let public_key = to_dalek_public_key(public_key).map_err(|e| e.to_string())?;
+    ) -> Result<(AggrCommitment, Point<Ed25519>), AggregateSigningError> {
+        let public_key = to_dalek_public_key(public_key)?;
         let message = Self::serialize(&self.commitment, &self.signing_public_key)?;
         public_key
             .verify(&message, &self.signature)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| AggregateSigningError::SignatureVerificationFailed(anyhow::anyhow!(e)))?;
 
-        let signing_public_key =
-            to_dalek_public_key(&self.signing_public_key).map_err(|e| e.to_string())?;
+        let signing_public_key = to_dalek_public_key(&self.signing_public_key)?;
         signing_public_key
             .verify(b"", &self.signing_public_key_sig)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| AggregateSigningError::SignatureVerificationFailed(anyhow::anyhow!(e)))?;
 
         Ok((self.commitment.clone(), self.signing_public_key.clone()))
     }
 
-    fn serialize(commitment: &AggrCommitment, pk: &Point<Ed25519>) -> Result<Vec<u8>, String> {
-        let content = serde_json::to_vec(&(commitment, pk)).map_err(|e| e.to_string())?;
+    fn serialize(
+        commitment: &AggrCommitment,
+        pk: &Point<Ed25519>,
+    ) -> Result<Vec<u8>, AggregateSigningError> {
+        let content = serde_json::to_vec(&(commitment, pk))
+            .map_err(|e| AggregateSigningError::DataConversionFailure(anyhow::anyhow!(e)))?;
         // Makes signature collisions less likely
         let mut message = b"SignedCommitment::serialize".to_vec();
         message.extend(content);
@@ -320,7 +321,7 @@ pub fn check_commitment(
     r_to_test: &Point<Ed25519>,
     blind_factor: &BigInt,
     comm: &BigInt,
-) -> Result<(), String> {
+) -> Result<(), AggregateSigningError> {
     let computed_comm = &HashCommitment::<Sha512>::create_commitment_with_user_defined_randomness(
         &r_to_test.y_coord().unwrap(),
         blind_factor,
@@ -328,9 +329,11 @@ pub fn check_commitment(
     if computed_comm != comm {
         // TODO check this is safe to share in case of error
         // Should be because everything is provided by the caller I think
-        Err(format!(
-            "In a commitment with r={:?}, with blind={} expected {} but found {}",
-            r_to_test, blind_factor, computed_comm, comm
+        Err(AggregateSigningError::InvalidCommitment(
+            r_to_test.clone(),
+            blind_factor.clone(),
+            computed_comm.clone(),
+            comm.clone(),
         ))
     } else {
         Ok(())

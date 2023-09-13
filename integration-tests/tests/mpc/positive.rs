@@ -178,7 +178,7 @@ async fn test_accept_existing_pk_set() -> anyhow::Result<()> {
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::OK);
-            assert!(matches!(result, Ok(_)));
+            assert!(result.is_ok());
 
             Ok(())
         })
@@ -241,6 +241,9 @@ async fn test_rotate_node_keys() -> anyhow::Result<()> {
                 let cipher_pair = sign_node.run_rotate_node_key(new_cipher).await?;
                 ciphers.insert(sign_node.node_id, cipher_pair);
             }
+
+            // Sleep a little so that the entities are updated in the datastore.
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
             let mut new_entities = gcp_service
                 .fetch_entities::<mpc_recovery::sign_node::user_credentials::EncryptedUserCredentials>()

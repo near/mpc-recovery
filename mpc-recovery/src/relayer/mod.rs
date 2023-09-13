@@ -1,11 +1,13 @@
 pub mod error;
 pub mod msg;
 
+use anyhow::Context;
 use hyper::{Body, Client, Method, Request};
 use near_crypto::PublicKey;
 use near_jsonrpc_client::JsonRpcClient;
 use near_primitives::hash::CryptoHash;
 use near_primitives::types::{AccountId, BlockHeight, Nonce};
+use near_primitives::views::FinalExecutionStatus;
 
 use self::error::RelayerError;
 use self::msg::{RegisterAccountRequest, SendMetaTxRequest, SendMetaTxResponse};
@@ -55,7 +57,10 @@ impl NearRpcAndRelayerClient {
     }
 
     #[tracing::instrument(level = "debug", skip_all, fields(account_id = request.account_id.to_string()))]
-    pub async fn register_account(&self, request: RegisterAccountRequest) -> anyhow::Result<()> {
+    pub async fn register_account(
+        &self,
+        request: RegisterAccountRequest,
+    ) -> Result<(), RelayerError> {
         let mut req = Request::builder()
             .method(Method::POST)
             .uri(format!("{}/register_account", self.relayer_url))
@@ -65,22 +70,32 @@ impl NearRpcAndRelayerClient {
             req = req.header("x-api-key", api_key);
         };
 
-        let request = req.body(Body::from(serde_json::to_vec(&request)?)).unwrap();
+        let request = req
+            .body(Body::from(
+                serde_json::to_vec(&request)
+                    .map_err(|e| RelayerError::DataConversionFailure(e.into()))?,
+            ))
+            .map_err(|e| RelayerError::NetworkFailure(e.into()))?;
 
         tracing::debug!("constructed http request to {}", self.relayer_url);
         let client = Client::new();
-        let response = client.request(request).await?;
+        let response = client
+            .request(request)
+            .await
+            .map_err(|e| RelayerError::NetworkFailure(e.into()))?;
 
-        if response.status().is_success() {
-            let response_body = hyper::body::to_bytes(response.into_body()).await?;
-            tracing::debug!("success: {}", std::str::from_utf8(&response_body)?);
+        let status = response.status();
+        let response_body = hyper::body::to_bytes(response.into_body())
+            .await
+            .map_err(|e| RelayerError::NetworkFailure(e.into()))?;
+        let msg = std::str::from_utf8(&response_body)
+            .map_err(|e| RelayerError::DataConversionFailure(e.into()))?;
+
+        if status.is_success() {
+            tracing::debug!("success: {msg}");
             Ok(())
         } else {
-            let response_body = hyper::body::to_bytes(response.into_body()).await?;
-            Err(anyhow::anyhow!(
-                "fail: {}",
-                std::str::from_utf8(&response_body)?
-            ))
+            Err(RelayerError::RequestFailure(status, msg.to_string()))
         }
     }
 
@@ -88,33 +103,52 @@ impl NearRpcAndRelayerClient {
     pub async fn send_meta_tx(
         &self,
         request: SendMetaTxRequest,
-    ) -> anyhow::Result<SendMetaTxResponse> {
+    ) -> Result<SendMetaTxResponse, RelayerError> {
         let request = Request::builder()
             .method(Method::POST)
             .uri(format!("{}/send_meta_tx", self.relayer_url))
             .header("content-type", "application/json")
-            .body(Body::from(serde_json::to_vec(&request)?))
-            .map_err(|err| anyhow::anyhow!("Failed to construct send_meta_tx request {err}"))?;
+            .body(Body::from(
+                serde_json::to_vec(&request)
+                    .map_err(|e| RelayerError::DataConversionFailure(e.into()))?,
+            ))
+            .context("failed to construct send_meta_tx request")
+            .map_err(RelayerError::NetworkFailure)?;
 
         tracing::debug!("constructed http request to {}", self.relayer_url);
         let client = Client::new();
-        let response = client.request(request).await.map_err(|err| {
-            anyhow::anyhow!("Failed to send send_meta_tx request to relayer: {err}")
-        })?;
+        let response = client
+            .request(request)
+            .await
+            .context("failed to send send_meta_tx request to relayer")
+            .map_err(RelayerError::NetworkFailure)?;
+        let status = response.status();
+        let response_body = hyper::body::to_bytes(response.into_body())
+            .await
+            .map_err(|e| RelayerError::NetworkFailure(e.into()))?;
+        let msg = std::str::from_utf8(&response_body)
+            .map_err(|e| RelayerError::DataConversionFailure(e.into()))?;
 
-        if response.status().is_success() {
-            let response_body = hyper::body::to_bytes(response.into_body()).await?;
-            tracing::debug!("body: {}", std::str::from_utf8(&response_body)?);
-            let response: SendMetaTxResponse = serde_json::from_slice(&response_body)?;
-            tracing::debug!("success: {:?}", response);
-
-            Ok(response)
+        if status.is_success() {
+            tracing::debug!(response_body = msg, "got response");
+            let response: SendMetaTxResponse = serde_json::from_slice(&response_body)
+                .map_err(|e| RelayerError::DataConversionFailure(e.into()))?;
+            match response.status {
+                FinalExecutionStatus::NotStarted | FinalExecutionStatus::Started => {
+                    Err(RelayerError::TxNotReady)
+                }
+                FinalExecutionStatus::Failure(e) => Err(RelayerError::TxExecutionFailure(e)),
+                FinalExecutionStatus::SuccessValue(ref value) => {
+                    tracing::debug!(
+                        value = std::str::from_utf8(value)
+                            .map_err(|e| RelayerError::DataConversionFailure(e.into()))?,
+                        "success"
+                    );
+                    Ok(response)
+                }
+            }
         } else {
-            let response_body = hyper::body::to_bytes(response.into_body()).await?;
-            Err(anyhow::anyhow!(
-                "fail: {}",
-                std::str::from_utf8(&response_body)?
-            ))
+            Err(RelayerError::RequestFailure(status, msg.to_string()))
         }
     }
 

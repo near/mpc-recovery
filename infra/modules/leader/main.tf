@@ -16,6 +16,24 @@ resource "google_secret_manager_secret_iam_member" "account_creator_secret_acces
   member    = "serviceAccount:${var.service_account_email}"
 }
 
+resource "google_secret_manager_secret" "allowed_oidc_providers" {
+  secret_id = "mpc-recovery-allowed-oidc-providers-leader-${var.env}"
+  replication {
+    automatic = true
+  }
+}
+
+resource "google_secret_manager_secret_version" "allowed_oidc_providers_data" {
+  secret      = google_secret_manager_secret.allowed_oidc_providers.name
+  secret_data = jsonencode(var.allowed_oidc_providers)
+}
+
+resource "google_secret_manager_secret_iam_member" "allowed_oidc_providers_secret_access" {
+  secret_id = google_secret_manager_secret.allowed_oidc_providers.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${var.service_account_email}"
+}
+
 resource "google_cloud_run_v2_service" "leader" {
   name     = "mpc-recovery-leader-${var.env}"
   location = var.region
@@ -65,10 +83,6 @@ resource "google_cloud_run_v2_service" "leader" {
         value = var.account_creator_id
       }
       env {
-        name  = "PAGODA_FIREBASE_AUDIENCE_ID"
-        value = var.firebase_audience_id
-      }
-      env {
         name  = "MPC_RECOVERY_GCP_PROJECT_ID"
         value = var.project
       }
@@ -97,7 +111,9 @@ resource "google_cloud_run_v2_service" "leader" {
   }
   depends_on = [
     google_secret_manager_secret_version.account_creator_sk_data,
-    google_secret_manager_secret_iam_member.account_creator_secret_access
+    google_secret_manager_secret_version.allowed_oidc_providers_data,
+    google_secret_manager_secret_iam_member.account_creator_secret_access,
+    google_secret_manager_secret_iam_member.allowed_oidc_providers_secret_access
   ]
 }
 

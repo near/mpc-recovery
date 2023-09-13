@@ -20,7 +20,8 @@ variable "docker_image" {
 variable "node_id" {
 }
 
-variable "firebase_audience_id" {
+variable "allowed_oidc_providers" {
+  type = list(map(string))
 }
 
 # Secrets

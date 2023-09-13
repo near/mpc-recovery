@@ -109,8 +109,8 @@ module "signer" {
   service_account_email = google_service_account.service_account.email
   docker_image          = docker_image.mpc_recovery.name
 
-  node_id              = count.index
-  firebase_audience_id = var.firebase_audience_id
+  node_id                = count.index
+  allowed_oidc_providers = var.allowed_oidc_providers
 
   cipher_key = var.cipher_keys[count.index]
   sk_share   = var.sk_shares[count.index]
@@ -128,13 +128,13 @@ module "leader" {
   service_account_email = google_service_account.service_account.email
   docker_image          = docker_image.mpc_recovery.name
 
-  signer_node_urls     = concat(module.signer.*.node.uri, var.external_signer_node_urls)
-  near_rpc             = local.workspace.near_rpc
-  relayer_api_key      = local.workspace.relayer_api_key
-  relayer_url          = local.workspace.relayer_url
-  near_root_account    = local.workspace.near_root_account
-  account_creator_id   = var.account_creator_id
-  firebase_audience_id = var.firebase_audience_id
+  signer_node_urls       = concat(module.signer.*.node.uri, var.external_signer_node_urls)
+  near_rpc               = local.workspace.near_rpc
+  relayer_api_key        = local.workspace.relayer_api_key
+  relayer_url            = local.workspace.relayer_url
+  near_root_account      = local.workspace.near_root_account
+  account_creator_id     = var.account_creator_id
+  allowed_oidc_providers = var.allowed_oidc_providers
 
   account_creator_sk = var.account_creator_sk
 

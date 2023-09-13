@@ -1,18 +1,19 @@
-use crate::error::MpcError;
-use crate::key_recovery::{get_user_recovery_pk, NodeRecoveryError};
+use crate::error::{LeaderNodeError, MpcError};
+use crate::firewall::allowed::AllowedOidcProviders;
+use crate::key_recovery::get_user_recovery_pk;
 use crate::msg::{
     AcceptNodePublicKeysRequest, ClaimOidcNodeRequest, ClaimOidcRequest, ClaimOidcResponse,
     MpcPkRequest, MpcPkResponse, NewAccountRequest, NewAccountResponse, SignNodeRequest,
     SignRequest, SignResponse, UserCredentialsRequest, UserCredentialsResponse,
 };
 use crate::oauth::OAuthTokenVerifier;
-use crate::relayer::error::RelayerError;
 use crate::relayer::msg::RegisterAccountRequest;
 use crate::relayer::NearRpcAndRelayerClient;
 use crate::transaction::{
     get_create_account_delegate_action, get_local_signed_delegated_action, get_mpc_signature,
-    sign_payload_with_mpc, to_dalek_combined_public_key, NodeCallError, NodeSignError,
+    sign_payload_with_mpc, to_dalek_combined_public_key,
 };
+use crate::utils::{check_digest_signature, user_credentials_request_digest};
 use crate::{metrics, nar};
 use anyhow::Context;
 use axum::extract::MatchedPath;
@@ -25,10 +26,10 @@ use axum::{
     Extension, Json, Router,
 };
 use axum_extra::extract::WithRejection;
+use borsh::BorshDeserialize;
 use curv::elliptic::curves::{Ed25519, Point};
-use near_crypto::{PublicKey, SecretKey};
-use near_primitives::account::id::ParseAccountError;
-use near_primitives::delegate_action::NonDelegateAction;
+use near_crypto::SecretKey;
+use near_primitives::delegate_action::{DelegateAction, NonDelegateAction};
 use near_primitives::transaction::{Action, DeleteKeyAction};
 use near_primitives::types::AccountId;
 use near_primitives::views::FinalExecutionStatus;
@@ -48,7 +49,7 @@ pub struct Config {
     pub account_creator_id: AccountId,
     // TODO: temporary solution
     pub account_creator_sk: SecretKey,
-    pub pagoda_firebase_audience_id: String,
+    pub oidc_providers: AllowedOidcProviders,
 }
 
 pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
@@ -62,7 +63,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         near_root_account,
         account_creator_id,
         account_creator_sk,
-        pagoda_firebase_audience_id,
+        oidc_providers,
     } = config;
     let _span = tracing::debug_span!("run", env, port);
     tracing::debug!(?sign_nodes, "running a leader node");
@@ -94,7 +95,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         near_root_account: near_root_account.parse().unwrap(),
         account_creator_id,
         account_creator_sk,
-        pagoda_firebase_audience_id,
+        oidc_providers,
     };
 
     // Get keys from all sign nodes, and broadcast them out as a set.
@@ -115,7 +116,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
     };
     tracing::debug!(?messages, "broadcasted public key statuses");
 
-    //TODO: not secure, allow only for testnet, whitelist endpoint etc. for mainnet
+    // Cors layer is move to load balancer
     let cors_layer = tower_http::cors::CorsLayer::permissive();
 
     let app = Router::new()
@@ -212,7 +213,7 @@ struct LeaderState {
     account_creator_id: AccountId,
     // TODO: temporary solution
     account_creator_sk: SecretKey,
-    pagoda_firebase_audience_id: String,
+    oidc_providers: AllowedOidcProviders,
 }
 
 async fn mpc_public_key(
@@ -224,7 +225,7 @@ async fn mpc_public_key(
         Ok(pk_set) => pk_set,
         Err(err) => {
             return (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                err.code(),
                 Json(MpcPkResponse::Err {
                     msg: err.to_string(),
                 }),
@@ -233,10 +234,10 @@ async fn mpc_public_key(
     };
 
     let mpc_pk = match to_dalek_combined_public_key(&pk_set) {
-        Ok(mpc_pk) => hex::encode(mpc_pk.to_bytes()),
+        Ok(mpc_pk) => mpc_pk,
         Err(err) => {
             return (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                err.code(),
                 Json(MpcPkResponse::Err {
                     msg: err.to_string(),
                 }),
@@ -253,8 +254,8 @@ async fn claim_oidc(
     WithRejection(Json(claim_oidc_request), _): WithRejection<Json<ClaimOidcRequest>, MpcError>,
 ) -> (StatusCode, Json<ClaimOidcResponse>) {
     tracing::info!(
-        oidc_hash = hex::encode(claim_oidc_request.oidc_token_hash),
-        pk = claim_oidc_request.frp_public_key,
+        oidc_hash = hex::encode(&claim_oidc_request.oidc_token_hash),
+        pk = claim_oidc_request.frp_public_key.to_string(),
         sig = claim_oidc_request.frp_signature.to_string(),
         "claim_oidc request"
     );
@@ -296,50 +297,25 @@ async fn user_credentials<T: OAuthTokenVerifier>(
             tracing::debug!("responding with OK");
             (StatusCode::OK, Json(response))
         }
-        Err(ref e @ UserCredentialsError::OidcVerificationFailed(ref err_msg)) => {
-            tracing::error!(err = ?e);
+        Err(err) => {
+            tracing::error!(err = ?err, "failed to process user credentials");
             (
-                StatusCode::UNAUTHORIZED,
+                err.code(),
                 Json(UserCredentialsResponse::Err {
-                    msg: format!("failed to verify oidc token: {}", err_msg),
-                }),
-            )
-        }
-        Err(UserCredentialsError::RecoveryKeyError(NodeRecoveryError::CallError(
-            NodeCallError::ClientError(e, status_code),
-        ))) => {
-            tracing::error!(err = ?e);
-            (status_code, Json(UserCredentialsResponse::Err { msg: e }))
-        }
-        Err(e) => {
-            tracing::error!(err = ?e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(UserCredentialsResponse::Err {
-                    msg: format!("failed to process user credentials request: {}", e),
+                    msg: err.to_string(),
                 }),
             )
         }
     }
 }
 
-#[derive(thiserror::Error, Debug)]
-enum UserCredentialsError {
-    #[error("failed to verify oidc token: {0}")]
-    OidcVerificationFailed(anyhow::Error),
-    #[error("failed to fetch recovery key: {0}")]
-    RecoveryKeyError(#[from] NodeRecoveryError),
-    #[error("{0}")]
-    Other(#[from] anyhow::Error),
-}
-
 async fn process_user_credentials<T: OAuthTokenVerifier>(
     state: LeaderState,
     request: UserCredentialsRequest,
-) -> Result<UserCredentialsResponse, UserCredentialsError> {
-    T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
+) -> Result<UserCredentialsResponse, LeaderNodeError> {
+    T::verify_token(&request.oidc_token, &state.oidc_providers)
         .await
-        .map_err(UserCredentialsError::OidcVerificationFailed)?;
+        .map_err(LeaderNodeError::OidcVerificationFailed)?;
 
     nar::retry(|| async {
         let mpc_user_recovery_pk = get_user_recovery_pk(
@@ -358,34 +334,26 @@ async fn process_user_credentials<T: OAuthTokenVerifier>(
     .await
 }
 
-#[derive(thiserror::Error, Debug)]
-enum NewAccountError {
-    #[error("malformed account id: {0}")]
-    MalformedAccountId(String, ParseAccountError),
-    #[error("failed to verify oidc token: {0}")]
-    OidcVerificationFailed(anyhow::Error),
-    #[error("relayer error: {0}")]
-    RelayerError(#[from] RelayerError),
-    #[error("failed to fetch recovery key: {0}")]
-    RecoveryKeyError(#[from] NodeRecoveryError),
-    #[error("{0}")]
-    Other(#[from] anyhow::Error),
-}
-
 async fn process_new_account<T: OAuthTokenVerifier>(
     state: LeaderState,
     request: NewAccountRequest,
-) -> Result<NewAccountResponse, NewAccountError> {
+) -> Result<NewAccountResponse, LeaderNodeError> {
     // Create a transaction to create new NEAR account
-    let new_user_account_id: AccountId = request
-        .near_account_id
-        .parse()
-        .map_err(|e| NewAccountError::MalformedAccountId(request.near_account_id, e))?;
-    let oidc_token_claims =
-        T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
-            .await
-            .map_err(NewAccountError::OidcVerificationFailed)?;
+    let new_user_account_id = request.near_account_id;
+    let oidc_token_claims = T::verify_token(&request.oidc_token, &state.oidc_providers)
+        .await
+        .map_err(LeaderNodeError::OidcVerificationFailed)?;
     let internal_acc_id = oidc_token_claims.get_internal_account_id();
+
+    // FIXME: waiting on https://github.com/near/mpc-recovery/issues/193
+    // FRP check to prevent invalid PKs and Sigs from getting through. Used to circumvent the
+    // atomicity of account creation between relayer and the sign nodes. The atomicity
+    // part is being worked on.
+    let frp_pk = &request.frp_public_key;
+    let digest = user_credentials_request_digest(&request.oidc_token, frp_pk)?;
+    check_digest_signature(frp_pk, &request.user_credentials_frp_signature, &digest)
+        .map_err(LeaderNodeError::SignatureVerificationFailed)?;
+    tracing::debug!("user credentials digest signature verified for {new_user_account_id:?}");
 
     state
         .client
@@ -404,7 +372,8 @@ async fn process_new_account<T: OAuthTokenVerifier>(
                 state.account_creator_id.clone(),
                 state.account_creator_sk.public_key(),
             )
-            .await?;
+            .await
+            .map_err(LeaderNodeError::RelayerError)?;
 
         let mpc_user_recovery_pk = get_user_recovery_pk(
             &state.reqwest_client,
@@ -430,7 +399,8 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             &state.near_root_account,
             nonce,
             block_height + 100,
-        )?;
+        )
+        .map_err(LeaderNodeError::Other)?;
         // We create accounts using the local key
         let signed_delegate_action = get_local_signed_delegated_action(
             delegate_action,
@@ -459,51 +429,17 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         if matches!(response.status, FinalExecutionStatus::SuccessValue(_)) {
             Ok(NewAccountResponse::Ok {
                 create_account_options: new_account_options,
-                user_recovery_public_key: mpc_user_recovery_pk.to_string(),
-                near_account_id: new_user_account_id.to_string(),
+                user_recovery_public_key: mpc_user_recovery_pk,
+                near_account_id: new_user_account_id.clone(),
             })
         } else {
-            Err(anyhow::anyhow!("transaction failed with {:?}", response.status).into())
+            Err(LeaderNodeError::Other(anyhow::anyhow!(
+                "transaction failed with {:?}",
+                response.status
+            )))
         }
     })
     .await
-}
-
-mod response {
-    use crate::msg::NewAccountResponse;
-    use crate::msg::SignResponse;
-    use axum::Json;
-    use hyper::StatusCode;
-
-    pub fn new_acc_bad_request(msg: String) -> (StatusCode, Json<NewAccountResponse>) {
-        (StatusCode::BAD_REQUEST, Json(NewAccountResponse::err(msg)))
-    }
-
-    pub fn new_acc_unauthorized(msg: String) -> (StatusCode, Json<NewAccountResponse>) {
-        (StatusCode::UNAUTHORIZED, Json(NewAccountResponse::err(msg)))
-    }
-
-    pub fn new_acc_internal_error(msg: String) -> (StatusCode, Json<NewAccountResponse>) {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(NewAccountResponse::err(msg)),
-        )
-    }
-
-    pub fn sign_unauthorized(msg: String) -> (StatusCode, Json<SignResponse>) {
-        (StatusCode::UNAUTHORIZED, Json(SignResponse::err(msg)))
-    }
-
-    pub fn sign_internal_error(msg: String) -> (StatusCode, Json<SignResponse>) {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(SignResponse::err(msg)),
-        )
-    }
-
-    pub fn sign_bad_request(msg: String) -> (StatusCode, Json<SignResponse>) {
-        (StatusCode::BAD_REQUEST, Json(SignResponse::err(msg)))
-    }
 }
 
 #[tracing::instrument(level = "info", skip_all, fields(env = state.env))]
@@ -512,7 +448,7 @@ async fn new_account<T: OAuthTokenVerifier>(
     WithRejection(Json(request), _): WithRejection<Json<NewAccountRequest>, MpcError>,
 ) -> (StatusCode, Json<NewAccountResponse>) {
     tracing::info!(
-        near_account_id = request.near_account_id.clone(),
+        near_account_id = request.near_account_id.to_string(),
         create_account_options = request.create_account_options.to_string(),
         oidc_token = format!("{:.5}...", request.oidc_token),
         "new_account request"
@@ -523,53 +459,28 @@ async fn new_account<T: OAuthTokenVerifier>(
             tracing::debug!("responding with OK");
             (StatusCode::OK, Json(response))
         }
-        Err(ref e @ NewAccountError::MalformedAccountId(ref account_id, _)) => {
-            tracing::error!(err = ?e);
-            response::new_acc_bad_request(format!("bad near_account_id: {}", account_id))
-        }
-        Err(ref e @ NewAccountError::OidcVerificationFailed(ref err_msg)) => {
-            tracing::error!(err = ?e);
-            response::new_acc_unauthorized(format!("failed to verify oidc token: {}", err_msg))
-        }
-        Err(NewAccountError::RecoveryKeyError(NodeRecoveryError::CallError(
-            NodeCallError::ClientError(e, status_code),
-        ))) => {
-            tracing::error!(err = ?e);
-            (status_code, Json(NewAccountResponse::err(e)))
-        }
-        Err(e) => {
-            tracing::error!(err = ?e);
-            response::new_acc_internal_error(format!("failed to process new account: {}", e))
+        Err(err) => {
+            tracing::error!(err = ?err);
+            (err.code(), Json(NewAccountResponse::err(err.to_string())))
         }
     }
-}
-
-#[derive(thiserror::Error, Debug)]
-#[allow(dead_code)]
-enum SignError {
-    #[error("failed to verify oidc token: {0}")]
-    OidcVerificationFailed(anyhow::Error),
-    #[error("Recovery key can not be deleted: {0}")]
-    RecoveryKeyCanNotBeDeleted(PublicKey),
-    #[error("failed to sign by sign node: {0}")]
-    NodeError(#[from] NodeSignError),
-    #[error("Failed to retrieve recovery pk, check digest signature")]
-    FailedToRetrieveRecoveryPk(anyhow::Error),
-    #[error("{0}")]
-    Other(#[from] anyhow::Error),
 }
 
 async fn process_sign<T: OAuthTokenVerifier>(
     state: LeaderState,
     request: SignRequest,
-) -> Result<SignResponse, SignError> {
+) -> Result<SignResponse, LeaderNodeError> {
+    // Deserialize the included delegate action via borsh
+    let delegate_action = DelegateAction::try_from_slice(&request.delegate_action)
+        .map_err(LeaderNodeError::MalformedDelegateAction)?;
+
     // Check OIDC token
-    T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
+    T::verify_token(&request.oidc_token, &state.oidc_providers)
         .await
-        .map_err(SignError::OidcVerificationFailed)?;
+        .map_err(LeaderNodeError::OidcVerificationFailed)?;
 
     // Prevent recovery key delition
-    let requested_delegate_actions: &Vec<NonDelegateAction> = &request.delegate_action.actions;
+    let requested_delegate_actions: &Vec<NonDelegateAction> = &delegate_action.actions;
 
     let requested_actions: &Vec<Action> = &requested_delegate_actions
         .iter()
@@ -598,13 +509,10 @@ async fn process_sign<T: OAuthTokenVerifier>(
     })
     .await;
 
-    let user_recovery_pk = match user_recovery_pk_res {
-        Ok(user_recovery_pk) => user_recovery_pk,
-        Err(err) => {
-            tracing::error!("Failed to retrieve recovery pk: {err}");
-            return Err(SignError::FailedToRetrieveRecoveryPk(err));
-        }
-    };
+    let user_recovery_pk = user_recovery_pk_res.map_err(|err| {
+        tracing::error!("Failed to retrieve recovery pk: {err}");
+        LeaderNodeError::FailedToRetrieveRecoveryPk(err)
+    })?;
 
     for delete_key_action in delete_key_actions {
         if delete_key_action.public_key == user_recovery_pk {
@@ -612,9 +520,9 @@ async fn process_sign<T: OAuthTokenVerifier>(
                 "Recovery key can not be deleted: {:?}",
                 delete_key_action.public_key
             );
-            return Err(SignError::RecoveryKeyCanNotBeDeleted(
+            Err(LeaderNodeError::RecoveryKeyCanNotBeDeleted(
                 delete_key_action.public_key.clone(),
-            ));
+            ))?;
         }
     }
 
@@ -624,7 +532,7 @@ async fn process_sign<T: OAuthTokenVerifier>(
             &state.reqwest_client,
             &state.sign_nodes,
             &request.oidc_token,
-            request.delegate_action.clone(),
+            delegate_action.clone(),
             request.frp_signature,
             &request.frp_public_key,
         )
@@ -650,63 +558,39 @@ async fn sign<T: OAuthTokenVerifier>(
             tracing::debug!("responding with OK");
             (StatusCode::OK, Json(response))
         }
-        Err(ref e @ SignError::OidcVerificationFailed(ref err_msg)) => {
-            tracing::error!(err = ?e);
-            response::sign_unauthorized(format!("failed to verify oidc token: {}", err_msg))
-        }
-        Err(ref e @ SignError::RecoveryKeyCanNotBeDeleted(ref _recovery_pk)) => {
-            tracing::error!(err = ?e);
-            response::sign_bad_request(format!("You can not delete you recovery key: {}", e))
-        }
-        Err(ref e @ SignError::FailedToRetrieveRecoveryPk(ref err)) => {
-            tracing::error!(err = ?e);
-            response::sign_unauthorized(format!(
-                "Failed to retrieve recovery PK, check FRP digest: {}",
-                err
-            ))
-        }
-        Err(SignError::NodeError(NodeSignError::CallError(NodeCallError::ClientError(
-            e,
-            status_code,
-        )))) => {
-            tracing::error!(err = ?e);
-            (status_code, Json(SignResponse::err(e)))
-        }
         Err(e) => {
             tracing::error!(err = ?e);
-            response::sign_internal_error(format!("failed to process sign: {}", e))
+            (e.code(), Json(SignResponse::err(e.to_string())))
         }
     }
 }
 
-async fn gather_sign_node_pk_shares(state: &LeaderState) -> anyhow::Result<Vec<Point<Ed25519>>> {
+async fn gather_sign_node_pk_shares(
+    state: &LeaderState,
+) -> Result<Vec<Point<Ed25519>>, LeaderNodeError> {
     let fut = nar::retry_every(std::time::Duration::from_secs(1), || async {
-        let results: Result<Vec<(usize, Point<Ed25519>)>, NodeCallError> =
-            crate::transaction::call_all_nodes(
-                &state.reqwest_client,
-                &state.sign_nodes,
-                "public_key_node",
-                (),
-            )
-            .await;
-        let mut results = match results {
-            Ok(results) => results,
-            Err(err) => {
-                tracing::debug!("failed to gather pk: {err}");
-                return Err(err);
-            }
-        };
+        let mut results: Vec<(usize, Point<Ed25519>)> = crate::transaction::call_all_nodes(
+            &state.reqwest_client,
+            &state.sign_nodes,
+            "public_key_node",
+            (),
+        )
+        .await
+        .map_err(|err| {
+            tracing::debug!("failed to gather pk: {err:?}");
+            err
+        })?;
 
         results.sort_by_key(|(index, _)| *index);
         let results: Vec<Point<Ed25519>> =
             results.into_iter().map(|(_index, point)| point).collect();
 
-        anyhow::Result::Ok(results)
+        Result::<Vec<Point<Ed25519>>, LeaderNodeError>::Ok(results)
     });
 
     let results = tokio::time::timeout(std::time::Duration::from_secs(60), fut)
         .await
-        .map_err(|_| anyhow::anyhow!("timeout gathering sign node pks"))??;
+        .map_err(|_| LeaderNodeError::TimeoutGatheringPublicKeys)??;
     Ok(results)
 }
 

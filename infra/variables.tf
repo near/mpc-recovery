@@ -22,11 +22,11 @@ variable "zone" {
 
 # Application variables
 variable "account_creator_id" {
-  default = "tmp_acount_creator.serhii.testnet"
 }
 
-variable "firebase_audience_id" {
-  default = "pagoda-oboarding-dev"
+variable "allowed_oidc_providers" {
+  type    = list(map(string))
+  default = []
 }
 
 variable "external_signer_node_urls" {

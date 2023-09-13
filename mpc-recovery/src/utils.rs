@@ -5,10 +5,12 @@ use near_crypto::PublicKey;
 use near_primitives::delegate_action::DelegateAction;
 use sha2::{Digest, Sha256};
 
-use crate::{primitives::HashSalt, sign_node::CommitError};
+use crate::error::SignNodeError;
+use crate::primitives::HashSalt;
+use crate::sign_node::oidc::{OidcHash, OidcToken};
 
 pub fn claim_oidc_request_digest(
-    oidc_token_hash: [u8; 32],
+    oidc_token_hash: &OidcHash,
     frp_public_key: &PublicKey,
 ) -> anyhow::Result<Vec<u8>> {
     // As per the readme
@@ -22,7 +24,7 @@ pub fn claim_oidc_request_digest(
     Ok(hasher.finalize().to_vec())
 }
 
-pub fn claim_oidc_response_digest(users_signature: Signature) -> Result<Vec<u8>, CommitError> {
+pub fn claim_oidc_response_digest(users_signature: Signature) -> Result<Vec<u8>, SignNodeError> {
     // As per the readme
     // If you successfully claim the token you will receive a signature in return of:
     // sha256.hash(Borsh.serialize<u32>(SALT + 1) ++ Borsh.serialize<[u8]>(signature))
@@ -36,9 +38,9 @@ pub fn claim_oidc_response_digest(users_signature: Signature) -> Result<Vec<u8>,
 
 pub fn sign_request_digest(
     delegate_action: &DelegateAction,
-    oidc_token: &str,
+    oidc_token: &OidcToken,
     frp_public_key: &PublicKey,
-) -> Result<Vec<u8>, CommitError> {
+) -> Result<Vec<u8>, SignNodeError> {
     let mut hasher = Sha256::default();
     BorshSerialize::serialize(&HashSalt::SignRequest.get_salt(), &mut hasher)
         .context("Serialization failed")?;
@@ -49,7 +51,7 @@ pub fn sign_request_digest(
 }
 
 pub fn user_credentials_request_digest(
-    oidc_token: &str,
+    oidc_token: &OidcToken,
     frp_public_key: &PublicKey,
 ) -> anyhow::Result<Vec<u8>> {
     let mut hasher = Sha256::default();
@@ -75,12 +77,6 @@ pub fn check_digest_signature(
     } else {
         Ok(())
     }
-}
-
-pub fn oidc_digest(oidc_token: &str) -> [u8; 32] {
-    let hasher = Sha256::default().chain(oidc_token.as_bytes());
-
-    <[u8; 32]>::try_from(hasher.finalize().as_slice()).expect("Hash is the wrong size")
 }
 
 pub fn sign_digest(

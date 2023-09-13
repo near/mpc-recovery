@@ -163,23 +163,6 @@ mod key {
     }
 }
 
-mod token {
-    use rand::{distributions::Alphanumeric, Rng};
-
-    pub fn valid_random() -> String {
-        let random: String = rand::thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(10)
-            .map(char::from)
-            .collect();
-        format!("validToken:{}", random)
-    }
-
-    pub fn invalid() -> String {
-        "invalidToken".to_string()
-    }
-}
-
 mod check {
     use crate::TestContext;
     use near_crypto::PublicKey;
@@ -273,7 +256,9 @@ macro_rules! impl_mpc_check {
                     let $response::Err { .. } = response else {
                         anyhow::bail!("unexpected Ok with a non-200 http code ({status_code})");
                     };
-                    anyhow::bail!("expected 200, but got {status_code} with response: {response:?}");
+                    anyhow::bail!(
+                        "expected 200, but got {status_code} with response: {response:?}"
+                    );
                 }
             }
 
@@ -285,15 +270,20 @@ macro_rules! impl_mpc_check {
                     let $response::Err { ref msg, .. } = response else {
                         anyhow::bail!("unexpected Ok with a 400 http code");
                     };
-                    assert!(msg.contains(expected));
+                    assert!(msg.contains(expected), "{expected:?} not in {msg:?}");
 
                     Ok(response)
                 } else {
-                    anyhow::bail!("expected 400, but got {status_code} with response: {response:?}");
+                    anyhow::bail!(
+                        "expected 400, but got {status_code} with response: {response:?}"
+                    );
                 }
             }
 
-            fn assert_unauthorized_contains(self, expected: &str) -> anyhow::Result<Self::Response> {
+            fn assert_unauthorized_contains(
+                self,
+                expected: &str,
+            ) -> anyhow::Result<Self::Response> {
                 let status_code = self.0;
                 let response = self.1;
 
@@ -301,11 +291,13 @@ macro_rules! impl_mpc_check {
                     let $response::Err { ref msg, .. } = response else {
                         anyhow::bail!("unexpected Ok with a 401 http code");
                     };
-                    assert!(msg.contains(expected));
+                    assert!(msg.contains(expected), "{expected:?} not in {msg:?}");
 
                     Ok(response)
                 } else {
-                    anyhow::bail!("expected 401, but got {status_code} with response: {response:?}");
+                    anyhow::bail!(
+                        "expected 401, but got {status_code} with response: {response:?}"
+                    );
                 }
             }
             fn assert_internal_error_contains(self, expected: &str) -> anyhow::Result<Self::Response> {

@@ -1,13 +1,14 @@
 use crate::mpc::{fetch_recovery_pk, register_account};
-use crate::{account, check, key, token, with_nodes, MpcCheck};
+use crate::{account, check, key, with_nodes, MpcCheck};
 
 use anyhow::Context;
 use ed25519_dalek::{PublicKey as PublicKeyEd25519, Signature, Verifier};
 use hyper::StatusCode;
+use mpc_recovery::sign_node::oidc::OidcToken;
 use mpc_recovery::utils::user_credentials_request_digest;
 use mpc_recovery::{
     msg::{ClaimOidcRequest, MpcPkRequest, NewAccountResponse, UserCredentialsResponse},
-    utils::{claim_oidc_request_digest, claim_oidc_response_digest, oidc_digest, sign_digest},
+    utils::{claim_oidc_request_digest, claim_oidc_response_digest, sign_digest},
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_primitives::{
@@ -31,7 +32,7 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
             let user_secret_key =
                 near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519);
             let user_public_key = user_secret_key.public_key();
-            let oidc_token = token::valid_random();
+            let oidc_token = OidcToken::random();
 
             // Claim OIDC token
             ctx.leader_node
@@ -55,7 +56,7 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
 
             for whitelisted_action in whitelisted_actions {
                 ctx.leader_node
-                    .perform_delegate_action_with_helper(
+                    .sign_with_helper(
                         &get_stub_delegate_action(whitelisted_action)?,
                         &oidc_token,
                         &user_secret_key,
@@ -77,7 +78,7 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
 
             for blacklisted_action in blacklisted_actions {
                 ctx.leader_node
-                    .perform_delegate_action_with_helper(
+                    .sign_with_helper(
                         &get_stub_delegate_action(blacklisted_action)?,
                         &oidc_token,
                         &user_secret_key,
@@ -114,7 +115,7 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
                     &user_public_key,
                 )
                 .await?
-                .assert_bad_request_contains("Recovery key can not be deleted")?;
+                .assert_bad_request_contains("recovery key can not be deleted")?;
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
             check::access_key_exists(&ctx, &account_id, &recovery_pk).await?;
@@ -200,9 +201,9 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
             let user_secret_key =
                 near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519);
             let user_public_key = user_secret_key.public_key();
-            let oidc_token_1 = token::valid_random();
-            let oidc_token_2 = token::valid_random();
-            let wrong_oidc_token = token::valid_random();
+            let oidc_token_1 = OidcToken::random();
+            let oidc_token_2 = OidcToken::random();
+            let wrong_oidc_token = OidcToken::random();
 
             // Create account before claiming OIDC token
             // This part of the test is commented since account creation is not atomic (known issue)
@@ -260,13 +261,13 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
                 .try_into()?;
 
             // Prepare the oidc claiming request
-            let oidc_token_hash = oidc_digest(&oidc_token_2);
-            let wrong_oidc_token_hash = oidc_digest(&wrong_oidc_token);
+            let oidc_token_hash = oidc_token_2.digest_hash();
+            let wrong_oidc_token_hash = wrong_oidc_token.digest_hash();
 
             let request_digest =
-                claim_oidc_request_digest(oidc_token_hash, &user_public_key).unwrap();
+                claim_oidc_request_digest(&oidc_token_hash, &user_public_key).unwrap();
             let wrong_digest =
-                claim_oidc_request_digest(wrong_oidc_token_hash, &user_public_key).unwrap();
+                claim_oidc_request_digest(&wrong_oidc_token_hash, &user_public_key).unwrap();
 
             let request_digest_signature = sign_digest(&request_digest, &user_secret_key)?;
 
@@ -276,14 +277,14 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
             };
 
             let oidc_request = ClaimOidcRequest {
-                oidc_token_hash,
-                frp_public_key: user_public_key.to_string(),
+                oidc_token_hash: oidc_token_hash.clone(),
+                frp_public_key: user_public_key.clone(),
                 frp_signature: request_digest_signature,
             };
 
             let bad_oidc_request = ClaimOidcRequest {
                 oidc_token_hash,
-                frp_public_key: user_public_key.to_string(),
+                frp_public_key: user_public_key,
                 frp_signature: wrong_request_digest_signature,
             };
 
@@ -319,7 +320,7 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
             }
 
             // It should not be possible to make the claiming with another key
-            let new_oidc_token = token::valid_random();
+            let new_oidc_token = OidcToken::random();
             let user_sk = key::random_sk();
             let user_pk = user_sk.public_key();
             let atacker_sk = key::random_sk();
@@ -369,8 +370,8 @@ async fn test_invalid_token() -> anyhow::Result<()> {
             let account_id = account::random(ctx.worker)?;
             let user_secret_key = key::random_sk();
             let user_public_key = user_secret_key.public_key();
-            let oidc_token = token::valid_random();
-            let invalid_oidc_token = token::invalid();
+            let oidc_token = OidcToken::random();
+            let invalid_oidc_token = OidcToken::invalid();
 
             // Claim OIDC token
             ctx.leader_node
@@ -411,7 +412,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                     create_account_options: _,
                     user_recovery_public_key: _,
                     near_account_id: acc_id,
-                } if acc_id == account_id.to_string()
+                } if acc_id == account_id
             ));
 
             tokio::time::sleep(Duration::from_millis(2000)).await;
@@ -467,63 +468,6 @@ async fn test_invalid_token() -> anyhow::Result<()> {
 }
 
 #[test(tokio::test)]
-async fn test_malformed_account_id() -> anyhow::Result<()> {
-    with_nodes(1, |ctx| {
-        Box::pin(async move {
-            let malformed_account_id = account::malformed();
-            let user_secret_key = key::random_sk();
-            let user_public_key = user_secret_key.public_key();
-            let oidc_token = token::valid_random();
-
-            ctx.leader_node
-                .claim_oidc_with_helper(&oidc_token, &user_public_key, &user_secret_key)
-                .await?;
-
-            ctx.leader_node
-                .new_account_with_helper(
-                    &malformed_account_id,
-                    &user_public_key,
-                    None,
-                    &user_secret_key,
-                    &oidc_token,
-                )
-                .await?
-                .assert_bad_request()?;
-
-            let account_id = account::random(ctx.worker)?;
-            let account_id_repr = account_id.to_string();
-
-            // Check that the service is still available
-            let new_acc_response = ctx
-                .leader_node
-                .new_account_with_helper(
-                    &account_id_repr,
-                    &user_public_key,
-                    None,
-                    &user_secret_key,
-                    &oidc_token,
-                )
-                .await?
-                .assert_ok()?;
-
-            assert!(matches!(new_acc_response, NewAccountResponse::Ok {
-                    create_account_options: _,
-                    user_recovery_public_key: _,
-                    near_account_id: acc_id,
-                } if acc_id == account_id_repr
-            ));
-
-            tokio::time::sleep(Duration::from_millis(2000)).await;
-
-            check::access_key_exists(&ctx, &account_id, &user_public_key).await?;
-
-            Ok(())
-        })
-    })
-    .await
-}
-
-#[test(tokio::test)]
 async fn test_reject_new_pk_set() -> anyhow::Result<()> {
     with_nodes(2, |ctx| {
         Box::pin(async move {
@@ -536,7 +480,7 @@ async fn test_reject_new_pk_set() -> anyhow::Result<()> {
                 })
                 .await?;
             assert_eq!(status_code, StatusCode::BAD_REQUEST);
-            assert!(matches!(result, Err(_)));
+            assert!(result.is_err());
 
             Ok(())
         })
@@ -546,7 +490,7 @@ async fn test_reject_new_pk_set() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
-    let user_oidc = token::valid_random();
+    let user_oidc = OidcToken::random();
     let (user_sk, user_pk) = key::random();
     let digest = user_credentials_request_digest(&user_oidc, &user_pk)?;
     let near_crypto::Signature::ED25519(frp_signature) = user_sk.sign(&digest) else {
@@ -560,14 +504,14 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
             "limited_access_keys": serde_json::Value::Null,
             "contract_bytes": serde_json::Value::Null,
         },
-        "user_credentials_frp_signature": frp_signature.clone(),
         "oidc_token": user_oidc,
+        "user_credentials_frp_signature": hex::encode(frp_signature),
         "frp_public_key": user_pk,
     });
 
     let malformed_cases = {
         let mut invalid_account_req = template_new_account.clone();
-        invalid_account_req["near_account_id"] = "groot++".into();
+        invalid_account_req["near_account_id"] = account::malformed().into();
 
         let mut invalid_user_key_req = template_new_account.clone();
         let malformed_key = key::malformed_pk();
@@ -576,30 +520,31 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
         invalid_user_key_req["frp_public_key"] = malformed_key.into();
 
         let mut invalid_oidc_token_req = template_new_account.clone();
-        invalid_oidc_token_req["oidc_token"] = token::invalid().into();
+        invalid_oidc_token_req["oidc_token"] = serde_json::to_value(OidcToken::invalid())?;
 
         let mut invalid_frp_signature_req = template_new_account.clone();
         // create invalid sig by having the first 16 bytes of the signature be 0:
         let mut invalid_sig = frp_signature.to_bytes();
         invalid_sig[0..16].copy_from_slice(&[0; 16]);
-        invalid_frp_signature_req["user_credentials_frp_signature"] =
-            serde_json::to_value(ed25519_dalek::Signature::from_bytes(&invalid_sig)?)?;
+        invalid_frp_signature_req["user_credentials_frp_signature"] = serde_json::to_value(
+            hex::encode(ed25519_dalek::Signature::from_bytes(&invalid_sig)?),
+        )?;
 
         [
             (
                 invalid_account_req,
-                (400, "bad near_account_id: groot++")),
+                (StatusCode::UNPROCESSABLE_ENTITY, "Failed to deserialize the JSON body into the target type: near_account_id: invalid value:")),
             (
                 invalid_user_key_req,
-                (422, "Failed to deserialize the JSON body into the target type: create_account_options.full_access_keys")
+                (StatusCode::UNPROCESSABLE_ENTITY, "Failed to deserialize the JSON body into the target type: create_account_options.full_access_keys")
             ),
             (
                 invalid_oidc_token_req,
-                (401, "failed to verify oidc token: Invalid token"),
+                (StatusCode::UNAUTHORIZED, "failed to verify oidc token: Invalid token"),
             ),
             (
                 invalid_frp_signature_req,
-                (401, "signer failed to verify signature"),
+                (StatusCode::BAD_REQUEST, "failed to verify signature: Public key"),
             )
         ]
     };
@@ -610,7 +555,9 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
                 .claim_oidc_with_helper(&user_oidc, &user_pk, &user_sk)
                 .await?;
 
-            for (invalid_req, (expected_status_code, expected_msg)) in malformed_cases {
+            for (case_idx, (invalid_req, (expected_status_code, expected_msg))) in
+                malformed_cases.into_iter().enumerate()
+            {
                 let (code, msg): (StatusCode, serde_json::Value) =
                     mpc_recovery_integration_tests::util::post(
                         format!("{}/new_account", ctx.leader_node.address),
@@ -619,14 +566,39 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
                     .await
                     .context("failed to send request")?;
 
-                assert_eq!(code, expected_status_code, "wrong status code");
+                assert_eq!(
+                    code, expected_status_code,
+                    "wrong status code [case={case_idx}]:\n   expected: `{expected_msg}`\n     actual: `{msg}`"
+                );
                 assert!(
                     msg.to_string().contains(expected_msg),
-                    "wrong error message: `{}` not in `{}`",
-                    expected_msg,
-                    msg,
+                    "wrong error message [case={case_idx}]: `{expected_msg}` not in `{msg}`",
                 );
             }
+
+            // Check that the service is still available
+            let account_id = account::random(ctx.worker)?;
+            let new_acc_response = ctx
+                .leader_node
+                .new_account_with_helper(
+                    &account_id,
+                    &user_pk,
+                    None,
+                    &user_sk,
+                    &user_oidc,
+                )
+                .await?
+                .assert_ok()?;
+
+            assert!(matches!(new_acc_response, NewAccountResponse::Ok {
+                    create_account_options: _,
+                    user_recovery_public_key: _,
+                    near_account_id,
+                } if near_account_id == account_id
+            ));
+
+            tokio::time::sleep(Duration::from_millis(2000)).await;
+            check::access_key_exists(&ctx, &account_id, &user_pk).await?;
 
             Ok(())
         })

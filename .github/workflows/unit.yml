@@ -46,5 +46,4 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: audit
-          # Fix RUSTSEC-2023-0001 by upgrading tokio once https://github.com/near/nearcore/issues/8888 is resolved
-          args: --ignore RUSTSEC-2020-0071 --ignore RUSTSEC-2023-0001
+          args: --ignore RUSTSEC-2020-0071 --ignore RUSTSEC-2022-0093
