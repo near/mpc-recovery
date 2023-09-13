@@ -188,7 +188,7 @@ fn get_pagoda_firebase_public_keys() -> anyhow::Result<Vec<String>> {
 
 pub fn get_test_claims(sub: String) -> IdTokenClaims {
     IdTokenClaims {
-        iss: "test_issuer".to_string(),
+        iss: format!("https://securetoken.google.com/{}", "test_audience"),
         sub,
         aud: "test_audience".to_string(),
         exp: Utc::now().timestamp() as usize + 3600,

@@ -6,8 +6,7 @@ use tracing_subscriber::EnvFilter;
 
 const NETWORK: &str = "mpc_recovery_dev_network";
 const GCP_PROJECT_ID: &str = "mpc-recovery-dev-gcp-project";
-// TODO: figure out how to instantiate an use a local firebase deployment
-const FIREBASE_AUDIENCE_ID: &str = "not-actually-used-in-integration-tests";
+pub const FIREBASE_AUDIENCE_ID: &str = "test_audience";
 
 #[derive(Parser, Debug)]
 enum Cli {
