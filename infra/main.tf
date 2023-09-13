@@ -104,8 +104,8 @@ module "signer" {
   service_account_email = google_service_account.service_account.email
   docker_image          = docker_image.mpc_recovery.name
 
-  node_id            = count.index
-  fast_auth_partners = var.fast_auth_partners
+  node_id        = count.index
+  oidc_providers = var.oidc_providers
 
   cipher_key = var.cipher_keys[count.index]
   sk_share   = var.sk_shares[count.index]

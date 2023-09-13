@@ -20,16 +20,10 @@ variable "docker_image" {
 variable "node_id" {
 }
 
-variable "fast_auth_partners" {
+variable "oidc_providers" {
   type = list(object({
-    oidc_provider = object({
-      issuer   = string
-      audience = string
-    })
-    relayer = object({
-      url     = string
-      api_key = string
-    })
+    issuer   = string
+    audience = string
   }))
   default = []
 }

@@ -394,7 +394,7 @@ impl<'a> SignerNode<'a> {
     // Container port used for the docker network, does not have to be unique
     const CONTAINER_PORT: u16 = 3000;
 
-    pub async fn run(
+    pub async fn run_signing_node(
         docker_client: &'a DockerClient,
         network: &str,
         node_id: u64,
@@ -422,17 +422,11 @@ impl<'a> SignerNode<'a> {
                 hex::encode(cipher_key),
                 "--web-port".to_string(),
                 Self::CONTAINER_PORT.to_string(),
-                "--fast-auth-partners".to_string(),
+                "--oidc-providers".to_string(),
                 serde_json::json!([
                     {
-                        "oidc_provider": {
-                            "issuer": format!("https://securetoken.google.com/{}", firebase_audience_id),
-                            "audience": firebase_audience_id,
-                        },
-                        "relayer": {
-                            "url": "http://relayer:3000", // not used
-                            "api_key": serde_json::Value::Null,
-                        },
+                        "issuer": format!("https://securetoken.google.com/{}", firebase_audience_id),
+                        "audience": firebase_audience_id,
                     },
                 ]).to_string(),
                 "--gcp-project-id".to_string(),

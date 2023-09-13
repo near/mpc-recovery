@@ -57,7 +57,7 @@ where
     let GenerateResult { pk_set, secrets } = mpc_recovery::generate(nodes);
     let mut signer_node_futures = Vec::new();
     for (i, (share, cipher_key)) in secrets.iter().enumerate().take(nodes) {
-        let signer_node = containers::SignerNode::run(
+        let signer_node = containers::SignerNode::run_signing_node(
             &docker_client,
             NETWORK,
             i as u64,

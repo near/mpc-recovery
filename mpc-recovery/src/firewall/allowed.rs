@@ -22,6 +22,23 @@ pub struct FastAuthPartner {
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct OidcProviderList {
+    pub entries: HashSet<OidcProvider>,
+}
+
+impl OidcProviderList {
+    pub fn contains(&self, issuer: &str, audience: &str) -> bool {
+        self.entries
+            .iter()
+            .any(|entry| entry.issuer == issuer && entry.audience == audience)
+    }
+
+    pub fn insert(&mut self, entry: OidcProvider) {
+        self.entries.insert(entry);
+    }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct PartnerList {
     pub entries: HashSet<FastAuthPartner>,
 }
@@ -51,8 +68,11 @@ impl PartnerList {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn insert(&mut self, entry: FastAuthPartner) {
-        self.entries.insert(entry);
+    pub fn oidc_providers(&self) -> OidcProviderList {
+        let mut oidc_providers = OidcProviderList::default();
+        for entry in self.entries.iter() {
+            oidc_providers.insert(entry.oidc_provider.clone());
+        }
+        oidc_providers
     }
 }
