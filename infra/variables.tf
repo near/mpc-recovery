@@ -38,7 +38,6 @@ variable "fast_auth_partners" {
   default = []
 }
 
-
 variable "external_signer_node_urls" {
   type    = list(string)
   default = []
