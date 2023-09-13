@@ -38,6 +38,14 @@ variable "fast_auth_partners" {
   default = []
 }
 
+variable "oidc_providers" {
+  type = list(object({
+    issuer   = string
+    audience = string
+  }))
+  default = []
+}
+
 variable "external_signer_node_urls" {
   type    = list(string)
   default = []
