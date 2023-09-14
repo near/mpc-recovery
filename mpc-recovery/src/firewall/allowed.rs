@@ -27,9 +27,10 @@ pub struct OidcProviderList {
 
 impl OidcProviderList {
     pub fn contains(&self, issuer: &str, audience: &str) -> bool {
-        self.entries
-            .iter()
-            .any(|entry| entry.issuer == issuer && entry.audience == audience)
+        self.entries.contains(&OidcProvider {
+            issuer: issuer.into(),
+            audience: audience.into(),
+        })
     }
 
     pub fn insert(&mut self, entry: OidcProvider) {
