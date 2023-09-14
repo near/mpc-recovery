@@ -9,7 +9,6 @@ pub struct OidcProvider {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Hash, PartialEq, Eq)]
-
 pub struct DelegateActionRelayer {
     pub url: String,
     pub api_key: Option<String>,
