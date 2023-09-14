@@ -300,6 +300,7 @@ macro_rules! impl_mpc_check {
                     );
                 }
             }
+            // ideally we should not have situations where we can get INTERNAL_SERVER_ERROR
             fn assert_internal_error_contains(self, expected: &str) -> anyhow::Result<Self::Response> {
                 let status_code = self.0;
                 let response = self.1;

@@ -206,18 +206,16 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
             let wrong_oidc_token = OidcToken::random();
 
             // Create account before claiming OIDC token
-            // This part of the test is commented since account creation is not atomic (known issue)
-            // Relayer is wasting a token even if account was not created
-            // ctx.leader_node
-            //     .new_account_with_helper(
-            //         &account_id.to_string(),
-            //         &user_public_key,
-            //         None,
-            //         &user_secret_key,
-            //         &oidc_token_1,
-            //     )
-            //     .await?
-            //     .assert_unauthorized_contains("was not claimed")?;
+            ctx.leader_node
+                .new_account_with_helper(
+                    &account_id,
+                    &user_public_key,
+                    None,
+                    &user_secret_key,
+                    &oidc_token_1,
+                )
+                .await?
+                .assert_unauthorized_contains("was not claimed")?;
 
             // Get user recovery PK before claiming OIDC token
             ctx.leader_node
@@ -613,11 +611,11 @@ async fn test_account_creation_should_work_on_second_attempt() -> anyhow::Result
             let account_id = account::random(ctx.worker)?;
             let user_secret_key = key::random_sk();
             let user_public_key = user_secret_key.public_key();
-            let oidc_token = token::valid_random();
+            let oidc_token = OidcToken::random();
 
             ctx.leader_node
                 .new_account_with_helper(
-                    &account_id.to_string(),
+                    &account_id,
                     &user_public_key,
                     None,
                     &user_secret_key,
@@ -651,7 +649,7 @@ async fn test_creation_of_two_account_with_the_same_oidc_should_not_be_possible(
             let account_id_2 = account::random(ctx.worker)?;
             let user_secret_key = key::random_sk();
             let user_public_key = user_secret_key.public_key();
-            let oidc_token = token::valid_random();
+            let oidc_token = OidcToken::random();
 
             register_account(
                 &ctx,
@@ -665,7 +663,7 @@ async fn test_creation_of_two_account_with_the_same_oidc_should_not_be_possible(
 
             ctx.leader_node
                 .new_account_with_helper(
-                    &account_id_2.to_string(),
+                    &account_id_2,
                     &user_public_key,
                     None,
                     &user_secret_key,

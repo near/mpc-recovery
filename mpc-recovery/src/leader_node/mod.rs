@@ -7,7 +7,7 @@ use crate::msg::{
     SignRequest, SignResponse, UserCredentialsRequest, UserCredentialsResponse,
 };
 use crate::oauth::OAuthTokenVerifier;
-use crate::relayer::msg::RegisterAccountRequest;
+use crate::relayer::msg::{RegisterAccountAtomicRequest, RegisterAccountRequest};
 use crate::relayer::NearRpcAndRelayerClient;
 use crate::transaction::{
     get_create_account_delegate_action, get_local_signed_delegated_action, get_mpc_signature,
@@ -355,15 +355,6 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         .map_err(LeaderNodeError::SignatureVerificationFailed)?;
     tracing::debug!("user credentials digest signature verified for {new_user_account_id:?}");
 
-    state
-        .client
-        .register_account(RegisterAccountRequest {
-            account_id: new_user_account_id.clone(),
-            allowance: 300_000_000_000_000,
-            oauth_token: internal_acc_id.clone(),
-        })
-        .await?;
-
     nar::retry(|| async {
         // Get nonce and recent block hash
         let (_hash, block_height, nonce) = state
@@ -409,7 +400,14 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         );
 
         // Send delegate action to relayer
-        let result = state.client.send_meta_tx(signed_delegate_action).await;
+        let request = RegisterAccountAtomicRequest {
+            account_id: new_user_account_id.clone(),
+            allowance: 300_000_000_000_000,
+            oauth_token: internal_acc_id.clone(),
+            signed_delegate_action,
+        };
+
+        let result = state.client.register_account_atomic(request).await;
         if let Err(err) = &result {
             let err_str = format!("{:?}", err);
             state

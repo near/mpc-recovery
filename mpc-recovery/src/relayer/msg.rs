@@ -14,6 +14,16 @@ pub struct RegisterAccountRequest {
     pub oauth_token: String,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RegisterAccountAtomicRequest {
+    pub account_id: AccountId,
+    pub allowance: u64,
+    // This is actually an InternalAccountId.
+    // TODO: rename it to internal_account_id on the relayer side
+    pub oauth_token: String,
+    pub signed_delegate_action: SignedDelegateAction,
+}
+
 pub type SendMetaTxRequest = SignedDelegateAction;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
