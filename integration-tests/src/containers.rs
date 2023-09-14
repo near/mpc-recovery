@@ -7,6 +7,7 @@ use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::Gene
 use ed25519_dalek::{PublicKey as PublicKeyEd25519, Verifier};
 use futures::{lock::Mutex, StreamExt};
 use hyper::StatusCode;
+use mpc_recovery::firewall::allowed::DelegateActionRelayer;
 use mpc_recovery::sign_node::oidc::OidcToken;
 use mpc_recovery::{
     msg::{
@@ -389,7 +390,7 @@ impl<'a> SignerNode<'a> {
     // Container port used for the docker network, does not have to be unique
     const CONTAINER_PORT: u16 = 3000;
 
-    pub async fn run(
+    pub async fn run_signing_node(
         docker_client: &'a DockerClient,
         network: &str,
         node_id: u64,
@@ -417,14 +418,13 @@ impl<'a> SignerNode<'a> {
                 hex::encode(cipher_key),
                 "--web-port".to_string(),
                 Self::CONTAINER_PORT.to_string(),
-                "--allowed-oidc-providers".to_string(),
+                "--oidc-providers".to_string(),
                 serde_json::json!([
                     {
-                        "issuer": format!("https://securetoken.google.com/{firebase_audience_id}"),
+                        "issuer": format!("https://securetoken.google.com/{}", firebase_audience_id),
                         "audience": firebase_audience_id,
                     },
-                ])
-                .to_string(),
+                ]).to_string(),
                 "--gcp-project-id".to_string(),
                 gcp_project_id.to_string(),
                 "--gcp-datastore-url".to_string(),
@@ -520,6 +520,7 @@ pub struct LeaderNode<'a> {
 
 pub struct LeaderNodeApi {
     pub address: String,
+    pub relayer: DelegateActionRelayer,
     client: NearRpcAndRelayerClient,
 }
 
@@ -552,22 +553,25 @@ impl<'a> LeaderNode<'a> {
             Self::CONTAINER_PORT.to_string(),
             "--near-rpc".to_string(),
             near_rpc.to_string(),
-            "--relayer-url".to_string(),
-            relayer_url.to_string(),
             "--near-root-account".to_string(),
             near_root_account.to_string(),
             "--account-creator-id".to_string(),
             account_creator_id.to_string(),
             "--account-creator-sk".to_string(),
             account_creator_sk.to_string(),
-            "--allowed-oidc-providers".to_string(),
+            "--fast-auth-partners".to_string(),
             serde_json::json!([
                 {
-                    "issuer": format!("https://securetoken.google.com/{firebase_audience_id}"),
-                    "audience": firebase_audience_id,
+                    "oidc_provider": {
+                        "issuer": format!("https://securetoken.google.com/{}", firebase_audience_id),
+                        "audience": firebase_audience_id,
+                    },
+                    "relayer": {
+                        "url": relayer_url.to_string(),
+                        "api_key": serde_json::Value::Null,
+                    },
                 },
-            ])
-            .to_string(),
+            ]).to_string(),
             "--gcp-project-id".to_string(),
             gcp_project_id.to_string(),
             "--gcp-datastore-url".to_string(),
@@ -600,10 +604,11 @@ impl<'a> LeaderNode<'a> {
         })
     }
 
-    pub fn api(&self, near_rpc: &str, relayer_url: &str) -> LeaderNodeApi {
+    pub fn api(&self, near_rpc: &str, relayer: &DelegateActionRelayer) -> LeaderNodeApi {
         LeaderNodeApi {
             address: self.local_address.clone(),
-            client: NearRpcAndRelayerClient::connect(near_rpc, relayer_url.to_string(), None),
+            client: NearRpcAndRelayerClient::connect(near_rpc),
+            relayer: relayer.clone(),
         }
     }
 }
@@ -721,10 +726,13 @@ impl LeaderNodeApi {
         };
         let response = self
             .client
-            .send_meta_tx(SignedDelegateAction {
-                delegate_action: add_key_delegate_action,
-                signature: near_crypto::Signature::ED25519(*signature),
-            })
+            .send_meta_tx(
+                SignedDelegateAction {
+                    delegate_action: add_key_delegate_action,
+                    signature: near_crypto::Signature::ED25519(*signature),
+                },
+                self.relayer.clone(),
+            )
             .await?;
         if matches!(response.status, FinalExecutionStatus::SuccessValue(_)) {
             Ok((status_code, sign_response))
@@ -771,10 +779,13 @@ impl LeaderNodeApi {
         };
         let response = self
             .client
-            .send_meta_tx(SignedDelegateAction {
-                delegate_action: delete_key_delegate_action,
-                signature: near_crypto::Signature::ED25519(*signature),
-            })
+            .send_meta_tx(
+                SignedDelegateAction {
+                    delegate_action: delete_key_delegate_action,
+                    signature: near_crypto::Signature::ED25519(*signature),
+                },
+                self.relayer.clone(),
+            )
             .await?;
         if matches!(response.status, FinalExecutionStatus::SuccessValue(_)) {
             Ok((status_code, sign_response))

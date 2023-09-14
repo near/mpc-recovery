@@ -4,6 +4,7 @@ use curv::elliptic::curves::{Ed25519, Point};
 use futures::future::BoxFuture;
 use hyper::StatusCode;
 use mpc_recovery::{
+    firewall::allowed::DelegateActionRelayer,
     gcp::GcpService,
     msg::{
         ClaimOidcResponse, MpcPkResponse, NewAccountResponse, SignResponse, UserCredentialsResponse,
@@ -15,8 +16,8 @@ use workspaces::{network::Sandbox, Worker};
 
 const NETWORK: &str = "mpc_it_network";
 const GCP_PROJECT_ID: &str = "mpc-recovery-gcp-project";
-// TODO: figure out how to instantiate an use a local firebase deployment
-const FIREBASE_AUDIENCE_ID: &str = "not actually used in integration tests";
+// TODO: figure out how to instantiate and use a local firebase deployment
+pub const FIREBASE_AUDIENCE_ID: &str = "test_audience";
 
 pub struct TestContext<'a> {
     leader_node: &'a containers::LeaderNodeApi,
@@ -56,7 +57,7 @@ where
     let GenerateResult { pk_set, secrets } = mpc_recovery::generate(nodes);
     let mut signer_node_futures = Vec::new();
     for (i, (share, cipher_key)) in secrets.iter().enumerate().take(nodes) {
-        let signer_node = containers::SignerNode::run(
+        let signer_node = containers::SignerNode::run_signing_node(
             &docker_client,
             NETWORK,
             i as u64,
@@ -94,7 +95,10 @@ where
     f(TestContext {
         leader_node: &leader_node.api(
             &relayer_ctx.sandbox.local_address,
-            &relayer_ctx.relayer.local_address,
+            &DelegateActionRelayer {
+                url: relayer_ctx.relayer.local_address.clone(),
+                api_key: None,
+            },
         ),
         pk_set: &pk_set,
         signer_nodes: &signer_nodes.iter().map(|n| n.api()).collect(),

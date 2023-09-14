@@ -16,20 +16,20 @@ resource "google_secret_manager_secret_iam_member" "account_creator_secret_acces
   member    = "serviceAccount:${var.service_account_email}"
 }
 
-resource "google_secret_manager_secret" "allowed_oidc_providers" {
+resource "google_secret_manager_secret" "fast_auth_partners" {
   secret_id = "mpc-recovery-allowed-oidc-providers-leader-${var.env}"
   replication {
     automatic = true
   }
 }
 
-resource "google_secret_manager_secret_version" "allowed_oidc_providers_data" {
-  secret      = google_secret_manager_secret.allowed_oidc_providers.name
-  secret_data = jsonencode(var.allowed_oidc_providers)
+resource "google_secret_manager_secret_version" "fast_auth_partners_data" {
+  secret      = google_secret_manager_secret.fast_auth_partners.name
+  secret_data = jsonencode(var.fast_auth_partners)
 }
 
-resource "google_secret_manager_secret_iam_member" "allowed_oidc_providers_secret_access" {
-  secret_id = google_secret_manager_secret.allowed_oidc_providers.id
+resource "google_secret_manager_secret_iam_member" "fast_auth_partners_secret_access" {
+  secret_id = google_secret_manager_secret.fast_auth_partners.id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${var.service_account_email}"
 }
@@ -62,17 +62,6 @@ resource "google_cloud_run_v2_service" "leader" {
       env {
         name  = "MPC_RECOVERY_NEAR_RPC"
         value = var.near_rpc
-      }
-      dynamic "env" {
-        for_each = var.relayer_api_key == null ? [] : [1]
-        content {
-          name  = "MPC_RECOVERY_RELAYER_API_KEY"
-          value = var.relayer_api_key
-        }
-      }
-      env {
-        name  = "MPC_RECOVERY_RELAYER_URL"
-        value = var.relayer_url
       }
       env {
         name  = "MPC_RECOVERY_NEAR_ROOT_ACCOUNT"
@@ -111,9 +100,9 @@ resource "google_cloud_run_v2_service" "leader" {
   }
   depends_on = [
     google_secret_manager_secret_version.account_creator_sk_data,
-    google_secret_manager_secret_version.allowed_oidc_providers_data,
+    google_secret_manager_secret_version.fast_auth_partners_data,
     google_secret_manager_secret_iam_member.account_creator_secret_access,
-    google_secret_manager_secret_iam_member.allowed_oidc_providers_secret_access
+    google_secret_manager_secret_iam_member.fast_auth_partners_secret_access
   ]
 }
 

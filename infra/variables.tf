@@ -24,8 +24,25 @@ variable "zone" {
 variable "account_creator_id" {
 }
 
-variable "allowed_oidc_providers" {
-  type    = list(map(string))
+variable "fast_auth_partners" {
+  type = list(object({
+    oidc_provider = object({
+      issuer   = string
+      audience = string
+    })
+    relayer = object({
+      url     = string
+      api_key = string
+    })
+  }))
+  default = []
+}
+
+variable "oidc_providers" {
+  type = list(object({
+    issuer   = string
+    audience = string
+  }))
   default = []
 }
 

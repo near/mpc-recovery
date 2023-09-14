@@ -24,20 +24,24 @@ variable "signer_node_urls" {
 variable "near_rpc" {
 }
 
-variable "relayer_api_key" {
-}
-
-variable "relayer_url" {
-}
-
 variable "near_root_account" {
 }
 
 variable "account_creator_id" {
 }
 
-variable "allowed_oidc_providers" {
-  type = list(map(string))
+variable "fast_auth_partners" {
+  type = list(object({
+    oidc_provider = object({
+      issuer   = string
+      audience = string
+    })
+    relayer = object({
+      url     = string
+      api_key = string
+    })
+  }))
+  default = []
 }
 
 # Secrets

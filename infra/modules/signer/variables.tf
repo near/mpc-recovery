@@ -20,8 +20,12 @@ variable "docker_image" {
 variable "node_id" {
 }
 
-variable "allowed_oidc_providers" {
-  type = list(map(string))
+variable "oidc_providers" {
+  type = list(object({
+    issuer   = string
+    audience = string
+  }))
+  default = []
 }
 
 # Secrets
