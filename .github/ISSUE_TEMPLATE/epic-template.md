@@ -1,7 +1,7 @@
 ---
 name: Epic Template
 about: Describe this issue template's purpose here.
-title: ''
+title: "\U0001F537 [Epic"
 labels: Emerging Tech, Epic, Near BOS
 assignees: ''
 
