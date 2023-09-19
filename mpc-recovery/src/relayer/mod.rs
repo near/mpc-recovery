@@ -102,7 +102,7 @@ impl NearRpcAndRelayerClient {
         &self,
         request: CreateAccountAtomicRequest,
         relayer: DelegateActionRelayer,
-    ) -> Result<SendMetaTxResponse, RelayerError> {
+    ) -> Result<(), RelayerError> {
         let mut req = Request::builder()
             .method(Method::POST)
             .uri(format!("{}/create_account_atomic", relayer.url))
@@ -135,22 +135,7 @@ impl NearRpcAndRelayerClient {
 
         if status.is_success() {
             tracing::debug!(response_body = msg, "got response");
-            let response: SendMetaTxResponse = serde_json::from_slice(&response_body)
-                .map_err(|e| RelayerError::DataConversionFailure(e.into()))?;
-            match response.status {
-                FinalExecutionStatus::NotStarted | FinalExecutionStatus::Started => {
-                    Err(RelayerError::TxNotReady)
-                }
-                FinalExecutionStatus::Failure(e) => Err(RelayerError::TxExecutionFailure(e)),
-                FinalExecutionStatus::SuccessValue(ref value) => {
-                    tracing::debug!(
-                        value = std::str::from_utf8(value)
-                            .map_err(|e| RelayerError::DataConversionFailure(e.into()))?,
-                        "success"
-                    );
-                    Ok(response)
-                }
-            }
+            Ok(())
         } else {
             Err(RelayerError::RequestFailure(status, msg.to_string()))
         }
@@ -210,7 +195,7 @@ impl NearRpcAndRelayerClient {
         }
     }
 
-    pub(crate) async fn invalidate_cache_if_tx_failed(
+    pub(crate) async fn invalidate_cache_if_acc_creation_failed(
         &self,
         cache_key: &(AccountId, PublicKey),
         err_str: &str,

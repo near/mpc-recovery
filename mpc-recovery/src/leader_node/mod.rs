@@ -32,7 +32,6 @@ use near_crypto::SecretKey;
 use near_primitives::delegate_action::{DelegateAction, NonDelegateAction};
 use near_primitives::transaction::{Action, DeleteKeyAction};
 use near_primitives::types::AccountId;
-use near_primitives::views::FinalExecutionStatus;
 use prometheus::{Encoder, TextEncoder};
 use rand::{distributions::Alphanumeric, Rng};
 use std::net::SocketAddr;
@@ -422,7 +421,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             let err_str = format!("{:?}", err);
             state
                 .client
-                .invalidate_cache_if_tx_failed(
+                .invalidate_cache_if_acc_creation_failed(
                     &(
                         state.account_creator_id.clone(),
                         state.account_creator_sk.public_key(),
@@ -431,21 +430,12 @@ async fn process_new_account<T: OAuthTokenVerifier>(
                 )
                 .await;
         }
-        let response = result?;
 
-        // TODO: Probably need to check more fields
-        if matches!(response.status, FinalExecutionStatus::SuccessValue(_)) {
-            Ok(NewAccountResponse::Ok {
-                create_account_options: new_account_options,
-                user_recovery_public_key: mpc_user_recovery_pk,
-                near_account_id: new_user_account_id.clone(),
-            })
-        } else {
-            Err(LeaderNodeError::Other(anyhow::anyhow!(
-                "transaction failed with {:?}",
-                response.status
-            )))
-        }
+        Ok(NewAccountResponse::Ok {
+            create_account_options: new_account_options,
+            user_recovery_public_key: mpc_user_recovery_pk,
+            near_account_id: new_user_account_id.clone(),
+        })
     })
     .await
 }

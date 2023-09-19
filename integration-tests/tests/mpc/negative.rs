@@ -651,15 +651,21 @@ async fn test_creation_of_two_account_with_the_same_oidc_should_not_be_possible(
             let user_public_key = user_secret_key.public_key();
             let oidc_token = OidcToken::random();
 
-            register_account(
-                &ctx,
-                &account_id,
-                &user_secret_key,
-                &user_public_key,
-                &oidc_token,
-                None,
-            )
-            .await?;
+            ctx.leader_node
+                .claim_oidc_with_helper(&oidc_token, &user_public_key, &user_secret_key)
+                .await?
+                .assert_ok()?;
+
+            ctx.leader_node
+                .new_account_with_helper(
+                    &account_id,
+                    &user_public_key,
+                    None,
+                    &user_secret_key,
+                    &oidc_token,
+                )
+                .await?
+                .assert_ok()?;
 
             ctx.leader_node
                 .new_account_with_helper(
