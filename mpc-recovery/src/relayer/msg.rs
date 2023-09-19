@@ -15,7 +15,7 @@ pub struct RegisterAccountRequest {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RegisterAccountAtomicRequest {
+pub struct CreateAccountAtomicRequest {
     pub account_id: AccountId,
     pub allowance: u64,
     // This is actually an InternalAccountId.

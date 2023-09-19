@@ -7,7 +7,7 @@ use crate::msg::{
     SignRequest, SignResponse, UserCredentialsRequest, UserCredentialsResponse,
 };
 use crate::oauth::OAuthTokenVerifier;
-use crate::relayer::msg::{RegisterAccountAtomicRequest, RegisterAccountRequest};
+use crate::relayer::msg::{CreateAccountAtomicRequest, RegisterAccountRequest};
 use crate::relayer::NearRpcAndRelayerClient;
 use crate::transaction::{
     get_create_account_delegate_action, get_local_signed_delegated_action, get_mpc_signature,
@@ -401,7 +401,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         );
 
         // Send delegate action to relayer
-        let request = RegisterAccountAtomicRequest {
+        let request = CreateAccountAtomicRequest {
             account_id: new_user_account_id.clone(),
             allowance: 300_000_000_000_000,
             oauth_token: internal_acc_id.clone(),
@@ -415,7 +415,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
 
         let result = state
             .client
-            .register_account_atomic(request, partner.relayer)
+            .create_account_atomic(request, partner.relayer)
             .await;
 
         if let Err(err) = &result {

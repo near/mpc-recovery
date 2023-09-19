@@ -11,7 +11,7 @@ use near_primitives::views::FinalExecutionStatus;
 
 use self::error::RelayerError;
 use self::msg::{
-    RegisterAccountAtomicRequest, RegisterAccountRequest, SendMetaTxRequest, SendMetaTxResponse,
+    CreateAccountAtomicRequest, RegisterAccountRequest, SendMetaTxRequest, SendMetaTxResponse,
 };
 
 use crate::firewall::allowed::DelegateActionRelayer;
@@ -98,14 +98,14 @@ impl NearRpcAndRelayerClient {
     }
 
     #[tracing::instrument(level = "debug", skip_all, fields(account_id = request.account_id.to_string()))]
-    pub async fn register_account_atomic(
+    pub async fn create_account_atomic(
         &self,
-        request: RegisterAccountAtomicRequest,
+        request: CreateAccountAtomicRequest,
         relayer: DelegateActionRelayer,
     ) -> Result<SendMetaTxResponse, RelayerError> {
         let mut req = Request::builder()
             .method(Method::POST)
-            .uri(format!("{}/register_account_atomic", relayer.url))
+            .uri(format!("{}/create_account_atomic", relayer.url))
             .header("content-type", "application/json");
 
         if let Some(api_key) = relayer.api_key {
