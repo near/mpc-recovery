@@ -442,7 +442,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
                         &err_str,
                     )
                     .await;
-                return Err(LeaderNodeError::RelayerError(err));
+                Err(LeaderNodeError::RelayerError(err))
             }
         }
     })
