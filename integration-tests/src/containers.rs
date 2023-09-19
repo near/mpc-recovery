@@ -288,7 +288,9 @@ impl<'a> Relayer<'a> {
                 "STORAGE_PUBLIC_KEY",
                 social_account_sk.public_key().to_string(),
             )
-            .with_env_var("STORAGE_PRIVATE_KEY", social_account_sk.to_string());
+            .with_env_var("STORAGE_PRIVATE_KEY", social_account_sk.to_string())
+            .with_env_var("NUM_KEYS", "1");
+
         let image: RunnableImage<GenericImage> = image.into();
         let image = image.with_network(network);
         let container = docker_client.cli.run(image);
