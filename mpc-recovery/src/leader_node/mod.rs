@@ -417,25 +417,34 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             .create_account_atomic(request, partner.relayer)
             .await;
 
-        if let Err(err) = &result {
-            let err_str = format!("{:?}", err);
-            state
-                .client
-                .invalidate_cache_if_acc_creation_failed(
-                    &(
-                        state.account_creator_id.clone(),
-                        state.account_creator_sk.public_key(),
-                    ),
-                    &err_str,
-                )
-                .await;
+        match result {
+            Ok(_) => {
+                tracing::info!(
+                    "account creation succeeded: {new_user_account_id:?}",
+                    new_user_account_id = new_user_account_id
+                );
+                Ok(NewAccountResponse::Ok {
+                    create_account_options: new_account_options,
+                    user_recovery_public_key: mpc_user_recovery_pk,
+                    near_account_id: new_user_account_id.clone(),
+                })
+            }
+            Err(err) => {
+                tracing::error!("account creation failed: {err}");
+                let err_str = format!("{:?}", err);
+                state
+                    .client
+                    .invalidate_cache_if_acc_creation_failed(
+                        &(
+                            state.account_creator_id.clone(),
+                            state.account_creator_sk.public_key(),
+                        ),
+                        &err_str,
+                    )
+                    .await;
+                return Err(LeaderNodeError::RelayerError(err));
+            }
         }
-
-        Ok(NewAccountResponse::Ok {
-            create_account_options: new_account_options,
-            user_recovery_public_key: mpc_user_recovery_pk,
-            near_account_id: new_user_account_id.clone(),
-        })
     })
     .await
 }

@@ -676,7 +676,9 @@ async fn test_creation_of_two_account_with_the_same_oidc_should_not_be_possible(
                     &oidc_token,
                 )
                 .await?
-                .assert_internal_error_contains("Yu can only register 1 account per oath_token")?;
+                .assert_dependency_error_contains(
+                    "You can only register 1 account per oauth_token",
+                )?;
 
             Ok(())
         })

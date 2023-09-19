@@ -218,6 +218,7 @@ trait MpcCheck {
     fn assert_bad_request_contains(self, expected: &str) -> anyhow::Result<Self::Response>;
     fn assert_unauthorized_contains(self, expected: &str) -> anyhow::Result<Self::Response>;
     fn assert_internal_error_contains(self, expected: &str) -> anyhow::Result<Self::Response>;
+    fn assert_dependency_error_contains(self, expected: &str) -> anyhow::Result<Self::Response>;
 
     fn assert_bad_request(self) -> anyhow::Result<Self::Response>
     where
@@ -311,13 +312,28 @@ macro_rules! impl_mpc_check {
 
                 if status_code == StatusCode::INTERNAL_SERVER_ERROR {
                     let $response::Err { ref msg, .. } = response else {
-                        anyhow::bail!("unexpected Ok with a 500 http code");
+                        anyhow::bail!("unexpected error with a 401 http code");
                     };
                     assert!(msg.contains(expected));
 
                     Ok(response)
                 } else {
                     anyhow::bail!("expected 401, but got {status_code} with response: {response:?}");
+                }
+            }
+            fn assert_dependency_error_contains(self, expected: &str) -> anyhow::Result<Self::Response> {
+                let status_code = self.0;
+                let response = self.1;
+
+                if status_code == StatusCode::FAILED_DEPENDENCY {
+                    let $response::Err { ref msg, .. } = response else {
+                        anyhow::bail!("unexpected error with a 424 http code");
+                    };
+                    assert!(msg.contains(expected));
+
+                    Ok(response)
+                } else {
+                    anyhow::bail!("expected 424, but got {status_code} with response: {response:?}");
                 }
             }
         }
