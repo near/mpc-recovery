@@ -196,10 +196,13 @@ async fn metrics() -> (StatusCode, String) {
 
     match grab_metrics() {
         Ok(response) => (StatusCode::OK, response),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "failed to generate prometheus metrics".to_string(),
-        ),
+        Err(err) => {
+            tracing::error!("failed to generate prometheus metrics: {err}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to generate prometheus metrics".to_string(),
+            )
+        }
     }
 }
 

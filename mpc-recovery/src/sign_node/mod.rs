@@ -515,10 +515,13 @@ async fn accept_pk_set(
             StatusCode::OK,
             Json(Ok("Successfully set node public keys".to_string())),
         ),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(Ok("failed to save the keys".to_string())),
-        ),
+        Err(err) => {
+            tracing::error!("Failed to save pk set due to GCP error: {err}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(Ok("failed to save node public keys".to_string())),
+            )
+        }
     }
 }
 
