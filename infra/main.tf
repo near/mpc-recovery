@@ -144,10 +144,7 @@ module "leader" {
   near_root_account    = local.workspace.near_root_account
   account_creator_id   = var.account_creator_id
   fast_auth_partners   = var.fast_auth_partners
-  relayer_api_key      = local.workspace.relayer_api_key
-  relayer_url          = local.workspace.relayer_url
   account_lookup_url   = local.workspace.account_lookup_url
-  firebase_audience_id = var.firebase_audience_id
 
   account_creator_sk = var.account_creator_sk
 

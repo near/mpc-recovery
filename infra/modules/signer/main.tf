@@ -78,10 +78,6 @@ resource "google_cloud_run_v2_service" "signer" {
         value = var.node_id
       }
       env {
-        name  = "PAGODA_FIREBASE_AUDIENCE_ID"
-        value = var.firebase_audience_id
-      }
-      env {
         name  = "MPC_RECOVERY_GCP_PROJECT_ID"
         value = var.project
       }
