@@ -43,8 +43,6 @@ variable "fast_auth_partners" {
   }))
   default = []
 }
-variable "account_lookup_url" {
-}
 
 # Secrets
 variable "account_creator_sk" {

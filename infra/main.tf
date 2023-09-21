@@ -24,14 +24,12 @@ locals {
     defaults = {
       near_rpc           = "https://rpc.testnet.near.org"
       near_root_account  = "testnet"
-      account_lookup_url = "https://testnet-api.kitwallet.app"
     }
     testnet = {
     }
     mainnet = {
       near_rpc           = "https://rpc.mainnet.near.org"
       near_root_account  = "near"
-      account_lookup_url = "https://api.kitwallet.app"
     }
   }
 
@@ -139,7 +137,6 @@ module "leader" {
   near_root_account  = local.workspace.near_root_account
   account_creator_id = var.account_creator_id
   fast_auth_partners = var.fast_auth_partners
-  account_lookup_url = local.workspace.account_lookup_url
 
   account_creator_sk = var.account_creator_sk
 
