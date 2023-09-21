@@ -88,7 +88,7 @@ module "signer" {
   service_account_email = google_service_account.service_account.email
   docker_image          = docker_tag.mpc_recovery.target_image
 
-  node_id              = var.node_id
+  node_id = var.node_id
 
   cipher_key = var.cipher_key
   sk_share   = var.sk_share
