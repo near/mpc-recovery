@@ -139,12 +139,12 @@ module "leader" {
   service_account_email = google_service_account.service_account.email
   docker_image          = docker_image.mpc_recovery.name
 
-  signer_node_urls     = concat(module.signer.*.node.uri, var.external_signer_node_urls)
-  near_rpc             = local.workspace.near_rpc
-  near_root_account    = local.workspace.near_root_account
-  account_creator_id   = var.account_creator_id
-  fast_auth_partners   = var.fast_auth_partners
-  account_lookup_url   = local.workspace.account_lookup_url
+  signer_node_urls   = concat(module.signer.*.node.uri, var.external_signer_node_urls)
+  near_rpc           = local.workspace.near_rpc
+  near_root_account  = local.workspace.near_root_account
+  account_creator_id = var.account_creator_id
+  fast_auth_partners = var.fast_auth_partners
+  account_lookup_url = local.workspace.account_lookup_url
 
   account_creator_sk = var.account_creator_sk
 
