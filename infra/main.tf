@@ -22,14 +22,14 @@ locals {
 
   env = {
     defaults = {
-      near_rpc           = "https://rpc.testnet.near.org"
-      near_root_account  = "testnet"
+      near_rpc          = "https://rpc.testnet.near.org"
+      near_root_account = "testnet"
     }
     testnet = {
     }
     mainnet = {
-      near_rpc           = "https://rpc.mainnet.near.org"
-      near_root_account  = "near"
+      near_rpc          = "https://rpc.mainnet.near.org"
+      near_root_account = "near"
     }
   }
 
