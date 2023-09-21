@@ -24,18 +24,13 @@ locals {
     defaults = {
       near_rpc           = "https://rpc.testnet.near.org"
       near_root_account  = "testnet"
-      relayer_api_key    = null
-      relayer_url        = "http://34.70.226.83:3030"
       account_lookup_url = "https://testnet-api.kitwallet.app"
     }
     testnet = {
     }
     mainnet = {
-      near_rpc          = "https://rpc.mainnet.near.org"
-      near_root_account = "near"
-      // TODO: move relayer API key to secrets
-      relayer_api_key    = "dfadcb16-2293-4649-896b-4bc4224adea0"
-      relayer_url        = "http://near-relayer-mainnet.api.pagoda.co"
+      near_rpc           = "https://rpc.mainnet.near.org"
+      near_root_account  = "near"
       account_lookup_url = "https://api.kitwallet.app"
     }
   }
