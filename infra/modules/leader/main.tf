@@ -102,8 +102,7 @@ resource "google_cloud_run_v2_service" "leader" {
     google_secret_manager_secret_version.account_creator_sk_data,
     google_secret_manager_secret_version.fast_auth_partners_data,
     google_secret_manager_secret_iam_member.account_creator_secret_access,
-    google_secret_manager_secret_iam_member.fast_auth_partners_secret_access,
-    google_secret_manager_secret_iam_member.account_creator_secret_access
+    google_secret_manager_secret_iam_member.fast_auth_partners_secret_access
   ]
 }
 
