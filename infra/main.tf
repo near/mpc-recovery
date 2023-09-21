@@ -22,14 +22,21 @@ locals {
 
   env = {
     defaults = {
-      near_rpc          = "https://rpc.testnet.near.org"
-      near_root_account = "testnet"
+      near_rpc           = "https://rpc.testnet.near.org"
+      near_root_account  = "testnet"
+      relayer_api_key    = null
+      relayer_url        = "http://34.70.226.83:3030"
+      account_lookup_url = "https://testnet-api.kitwallet.app"
     }
     testnet = {
     }
     mainnet = {
       near_rpc          = "https://rpc.mainnet.near.org"
       near_root_account = "near"
+      // TODO: move relayer API key to secrets
+      relayer_api_key    = "dfadcb16-2293-4649-896b-4bc4224adea0"
+      relayer_url        = "http://near-relayer-mainnet.api.pagoda.co"
+      account_lookup_url = "https://api.kitwallet.app"
     }
   }
 
@@ -81,6 +88,15 @@ resource "google_artifact_registry_repository" "mpc_recovery" {
   format        = "DOCKER"
 }
 
+resource "google_project_iam_binding" "service-account-datastore-user" {
+  project = var.project
+  role    = "roles/datastore.user"
+
+  members = [
+    "serviceAccount:${google_service_account.service_account.email}",
+  ]
+}
+
 resource "docker_registry_image" "mpc_recovery" {
   name          = docker_image.mpc_recovery.name
   keep_remotely = true
@@ -123,11 +139,15 @@ module "leader" {
   service_account_email = google_service_account.service_account.email
   docker_image          = docker_image.mpc_recovery.name
 
-  signer_node_urls   = concat(module.signer.*.node.uri, var.external_signer_node_urls)
-  near_rpc           = local.workspace.near_rpc
-  near_root_account  = local.workspace.near_root_account
-  account_creator_id = var.account_creator_id
-  fast_auth_partners = var.fast_auth_partners
+  signer_node_urls     = concat(module.signer.*.node.uri, var.external_signer_node_urls)
+  near_rpc             = local.workspace.near_rpc
+  near_root_account    = local.workspace.near_root_account
+  account_creator_id   = var.account_creator_id
+  fast_auth_partners   = var.fast_auth_partners
+  relayer_api_key      = local.workspace.relayer_api_key
+  relayer_url          = local.workspace.relayer_url
+  account_lookup_url   = local.workspace.account_lookup_url
+  firebase_audience_id = var.firebase_audience_id
 
   account_creator_sk = var.account_creator_sk
 

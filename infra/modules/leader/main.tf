@@ -63,13 +63,32 @@ resource "google_cloud_run_v2_service" "leader" {
         name  = "MPC_RECOVERY_NEAR_RPC"
         value = var.near_rpc
       }
+      dynamic "env" {
+        for_each = var.relayer_api_key == null ? [] : [1]
+        content {
+          name  = "MPC_RECOVERY_RELAYER_API_KEY"
+          value = var.relayer_api_key
+        }
+      }
+      env {
+        name  = "MPC_RECOVERY_RELAYER_URL"
+        value = var.relayer_url
+      }
       env {
         name  = "MPC_RECOVERY_NEAR_ROOT_ACCOUNT"
         value = var.near_root_account
       }
       env {
+        name  = "MPC_RECOVERY_ACCOUNT_LOOKUP_URL"
+        value = var.account_lookup_url
+      }
+      env {
         name  = "MPC_RECOVERY_ACCOUNT_CREATOR_ID"
         value = var.account_creator_id
+      }
+      env {
+        name  = "PAGODA_FIREBASE_AUDIENCE_ID"
+        value = var.firebase_audience_id
       }
       env {
         name  = "MPC_RECOVERY_GCP_PROJECT_ID"
@@ -102,7 +121,8 @@ resource "google_cloud_run_v2_service" "leader" {
     google_secret_manager_secret_version.account_creator_sk_data,
     google_secret_manager_secret_version.fast_auth_partners_data,
     google_secret_manager_secret_iam_member.account_creator_secret_access,
-    google_secret_manager_secret_iam_member.fast_auth_partners_secret_access
+    google_secret_manager_secret_iam_member.fast_auth_partners_secret_access,
+    google_secret_manager_secret_iam_member.account_creator_secret_access
   ]
 }
 

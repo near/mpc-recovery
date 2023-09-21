@@ -24,6 +24,12 @@ variable "signer_node_urls" {
 variable "near_rpc" {
 }
 
+variable "relayer_api_key" {
+}
+
+variable "relayer_url" {
+}
+
 variable "near_root_account" {
 }
 
@@ -42,6 +48,8 @@ variable "fast_auth_partners" {
     })
   }))
   default = []
+}
+variable "account_lookup_url" {
 }
 
 # Secrets
