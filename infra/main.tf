@@ -81,15 +81,6 @@ resource "google_artifact_registry_repository" "mpc_recovery" {
   format        = "DOCKER"
 }
 
-resource "google_project_iam_binding" "service-account-datastore-user" {
-  project = var.project
-  role    = "roles/datastore.user"
-
-  members = [
-    "serviceAccount:${google_service_account.service_account.email}",
-  ]
-}
-
 resource "docker_registry_image" "mpc_recovery" {
   name          = docker_image.mpc_recovery.name
   keep_remotely = true
