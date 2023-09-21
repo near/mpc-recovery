@@ -14,11 +14,6 @@ variable "zone" {
   default = "us-east1-c"
 }
 
-# Application variables
-variable "firebase_audience_id" {
-  default = "pagoda-oboarding-dev"
-}
-
 variable "docker_image" {
 }
 
