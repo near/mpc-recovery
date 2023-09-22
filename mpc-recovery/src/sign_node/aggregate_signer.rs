@@ -20,8 +20,8 @@ use crate::error::AggregateSigningError;
 use crate::transaction::{to_dalek_public_key, to_dalek_signature};
 
 pub struct SigningState {
-    committed: HashMap<AggrCommitment, Committed>,
-    revealed: HashMap<Reveal, Revealed>,
+    committed: RwLock<HashMap<AggrCommitment, Committed>>,
+    revealed: RwLock<HashMap<Reveal, Revealed>>,
 }
 
 impl Default for SigningState {
@@ -33,37 +33,41 @@ impl Default for SigningState {
 impl SigningState {
     pub fn new() -> Self {
         SigningState {
-            committed: HashMap::new(),
-            revealed: HashMap::new(),
+            committed: RwLock::new(HashMap::new()),
+            revealed: RwLock::new(HashMap::new()),
         }
     }
 
-    pub fn get_commitment(
-        &mut self,
+    pub async fn get_commitment(
+        &self,
         our_key: &protocols::ExpandedKeyPair,
         node_key: &protocols::ExpandedKeyPair,
         message: Vec<u8>,
     ) -> Result<SignedCommitment, AggregateSigningError> {
         // We use OSRng on it's own instead of thread_random() for commit padding and OsRng
         self.get_commitment_with_rng(our_key, node_key, message, &mut OsRng)
+            .await
     }
 
     /// This is for deterministic testing, don't use it in prod
     /// The whole signing process is deterministic if a deterministic rng is used
-    pub(crate) fn get_commitment_with_rng(
-        &mut self,
+    pub(crate) async fn get_commitment_with_rng(
+        &self,
         our_key: &protocols::ExpandedKeyPair,
         node_key: &protocols::ExpandedKeyPair,
         message: Vec<u8>,
         rng: &mut impl Rng,
     ) -> Result<SignedCommitment, AggregateSigningError> {
         let (commitment, state) = Committed::commit(our_key, node_key, message, rng)?;
-        self.committed.insert(commitment.commitment.clone(), state);
+        self.committed
+            .write()
+            .await
+            .insert(commitment.commitment.clone(), state);
         Ok(commitment)
     }
 
     pub async fn get_reveal(
-        &mut self,
+        &self,
         node_info: NodeInfo,
         recieved_commitments: Vec<SignedCommitment>,
     ) -> Result<Reveal, AggregateSigningError> {
@@ -76,18 +80,23 @@ impl SigningState {
             )
         })?;
         // Don't readd this on failure, this commitment is now burnt
-        let state = self.committed.remove(&our_c.commitment).ok_or_else(|| {
-            AggregateSigningError::CommitmentNotFound(format!("{:?}", our_c.commitment))
-        })?;
+        let state = self
+            .committed
+            .write()
+            .await
+            .remove(&our_c.commitment)
+            .ok_or_else(|| {
+                AggregateSigningError::CommitmentNotFound(format!("{:?}", our_c.commitment))
+            })?;
 
         let (reveal, state) = state.reveal(&node_info, recieved_commitments).await?;
         let reveal = Reveal(reveal);
-        self.revealed.insert(reveal.clone(), state);
+        self.revealed.write().await.insert(reveal.clone(), state);
         Ok(reveal)
     }
 
-    pub fn get_signature_share(
-        &mut self,
+    pub async fn get_signature_share(
+        &self,
         node_info: NodeInfo,
         signature_parts: Vec<Reveal>,
     ) -> Result<protocols::Signature, AggregateSigningError> {
@@ -99,6 +108,8 @@ impl SigningState {
         // Don't readd this on failure, this commitment is now burnt
         let state = self
             .revealed
+            .write()
+            .await
             .remove(our_r)
             .ok_or_else(|| AggregateSigningError::RevealNotFound(format!("{:?}", our_r)))?;
 
@@ -415,16 +426,16 @@ mod tests {
         let ni = |n| NodeInfo::new(n, Some(nodes_public_keys.clone()));
 
         // Set up nodes with that config
-        let mut s1 = SigningState::new();
-        let mut s2 = SigningState::new();
-        let mut s3 = SigningState::new();
+        let s1 = SigningState::new();
+        let s2 = SigningState::new();
+        let s3 = SigningState::new();
 
         let message = b"message in a bottle".to_vec();
 
         let mut commitments = vec![
-            s1.get_commitment(&k1, &n1, message.clone()).unwrap(),
-            s2.get_commitment(&k2, &n2, message.clone()).unwrap(),
-            s3.get_commitment(&k3, &n3, message.clone()).unwrap(),
+            s1.get_commitment(&k1, &n1, message.clone()).await.unwrap(),
+            s2.get_commitment(&k2, &n2, message.clone()).await.unwrap(),
+            s3.get_commitment(&k3, &n3, message.clone()).await.unwrap(),
         ];
         // Insert in the rogue key to be detected later.
         commitments.push(create_rogue_commit(&message, &commitments));
@@ -436,9 +447,9 @@ mod tests {
         ];
 
         let sig_shares = vec![
-            s1.get_signature_share(ni(0), reveals.clone()).unwrap(),
-            s2.get_signature_share(ni(1), reveals.clone()).unwrap(),
-            s3.get_signature_share(ni(2), reveals).unwrap(),
+            s1.get_signature_share(ni(0), reveals.clone()).await.unwrap(),
+            s2.get_signature_share(ni(1), reveals.clone()).await.unwrap(),
+            s3.get_signature_share(ni(2), reveals).await.unwrap(),
         ];
 
         let signing_keys: Vec<_> = commitments
@@ -472,16 +483,16 @@ mod tests {
         let ni = |n| NodeInfo::new(n, Some(nodes_public_keys.clone()));
 
         // Set up nodes with that config
-        let mut s1 = SigningState::new();
-        let mut s2 = SigningState::new();
-        let mut s3 = SigningState::new();
+        let s1 = SigningState::new();
+        let s2 = SigningState::new();
+        let s3 = SigningState::new();
 
         let message = b"message in a bottle".to_vec();
 
         let commitments = vec![
-            s1.get_commitment(&k1, &n1, message.clone()).unwrap(),
-            s2.get_commitment(&k2, &n2, message.clone()).unwrap(),
-            s3.get_commitment(&k3, &n3, message.clone()).unwrap(),
+            s1.get_commitment(&k1, &n1, message.clone()).await.unwrap(),
+            s2.get_commitment(&k2, &n2, message.clone()).await.unwrap(),
+            s3.get_commitment(&k3, &n3, message.clone()).await.unwrap(),
         ];
 
         let reveals = vec![
@@ -491,9 +502,9 @@ mod tests {
         ];
 
         let sig_shares = vec![
-            s1.get_signature_share(ni(0), reveals.clone()).unwrap(),
-            s2.get_signature_share(ni(1), reveals.clone()).unwrap(),
-            s3.get_signature_share(ni(2), reveals).unwrap(),
+            s1.get_signature_share(ni(0), reveals.clone()).await.unwrap(),
+            s2.get_signature_share(ni(1), reveals.clone()).await.unwrap(),
+            s3.get_signature_share(ni(2), reveals).await.unwrap(),
         ];
 
         let signing_keys: Vec<_> = commitments

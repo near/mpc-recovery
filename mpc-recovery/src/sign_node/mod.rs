@@ -21,7 +21,6 @@ use axum_extra::extract::WithRejection;
 use borsh::BorshSerialize;
 use curv::elliptic::curves::{Ed25519, Point};
 use multi_party_eddsa::protocols::{self, ExpandedKeyPair};
-use tokio::sync::RwLock;
 
 use near_primitives::delegate_action::NonDelegateAction;
 use near_primitives::hash::hash;
@@ -63,7 +62,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         .await
         .unwrap_or_default();
 
-    let signing_state = Arc::new(RwLock::new(SigningState::new()));
+    let signing_state = Arc::new(SigningState::new());
     let state = SignNodeState {
         gcp_service,
         node_key,
@@ -103,7 +102,7 @@ struct SignNodeState {
     gcp_service: GcpService,
     node_key: ExpandedKeyPair,
     cipher: Aes256Gcm,
-    signing_state: Arc<RwLock<SigningState>>,
+    signing_state: Arc<SigningState>,
     node_info: NodeInfo,
     oidc_providers: OidcProviderList,
 }
@@ -203,9 +202,8 @@ async fn process_commit<T: OAuthTokenVerifier>(
             };
             let response = state
                 .signing_state
-                .write()
-                .await
                 .get_commitment(&state.node_key, &state.node_key, payload)
+                .await
                 .map_err(|e| anyhow::anyhow!(e))?;
             tracing::info!("returning signed commitment");
             Ok(response)
@@ -306,13 +304,12 @@ async fn process_commit<T: OAuthTokenVerifier>(
 
             let response = state
                 .signing_state
-                .write()
-                .await
                 .get_commitment(
                     &user_credentials.decrypt_key_pair(&state.cipher)?,
                     &state.node_key,
                     hash,
                 )
+                .await
                 .map_err(|e| anyhow::anyhow!(e))?;
             tracing::info!("returning signed commitment");
             Ok(response)
@@ -346,8 +343,6 @@ async fn reveal(
 
     match state
         .signing_state
-        .write()
-        .await
         .get_reveal(state.node_info, request)
         .await
     {
@@ -373,9 +368,8 @@ async fn signature_share(
 
     match state
         .signing_state
-        .write()
-        .await
         .get_signature_share(state.node_info, request)
+        .await
     {
         Ok(r) => {
             tracing::debug!("Successful signature share");
