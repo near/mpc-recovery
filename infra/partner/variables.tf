@@ -21,10 +21,14 @@ variable "node_id" {
 }
 
 # Secrets
-variable "cipher_key" {
+variable "cipher_key_secret_id" {
   type = string
 }
 
-variable "sk_share" {
+variable "sk_share_secret_id" {
+  type = string
+}
+
+variable "oidc_providers_secret_id" {
   type = string
 }

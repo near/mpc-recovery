@@ -41,10 +41,18 @@ jobs:
           GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
           PR_NUMBER: ${{ env.PR_NUMBER }}
 
+      # Build Docker image.
+      - name: Docker Image
+        id: build
+        run: docker build .. -t near/mpc-recovery
+
       # Applies Terraform configuration to the temporary environment
       - name: Terraform Apply
         id: apply
-        run: terraform apply -auto-approve -input=false -no-color -lock-timeout=1h -var-file terraform-dev.tfvars -var "credentials=$GOOGLE_CREDENTIALS" -var "env=dev-$PR_NUMBER"
+        run: |
+          terraform apply -auto-approve -input=false -no-color -lock-timeout=1h -var-file terraform-dev.tfvars \
+            -var "credentials=$GOOGLE_CREDENTIALS" \
+            -var "env=dev-$PR_NUMBER"
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
           PR_NUMBER: ${{ env.PR_NUMBER }}
