@@ -33,6 +33,9 @@ provider "docker" {
   }
 }
 
+/*
+ * Create brand new service account with basic IAM
+ */
 resource "google_service_account" "service_account" {
   account_id   = "mpc-recovery-${var.env}"
   display_name = "MPC Recovery ${var.env} Account"
@@ -56,8 +59,32 @@ resource "google_project_iam_binding" "service-account-datastore-user" {
   ]
 }
 
+/*
+ * Ensure service account has access to Secret Manager variables
+ */
+resource "google_secret_manager_secret_iam_member" "cipher_key_secret_access" {
+  secret_id = var.cipher_key_secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.service_account.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "secret_share_secret_access" {
+  secret_id = var.sk_share_secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.service_account.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "oidc_providers_secret_access" {
+  secret_id = var.oidc_providers_secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.service_account.email}"
+}
+
+/*
+ * Create Artifact Registry repo, tag existing Docker image and push to the repo
+ */
 resource "google_artifact_registry_repository" "mpc_recovery" {
-  repository_id = "mpc-recovery-signer-${var.env}"
+  repository_id = "mpc-recovery-partner-${var.env}"
   format        = "DOCKER"
 }
 
@@ -71,13 +98,9 @@ resource "docker_tag" "mpc_recovery" {
   target_image = "${var.region}-docker.pkg.dev/${var.project}/${google_artifact_registry_repository.mpc_recovery.name}/mpc-recovery-${var.env}"
 }
 
-# resource "docker_image" "mpc_recovery" {
-#   name = "${var.region}-docker.pkg.dev/${var.project}/${google_artifact_registry_repository.mpc_recovery.name}/mpc-recovery-${var.env}"
-#   build {
-#     context = "${path.cwd}/.."
-#   }
-# }
-
+/*
+ * Create a partner signer node
+ */
 module "signer" {
   source = "../modules/signer"
 
@@ -90,8 +113,14 @@ module "signer" {
 
   node_id = var.node_id
 
-  cipher_key = var.cipher_key
-  sk_share   = var.sk_share
+  cipher_key_secret_id     = var.cipher_key_secret_id
+  sk_share_secret_id       = var.sk_share_secret_id
+  oidc_providers_secret_id = var.oidc_providers_secret_id
 
-  depends_on = [docker_registry_image.mpc_recovery]
+  depends_on = [
+    docker_registry_image.mpc_recovery,
+    google_secret_manager_secret_iam_member.cipher_key_secret_access,
+    google_secret_manager_secret_iam_member.secret_share_secret_access,
+    google_secret_manager_secret_iam_member.oidc_providers_secret_access
+  ]
 }
