@@ -1,15 +1,16 @@
 name: Terraform Dev
 
 on:
-  push:
-    branches:
-      - "develop"
-  pull_request:
+  workflow_run:
+    workflows: ["Docker Image"]
+    types:
+      - completed
 
 jobs:
   terraform_dev:
     name: Checks & Plan
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: read
       issues: write
@@ -53,17 +54,13 @@ jobs:
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
 
-      # Build Docker image.
-      - name: Docker Image
-        id: build
-        run: docker build .. -t near/mpc-recovery
-
       # Generates an execution plan for Terraform
       - name: Terraform Plan
         id: plan
         run: |
           terraform plan -input=false -no-color -lock-timeout=1h -var-file terraform-dev.tfvars \
-            -var "credentials=$GOOGLE_CREDENTIALS"
+            -var "credentials=$GOOGLE_CREDENTIALS" \
+            -var docker_image=us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev:${{ github.sha }}
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
 
@@ -139,6 +136,7 @@ jobs:
         if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
         run: |
           terraform apply -auto-approve -input=false -lock-timeout=1h -var-file terraform-dev.tfvars \
-            -var "credentials=$GOOGLE_CREDENTIALS"
+            -var "credentials=$GOOGLE_CREDENTIALS" \
+            -var docker_image=us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev:${{ github.sha }}
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}

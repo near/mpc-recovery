@@ -8,10 +8,6 @@ terraform {
       source  = "hashicorp/google"
       version = "4.73.0"
     }
-    docker = {
-      source  = "kreuzwerker/docker"
-      version = "3.0.2"
-    }
   }
 }
 
@@ -46,14 +42,6 @@ provider "google" {
   project = var.project
   region  = var.region
   zone    = var.zone
-}
-
-provider "docker" {
-  registry_auth {
-    address  = "${var.region}-docker.pkg.dev"
-    username = "_json_key"
-    password = local.credentials
-  }
 }
 
 /*
@@ -117,24 +105,6 @@ resource "google_secret_manager_secret_iam_member" "fast_auth_partners_secret_ac
 }
 
 /*
- * Create Artifact Registry repo, tag existing Docker image and push to the repo
- */
-resource "google_artifact_registry_repository" "mpc_recovery" {
-  repository_id = "mpc-recovery-${var.env}"
-  format        = "DOCKER"
-}
-
-resource "docker_registry_image" "mpc_recovery" {
-  name          = docker_tag.mpc_recovery.target_image
-  keep_remotely = true
-}
-
-resource "docker_tag" "mpc_recovery" {
-  source_image = var.docker_image
-  target_image = "${var.region}-docker.pkg.dev/${var.project}/${google_artifact_registry_repository.mpc_recovery.name}/mpc-recovery-${var.env}:${data.external.git_checkout.result.sha}"
-}
-
-/*
  * Create multiple signer nodes
  */
 module "signer" {
@@ -146,7 +116,7 @@ module "signer" {
   region                = var.region
   zone                  = var.zone
   service_account_email = google_service_account.service_account.email
-  docker_image          = docker_tag.mpc_recovery.target_image
+  docker_image          = var.docker_image
 
   node_id = count.index
 
@@ -155,7 +125,6 @@ module "signer" {
   sk_share_secret_id       = var.signer_configs[count.index].sk_share_secret_id
 
   depends_on = [
-    docker_registry_image.mpc_recovery,
     google_secret_manager_secret_iam_member.cipher_key_secret_access,
     google_secret_manager_secret_iam_member.secret_share_secret_access,
     google_secret_manager_secret_iam_member.oidc_providers_secret_access
@@ -173,7 +142,7 @@ module "leader" {
   region                = var.region
   zone                  = var.zone
   service_account_email = google_service_account.service_account.email
-  docker_image          = docker_tag.mpc_recovery.target_image
+  docker_image          = var.docker_image
 
   signer_node_urls   = concat(module.signer.*.node.uri, var.external_signer_node_urls)
   near_rpc           = local.workspace.near_rpc
@@ -184,7 +153,6 @@ module "leader" {
   fast_auth_partners_secret_id = var.fast_auth_partners_secret_id
 
   depends_on = [
-    docker_registry_image.mpc_recovery,
     google_secret_manager_secret_iam_member.account_creator_secret_access,
     google_secret_manager_secret_iam_member.fast_auth_partners_secret_access,
     module.signer
