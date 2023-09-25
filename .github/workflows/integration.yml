@@ -50,7 +50,7 @@ jobs:
       - name: Pull MPC Recovery Docker Image
         run: |
           docker pull us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev:${{ github.sha }}
-          docker tag us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev:${{ github.sha }} near/mpc-recovery-dev:latest
+          docker tag us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev:${{ github.sha }} near/mpc-recovery:latest
 
       - name: Install stable toolchain
         uses: actions-rs/toolchain@v1
