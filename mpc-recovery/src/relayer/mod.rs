@@ -22,16 +22,6 @@ pub struct NearRpcAndRelayerClient {
     cached_nonces: CachedAccessKeyNonces,
 }
 
-impl Clone for NearRpcAndRelayerClient {
-    fn clone(&self) -> Self {
-        Self {
-            rpc_client: self.rpc_client.clone(),
-            // all the cached nonces will not get cloned, and instead get invalidated:
-            cached_nonces: Default::default(),
-        }
-    }
-}
-
 impl NearRpcAndRelayerClient {
     pub fn connect(near_rpc: &str) -> Self {
         Self {
