@@ -327,7 +327,7 @@ async fn process_user_credentials<T: OAuthTokenVerifier>(
             &state.reqwest_client,
             &state.sign_nodes,
             &request.oidc_token,
-            request.frp_signature,
+            &request.frp_signature,
             &request.frp_public_key,
         )
         .await?;
@@ -375,7 +375,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             &state.reqwest_client,
             &state.sign_nodes,
             &request.oidc_token,
-            request.user_credentials_frp_signature,
+            &request.user_credentials_frp_signature,
             &request.frp_public_key,
         )
         .await?;
@@ -512,7 +512,7 @@ async fn process_sign<T: OAuthTokenVerifier>(
             &state.reqwest_client,
             &state.sign_nodes,
             &request.oidc_token,
-            request.user_credentials_frp_signature,
+            &request.user_credentials_frp_signature,
             &request.frp_public_key,
         )
         .await?;
@@ -545,7 +545,7 @@ async fn process_sign<T: OAuthTokenVerifier>(
             &state.sign_nodes,
             &request.oidc_token,
             delegate_action.clone(),
-            request.frp_signature,
+            &request.frp_signature,
             &request.frp_public_key,
         )
         .await?;
