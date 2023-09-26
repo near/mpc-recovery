@@ -696,10 +696,7 @@ impl LeaderNodeApi {
         frp_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
-        let (_, block_height, nonce) = self
-            .client
-            .access_key(account_id.clone(), recovery_pk.clone())
-            .await?;
+        let (_, block_height, nonce) = self.client.access_key(&account_id, &recovery_pk).await?;
 
         let add_key_delegate_action = DelegateAction {
             sender_id: account_id.clone(),
@@ -753,10 +750,7 @@ impl LeaderNodeApi {
         frp_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
-        let (_, block_height, nonce) = self
-            .client
-            .access_key(account_id.clone(), recovery_pk.clone())
-            .await?;
+        let (_, block_height, nonce) = self.client.access_key(&account_id, &recovery_pk).await?;
 
         let delete_key_delegate_action = DelegateAction {
             sender_id: account_id.clone(),

@@ -325,7 +325,7 @@ async fn process_user_credentials<T: OAuthTokenVerifier>(
             &state.reqwest_client,
             &state.sign_nodes,
             &request.oidc_token,
-            request.frp_signature,
+            &request.frp_signature,
             &request.frp_public_key,
         )
         .await?;
@@ -363,8 +363,8 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         let (_hash, block_height, nonce) = state
             .client
             .access_key(
-                state.account_creator_id.clone(),
-                state.account_creator_sk.public_key(),
+                &state.account_creator_id,
+                &state.account_creator_sk.public_key(),
             )
             .await
             .map_err(LeaderNodeError::RelayerError)?;
@@ -373,7 +373,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             &state.reqwest_client,
             &state.sign_nodes,
             &request.oidc_token,
-            request.user_credentials_frp_signature,
+            &request.user_credentials_frp_signature,
             &request.frp_public_key,
         )
         .await?;
@@ -510,7 +510,7 @@ async fn process_sign<T: OAuthTokenVerifier>(
             &state.reqwest_client,
             &state.sign_nodes,
             &request.oidc_token,
-            request.user_credentials_frp_signature,
+            &request.user_credentials_frp_signature,
             &request.frp_public_key,
         )
         .await?;

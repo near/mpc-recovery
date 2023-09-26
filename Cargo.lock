@@ -2775,6 +2775,7 @@ dependencies = [
  "lazy_static",
  "multi-party-eddsa",
  "near-crypto 0.17.0",
+ "near-fetch",
  "near-jsonrpc-client",
  "near-jsonrpc-primitives",
  "near-primitives 0.17.0",
@@ -2987,6 +2988,24 @@ dependencies = [
  "serde_json",
  "subtle",
  "thiserror",
+]
+
+[[package]]
+name = "near-fetch"
+version = "0.0.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "524e51f140de8b0646f0a4cdb297622ddd128916f6265d2cdb52866c5acf0715"
+dependencies = [
+ "near-account-id 0.17.0",
+ "near-crypto 0.17.0",
+ "near-jsonrpc-client",
+ "near-jsonrpc-primitives",
+ "near-primitives 0.17.0",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-retry",
 ]
 
 [[package]]
