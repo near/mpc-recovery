@@ -68,7 +68,7 @@ impl SigningState {
 
     pub async fn get_reveal(
         &self,
-        node_info: NodeInfo,
+        node_info: &NodeInfo,
         recieved_commitments: Vec<SignedCommitment>,
     ) -> Result<Reveal, AggregateSigningError> {
         // TODO Factor this out
@@ -89,7 +89,7 @@ impl SigningState {
                 AggregateSigningError::CommitmentNotFound(format!("{:?}", our_c.commitment))
             })?;
 
-        let (reveal, state) = state.reveal(&node_info, recieved_commitments).await?;
+        let (reveal, state) = state.reveal(node_info, recieved_commitments).await?;
         let reveal = Reveal(reveal);
         self.revealed.write().await.insert(reveal.clone(), state);
         Ok(reveal)
@@ -97,7 +97,7 @@ impl SigningState {
 
     pub async fn get_signature_share(
         &self,
-        node_info: NodeInfo,
+        node_info: &NodeInfo,
         signature_parts: Vec<Reveal>,
     ) -> Result<protocols::Signature, AggregateSigningError> {
         let i = node_info.our_index;
@@ -115,7 +115,7 @@ impl SigningState {
 
         let signature_parts = signature_parts.into_iter().map(|s| s.0).collect();
 
-        state.combine(signature_parts, &node_info)
+        state.combine(signature_parts, node_info)
     }
 }
 
@@ -441,19 +441,19 @@ mod tests {
         commitments.push(create_rogue_commit(&message, &commitments));
 
         let reveals = vec![
-            s1.get_reveal(ni(0), commitments.clone()).await.unwrap(),
-            s2.get_reveal(ni(1), commitments.clone()).await.unwrap(),
-            s3.get_reveal(ni(2), commitments.clone()).await.unwrap(),
+            s1.get_reveal(&ni(0), commitments.clone()).await.unwrap(),
+            s2.get_reveal(&ni(1), commitments.clone()).await.unwrap(),
+            s3.get_reveal(&ni(2), commitments.clone()).await.unwrap(),
         ];
 
         let sig_shares = vec![
-            s1.get_signature_share(ni(0), reveals.clone())
+            s1.get_signature_share(&ni(0), reveals.clone())
                 .await
                 .unwrap(),
-            s2.get_signature_share(ni(1), reveals.clone())
+            s2.get_signature_share(&ni(1), reveals.clone())
                 .await
                 .unwrap(),
-            s3.get_signature_share(ni(2), reveals).await.unwrap(),
+            s3.get_signature_share(&ni(2), reveals).await.unwrap(),
         ];
 
         let signing_keys: Vec<_> = commitments
@@ -500,19 +500,19 @@ mod tests {
         ];
 
         let reveals = vec![
-            s1.get_reveal(ni(0), commitments.clone()).await.unwrap(),
-            s2.get_reveal(ni(1), commitments.clone()).await.unwrap(),
-            s3.get_reveal(ni(2), commitments.clone()).await.unwrap(),
+            s1.get_reveal(&ni(0), commitments.clone()).await.unwrap(),
+            s2.get_reveal(&ni(1), commitments.clone()).await.unwrap(),
+            s3.get_reveal(&ni(2), commitments.clone()).await.unwrap(),
         ];
 
         let sig_shares = vec![
-            s1.get_signature_share(ni(0), reveals.clone())
+            s1.get_signature_share(&ni(0), reveals.clone())
                 .await
                 .unwrap(),
-            s2.get_signature_share(ni(1), reveals.clone())
+            s2.get_signature_share(&ni(1), reveals.clone())
                 .await
                 .unwrap(),
-            s3.get_signature_share(ni(2), reveals).await.unwrap(),
+            s3.get_signature_share(&ni(2), reveals).await.unwrap(),
         ];
 
         let signing_keys: Vec<_> = commitments
