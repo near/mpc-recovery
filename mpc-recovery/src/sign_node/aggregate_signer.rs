@@ -447,8 +447,12 @@ mod tests {
         ];
 
         let sig_shares = vec![
-            s1.get_signature_share(ni(0), reveals.clone()).await.unwrap(),
-            s2.get_signature_share(ni(1), reveals.clone()).await.unwrap(),
+            s1.get_signature_share(ni(0), reveals.clone())
+                .await
+                .unwrap(),
+            s2.get_signature_share(ni(1), reveals.clone())
+                .await
+                .unwrap(),
             s3.get_signature_share(ni(2), reveals).await.unwrap(),
         ];
 
@@ -502,8 +506,12 @@ mod tests {
         ];
 
         let sig_shares = vec![
-            s1.get_signature_share(ni(0), reveals.clone()).await.unwrap(),
-            s2.get_signature_share(ni(1), reveals.clone()).await.unwrap(),
+            s1.get_signature_share(ni(0), reveals.clone())
+                .await
+                .unwrap(),
+            s2.get_signature_share(ni(1), reveals.clone())
+                .await
+                .unwrap(),
             s3.get_signature_share(ni(2), reveals).await.unwrap(),
         ];
 

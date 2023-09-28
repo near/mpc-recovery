@@ -267,7 +267,7 @@ impl<'a> Relayer<'a> {
         social_account_sk: &workspaces::types::SecretKey,
     ) -> anyhow::Result<Relayer<'a>> {
         tracing::info!("Running relayer container...");
-        let image = GenericImage::new("ghcr.io/near/pagoda-relayer-rs-fastauth", "latest")
+        let image = GenericImage::new("pagoda-relayer-rs-fastauth", "latest")
             .with_wait_for(WaitFor::message_on_stdout("listening on"))
             .with_exposed_port(Self::CONTAINER_PORT)
             .with_env_var("RUST_LOG", "DEBUG")
@@ -540,7 +540,7 @@ impl<'a> LeaderNode<'a> {
         gcp_project_id: &str,
         near_root_account: &AccountId,
         account_creator_id: &AccountId,
-        account_creator_sk: &workspaces::types::SecretKey,
+        account_creator_sks: &[workspaces::types::SecretKey],
         firebase_audience_id: &str,
     ) -> anyhow::Result<LeaderNode<'a>> {
         tracing::info!("Running leader node container...");
@@ -559,8 +559,6 @@ impl<'a> LeaderNode<'a> {
             near_root_account.to_string(),
             "--account-creator-id".to_string(),
             account_creator_id.to_string(),
-            "--account-creator-sk".to_string(),
-            account_creator_sk.to_string(),
             "--fast-auth-partners".to_string(),
             serde_json::json!([
                 {
@@ -584,6 +582,11 @@ impl<'a> LeaderNode<'a> {
             cmd.push("--sign-nodes".to_string());
             cmd.push(sign_node);
         }
+        for sk in account_creator_sks {
+            cmd.push("--account-creator-multi-sk".to_string());
+            cmd.push(sk.to_string());
+        }
+
         let image: RunnableImage<GenericImage> = (image, cmd).into();
         let image = image.with_network(network);
         let container = docker_client.cli.run(image);
@@ -696,7 +699,7 @@ impl LeaderNodeApi {
         frp_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
-        let (_, block_height, nonce) = self.client.access_key(&account_id, &recovery_pk).await?;
+        let (_, block_height, nonce) = self.client.access_key(account_id, recovery_pk).await?;
 
         let add_key_delegate_action = DelegateAction {
             sender_id: account_id.clone(),
@@ -750,7 +753,7 @@ impl LeaderNodeApi {
         frp_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
-        let (_, block_height, nonce) = self.client.access_key(&account_id, &recovery_pk).await?;
+        let (_, block_height, nonce) = self.client.access_key(account_id, recovery_pk).await?;
 
         let delete_key_delegate_action = DelegateAction {
             sender_id: account_id.clone(),

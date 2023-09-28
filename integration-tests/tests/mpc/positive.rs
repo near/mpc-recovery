@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::mpc::{add_pk_and_check_validity, fetch_recovery_pk, new_random_account};
 use crate::{account, key, with_nodes, MpcCheck};
 
+use futures::stream::FuturesUnordered;
 use hyper::StatusCode;
 use workspaces::types::AccessKeyPermission;
 
@@ -279,6 +280,60 @@ async fn test_rotate_node_keys() -> anyhow::Result<()> {
                 assert_eq!(old_key_pair.public_key, new_key_pair.public_key);
             }
 
+            Ok(())
+        })
+    })
+    .await
+}
+
+#[test(tokio::test(flavor = "multi_thread", worker_threads = 8))]
+async fn test_stress_network() -> anyhow::Result<()> {
+    with_nodes(3, |ctx| {
+        Box::pin(async move {
+            let ctx = std::sync::Arc::new(ctx);
+            let tasks = (0..100)
+                .map(|_| {
+                    let ctx = ctx.clone();
+                    tokio::spawn(async move {
+                        let (account_id, user_secret_key, oidc_token) =
+                            new_random_account(&ctx, None).await?;
+
+                        // Add key
+                        let recovery_pk =
+                            fetch_recovery_pk(&ctx, &user_secret_key, &oidc_token).await?;
+                        let new_user_public_key = add_pk_and_check_validity(
+                            &ctx,
+                            &account_id,
+                            &user_secret_key,
+                            &oidc_token,
+                            &recovery_pk,
+                            None,
+                        )
+                        .await?;
+
+                        // Adding the same key should now fail
+                        add_pk_and_check_validity(
+                            &ctx,
+                            &account_id,
+                            &user_secret_key,
+                            &oidc_token,
+                            &recovery_pk,
+                            Some(new_user_public_key),
+                        )
+                        .await?;
+
+                        anyhow::Result::<()>::Ok(())
+                    })
+                })
+                .collect::<FuturesUnordered<_>>();
+
+            let result = futures::future::join_all(tasks)
+                .await
+                .into_iter()
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .collect::<Result<Vec<_>, _>>()?;
+            tracing::debug!("{:#?}", result);
             Ok(())
         })
     })

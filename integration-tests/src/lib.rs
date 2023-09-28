@@ -4,7 +4,8 @@ use near_crypto::KeyFile;
 use near_units::parse_near;
 use workspaces::{
     network::{Sandbox, ValidatorKey},
-    Account, Worker,
+    types::SecretKey,
+    AccessKey, Account, Worker,
 };
 
 pub mod containers;
@@ -57,6 +58,7 @@ pub struct RelayerCtx<'a> {
     pub relayer: containers::Relayer<'a>,
     pub worker: Worker<Sandbox>,
     pub creator_account: Account,
+    pub creator_account_keys: Vec<SecretKey>,
 }
 
 pub async fn initialize_relayer<'a>(
@@ -96,6 +98,25 @@ pub async fn initialize_relayer<'a>(
         social_account.id()
     );
 
+    // Generate an additional 5 secret keys to rotate on account creation:
+    let mut creator_account_keys = vec![creator_account.secret_key().clone()];
+    for _ in 0..5 {
+        let sk = SecretKey::from_seed(
+            workspaces::types::KeyType::ED25519,
+            &rand::Rng::sample_iter(rand::thread_rng(), &rand::distributions::Alphanumeric)
+                .take(10)
+                .map(char::from)
+                .collect::<String>(),
+        );
+        creator_account
+            .batch(creator_account.id())
+            .add_key(sk.public_key(), AccessKey::full_access())
+            .transact()
+            .await?
+            .into_result()?;
+        creator_account_keys.push(sk);
+    }
+
     let redis = containers::Redis::run(docker_client, network).await?;
 
     let relayer = containers::Relayer::run(
@@ -118,5 +139,6 @@ pub async fn initialize_relayer<'a>(
         relayer,
         worker,
         creator_account,
+        creator_account_keys,
     })
 }

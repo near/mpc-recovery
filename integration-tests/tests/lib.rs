@@ -87,7 +87,7 @@ where
         GCP_PROJECT_ID,
         near_root_account.id(),
         relayer_ctx.creator_account.id(),
-        relayer_ctx.creator_account.secret_key(),
+        &relayer_ctx.creator_account_keys,
         FIREBASE_AUDIENCE_ID,
     )
     .await?;

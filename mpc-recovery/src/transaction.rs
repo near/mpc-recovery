@@ -9,7 +9,8 @@ use futures::{future, FutureExt};
 use hyper::StatusCode;
 use multi_party_eddsa::protocols::aggsig::KeyAgg;
 use multi_party_eddsa::protocols::{self, aggsig};
-use near_crypto::{InMemorySigner, PublicKey, SecretKey};
+use near_crypto::PublicKey;
+use near_fetch::signer::KeyRotatingSigner;
 use near_primitives::delegate_action::{DelegateAction, NonDelegateAction, SignedDelegateAction};
 use near_primitives::signable_message::{SignableMessage, SignableMessageType};
 use near_primitives::transaction::{Action, FunctionCallAction};
@@ -83,13 +84,11 @@ pub fn get_create_account_delegate_action(
 
 pub fn get_local_signed_delegated_action(
     delegate_action: DelegateAction,
-    signer_id: AccountId,
-    signer_sk: SecretKey,
+    signer: &KeyRotatingSigner,
 ) -> SignedDelegateAction {
-    let signer = InMemorySigner::from_secret_key(signer_id, signer_sk);
     let signable_message =
         SignableMessage::new(&delegate_action, SignableMessageType::DelegateAction);
-    let signature = signable_message.sign(&signer);
+    let signature = signable_message.sign(signer);
 
     SignedDelegateAction {
         delegate_action,

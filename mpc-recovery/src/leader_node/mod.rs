@@ -29,6 +29,7 @@ use axum_extra::extract::WithRejection;
 use borsh::BorshDeserialize;
 use curv::elliptic::curves::{Ed25519, Point};
 use near_crypto::SecretKey;
+use near_fetch::signer::KeyRotatingSigner;
 use near_primitives::delegate_action::{DelegateAction, NonDelegateAction};
 use near_primitives::transaction::{Action, DeleteKeyAction};
 use near_primitives::types::AccountId;
@@ -46,6 +47,7 @@ pub struct Config {
     pub account_creator_id: AccountId,
     // TODO: temporary solution
     pub account_creator_sk: SecretKey,
+    pub account_creator_signer: KeyRotatingSigner,
     pub partners: PartnerList,
 }
 
@@ -58,6 +60,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         near_root_account,
         account_creator_id,
         account_creator_sk,
+        account_creator_signer,
         partners,
     } = config;
     let _span = tracing::debug_span!("run", env, port);
@@ -95,6 +98,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         near_root_account: near_root_account.parse().unwrap(),
         account_creator_id,
         account_creator_sk,
+        account_creator_signer,
         partners,
     };
 
@@ -216,6 +220,7 @@ struct LeaderState {
     account_creator_id: AccountId,
     // TODO: temporary solution
     account_creator_sk: SecretKey,
+    account_creator_signer: KeyRotatingSigner,
     partners: PartnerList,
 }
 
@@ -364,7 +369,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             .client
             .access_key(
                 &state.account_creator_id,
-                &state.account_creator_sk.public_key(),
+                state.account_creator_signer.public_key(),
             )
             .await
             .map_err(LeaderNodeError::RelayerError)?;
@@ -398,8 +403,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         // We create accounts using the local key
         let signed_delegate_action = get_local_signed_delegated_action(
             delegate_action,
-            state.account_creator_id.clone(),
-            state.account_creator_sk.clone(),
+            &state.account_creator_signer,
         );
 
         // Send delegate action to relayer
