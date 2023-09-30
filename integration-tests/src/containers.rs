@@ -260,7 +260,7 @@ impl<'a> Relayer<'a> {
         near_rpc: &str,
         redis_hostname: &str,
         relayer_account_id: &AccountId,
-        relayer_account_sk: &workspaces::types::SecretKey,
+        relayer_account_sks: &[workspaces::types::SecretKey],
         creator_account_id: &AccountId,
         social_db_id: &AccountId,
         social_account_id: &AccountId,
@@ -277,9 +277,14 @@ impl<'a> Relayer<'a> {
             .with_env_var("RELAYER_ACCOUNT_ID", relayer_account_id.to_string())
             .with_env_var("REDIS_HOST", redis_hostname)
             .with_env_var("OVERRIDE_RPC_CONF", "true")
-            .with_env_var("PUBLIC_KEY", relayer_account_sk.public_key().to_string())
-            .with_env_var("PRIVATE_KEY", relayer_account_sk.to_string())
-            .with_env_var("KEYS_FILENAMES", format!("{relayer_account_id}.json"))
+            .with_env_var(
+                "RELAYER_SECRET_KEYS",
+                serde_json::json!(relayer_account_sks
+                    .iter()
+                    .map(|sk| serde_json::json!(sk))
+                    .collect::<serde_json::Value>())
+                .to_string(),
+            )
             .with_env_var("WHITELISTED_CONTRACT", creator_account_id.to_string())
             .with_env_var("WHITELISTED_RECEIVER_IDS", creator_account_id.to_string())
             .with_env_var("CUSTOM_SOCIAL_DB_ID", social_db_id.to_string())

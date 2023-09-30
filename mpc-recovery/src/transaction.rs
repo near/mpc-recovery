@@ -2,6 +2,7 @@ use crate::error::{AggregateSigningError, LeaderNodeError};
 use crate::msg::{SignNodeRequest, SignShareNodeRequest};
 use crate::sign_node::aggregate_signer::{Reveal, SignedCommitment};
 use crate::sign_node::oidc::OidcToken;
+
 use anyhow::Context;
 use curv::elliptic::curves::{Ed25519, Point};
 use ed25519_dalek::Signature;
@@ -9,15 +10,15 @@ use futures::{future, FutureExt};
 use hyper::StatusCode;
 use multi_party_eddsa::protocols::aggsig::KeyAgg;
 use multi_party_eddsa::protocols::{self, aggsig};
-use near_crypto::PublicKey;
-use near_fetch::signer::KeyRotatingSigner;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+
+use near_crypto::{InMemorySigner, PublicKey};
 use near_primitives::delegate_action::{DelegateAction, NonDelegateAction, SignedDelegateAction};
 use near_primitives::signable_message::{SignableMessage, SignableMessageType};
 use near_primitives::transaction::{Action, FunctionCallAction};
 use near_primitives::types::{AccountId, Nonce};
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CreateAccountOptions {
@@ -82,9 +83,10 @@ pub fn get_create_account_delegate_action(
     Ok(delegate_action)
 }
 
+// TODO: reduce this as it seems wasteful as separate functions
 pub fn get_local_signed_delegated_action(
     delegate_action: DelegateAction,
-    signer: &KeyRotatingSigner,
+    signer: &InMemorySigner,
 ) -> SignedDelegateAction {
     let signable_message =
         SignableMessage::new(&delegate_action, SignableMessageType::DelegateAction);

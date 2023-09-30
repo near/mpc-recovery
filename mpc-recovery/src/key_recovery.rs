@@ -17,7 +17,7 @@ pub async fn get_user_recovery_pk(
 ) -> Result<PublicKey, LeaderNodeError> {
     let request = PublicKeyNodeRequest {
         oidc_token: oidc_token.clone(),
-        frp_signature: frp_signature.clone(),
+        frp_signature: *frp_signature,
         frp_public_key: frp_public_key.clone(),
     };
     let res = call_all_nodes(client, sign_nodes, "public_key", request).await?;

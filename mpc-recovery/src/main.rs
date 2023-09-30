@@ -47,9 +47,6 @@ enum Cli {
         /// Account creator ID
         #[arg(long, env("MPC_RECOVERY_ACCOUNT_CREATOR_ID"))]
         account_creator_id: AccountId,
-        /// TEMPORARY - Account creator ed25519 secret key
-        #[arg(long, env("MPC_RECOVERY_ACCOUNT_CREATOR_SK"))]
-        account_creator_sk: Option<String>,
         /// TEMPORARY - Account creator ed25519 secret keys
         #[arg(
             long,
@@ -165,37 +162,24 @@ async fn load_account_creator(
     gcp_service: &GcpService,
     env: &str,
     account_creator_id: &AccountId,
-    account_creator_sk_arg: Option<String>,
     account_creator_multi_sk: Option<Vec<String>>,
-) -> anyhow::Result<(SecretKey, KeyRotatingSigner)> {
-    let (sk, sks) = match (account_creator_sk_arg, account_creator_multi_sk) {
-        (Some(account_creator_sk), None) => {
-            let sk: SecretKey = account_creator_sk.parse()?;
-            (sk.clone(), vec![sk])
-        }
-        (None, Some(multi_sk)) => {
-            let sks = multi_sk
-                .into_iter()
-                .map(|sk| sk.parse())
-                .collect::<Result<Vec<SecretKey>, _>>()?;
-            (sks[0].clone(), sks)
-        }
-        (None, None) => {
-            let name = format!("mpc-recovery-account-creator-sk-{env}/versions/latest");
-            let sk: SecretKey = std::str::from_utf8(&gcp_service.load_secret(name).await?)?.to_string().parse()?;
-
-            (sk.clone(), vec![sk])
-        },
-        _ => anyhow::bail!("cannot supply both account creator cres: either account_creator_sk or account_creator_multi_sk must be supplied, but not both"),
+) -> anyhow::Result<KeyRotatingSigner> {
+    let sks = if let Some(multi_sk) = account_creator_multi_sk {
+        multi_sk
+            .into_iter()
+            .map(|sk| sk.parse())
+            .collect::<Result<Vec<SecretKey>, _>>()?
+    } else {
+        let name = format!("mpc-recovery-account-creator-sk-{env}/versions/latest");
+        let sk: SecretKey = std::str::from_utf8(&gcp_service.load_secret(name).await?)?
+            .to_string()
+            .parse()?;
+        vec![sk]
     };
 
-    Ok((
-        sk,
-        KeyRotatingSigner::from_signers(
-            sks.into_iter()
-                .map(|sk| InMemorySigner::from_secret_key(account_creator_id.clone(), sk)),
-        ),
-    ))
+    Ok(KeyRotatingSigner::from_signers(sks.into_iter().map(|sk| {
+        InMemorySigner::from_secret_key(account_creator_id.clone(), sk)
+    })))
 }
 
 async fn load_entries<T>(
@@ -261,7 +245,6 @@ async fn main() -> anyhow::Result<()> {
             near_rpc,
             near_root_account,
             account_creator_id,
-            account_creator_sk,
             account_creator_multi_sk,
             fast_auth_partners: partners,
             fast_auth_partners_filepath: partners_filepath,
@@ -271,11 +254,10 @@ async fn main() -> anyhow::Result<()> {
         } => {
             let gcp_service =
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
-            let (account_creator_sk, account_creator_signer) = load_account_creator(
+            let account_creator_signer = load_account_creator(
                 &gcp_service,
                 &env,
                 &account_creator_id,
-                account_creator_sk,
                 account_creator_multi_sk,
             )
             .await?;
@@ -292,7 +274,6 @@ async fn main() -> anyhow::Result<()> {
                 near_root_account,
                 // TODO: Create such an account for testnet and mainnet in a secure way
                 account_creator_id,
-                account_creator_sk,
                 account_creator_signer,
                 partners,
             };

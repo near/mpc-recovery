@@ -15,6 +15,7 @@ use crate::transaction::{
 };
 use crate::utils::{check_digest_signature, user_credentials_request_digest};
 use crate::{metrics, nar};
+
 use anyhow::Context;
 use axum::extract::MatchedPath;
 use axum::middleware::{self, Next};
@@ -28,13 +29,14 @@ use axum::{
 use axum_extra::extract::WithRejection;
 use borsh::BorshDeserialize;
 use curv::elliptic::curves::{Ed25519, Point};
-use near_crypto::SecretKey;
+use prometheus::{Encoder, TextEncoder};
+use rand::{distributions::Alphanumeric, Rng};
+
 use near_fetch::signer::KeyRotatingSigner;
 use near_primitives::delegate_action::{DelegateAction, NonDelegateAction};
 use near_primitives::transaction::{Action, DeleteKeyAction};
 use near_primitives::types::AccountId;
-use prometheus::{Encoder, TextEncoder};
-use rand::{distributions::Alphanumeric, Rng};
+
 use std::net::SocketAddr;
 use std::time::Instant;
 
@@ -46,7 +48,6 @@ pub struct Config {
     pub near_root_account: String,
     pub account_creator_id: AccountId,
     // TODO: temporary solution
-    pub account_creator_sk: SecretKey,
     pub account_creator_signer: KeyRotatingSigner,
     pub partners: PartnerList,
 }
@@ -59,7 +60,6 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         near_rpc,
         near_root_account,
         account_creator_id,
-        account_creator_sk,
         account_creator_signer,
         partners,
     } = config;
@@ -97,7 +97,6 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         reqwest_client: reqwest::Client::new(),
         near_root_account: near_root_account.parse().unwrap(),
         account_creator_id,
-        account_creator_sk,
         account_creator_signer,
         partners,
     };
@@ -219,7 +218,6 @@ struct LeaderState {
     near_root_account: AccountId,
     account_creator_id: AccountId,
     // TODO: temporary solution
-    account_creator_sk: SecretKey,
     account_creator_signer: KeyRotatingSigner,
     partners: PartnerList,
 }
@@ -365,15 +363,14 @@ async fn process_new_account<T: OAuthTokenVerifier>(
 
     nar::retry(|| async {
         // Get nonce and recent block hash
+        let account_creator = state.account_creator_signer.fetch_and_rotate_signer();
         let (_hash, block_height, nonce) = state
             .client
-            .access_key(
-                &state.account_creator_id,
-                state.account_creator_signer.public_key(),
-            )
+            .access_key(&account_creator.account_id, &account_creator.public_key)
             .await
             .map_err(LeaderNodeError::RelayerError)?;
 
+        // TODO: test outside of retry loop
         let mpc_user_recovery_pk = get_user_recovery_pk(
             &state.reqwest_client,
             &state.sign_nodes,
@@ -392,7 +389,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
 
         let delegate_action = get_create_account_delegate_action(
             &state.account_creator_id,
-            &state.account_creator_sk.public_key(),
+            &account_creator.public_key,
             &new_user_account_id,
             new_account_options.clone(),
             &state.near_root_account,
@@ -401,10 +398,8 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         )
         .map_err(LeaderNodeError::Other)?;
         // We create accounts using the local key
-        let signed_delegate_action = get_local_signed_delegated_action(
-            delegate_action,
-            &state.account_creator_signer,
-        );
+        let signed_delegate_action =
+            get_local_signed_delegated_action(delegate_action, account_creator);
 
         // Send delegate action to relayer
         let request = CreateAccountAtomicRequest {
@@ -443,8 +438,8 @@ async fn process_new_account<T: OAuthTokenVerifier>(
                     .client
                     .invalidate_cache_if_acc_creation_failed(
                         &(
-                            state.account_creator_id.clone(),
-                            state.account_creator_sk.public_key(),
+                            account_creator.account_id.clone(),
+                            account_creator.public_key.clone(),
                         ),
                         &err_str,
                     )
