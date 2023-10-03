@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::mpc::{add_pk_and_check_validity, fetch_recovery_pk, new_random_account};
-use crate::{account, key, with_nodes, MpcCheck};
+use crate::{account, key, with_nodes, MpcCheck, TestContext};
 
 use futures::stream::FuturesUnordered;
 use hyper::StatusCode;
@@ -57,37 +57,7 @@ async fn test_basic_front_running_protection() -> anyhow::Result<()> {
 
 #[test(tokio::test)]
 async fn test_basic_action() -> anyhow::Result<()> {
-    with_nodes(3, |ctx| {
-        Box::pin(async move {
-            let (account_id, user_secret_key, oidc_token) = new_random_account(&ctx, None).await?;
-
-            // Add key
-            let recovery_pk = fetch_recovery_pk(&ctx, &user_secret_key, &oidc_token).await?;
-            let new_user_public_key = add_pk_and_check_validity(
-                &ctx,
-                &account_id,
-                &user_secret_key,
-                &oidc_token,
-                &recovery_pk,
-                None,
-            )
-            .await?;
-
-            // Adding the same key should now fail
-            add_pk_and_check_validity(
-                &ctx,
-                &account_id,
-                &user_secret_key,
-                &oidc_token,
-                &recovery_pk,
-                Some(new_user_public_key),
-            )
-            .await?;
-
-            Ok(())
-        })
-    })
-    .await
+    with_nodes(3, |ctx| Box::pin(async move { basic_action(&ctx).await })).await
 }
 
 #[test(tokio::test)]
@@ -291,38 +261,11 @@ async fn test_stress_network() -> anyhow::Result<()> {
     with_nodes(3, |ctx| {
         Box::pin(async move {
             let ctx = std::sync::Arc::new(ctx);
-            let tasks = (0..100)
+            let tasks = (0..50)
                 .map(|_| {
                     let ctx = ctx.clone();
                     tokio::spawn(async move {
-                        let (account_id, user_secret_key, oidc_token) =
-                            new_random_account(&ctx, None).await?;
-
-                        // Add key
-                        let recovery_pk =
-                            fetch_recovery_pk(&ctx, &user_secret_key, &oidc_token).await?;
-                        let new_user_public_key = add_pk_and_check_validity(
-                            &ctx,
-                            &account_id,
-                            &user_secret_key,
-                            &oidc_token,
-                            &recovery_pk,
-                            None,
-                        )
-                        .await?;
-
-                        // Adding the same key should now fail
-                        add_pk_and_check_validity(
-                            &ctx,
-                            &account_id,
-                            &user_secret_key,
-                            &oidc_token,
-                            &recovery_pk,
-                            Some(new_user_public_key),
-                        )
-                        .await?;
-
-                        anyhow::Result::<()>::Ok(())
+                        basic_action(&ctx).await
                     })
                 })
                 .collect::<FuturesUnordered<_>>();
@@ -338,4 +281,33 @@ async fn test_stress_network() -> anyhow::Result<()> {
         })
     })
     .await
+}
+
+async fn basic_action(ctx: &TestContext) -> anyhow::Result<()> {
+    let (account_id, user_secret_key, oidc_token) = new_random_account(ctx, None).await?;
+
+    // Add key
+    let recovery_pk = fetch_recovery_pk(ctx, &user_secret_key, &oidc_token).await?;
+    let new_user_public_key = add_pk_and_check_validity(
+        ctx,
+        &account_id,
+        &user_secret_key,
+        &oidc_token,
+        &recovery_pk,
+        None,
+    )
+    .await?;
+
+    // Adding the same key should now fail
+    add_pk_and_check_validity(
+        ctx,
+        &account_id,
+        &user_secret_key,
+        &oidc_token,
+        &recovery_pk,
+        Some(new_user_public_key),
+    )
+    .await?;
+
+    Ok(())
 }

@@ -38,7 +38,7 @@ tokio = { version = "1.28", features = ["full"] }
 tokio-retry = "0.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-near-fetch = "0.0.10"
+near-fetch = "0.0.12"
 near-jsonrpc-client = "0.6"
 near-jsonrpc-primitives = "0.17"
 near-primitives = "0.17"

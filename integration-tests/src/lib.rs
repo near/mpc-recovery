@@ -89,10 +89,10 @@ pub async fn initialize_relayer<'a>(
     tracing::info!("Initializing relayer accounts...");
     let relayer_account =
         sandbox::create_account(&worker, "relayer", parse_near!("1000 N")).await?;
-    let relayer_account_keys = sandbox::gen_rotating_keys(&relayer_account, 300).await?;
+    let relayer_account_keys = sandbox::gen_rotating_keys(&relayer_account, 5).await?;
 
     let creator_account = sandbox::create_account(&worker, "creator", parse_near!("200 N")).await?;
-    let creator_account_keys = sandbox::gen_rotating_keys(&creator_account, 300).await?;
+    let creator_account_keys = sandbox::gen_rotating_keys(&creator_account, 5).await?;
 
     let social_account = sandbox::create_account(&worker, "social", parse_near!("1000 N")).await?;
     tracing::info!(
