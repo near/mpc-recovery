@@ -12,6 +12,7 @@ use mpc_recovery::{
     GenerateResult,
 };
 use mpc_recovery_integration_tests::containers;
+use near_primitives::utils::generate_random_string;
 use workspaces::{network::Sandbox, Worker};
 
 const NETWORK: &str = "mpc_it_network";
@@ -45,8 +46,9 @@ where
     let docker_client = containers::DockerClient::default();
     docker_client.create_network(NETWORK).await?;
 
+    let relayer_id = generate_random_string(7); // used to distinguish relayer tmp files in multiple tests
     let relayer_ctx_future =
-        mpc_recovery_integration_tests::initialize_relayer(&docker_client, NETWORK);
+        mpc_recovery_integration_tests::initialize_relayer(&docker_client, NETWORK, &relayer_id);
     let datastore_future = containers::Datastore::run(&docker_client, NETWORK, GCP_PROJECT_ID);
 
     let (relayer_ctx, datastore) =
@@ -106,6 +108,8 @@ where
         gcp_datastore_url: datastore.local_address,
     })
     .await?;
+
+    relayer_ctx.relayer.clean_tmp_files()?;
 
     Ok(())
 }

@@ -64,6 +64,7 @@ pub struct RelayerCtx<'a> {
 pub async fn initialize_relayer<'a>(
     docker_client: &'a containers::DockerClient,
     network: &str,
+    relayer_id: &str,
 ) -> anyhow::Result<RelayerCtx<'a>> {
     tracing::info!("Initializing relayer...");
     let sandbox = containers::Sandbox::run(docker_client, network).await?;
@@ -107,13 +108,14 @@ pub async fn initialize_relayer<'a>(
         docker_client,
         network,
         &sandbox.address,
-        &redis.address,
+        &redis.full_address,
         relayer_account.id(),
         &relayer_account_keys,
         creator_account.id(),
         social_db.id(),
         social_account.id(),
         social_account.secret_key(),
+        relayer_id,
     )
     .await?;
 

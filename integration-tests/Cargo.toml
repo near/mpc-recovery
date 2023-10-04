@@ -28,6 +28,7 @@ testcontainers = { version = "0.14", features = ["experimental"] }
 tokio = { version = "1.28", features = ["full"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 workspaces = { git = "https://github.com/near/workspaces-rs", branch = "main" }
+toml = "0.8.1"
 
 [dev-dependencies]
 rand = "0.7"

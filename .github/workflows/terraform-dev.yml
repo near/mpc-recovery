@@ -1,15 +1,16 @@
 name: Terraform Dev
 
 on:
-  push:
-    branches:
-      - "develop"
-  pull_request:
+  workflow_run:
+    workflows: ["Docker Image"]
+    types:
+      - completed
 
 jobs:
   terraform_dev:
     name: Checks & Plan
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: read
       issues: write
@@ -59,11 +60,9 @@ jobs:
         run: |
           terraform plan -input=false -no-color -lock-timeout=1h -var-file terraform-dev.tfvars \
             -var "credentials=$GOOGLE_CREDENTIALS" \
-            -var "account_creator_id=mpc-recovery-dev-creator.testnet" \
-            -var "account_creator_sk=$ACCOUNT_CREATOR_SK"
+            -var docker_image=us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev:${{ github.sha }}
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
-          ACCOUNT_CREATOR_SK: ${{ secrets.ACCOUNT_CREATOR_SK_DEV }}
 
       - uses: actions/github-script@v6
         if: github.event_name == 'pull_request'
@@ -138,8 +137,6 @@ jobs:
         run: |
           terraform apply -auto-approve -input=false -lock-timeout=1h -var-file terraform-dev.tfvars \
             -var "credentials=$GOOGLE_CREDENTIALS" \
-            -var "account_creator_id=mpc-recovery-dev-creator.testnet" \
-            -var "account_creator_sk=$ACCOUNT_CREATOR_SK"
+            -var docker_image=us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev:${{ github.sha }}
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
-          ACCOUNT_CREATOR_SK: ${{ secrets.ACCOUNT_CREATOR_SK_DEV }}

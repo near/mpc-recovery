@@ -22,14 +22,6 @@ pub struct NearRpcAndRelayerClient {
     rpc_client: near_fetch::Client,
 }
 
-impl Clone for NearRpcAndRelayerClient {
-    fn clone(&self) -> Self {
-        Self {
-            rpc_client: self.rpc_client.clone(),
-        }
-    }
-}
-
 impl NearRpcAndRelayerClient {
     pub fn connect(near_rpc: &str) -> Self {
         Self {

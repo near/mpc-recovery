@@ -38,6 +38,7 @@ use near_primitives::transaction::{Action, DeleteKeyAction};
 use near_primitives::types::AccountId;
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Instant;
 
 pub struct Config {
@@ -90,7 +91,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
             .unwrap();
     }
 
-    let state = LeaderState {
+    let state = Arc::new(LeaderState {
         env,
         sign_nodes,
         client,
@@ -99,7 +100,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         account_creator_id,
         account_creator_signer,
         partners,
-    };
+    });
 
     // Get keys from all sign nodes, and broadcast them out as a set.
     let pk_set = match gather_sign_node_pk_shares(&state).await {
@@ -209,7 +210,6 @@ async fn metrics() -> (StatusCode, String) {
     }
 }
 
-#[derive(Clone)]
 struct LeaderState {
     env: String,
     sign_nodes: Vec<String>,
@@ -223,7 +223,7 @@ struct LeaderState {
 }
 
 async fn mpc_public_key(
-    Extension(state): Extension<LeaderState>,
+    Extension(state): Extension<Arc<LeaderState>>,
     WithRejection(Json(_), _): WithRejection<Json<MpcPkRequest>, MpcError>,
 ) -> (StatusCode, Json<MpcPkResponse>) {
     // Getting MPC PK from sign nodes
@@ -256,7 +256,7 @@ async fn mpc_public_key(
 
 #[tracing::instrument(level = "info", skip_all, fields(env = state.env))]
 async fn claim_oidc(
-    Extension(state): Extension<LeaderState>,
+    Extension(state): Extension<Arc<LeaderState>>,
     WithRejection(Json(claim_oidc_request), _): WithRejection<Json<ClaimOidcRequest>, MpcError>,
 ) -> (StatusCode, Json<ClaimOidcResponse>) {
     tracing::info!(
@@ -290,7 +290,7 @@ async fn claim_oidc(
 
 #[tracing::instrument(level = "info", skip_all, fields(env = state.env))]
 async fn user_credentials<T: OAuthTokenVerifier>(
-    Extension(state): Extension<LeaderState>,
+    Extension(state): Extension<Arc<LeaderState>>,
     WithRejection(Json(request), _): WithRejection<Json<UserCredentialsRequest>, MpcError>,
 ) -> (StatusCode, Json<UserCredentialsResponse>) {
     tracing::info!(
@@ -316,7 +316,7 @@ async fn user_credentials<T: OAuthTokenVerifier>(
 }
 
 async fn process_user_credentials<T: OAuthTokenVerifier>(
-    state: LeaderState,
+    state: Arc<LeaderState>,
     request: UserCredentialsRequest,
 ) -> Result<UserCredentialsResponse, LeaderNodeError> {
     T::verify_token(&request.oidc_token, &state.partners.oidc_providers())
@@ -341,7 +341,7 @@ async fn process_user_credentials<T: OAuthTokenVerifier>(
 }
 
 async fn process_new_account<T: OAuthTokenVerifier>(
-    state: LeaderState,
+    state: Arc<LeaderState>,
     request: NewAccountRequest,
 ) -> Result<NewAccountResponse, LeaderNodeError> {
     // Create a transaction to create new NEAR account
@@ -453,7 +453,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
 
 #[tracing::instrument(level = "info", skip_all, fields(env = state.env))]
 async fn new_account<T: OAuthTokenVerifier>(
-    Extension(state): Extension<LeaderState>,
+    Extension(state): Extension<Arc<LeaderState>>,
     WithRejection(Json(request), _): WithRejection<Json<NewAccountRequest>, MpcError>,
 ) -> (StatusCode, Json<NewAccountResponse>) {
     tracing::info!(
@@ -476,7 +476,7 @@ async fn new_account<T: OAuthTokenVerifier>(
 }
 
 async fn process_sign<T: OAuthTokenVerifier>(
-    state: LeaderState,
+    state: Arc<LeaderState>,
     request: SignRequest,
 ) -> Result<SignResponse, LeaderNodeError> {
     // Deserialize the included delegate action via borsh
@@ -542,7 +542,7 @@ async fn process_sign<T: OAuthTokenVerifier>(
             &state.sign_nodes,
             &request.oidc_token,
             delegate_action.clone(),
-            request.frp_signature,
+            &request.frp_signature,
             &request.frp_public_key,
         )
         .await?;
@@ -554,7 +554,7 @@ async fn process_sign<T: OAuthTokenVerifier>(
 
 #[tracing::instrument(level = "info", skip_all, fields(env = state.env))]
 async fn sign<T: OAuthTokenVerifier>(
-    Extension(state): Extension<LeaderState>,
+    Extension(state): Extension<Arc<LeaderState>>,
     WithRejection(Json(request), _): WithRejection<Json<SignRequest>, MpcError>,
 ) -> (StatusCode, Json<SignResponse>) {
     tracing::info!(
