@@ -1,7 +1,6 @@
 mod mpc;
 
 use curv::elliptic::curves::{Ed25519, Point};
-use futures::future::BoxFuture;
 use hyper::StatusCode;
 use mpc_recovery::{
     firewall::allowed::DelegateActionRelayer,
@@ -39,9 +38,10 @@ impl TestContext {
     }
 }
 
-async fn with_nodes<F>(nodes: usize, f: F) -> anyhow::Result<()>
+async fn with_nodes<Task, Fut, Val>(nodes: usize, f: Task) -> anyhow::Result<()>
 where
-    F: FnOnce(TestContext) -> BoxFuture<'static, anyhow::Result<()>>,
+    Task: FnOnce(TestContext) -> Fut,
+    Fut: core::future::Future<Output = anyhow::Result<Val>>,
 {
     let docker_client = containers::DockerClient::default();
     docker_client.create_network(NETWORK).await?;
@@ -104,7 +104,7 @@ where
         ),
         pk_set,
         signer_nodes: signer_nodes.iter().map(|n| n.api()).collect(),
-        worker: relayer_ctx.worker,
+        worker: relayer_ctx.worker.clone(),
         gcp_datastore_url: datastore.local_address,
     })
     .await?;
