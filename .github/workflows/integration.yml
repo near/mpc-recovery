@@ -39,7 +39,7 @@ jobs:
 
       - name: Pull Relayer & Sandbox Docker Images
         run: |
-          docker pull ghcr.io/near/pagoda-relayer-rs-fastauth
+          docker pull ghcr.io/near/os-relayer
           docker pull ghcr.io/near/sandbox
 
       - name: Login to GCP Artifact Registry

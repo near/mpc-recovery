@@ -42,7 +42,9 @@ use workspaces::AccountId;
 
 use std::fs;
 
-use crate::util::{self, create_key_file, create_relayer_cofig_file};
+use crate::util::{
+    self, create_key_file, create_key_file_with_filepath, create_relayer_cofig_file,
+};
 
 static NETWORK_MUTEX: Lazy<Mutex<i32>> = Lazy::new(|| Mutex::new(0));
 
@@ -304,18 +306,19 @@ impl<'a> Relayer<'a> {
             .unwrap_or_else(|_| panic!("Failed to create {relayer_configs_path} directory"));
 
         // Create dir for keys
-        let keys_path = format!("{relayer_configs_path}/account_keys");
-        std::fs::create_dir_all(&keys_path).expect("Failed to create account_keys directory");
+        let key_dir = format!("{relayer_configs_path}/account_keys");
+        std::fs::create_dir_all(&key_dir).expect("Failed to create account_keys directory");
         let keys_absolute_path =
-            fs::canonicalize(&keys_path).expect("Failed to get absolute path for keys");
+            fs::canonicalize(&key_dir).expect("Failed to get absolute path for keys");
 
         // Create JSON key files
-        create_key_file(social_account_id, social_account_sk, &keys_path)?;
+        create_key_file(social_account_id, social_account_sk, &key_dir)?;
         let mut relayer_keyfiles = Vec::with_capacity(relayer_account_sks.len());
         for (i, relayer_sk) in relayer_account_sks.iter().enumerate() {
-            let account_id = format!("{i}-{relayer_account_id}").parse().unwrap();
-            create_key_file(&account_id, relayer_sk, &keys_path)?;
-            relayer_keyfiles.push(format!("./account_keys/{}.json", account_id));
+            let filename = format!("{i}-{relayer_account_id}");
+            let keypath = format!("{key_dir}/{filename}.json");
+            create_key_file_with_filepath(relayer_account_id, relayer_sk, &keypath)?;
+            relayer_keyfiles.push(format!("./account_keys/{filename}.json"));
         }
 
         // Create relayer config file
@@ -341,7 +344,7 @@ impl<'a> Relayer<'a> {
             format!("{relayer_configs_path}/{config_file_name}"),
         )?;
 
-        let image = GenericImage::new("ghcr.io/near/os-relayer", "latest")
+        let image = GenericImage::new("os-relayer", "latest")
             .with_wait_for(WaitFor::message_on_stdout("listening on"))
             .with_exposed_port(Self::CONTAINER_PORT)
             .with_volume(
