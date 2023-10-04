@@ -12,7 +12,7 @@ mod negative;
 mod positive;
 
 pub async fn register_account(
-    ctx: &TestContext<'_>,
+    ctx: &TestContext,
     user_id: &AccountId,
     user_sk: &SecretKey,
     user_pk: &PublicKey,
@@ -45,10 +45,10 @@ pub async fn register_account(
 }
 
 pub async fn new_random_account(
-    ctx: &TestContext<'_>,
+    ctx: &TestContext,
     user_lak: Option<LimitedAccessKey>,
 ) -> anyhow::Result<(AccountId, SecretKey, OidcToken)> {
-    let account_id = account::random(ctx.worker)?;
+    let account_id = account::random(&ctx.worker)?;
     let user_secret_key = key::random_sk();
     let user_public_key = user_secret_key.public_key();
     let oidc_token = OidcToken::random();
@@ -66,7 +66,7 @@ pub async fn new_random_account(
 }
 
 pub async fn fetch_recovery_pk(
-    ctx: &TestContext<'_>,
+    ctx: &TestContext,
     user_sk: &SecretKey,
     user_oidc: &OidcToken,
 ) -> anyhow::Result<PublicKey> {
@@ -84,7 +84,7 @@ pub async fn fetch_recovery_pk(
 
 /// Add a new random public key or a supplied public key.
 pub async fn add_pk_and_check_validity(
-    ctx: &TestContext<'_>,
+    ctx: &TestContext,
     user_id: &AccountId,
     user_sk: &SecretKey,
     user_oidc: &OidcToken,

@@ -28,7 +28,7 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
     with_nodes(3, |ctx| {
         Box::pin(async move {
             // Preparing user credentials
-            let account_id = account::random(ctx.worker)?;
+            let account_id = account::random(&ctx.worker)?;
             let user_secret_key =
                 near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519);
             let user_public_key = user_secret_key.public_key();
@@ -197,7 +197,7 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
     with_nodes(3, |ctx| {
         Box::pin(async move {
             // Preparing user credentials
-            let account_id = account::random(ctx.worker)?;
+            let account_id = account::random(&ctx.worker)?;
             let user_secret_key =
                 near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519);
             let user_public_key = user_secret_key.public_key();
@@ -365,7 +365,7 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
 async fn test_invalid_token() -> anyhow::Result<()> {
     with_nodes(1, |ctx| {
         Box::pin(async move {
-            let account_id = account::random(ctx.worker)?;
+            let account_id = account::random(&ctx.worker)?;
             let user_secret_key = key::random_sk();
             let user_public_key = user_secret_key.public_key();
             let oidc_token = OidcToken::random();
@@ -575,7 +575,7 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
             }
 
             // Check that the service is still available
-            let account_id = account::random(ctx.worker)?;
+            let account_id = account::random(&ctx.worker)?;
             let new_acc_response = ctx
                 .leader_node
                 .new_account_with_helper(
@@ -608,7 +608,7 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
 async fn test_account_creation_should_work_on_second_attempt() -> anyhow::Result<()> {
     with_nodes(2, |ctx| {
         Box::pin(async move {
-            let account_id = account::random(ctx.worker)?;
+            let account_id = account::random(&ctx.worker)?;
             let user_secret_key = key::random_sk();
             let user_public_key = user_secret_key.public_key();
             let oidc_token = OidcToken::random();
@@ -645,8 +645,8 @@ async fn test_creation_of_two_account_with_the_same_oidc_should_not_be_possible(
 ) -> anyhow::Result<()> {
     with_nodes(2, |ctx| {
         Box::pin(async move {
-            let account_id = account::random(ctx.worker)?;
-            let account_id_2 = account::random(ctx.worker)?;
+            let account_id = account::random(&ctx.worker)?;
+            let account_id_2 = account::random(&ctx.worker)?;
             let user_secret_key = key::random_sk();
             let user_public_key = user_secret_key.public_key();
             let oidc_token = OidcToken::random();

@@ -20,15 +20,15 @@ const GCP_PROJECT_ID: &str = "mpc-recovery-gcp-project";
 // TODO: figure out how to instantiate and use a local firebase deployment
 pub const FIREBASE_AUDIENCE_ID: &str = "test_audience";
 
-pub struct TestContext<'a> {
-    leader_node: &'a containers::LeaderNodeApi,
-    pk_set: &'a Vec<Point<Ed25519>>,
-    worker: &'a Worker<Sandbox>,
-    signer_nodes: &'a Vec<containers::SignerNodeApi>,
+pub struct TestContext {
+    leader_node: containers::LeaderNodeApi,
+    pk_set: Vec<Point<Ed25519>>,
+    worker: Worker<Sandbox>,
+    signer_nodes: Vec<containers::SignerNodeApi>,
     gcp_datastore_url: String,
 }
 
-impl<'a> TestContext<'a> {
+impl TestContext {
     pub async fn gcp_service(&self) -> anyhow::Result<GcpService> {
         GcpService::new(
             "dev".into(),
@@ -41,7 +41,7 @@ impl<'a> TestContext<'a> {
 
 async fn with_nodes<F>(nodes: usize, f: F) -> anyhow::Result<()>
 where
-    F: for<'a> FnOnce(TestContext<'a>) -> BoxFuture<'a, anyhow::Result<()>>,
+    F: FnOnce(TestContext) -> BoxFuture<'static, anyhow::Result<()>>,
 {
     let docker_client = containers::DockerClient::default();
     docker_client.create_network(NETWORK).await?;
@@ -95,16 +95,16 @@ where
     .await?;
 
     f(TestContext {
-        leader_node: &leader_node.api(
+        leader_node: leader_node.api(
             &relayer_ctx.sandbox.local_address,
             &DelegateActionRelayer {
                 url: relayer_ctx.relayer.local_address.clone(),
                 api_key: None,
             },
         ),
-        pk_set: &pk_set,
-        signer_nodes: &signer_nodes.iter().map(|n| n.api()).collect(),
-        worker: &relayer_ctx.worker,
+        pk_set,
+        signer_nodes: signer_nodes.iter().map(|n| n.api()).collect(),
+        worker: relayer_ctx.worker,
         gcp_datastore_url: datastore.local_address,
     })
     .await?;
@@ -177,7 +177,7 @@ mod check {
     use workspaces::AccountId;
 
     pub async fn access_key_exists(
-        ctx: &TestContext<'_>,
+        ctx: &TestContext,
         account_id: &AccountId,
         public_key: &PublicKey,
     ) -> anyhow::Result<()> {
@@ -196,7 +196,7 @@ mod check {
     }
 
     pub async fn access_key_does_not_exists(
-        ctx: &TestContext<'_>,
+        ctx: &TestContext,
         account_id: &AccountId,
         public_key: &str,
     ) -> anyhow::Result<()> {
