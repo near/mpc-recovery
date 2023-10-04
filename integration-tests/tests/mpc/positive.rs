@@ -264,9 +264,7 @@ async fn test_stress_network() -> anyhow::Result<()> {
             let tasks = (0..50)
                 .map(|_| {
                     let ctx = ctx.clone();
-                    tokio::spawn(async move {
-                        basic_action(&ctx).await
-                    })
+                    tokio::spawn(async move { basic_action(&ctx).await })
                 })
                 .collect::<FuturesUnordered<_>>();
 
