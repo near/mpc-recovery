@@ -344,7 +344,7 @@ impl<'a> Relayer<'a> {
             format!("{relayer_configs_path}/{config_file_name}"),
         )?;
 
-        let image = GenericImage::new("os-relayer", "latest")
+        let image = GenericImage::new("ghcr.io/near/os-relayer", "latest")
             .with_wait_for(WaitFor::message_on_stdout("listening on"))
             .with_exposed_port(Self::CONTAINER_PORT)
             .with_volume(
