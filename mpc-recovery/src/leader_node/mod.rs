@@ -10,8 +10,8 @@ use crate::oauth::OAuthTokenVerifier;
 use crate::relayer::msg::{CreateAccountAtomicRequest, RegisterAccountRequest};
 use crate::relayer::NearRpcAndRelayerClient;
 use crate::transaction::{
-    get_create_account_delegate_action, get_local_signed_delegated_action, get_mpc_signature,
-    sign_payload_with_mpc, to_dalek_combined_public_key,
+    get_mpc_signature, new_create_account_delegate_action, sign_payload_with_mpc,
+    to_dalek_combined_public_key,
 };
 use crate::utils::{check_digest_signature, user_credentials_request_digest};
 use crate::{metrics, nar};
@@ -97,7 +97,6 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         client,
         reqwest_client: reqwest::Client::new(),
         near_root_account: near_root_account.parse().unwrap(),
-        account_creator_id,
         account_creator_signer,
         partners,
     });
@@ -216,7 +215,6 @@ struct LeaderState {
     client: NearRpcAndRelayerClient,
     reqwest_client: reqwest::Client,
     near_root_account: AccountId,
-    account_creator_id: AccountId,
     // TODO: temporary solution
     account_creator_signer: KeyRotatingSigner,
     partners: PartnerList,
@@ -370,7 +368,6 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             .await
             .map_err(LeaderNodeError::RelayerError)?;
 
-        // TODO: test outside of retry loop
         let mpc_user_recovery_pk = get_user_recovery_pk(
             &state.reqwest_client,
             &state.sign_nodes,
@@ -387,9 +384,9 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             None => new_account_options.full_access_keys = Some(vec![mpc_user_recovery_pk.clone()]),
         }
 
-        let delegate_action = get_create_account_delegate_action(
-            &state.account_creator_id,
-            &account_creator.public_key,
+        // We create accounts using the local key
+        let signed_delegate_action = new_create_account_delegate_action(
+            account_creator,
             &new_user_account_id,
             new_account_options.clone(),
             &state.near_root_account,
@@ -397,9 +394,6 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             block_height + 100,
         )
         .map_err(LeaderNodeError::Other)?;
-        // We create accounts using the local key
-        let signed_delegate_action =
-            get_local_signed_delegated_action(delegate_action, account_creator);
 
         // Send delegate action to relayer
         let request = CreateAccountAtomicRequest {

@@ -48,15 +48,14 @@ pub struct LimitedAccessKey {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn get_create_account_delegate_action(
-    signer_id: &AccountId,
-    signer_pk: &PublicKey,
+pub fn new_create_account_delegate_action(
+    signer: &InMemorySigner,
     new_account_id: &AccountId,
     new_account_options: CreateAccountOptions,
     near_root_account: &AccountId,
     nonce: Nonce,
     max_block_height: u64,
-) -> anyhow::Result<DelegateAction> {
+) -> anyhow::Result<SignedDelegateAction> {
     let create_acc_action = Action::FunctionCall(FunctionCallAction {
         method_name: "create_account_advanced".to_string(),
         args: json!({
@@ -72,30 +71,22 @@ pub fn get_create_account_delegate_action(
     let delegate_create_acc_action = NonDelegateAction::try_from(create_acc_action)?;
 
     let delegate_action = DelegateAction {
-        sender_id: signer_id.clone(),
+        sender_id: signer.account_id.clone(),
         receiver_id: near_root_account.clone(),
         actions: vec![delegate_create_acc_action],
         nonce,
         max_block_height,
-        public_key: signer_pk.clone(),
+        public_key: signer.public_key.clone(),
     };
 
-    Ok(delegate_action)
-}
-
-// TODO: reduce this as it seems wasteful as separate functions
-pub fn get_local_signed_delegated_action(
-    delegate_action: DelegateAction,
-    signer: &InMemorySigner,
-) -> SignedDelegateAction {
     let signable_message =
         SignableMessage::new(&delegate_action, SignableMessageType::DelegateAction);
     let signature = signable_message.sign(signer);
 
-    SignedDelegateAction {
+    Ok(SignedDelegateAction {
         delegate_action,
         signature,
-    }
+    })
 }
 
 pub async fn get_mpc_signature(
