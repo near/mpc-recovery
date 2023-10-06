@@ -1,51 +1,34 @@
-pub mod serde_participant {
-    use cait_sith::protocol::Participant;
-    use serde::{Deserialize, Deserializer, Serializer};
+use crate::types::PublicKey;
+use k256::elliptic_curve::sec1::FromEncodedPoint;
+use k256::EncodedPoint;
 
-    pub fn serialize<S>(participant: &Participant, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_u32(u32::from_le_bytes(participant.bytes()))
-    }
+pub trait NearPublicKeyExt {
+    fn into_affine_point(self) -> PublicKey;
+}
 
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Participant, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        Ok(u32::deserialize(deserializer)?.into())
+impl NearPublicKeyExt for near_sdk::PublicKey {
+    fn into_affine_point(self) -> PublicKey {
+        let mut bytes = self.into_bytes();
+        bytes.insert(0, 0x04);
+        let point = EncodedPoint::from_bytes(bytes).unwrap();
+        PublicKey::from_encoded_point(&point).unwrap()
     }
 }
 
-pub mod serde_participants {
-    use cait_sith::protocol::Participant;
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-    use std::collections::HashMap;
-    use url::Url;
-
-    pub fn serialize<S>(
-        participants: &HashMap<Participant, Url>,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let participants: HashMap<u32, Url> = participants
-            .clone()
-            .into_iter()
-            .map(|(p, u)| (u32::from_le_bytes(p.bytes()), u))
-            .collect();
-        Serialize::serialize(&participants, serializer)
+impl NearPublicKeyExt for near_crypto::Secp256K1PublicKey {
+    fn into_affine_point(self) -> PublicKey {
+        let mut bytes = vec![0x04];
+        bytes.extend_from_slice(self.as_ref());
+        let point = EncodedPoint::from_bytes(bytes).unwrap();
+        PublicKey::from_encoded_point(&point).unwrap()
     }
+}
 
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<HashMap<Participant, Url>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let participants: HashMap<u32, Url> = Deserialize::deserialize(deserializer)?;
-        Ok(participants
-            .into_iter()
-            .map(|(p, u)| (p.into(), u))
-            .collect())
+impl NearPublicKeyExt for near_crypto::PublicKey {
+    fn into_affine_point(self) -> PublicKey {
+        match self {
+            near_crypto::PublicKey::SECP256K1(public_key) => public_key.into_affine_point(),
+            near_crypto::PublicKey::ED25519(_) => panic!("unsupported key type"),
+        }
     }
 }

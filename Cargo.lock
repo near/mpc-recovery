@@ -1269,8 +1269,7 @@ dependencies = [
 [[package]]
 name = "cait-sith"
 version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4129fa8cba7c05daa87f52a6752cf7e7508eccd2ee9e9c9e75a327de1b16dfa"
+source = "git+https://github.com/LIT-Protocol/cait-sith.git#ad0e4cf4d5845be03a7997d423799f98b4705978"
 dependencies = [
  "auto_ops",
  "ck-meow",
@@ -3499,6 +3498,7 @@ name = "mpc-recovery-node"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
  "axum-extra",
  "cait-sith",
@@ -3506,11 +3506,13 @@ dependencies = [
  "hex 0.4.3",
  "k256",
  "local-ip-address",
+ "mpc-contract",
  "near-crypto 0.17.0",
  "near-fetch",
  "near-lake-framework",
  "near-lake-primitives",
  "near-primitives 0.17.0",
+ "near-sdk",
  "reqwest",
  "serde",
  "serde_json",

@@ -969,7 +969,7 @@ impl<'a> Node<'a> {
                 node_id.to_string(),
                 "--near-network".to_string(),
                 "testnet".to_string(),
-                "--signer-account".to_string(),
+                "--mpc-contract-id".to_string(),
                 signer_account.to_string(),
                 "--account".to_string(),
                 account.to_string(),

@@ -9,9 +9,12 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = { version = "1", features = ["backtrace"] }
+async-trait = "0.1"
 axum = { version = "0.6.19" }
 axum-extra = "0.7"
-cait-sith = { version = "0.7", features = ["k256"] }
+cait-sith = { git = "https://github.com/LIT-Protocol/cait-sith.git", features = [
+    "k256",
+] }
 clap = { version = "4.2", features = ["derive", "env"] }
 hex = "0.4.3"
 k256 = { version = "0.13.1", features = ["sha256", "ecdsa", "serde"] }
@@ -28,6 +31,9 @@ url = { version = "2.4.0", features = ["serde"] }
 
 near-crypto = "0.17"
 near-fetch = "0.0.12"
-near-primitives = "0.17"
 near-lake-framework = "0.8.0-beta.2"
 near-lake-primitives = "0.8.0-beta.2"
+near-primitives = "0.17"
+near-sdk = "4.1.1"
+
+mpc-contract = { path = "../contract" }

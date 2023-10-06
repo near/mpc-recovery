@@ -1,13 +1,11 @@
+use crate::protocol::MpcMessage;
+use crate::web::JoinRequest;
 use cait_sith::protocol::Participant;
 use near_primitives::types::AccountId;
 use reqwest::{Client, IntoUrl};
 use std::str::Utf8Error;
-use tokio_retry::{
-    strategy::{jitter, ExponentialBackoff},
-    Retry,
-};
-
-use crate::web::{JoinRequest, MsgRequest};
+use tokio_retry::strategy::{jitter, ExponentialBackoff};
+use tokio_retry::Retry;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SendError {
@@ -24,17 +22,15 @@ pub enum SendError {
 pub async fn message<U: IntoUrl>(
     client: &Client,
     url: U,
-    from: Participant,
-    msg: Vec<u8>,
+    message: MpcMessage,
 ) -> Result<(), SendError> {
     let mut url = url.into_url().unwrap();
     url.set_path("msg");
-    let request = MsgRequest { from, msg };
     let action = || async {
         let response = client
             .post(url.clone())
             .header("content-type", "application/json")
-            .json(&request)
+            .json(&message)
             .send()
             .await
             .map_err(|e| SendError::ReqwestClientError(e))?;
@@ -66,7 +62,7 @@ pub async fn join<U: IntoUrl>(
     client: &Client,
     url: U,
     me: Participant,
-    my_account: AccountId,
+    my_account: &AccountId,
     my_address: U,
 ) -> Result<(), SendError> {
     let mut url = url.into_url().unwrap();

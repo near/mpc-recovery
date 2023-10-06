@@ -1,0 +1,126 @@
+mod advance;
+mod contract;
+mod message_handler;
+mod progress;
+mod state;
+
+pub use contract::ProtocolContractState;
+pub use message_handler::MpcMessage;
+pub use state::ProtocolState;
+
+use self::advance::AdvanceCtx;
+use self::progress::ProgressCtx;
+use crate::protocol::advance::Advance;
+use crate::protocol::message_handler::MessageHandler;
+use crate::protocol::progress::Progress;
+use crate::rpc_client::{self};
+use cait_sith::protocol::Participant;
+use near_crypto::InMemorySigner;
+use near_primitives::types::AccountId;
+use reqwest::IntoUrl;
+use std::{sync::Arc, time::Duration};
+use tokio::sync::mpsc::{self, error::TryRecvError};
+use tokio::sync::RwLock;
+use url::Url;
+
+struct Ctx {
+    me: Participant,
+    my_address: Url,
+    mpc_contract_id: AccountId,
+    signer: InMemorySigner,
+    rpc_client: near_fetch::Client,
+    http_client: reqwest::Client,
+}
+
+impl AdvanceCtx for &Ctx {
+    fn me(&self) -> Participant {
+        self.me
+    }
+}
+
+impl ProgressCtx for &Ctx {
+    fn me(&self) -> Participant {
+        self.me
+    }
+
+    fn http_client(&self) -> &reqwest::Client {
+        &self.http_client
+    }
+}
+
+pub struct MpcSignProtocol {
+    ctx: Ctx,
+    receiver: mpsc::Receiver<MpcMessage>,
+    state: Arc<RwLock<ProtocolState>>,
+}
+
+impl MpcSignProtocol {
+    pub fn init<U: IntoUrl>(
+        me: Participant,
+        my_address: U,
+        mpc_contract_id: AccountId,
+        rpc_client: near_fetch::Client,
+        signer: InMemorySigner,
+        receiver: mpsc::Receiver<MpcMessage>,
+    ) -> (Self, Arc<RwLock<ProtocolState>>) {
+        let state = Arc::new(RwLock::new(ProtocolState::Starting));
+        let ctx = Ctx {
+            me,
+            my_address: my_address.into_url().unwrap(),
+            mpc_contract_id,
+            signer,
+            rpc_client,
+            http_client: reqwest::Client::new(),
+        };
+        let protocol = MpcSignProtocol {
+            ctx,
+            receiver,
+            state: state.clone(),
+        };
+        (protocol, state)
+    }
+
+    pub async fn run(mut self) -> anyhow::Result<()> {
+        tracing::info!("running mpc recovery protocol");
+        loop {
+            tracing::debug!("trying to advance mpc recovery protocol");
+            let contract_state = match rpc_client::fetch_mpc_contract_state(
+                &self.ctx.rpc_client,
+                &self.ctx.mpc_contract_id,
+            )
+            .await
+            {
+                Ok(contract_state) => contract_state,
+                Err(e) => {
+                    tracing::error!("could not fetch contract's state: {e}");
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
+            tracing::debug!(?contract_state);
+            let msg_result = self.receiver.try_recv();
+            let mut state_guard = self.state.write().await;
+            let mut state = std::mem::take(&mut *state_guard);
+            match msg_result {
+                Ok(msg) => {
+                    tracing::debug!("received a new message");
+                    state.handle(msg);
+                }
+                Err(TryRecvError::Empty) => {
+                    tracing::debug!("no new messages received");
+                }
+                Err(TryRecvError::Disconnected) => {
+                    tracing::debug!("communication was disconnected, no more messages will be received, spinning down");
+                    break;
+                }
+            }
+            state = state.progress(&self.ctx).await?;
+            state = state.advance(&self.ctx, contract_state)?;
+            *state_guard = state;
+            drop(state_guard);
+            tokio::time::sleep(Duration::from_millis(1000)).await;
+        }
+
+        Ok(())
+    }
+}

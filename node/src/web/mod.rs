@@ -1,32 +1,25 @@
+mod error;
+
 use self::error::MpcSignError;
-use crate::{
-    protocol::{MpcSignMsg, ProtocolState},
-    util::serde_participant,
-};
-use axum::{
-    http::StatusCode,
-    routing::{get, post},
-    Extension, Json, Router,
-};
+use crate::protocol::{MpcMessage, ProtocolState};
+use axum::http::StatusCode;
+use axum::routing::{get, post};
+use axum::{Extension, Json, Router};
 use axum_extra::extract::WithRejection;
 use cait_sith::protocol::Participant;
 use near_crypto::InMemorySigner;
-use near_primitives::{
-    transaction::{Action, FunctionCallAction},
-    types::AccountId,
-};
+use near_primitives::transaction::{Action, FunctionCallAction};
+use near_primitives::types::AccountId;
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::{mpsc::Sender, RwLock};
 use url::Url;
 
-mod error;
-
 struct AxumState {
     mpc_contract_id: AccountId,
     rpc_client: near_fetch::Client,
     signer: InMemorySigner,
-    sender: Sender<MpcSignMsg>,
+    sender: Sender<MpcMessage>,
     protocol_state: Arc<RwLock<ProtocolState>>,
 }
 
@@ -35,7 +28,7 @@ pub async fn run(
     mpc_contract_id: AccountId,
     rpc_client: near_fetch::Client,
     signer: InMemorySigner,
-    sender: Sender<MpcSignMsg>,
+    sender: Sender<MpcMessage>,
     protocol_state: Arc<RwLock<ProtocolState>>,
 ) -> anyhow::Result<()> {
     tracing::debug!("running a node");
@@ -72,7 +65,6 @@ pub async fn run(
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MsgRequest {
-    #[serde(with = "serde_participant")]
     pub from: Participant,
     pub msg: Vec<u8>,
 }
@@ -80,17 +72,10 @@ pub struct MsgRequest {
 #[tracing::instrument(level = "debug", skip_all)]
 async fn msg(
     Extension(state): Extension<Arc<AxumState>>,
-    WithRejection(Json(request), _): WithRejection<Json<MsgRequest>, MpcSignError>,
+    WithRejection(Json(message), _): WithRejection<Json<MpcMessage>, MpcSignError>,
 ) -> StatusCode {
-    tracing::debug!(from = ?request.from, msg_len = request.msg.len(), "sending a message");
-    match state
-        .sender
-        .send(MpcSignMsg::Msg {
-            from: request.from,
-            data: request.msg,
-        })
-        .await
-    {
+    tracing::debug!(?message, "received");
+    match state.sender.send(message).await {
         Ok(()) => StatusCode::OK,
         Err(e) => {
             tracing::error!("failed to send a protocol message: {e}");
@@ -101,7 +86,6 @@ async fn msg(
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct JoinRequest {
-    #[serde(with = "serde_participant")]
     pub id: Participant,
     pub account_id: AccountId,
     pub url: Url,

@@ -8,10 +8,10 @@ RUN apt-get update \
 RUN echo "fn main() {}" > dummy.rs
 COPY node/Cargo.toml Cargo.toml
 RUN sed -i 's#src/main.rs#dummy.rs#' Cargo.toml
-RUN cargo build --release
+RUN sed -i 's#mpc-contract = { path = "../contract" }##' Cargo.toml
+RUN cargo build
 COPY . .
 RUN sed -i 's#"mpc-recovery",##' Cargo.toml
-RUN sed -i 's#"contract",##' Cargo.toml
 RUN sed -i 's#"integration-tests"##' Cargo.toml
 RUN cargo build --package mpc-recovery-node
 

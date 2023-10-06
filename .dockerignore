@@ -8,4 +8,3 @@ Dockerfile
 .dockerignore
 infra/
 integration-tests/
-contract/

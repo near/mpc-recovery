@@ -1,6 +1,5 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::store::UnorderedMap;
 use near_sdk::{env, near_bindgen, AccountId, PublicKey};
 use std::collections::{HashMap, HashSet};
 
@@ -17,40 +16,57 @@ type ParticipantId = u32;
     Eq,
     PartialOrd,
     Ord,
+    Debug,
 )]
-pub struct Participant {
-    id: ParticipantId,
-    account_id: AccountId,
-    url: String,
+pub struct ParticipantInfo {
+    pub id: ParticipantId,
+    pub account_id: AccountId,
+    pub url: String,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct State {
-    participants: HashSet<Participant>,
-    public_key: Option<PublicKey>,
-    threshold: usize,
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
+pub struct InitializedContractState {
+    pub participants: HashMap<AccountId, ParticipantInfo>,
+    pub threshold: usize,
+    pub pk_votes: HashMap<PublicKey, HashSet<ParticipantId>>,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
+pub struct RunningContractState {
+    pub participants: HashMap<AccountId, ParticipantInfo>,
+    pub threshold: usize,
+    pub public_key: PublicKey,
+    pub join_votes: HashMap<ParticipantInfo, HashSet<ParticipantId>>,
+    pub leave_votes: HashMap<ParticipantInfo, HashSet<ParticipantId>>,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
+pub struct ResharingContractState {
+    pub old_participants: HashMap<AccountId, ParticipantInfo>,
+    pub new_participants: HashMap<AccountId, ParticipantInfo>,
+    pub threshold: usize,
+    pub public_key: PublicKey,
+    pub finished_votes: HashMap<ParticipantInfo, HashSet<ParticipantId>>,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
+pub enum ProtocolContractState {
+    NonInitialized,
+    Initialized(InitializedContractState),
+    Running(RunningContractState),
+    Resharing(ResharingContractState),
 }
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct MpcContract {
-    public_key: Option<PublicKey>,
-    threshold: usize,
-    participants: UnorderedMap<AccountId, Participant>,
-    join_votes: UnorderedMap<Participant, HashSet<ParticipantId>>,
-    leave_votes: UnorderedMap<Participant, HashSet<ParticipantId>>,
-    pk_votes: UnorderedMap<PublicKey, HashSet<ParticipantId>>,
+    protocol_state: ProtocolContractState,
 }
 
 impl Default for MpcContract {
     fn default() -> Self {
         Self {
-            public_key: None,
-            threshold: 0,
-            participants: UnorderedMap::new(b"p"),
-            join_votes: UnorderedMap::new(b"j"),
-            leave_votes: UnorderedMap::new(b"l"),
-            pk_votes: UnorderedMap::new(b"k"),
+            protocol_state: ProtocolContractState::NonInitialized,
         }
     }
 }
@@ -58,85 +74,173 @@ impl Default for MpcContract {
 #[near_bindgen]
 impl MpcContract {
     #[init]
-    pub fn init(threshold: usize, participants: HashMap<AccountId, Participant>) -> Self {
-        let mut participant_map = UnorderedMap::new(b"p");
-        participant_map.extend(participants);
+    pub fn init(threshold: usize, participants: HashMap<AccountId, ParticipantInfo>) -> Self {
         MpcContract {
-            public_key: None,
-            threshold,
-            participants: participant_map,
-            join_votes: UnorderedMap::new(b"j"),
-            leave_votes: UnorderedMap::new(b"l"),
-            pk_votes: UnorderedMap::new(b"k"),
+            protocol_state: ProtocolContractState::Initialized(InitializedContractState {
+                participants,
+                threshold,
+                pk_votes: HashMap::new(),
+            }),
         }
     }
 
-    pub fn state(&self) -> State {
-        State {
-            participants: self.participants.values().cloned().into_iter().collect(),
-            public_key: self.public_key.clone(),
-            threshold: self.threshold,
-        }
+    pub fn state(self) -> ProtocolContractState {
+        self.protocol_state
     }
 
-    pub fn vote_join(&mut self, participant: Participant) -> bool {
-        let voting_participant = self
-            .participants
-            .get(&env::signer_account_id())
-            .unwrap_or_else(|| env::panic_str("calling account is not in the participant set"));
-        if self.participants.contains_key(&participant.account_id) {
-            env::panic_str("this participant is already in the participant set")
-        }
-        let voted = self.join_votes.entry(participant.clone()).or_default();
-        voted.insert(voting_participant.id);
-        if voted.len() >= self.threshold {
-            self.join_votes.remove(&participant);
-            self.participants
-                .insert(participant.account_id.clone(), participant);
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn vote_leave(&mut self, participant: Participant) -> bool {
-        let voting_participant = self
-            .participants
-            .get(&env::signer_account_id())
-            .unwrap_or_else(|| env::panic_str("calling account is not in the participant set"));
-        if !self.participants.contains_key(&participant.account_id) {
-            env::panic_str("this participant is not in the participant set")
-        }
-        let voted = self.leave_votes.entry(participant.clone()).or_default();
-        voted.insert(voting_participant.id);
-        if voted.len() >= self.threshold {
-            self.leave_votes.remove(&participant);
-            self.participants.remove(&participant.account_id);
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn vote_pk(&mut self, public_key: PublicKey) -> bool {
-        let voting_participant = self
-            .participants
-            .get(&env::signer_account_id())
-            .unwrap_or_else(|| env::panic_str("calling account is not in the participant set"));
-        match &self.public_key {
-            Some(state_public_key) if state_public_key == &public_key => return true,
-            Some(_) => env::panic_str("participants already reached consensus on the public key"),
-            None => {
-                let voted = self.pk_votes.entry(public_key.clone()).or_default();
+    pub fn vote_join(&mut self, participant: ParticipantInfo) -> bool {
+        match &mut self.protocol_state {
+            ProtocolContractState::Running(RunningContractState {
+                participants,
+                threshold,
+                public_key,
+                join_votes,
+                ..
+            }) => {
+                let voting_participant = participants
+                    .get(&env::signer_account_id())
+                    .unwrap_or_else(|| {
+                        env::panic_str("calling account is not in the participant set")
+                    });
+                if participants.contains_key(&participant.account_id) {
+                    env::panic_str("this participant is already in the participant set")
+                }
+                let voted = join_votes.entry(participant.clone()).or_default();
                 voted.insert(voting_participant.id);
-                if voted.len() >= self.threshold {
-                    self.pk_votes.clear();
-                    self.public_key = Some(public_key);
+                if voted.len() >= *threshold {
+                    let mut new_participants = participants.clone();
+                    new_participants.insert(participant.account_id.clone(), participant);
+                    self.protocol_state =
+                        ProtocolContractState::Resharing(ResharingContractState {
+                            old_participants: participants.clone(),
+                            new_participants,
+                            threshold: *threshold,
+                            public_key: public_key.clone(),
+                            finished_votes: HashMap::new(),
+                        });
                     true
                 } else {
                     false
                 }
             }
+            ProtocolContractState::NonInitialized => {
+                env::panic_str("protocol state hasn't been initialized yet")
+            }
+            _ => env::panic_str("protocol state can't accept new participants right now"),
+        }
+    }
+
+    pub fn vote_leave(&mut self, participant: ParticipantInfo) -> bool {
+        match &mut self.protocol_state {
+            ProtocolContractState::Running(RunningContractState {
+                participants,
+                threshold,
+                public_key,
+                leave_votes,
+                ..
+            }) => {
+                let voting_participant = participants
+                    .get(&env::signer_account_id())
+                    .unwrap_or_else(|| {
+                        env::panic_str("calling account is not in the participant set")
+                    });
+                if !participants.contains_key(&participant.account_id) {
+                    env::panic_str("this participant is not in the participant set")
+                }
+                let voted = leave_votes.entry(participant.clone()).or_default();
+                voted.insert(voting_participant.id);
+                if voted.len() >= *threshold {
+                    let mut new_participants = participants.clone();
+                    new_participants.remove(&participant.account_id);
+                    self.protocol_state =
+                        ProtocolContractState::Resharing(ResharingContractState {
+                            old_participants: participants.clone(),
+                            new_participants,
+                            threshold: *threshold,
+                            public_key: public_key.clone(),
+                            finished_votes: HashMap::new(),
+                        });
+                    true
+                } else {
+                    false
+                }
+            }
+            ProtocolContractState::NonInitialized => {
+                env::panic_str("protocol state hasn't been initialized yet")
+            }
+            _ => env::panic_str("protocol state can't kick participants right now"),
+        }
+    }
+
+    pub fn vote_pk(&mut self, public_key: PublicKey) -> bool {
+        match &mut self.protocol_state {
+            ProtocolContractState::Initialized(InitializedContractState {
+                participants,
+                threshold,
+                pk_votes,
+            }) => {
+                let voting_participant = participants
+                    .get(&env::signer_account_id())
+                    .unwrap_or_else(|| {
+                        env::panic_str("calling account is not in the participant set")
+                    });
+                let voted = pk_votes.entry(public_key.clone()).or_default();
+                voted.insert(voting_participant.id);
+                if voted.len() >= *threshold {
+                    self.protocol_state = ProtocolContractState::Running(RunningContractState {
+                        participants: participants.clone(),
+                        threshold: *threshold,
+                        public_key,
+                        join_votes: HashMap::new(),
+                        leave_votes: HashMap::new(),
+                    });
+                    true
+                } else {
+                    false
+                }
+            }
+            ProtocolContractState::NonInitialized => {
+                env::panic_str("protocol state hasn't been initialized yet")
+            }
+            _ => env::panic_str("can't change public key anymore"),
+        }
+    }
+
+    pub fn vote_reshared(&mut self) -> bool {
+        match &mut self.protocol_state {
+            ProtocolContractState::Resharing(ResharingContractState {
+                old_participants,
+                new_participants,
+                threshold,
+                public_key,
+                finished_votes,
+            }) => {
+                let voting_participant = old_participants
+                    .get(&env::signer_account_id())
+                    .unwrap_or_else(|| {
+                        env::panic_str("calling account is not in the old participant set")
+                    });
+                let voted = finished_votes
+                    .entry(voting_participant.clone())
+                    .or_default();
+                voted.insert(voting_participant.id);
+                if voted.len() >= *threshold {
+                    self.protocol_state = ProtocolContractState::Running(RunningContractState {
+                        participants: new_participants.clone(),
+                        threshold: *threshold,
+                        public_key: public_key.clone(),
+                        join_votes: HashMap::new(),
+                        leave_votes: HashMap::new(),
+                    });
+                    true
+                } else {
+                    false
+                }
+            }
+            ProtocolContractState::NonInitialized => {
+                env::panic_str("protocol state hasn't been initialized yet")
+            }
+            _ => env::panic_str("protocol is not resharing right now"),
         }
     }
 
