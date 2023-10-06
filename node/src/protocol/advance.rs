@@ -1,5 +1,7 @@
 use super::contract::ProtocolContractState;
-use super::state::{ProtocolState, RunningState, StartedState, WaitingForConsensusState};
+use super::state::{
+    PersistentNodeData, ProtocolState, RunningState, StartedState, WaitingForConsensusState,
+};
 use crate::protocol::state::{GeneratingState, ResharingState};
 use cait_sith::protocol::{InitializationError, Participant};
 use k256::Secp256k1;
@@ -12,6 +14,8 @@ pub trait AdvanceCtx {
 pub enum AdvanceError {
     #[error("contract state has been rolled back")]
     ContractStateRollback,
+    #[error("contract epoch has been rolled back")]
+    EpochRollback,
     #[error("mismatched public key between contract state and local state")]
     MismatchedPublicKey,
     #[error("mismatched threshold between contract state and local state")]
@@ -39,17 +43,32 @@ impl Advance for StartedState {
         contract_state: ProtocolContractState,
     ) -> Result<ProtocolState, AdvanceError> {
         match self.0 {
-            Some((private_share, public_key)) => match contract_state {
+            Some(PersistentNodeData {
+                epoch,
+                private_share,
+                public_key,
+            }) => match contract_state {
                 ProtocolContractState::Initialized(_) => Err(AdvanceError::ContractStateRollback),
                 ProtocolContractState::Running(contract_state) => {
                     if contract_state.public_key != public_key {
                         return Err(AdvanceError::MismatchedPublicKey);
+                    }
+                    if contract_state.epoch < epoch {
+                        return Err(AdvanceError::EpochRollback);
+                    } else if contract_state.epoch > epoch {
+                        tracing::warn!(
+                            "out current epoch is {} while contract state's is {}, trying to rejoin as a new participant",
+                            epoch,
+                            contract_state.epoch
+                        );
+                        todo!("transition to Joining state")
                     }
                     if contract_state.participants.contains_key(&ctx.me()) {
                         tracing::info!(
                             "contract state is running and we are already a participant"
                         );
                         Ok(ProtocolState::Running(RunningState {
+                            epoch,
                             participants: contract_state.participants,
                             threshold: contract_state.threshold,
                             private_share,
@@ -63,9 +82,42 @@ impl Advance for StartedState {
                     if contract_state.public_key != public_key {
                         return Err(AdvanceError::MismatchedPublicKey);
                     }
-                    // TODO: Try to re-join during the resharing phase if still in the participant set
-                    tracing::info!("contract state is resharing, we can't join yet");
-                    Ok(ProtocolState::Started(self))
+                    if contract_state.old_epoch < epoch {
+                        return Err(AdvanceError::EpochRollback);
+                    } else if contract_state.old_epoch > epoch {
+                        tracing::warn!(
+                            "out current epoch is {} while contract state's is {}, trying to rejoin as a new participant",
+                            epoch,
+                            contract_state.old_epoch
+                        );
+                        todo!("transition to Joining state")
+                    }
+                    tracing::info!("contract state is resharing with us, joining as a participant");
+                    let protocol = cait_sith::reshare::<Secp256k1>(
+                        &contract_state
+                            .old_participants
+                            .keys()
+                            .cloned()
+                            .collect::<Vec<_>>(),
+                        contract_state.threshold,
+                        &contract_state
+                            .new_participants
+                            .keys()
+                            .cloned()
+                            .collect::<Vec<_>>(),
+                        contract_state.threshold,
+                        ctx.me(),
+                        Some(private_share),
+                        public_key,
+                    )?;
+                    Ok(ProtocolState::Resharing(ResharingState {
+                        old_epoch: epoch,
+                        old_participants: contract_state.old_participants,
+                        new_participants: contract_state.new_participants,
+                        threshold: contract_state.threshold,
+                        public_key,
+                        protocol: Box::new(protocol),
+                    }))
                 }
             },
             None => match contract_state {
@@ -89,11 +141,7 @@ impl Advance for StartedState {
                     }
                 }
                 ProtocolContractState::Running(_) => todo!("initiate resharing"),
-                ProtocolContractState::Resharing(_) => {
-                    // TODO: Try to re-join during the resharing phase if still in the participant set
-                    tracing::info!("contract state is resharing, we can't join yet");
-                    Ok(ProtocolState::Started(self))
-                }
+                ProtocolContractState::Resharing(_) => todo!("transition to Joining state"),
             },
         }
     }
@@ -110,12 +158,32 @@ impl Advance for GeneratingState {
                 tracing::debug!("continuing generation, contract state has not been finalized yet");
                 Ok(ProtocolState::Generating(self))
             }
-            ProtocolContractState::Running(_) => {
+            ProtocolContractState::Running(contract_state) => {
+                if contract_state.epoch > 0 {
+                    tracing::warn!("contract has already changed epochs, trying to rejoin as a new participant");
+                    todo!("transition to Joining state")
+                }
                 tracing::info!("contract state has finished key generation, trying to catch up");
+                if self.participants != contract_state.participants {
+                    return Err(AdvanceError::MismatchedParticipants);
+                }
+                if self.threshold != contract_state.threshold {
+                    return Err(AdvanceError::MismatchedThreshold);
+                }
                 Ok(ProtocolState::Generating(self))
             }
-            ProtocolContractState::Resharing(_) => {
+            ProtocolContractState::Resharing(contract_state) => {
+                if contract_state.old_epoch > 0 {
+                    tracing::warn!("contract has already changed epochs, trying to rejoin as a new participant");
+                    todo!("transition to Joining state")
+                }
                 tracing::warn!("contract state is resharing without us, trying to catch up");
+                if self.participants != contract_state.old_participants {
+                    return Err(AdvanceError::MismatchedParticipants);
+                }
+                if self.threshold != contract_state.threshold {
+                    return Err(AdvanceError::MismatchedThreshold);
+                }
                 Ok(ProtocolState::Generating(self))
             }
         }
@@ -125,7 +193,7 @@ impl Advance for GeneratingState {
 impl Advance for WaitingForConsensusState {
     fn advance<C: AdvanceCtx>(
         self,
-        _ctx: C,
+        ctx: C,
         contract_state: ProtocolContractState,
     ) -> Result<ProtocolState, AdvanceError> {
         match contract_state {
@@ -134,6 +202,16 @@ impl Advance for WaitingForConsensusState {
                 Ok(ProtocolState::WaitingForConsensus(self))
             }
             ProtocolContractState::Running(contract_state) => {
+                if contract_state.epoch < self.epoch {
+                    return Err(AdvanceError::EpochRollback);
+                } else if contract_state.epoch > self.epoch {
+                    tracing::warn!(
+                        "out current epoch is {} while contract state's is {}, trying to rejoin as a new participant",
+                        self.epoch,
+                        contract_state.epoch
+                    );
+                    todo!("transition to Joining state")
+                }
                 tracing::info!("contract state has reached consensus");
                 if contract_state.participants != self.participants {
                     return Err(AdvanceError::MismatchedParticipants);
@@ -145,19 +223,60 @@ impl Advance for WaitingForConsensusState {
                     return Err(AdvanceError::MismatchedPublicKey);
                 }
                 Ok(ProtocolState::Running(RunningState {
+                    epoch: self.epoch,
                     participants: self.participants,
                     threshold: self.threshold,
                     private_share: self.private_share,
                     public_key: self.public_key,
                 }))
             }
-            ProtocolContractState::Resharing(_) => {
+            ProtocolContractState::Resharing(contract_state) => {
+                if contract_state.old_epoch < self.epoch {
+                    return Err(AdvanceError::EpochRollback);
+                } else if contract_state.old_epoch > self.epoch {
+                    tracing::warn!(
+                        "out current epoch is {} while contract state's is {}, trying to rejoin as a new participant",
+                        self.epoch,
+                        contract_state.old_epoch
+                    );
+                    todo!("transition to Joining state")
+                }
                 // TODO: Try to re-join during the resharing phase if still in the participant set
-                tracing::info!("contract state is resharing without us, restarting");
-                Ok(ProtocolState::Started(StartedState(Some((
-                    self.private_share,
+                tracing::info!("contract state is resharing, joining");
+                if contract_state.old_participants != self.participants {
+                    return Err(AdvanceError::MismatchedParticipants);
+                }
+                if contract_state.threshold != self.threshold {
+                    return Err(AdvanceError::MismatchedThreshold);
+                }
+                if contract_state.public_key != self.public_key {
+                    return Err(AdvanceError::MismatchedPublicKey);
+                }
+                let protocol = cait_sith::reshare::<Secp256k1>(
+                    &contract_state
+                        .old_participants
+                        .keys()
+                        .cloned()
+                        .collect::<Vec<_>>(),
+                    contract_state.threshold,
+                    &contract_state
+                        .new_participants
+                        .keys()
+                        .cloned()
+                        .collect::<Vec<_>>(),
+                    contract_state.threshold,
+                    ctx.me(),
+                    Some(self.private_share),
                     self.public_key,
-                )))))
+                )?;
+                Ok(ProtocolState::Resharing(ResharingState {
+                    old_epoch: self.epoch,
+                    old_participants: contract_state.old_participants,
+                    new_participants: contract_state.new_participants,
+                    threshold: contract_state.threshold,
+                    public_key: self.public_key,
+                    protocol: Box::new(protocol),
+                }))
             }
         }
     }
@@ -172,6 +291,16 @@ impl Advance for RunningState {
         match contract_state {
             ProtocolContractState::Initialized(_) => Err(AdvanceError::ContractStateRollback),
             ProtocolContractState::Running(contract_state) => {
+                if contract_state.epoch < self.epoch {
+                    return Err(AdvanceError::EpochRollback);
+                } else if contract_state.epoch > self.epoch {
+                    tracing::warn!(
+                        "out current epoch is {} while contract state's is {}, trying to rejoin as a new participant",
+                        self.epoch,
+                        contract_state.epoch
+                    );
+                    todo!("transition to Joining state")
+                }
                 tracing::debug!("continuing to run as normal");
                 if contract_state.participants != self.participants {
                     return Err(AdvanceError::MismatchedParticipants);
@@ -185,6 +314,16 @@ impl Advance for RunningState {
                 Ok(ProtocolState::Running(self))
             }
             ProtocolContractState::Resharing(contract_state) => {
+                if contract_state.old_epoch < self.epoch {
+                    return Err(AdvanceError::EpochRollback);
+                } else if contract_state.old_epoch > self.epoch {
+                    tracing::warn!(
+                        "out current epoch is {} while contract state's is {}, trying to rejoin as a new participant",
+                        self.epoch,
+                        contract_state.old_epoch
+                    );
+                    todo!("transition to Joining state")
+                }
                 tracing::info!("contract is resharing");
                 if !contract_state.old_participants.contains_key(&ctx.me())
                     || !contract_state.new_participants.contains_key(&ctx.me())
@@ -212,6 +351,7 @@ impl Advance for RunningState {
                     self.public_key,
                 )?;
                 Ok(ProtocolState::Resharing(ResharingState {
+                    old_epoch: self.epoch,
                     old_participants: contract_state.old_participants,
                     new_participants: contract_state.new_participants,
                     threshold: self.threshold,
@@ -232,6 +372,16 @@ impl Advance for ResharingState {
         match contract_state {
             ProtocolContractState::Initialized(_) => Err(AdvanceError::ContractStateRollback),
             ProtocolContractState::Running(contract_state) => {
+                if contract_state.epoch <= self.old_epoch {
+                    return Err(AdvanceError::EpochRollback);
+                } else if contract_state.epoch > self.old_epoch + 1 {
+                    tracing::warn!(
+                        "expected epoch {} while contract state's is {}, trying to rejoin as a new participant",
+                        self.old_epoch + 1,
+                        contract_state.epoch
+                    );
+                    todo!("transition to Joining state")
+                }
                 tracing::info!("contract state has finished resharing, trying to catch up");
                 if contract_state.participants != self.new_participants {
                     return Err(AdvanceError::MismatchedParticipants);
@@ -245,6 +395,16 @@ impl Advance for ResharingState {
                 Ok(ProtocolState::Resharing(self))
             }
             ProtocolContractState::Resharing(contract_state) => {
+                if contract_state.old_epoch < self.old_epoch {
+                    return Err(AdvanceError::EpochRollback);
+                } else if contract_state.old_epoch > self.old_epoch {
+                    tracing::warn!(
+                        "expected resharing from epoch {} while contract is resharing from {}, trying to rejoin as a new participant",
+                        self.old_epoch,
+                        contract_state.old_epoch
+                    );
+                    todo!("transition to Joining state")
+                }
                 tracing::debug!("continue to reshare as normal");
                 if contract_state.old_participants != self.old_participants {
                     return Err(AdvanceError::MismatchedParticipants);

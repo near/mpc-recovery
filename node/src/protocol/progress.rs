@@ -86,6 +86,7 @@ impl Progress for GeneratingState {
                     );
                     return Ok(ProtocolState::WaitingForConsensus(
                         WaitingForConsensusState {
+                            epoch: 0,
                             participants: self.participants,
                             threshold: self.threshold,
                             private_share: r.private_share,
@@ -151,6 +152,7 @@ impl Progress for ResharingState {
                     tracing::debug!("successfully completed key reshare");
                     return Ok(ProtocolState::WaitingForConsensus(
                         WaitingForConsensusState {
+                            epoch: self.old_epoch + 1,
                             participants: self.new_participants,
                             threshold: self.threshold,
                             private_share,

@@ -40,6 +40,7 @@ impl From<mpc_contract::InitializedContractState> for InitializedContractState {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RunningContractState {
+    pub epoch: u64,
     pub participants: HashMap<Participant, Url>,
     pub threshold: usize,
     pub public_key: PublicKey,
@@ -50,6 +51,7 @@ pub struct RunningContractState {
 impl From<mpc_contract::RunningContractState> for RunningContractState {
     fn from(value: mpc_contract::RunningContractState) -> Self {
         RunningContractState {
+            epoch: value.epoch,
             participants: contract_participants_into_cait_participants(value.participants),
             threshold: value.threshold,
             public_key: value.public_key.into_affine_point(),
@@ -69,6 +71,7 @@ impl From<mpc_contract::RunningContractState> for RunningContractState {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ResharingContractState {
+    pub old_epoch: u64,
     pub old_participants: HashMap<Participant, Url>,
     pub new_participants: HashMap<Participant, Url>,
     pub threshold: usize,
@@ -79,6 +82,7 @@ pub struct ResharingContractState {
 impl From<mpc_contract::ResharingContractState> for ResharingContractState {
     fn from(value: mpc_contract::ResharingContractState) -> Self {
         ResharingContractState {
+            old_epoch: value.old_epoch,
             old_participants: contract_participants_into_cait_participants(value.old_participants),
             new_participants: contract_participants_into_cait_participants(value.new_participants),
             threshold: value.threshold,

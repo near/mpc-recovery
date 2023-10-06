@@ -33,6 +33,7 @@ pub struct InitializedContractState {
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
 pub struct RunningContractState {
+    pub epoch: u64,
     pub participants: HashMap<AccountId, ParticipantInfo>,
     pub threshold: usize,
     pub public_key: PublicKey,
@@ -42,7 +43,9 @@ pub struct RunningContractState {
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
 pub struct ResharingContractState {
+    pub old_epoch: u64,
     pub old_participants: HashMap<AccountId, ParticipantInfo>,
+    // TODO: only store diff to save on storage
     pub new_participants: HashMap<AccountId, ParticipantInfo>,
     pub threshold: usize,
     pub public_key: PublicKey,
@@ -91,6 +94,7 @@ impl MpcContract {
     pub fn vote_join(&mut self, participant: ParticipantInfo) -> bool {
         match &mut self.protocol_state {
             ProtocolContractState::Running(RunningContractState {
+                epoch,
                 participants,
                 threshold,
                 public_key,
@@ -112,6 +116,7 @@ impl MpcContract {
                     new_participants.insert(participant.account_id.clone(), participant);
                     self.protocol_state =
                         ProtocolContractState::Resharing(ResharingContractState {
+                            old_epoch: *epoch,
                             old_participants: participants.clone(),
                             new_participants,
                             threshold: *threshold,
@@ -133,6 +138,7 @@ impl MpcContract {
     pub fn vote_leave(&mut self, participant: ParticipantInfo) -> bool {
         match &mut self.protocol_state {
             ProtocolContractState::Running(RunningContractState {
+                epoch,
                 participants,
                 threshold,
                 public_key,
@@ -154,6 +160,7 @@ impl MpcContract {
                     new_participants.remove(&participant.account_id);
                     self.protocol_state =
                         ProtocolContractState::Resharing(ResharingContractState {
+                            old_epoch: *epoch,
                             old_participants: participants.clone(),
                             new_participants,
                             threshold: *threshold,
@@ -188,6 +195,7 @@ impl MpcContract {
                 voted.insert(voting_participant.id);
                 if voted.len() >= *threshold {
                     self.protocol_state = ProtocolContractState::Running(RunningContractState {
+                        epoch: 0,
                         participants: participants.clone(),
                         threshold: *threshold,
                         public_key,
@@ -209,6 +217,7 @@ impl MpcContract {
     pub fn vote_reshared(&mut self) -> bool {
         match &mut self.protocol_state {
             ProtocolContractState::Resharing(ResharingContractState {
+                old_epoch,
                 old_participants,
                 new_participants,
                 threshold,
@@ -226,6 +235,7 @@ impl MpcContract {
                 voted.insert(voting_participant.id);
                 if voted.len() >= *threshold {
                     self.protocol_state = ProtocolContractState::Running(RunningContractState {
+                        epoch: *old_epoch + 1,
                         participants: new_participants.clone(),
                         threshold: *threshold,
                         public_key: public_key.clone(),
