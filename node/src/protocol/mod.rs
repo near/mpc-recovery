@@ -36,6 +36,18 @@ impl AdvanceCtx for &Ctx {
     fn me(&self) -> Participant {
         self.me
     }
+
+    fn rpc_client(&self) -> &near_fetch::Client {
+        &self.rpc_client
+    }
+
+    fn signer(&self) -> &InMemorySigner {
+        &self.signer
+    }
+
+    fn mpc_contract_id(&self) -> &AccountId {
+        &self.mpc_contract_id
+    }
 }
 
 impl ProgressCtx for &Ctx {
@@ -115,7 +127,7 @@ impl MpcSignProtocol {
                 }
             }
             state = state.progress(&self.ctx).await?;
-            state = state.advance(&self.ctx, contract_state)?;
+            state = state.advance(&self.ctx, contract_state).await?;
             *state_guard = state;
             drop(state_guard);
             tokio::time::sleep(Duration::from_millis(1000)).await;

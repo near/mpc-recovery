@@ -3,11 +3,19 @@ use super::state::{
     PersistentNodeData, ProtocolState, RunningState, StartedState, WaitingForConsensusState,
 };
 use crate::protocol::state::{GeneratingState, ResharingState};
+use crate::rpc_client;
+use crate::util::AffinePointExt;
+use async_trait::async_trait;
 use cait_sith::protocol::{InitializationError, Participant};
 use k256::Secp256k1;
+use near_crypto::InMemorySigner;
+use near_primitives::types::AccountId;
 
 pub trait AdvanceCtx {
     fn me(&self) -> Participant;
+    fn rpc_client(&self) -> &near_fetch::Client;
+    fn signer(&self) -> &InMemorySigner;
+    fn mpc_contract_id(&self) -> &AccountId;
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -28,16 +36,18 @@ pub enum AdvanceError {
     CaitSithInitializationError(#[from] InitializationError),
 }
 
+#[async_trait]
 pub trait Advance {
-    fn advance<C: AdvanceCtx>(
+    async fn advance<C: AdvanceCtx + Send + Sync>(
         self,
         ctx: C,
         contract_state: ProtocolContractState,
     ) -> Result<ProtocolState, AdvanceError>;
 }
 
+#[async_trait]
 impl Advance for StartedState {
-    fn advance<C: AdvanceCtx>(
+    async fn advance<C: AdvanceCtx + Send + Sync>(
         self,
         ctx: C,
         contract_state: ProtocolContractState,
@@ -147,8 +157,9 @@ impl Advance for StartedState {
     }
 }
 
+#[async_trait]
 impl Advance for GeneratingState {
-    fn advance<C: AdvanceCtx>(
+    async fn advance<C: AdvanceCtx + Send + Sync>(
         self,
         _ctx: C,
         contract_state: ProtocolContractState,
@@ -190,15 +201,33 @@ impl Advance for GeneratingState {
     }
 }
 
+#[async_trait]
 impl Advance for WaitingForConsensusState {
-    fn advance<C: AdvanceCtx>(
+    async fn advance<C: AdvanceCtx + Send + Sync>(
         self,
         ctx: C,
         contract_state: ProtocolContractState,
     ) -> Result<ProtocolState, AdvanceError> {
         match contract_state {
-            ProtocolContractState::Initialized(_) => {
+            ProtocolContractState::Initialized(contract_state) => {
                 tracing::debug!("waiting for consensus, contract state has not been finalized yet");
+                let public_key = self.public_key.into_near_public_key();
+                let has_voted = contract_state
+                    .pk_votes
+                    .get(&public_key)
+                    .map(|ps| ps.contains(&ctx.me()))
+                    .unwrap_or_default();
+                if !has_voted {
+                    tracing::info!("we haven't voted yet, voting for the generated public key");
+                    rpc_client::vote_for_public_key(
+                        ctx.rpc_client(),
+                        ctx.signer(),
+                        ctx.mpc_contract_id(),
+                        &public_key,
+                    )
+                    .await
+                    .unwrap();
+                }
                 Ok(ProtocolState::WaitingForConsensus(self))
             }
             ProtocolContractState::Running(contract_state) => {
@@ -282,8 +311,9 @@ impl Advance for WaitingForConsensusState {
     }
 }
 
+#[async_trait]
 impl Advance for RunningState {
-    fn advance<C: AdvanceCtx>(
+    async fn advance<C: AdvanceCtx + Send + Sync>(
         self,
         ctx: C,
         contract_state: ProtocolContractState,
@@ -363,8 +393,9 @@ impl Advance for RunningState {
     }
 }
 
+#[async_trait]
 impl Advance for ResharingState {
-    fn advance<C: AdvanceCtx>(
+    async fn advance<C: AdvanceCtx + Send + Sync>(
         self,
         _ctx: C,
         contract_state: ProtocolContractState,
@@ -424,8 +455,9 @@ impl Advance for ResharingState {
     }
 }
 
+#[async_trait]
 impl Advance for ProtocolState {
-    fn advance<C: AdvanceCtx>(
+    async fn advance<C: AdvanceCtx + Send + Sync>(
         self,
         ctx: C,
         contract_state: ProtocolContractState,
@@ -435,11 +467,11 @@ impl Advance for ProtocolState {
                 // TODO: Load from persistent storage
                 Ok(ProtocolState::Started(StartedState(None)))
             }
-            ProtocolState::Started(state) => state.advance(ctx, contract_state),
-            ProtocolState::Generating(state) => state.advance(ctx, contract_state),
-            ProtocolState::WaitingForConsensus(state) => state.advance(ctx, contract_state),
-            ProtocolState::Running(state) => state.advance(ctx, contract_state),
-            ProtocolState::Resharing(state) => state.advance(ctx, contract_state),
+            ProtocolState::Started(state) => state.advance(ctx, contract_state).await,
+            ProtocolState::Generating(state) => state.advance(ctx, contract_state).await,
+            ProtocolState::WaitingForConsensus(state) => state.advance(ctx, contract_state).await,
+            ProtocolState::Running(state) => state.advance(ctx, contract_state).await,
+            ProtocolState::Resharing(state) => state.advance(ctx, contract_state).await,
         }
     }
 }

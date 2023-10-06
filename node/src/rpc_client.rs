@@ -1,7 +1,7 @@
 use crate::protocol::ProtocolContractState;
 use crate::types::PublicKey;
-use k256::elliptic_curve::sec1::ToEncodedPoint;
-use near_crypto::{InMemorySigner, Secp256K1PublicKey};
+use crate::util::AffinePointExt;
+use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
 use near_primitives::types::AccountId;
 use near_primitives::views::FinalExecutionStatus;
@@ -22,11 +22,8 @@ pub async fn vote_for_public_key(
     rpc_client: &near_fetch::Client,
     signer: &InMemorySigner,
     mpc_contract_id: &AccountId,
-    public_key: &PublicKey,
+    public_key: &near_crypto::PublicKey,
 ) -> anyhow::Result<bool> {
-    let public_key = near_crypto::PublicKey::SECP256K1(Secp256K1PublicKey::try_from(
-        &public_key.to_encoded_point(false).as_bytes()[1..65],
-    )?);
     let args = json!({
         "public_key": public_key
     });
