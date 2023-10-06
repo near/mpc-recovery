@@ -41,7 +41,7 @@ jobs:
 
       - name: Pull Relayer & Sandbox Docker Images
         run: |
-          docker pull ghcr.io/near/pagoda-relayer-rs-fastauth
+          docker pull ghcr.io/near/os-relayer
           docker pull ghcr.io/near/sandbox
 
       - name: Login to GCP Artifact Registry
@@ -74,6 +74,7 @@ jobs:
           RUST_BACKTRACE: 1
 
       - name: Show Status on Pull Request
+        if: always()
         run: |
           curl --request POST \
           --url https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.event.workflow_run.head_commit.id }} \
