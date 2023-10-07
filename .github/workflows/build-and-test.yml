@@ -1,0 +1,21 @@
+name: Build Image and Test
+
+on:
+  push:
+    branches:
+      - develop
+  pull_request:
+
+jobs:
+  build-image:
+    name: Build and Push
+    uses: near/mpc-recovery/.github/workflows/docker-image.yml
+    with:
+      repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+  integrations:
+    needs: build-image
+    name: Integration
+    uses: near/mpc-recovery/.github/workflows/integration.yml
+    with:
+      repo-token: ${{ secrets.GITHUB_TOKEN }}

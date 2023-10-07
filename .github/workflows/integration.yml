@@ -1,10 +1,7 @@
 name: Integration
 
 on:
-  workflow_run:
-    workflows: ["Docker Image"]
-    types:
-      - completed
+  workflow_call:
 
 env:
   RUSTFLAGS: -D warnings
@@ -72,17 +69,3 @@ jobs:
         env:
           RUST_LOG: INFO
           RUST_BACKTRACE: 1
-
-      - name: Show Status on Pull Request
-        if: always()
-        run: |
-          curl --request POST \
-          --url https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.event.workflow_run.head_commit.id }} \
-          --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
-          --header 'content-type: application/json' \
-          --data '{
-            "state": "${{ github.event.workflow_run.conclusion }}",
-            "context": "Integration Test Run",
-            "target_url": "${{ github.event.workflow_run.html_url }}"
-            }' \
-          --fail
