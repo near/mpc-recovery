@@ -1,7 +1,6 @@
 use crate::protocol::MpcMessage;
-use crate::web::JoinRequest;
 use cait_sith::protocol::Participant;
-use near_primitives::types::AccountId;
+use mpc_contract::ParticipantInfo;
 use reqwest::{Client, IntoUrl};
 use std::str::Utf8Error;
 use tokio_retry::strategy::{jitter, ExponentialBackoff};
@@ -61,32 +60,21 @@ pub async fn message<U: IntoUrl>(
 pub async fn join<U: IntoUrl>(
     client: &Client,
     url: U,
-    me: Participant,
-    my_account: &AccountId,
-    my_address: U,
+    participant: &Participant,
 ) -> Result<(), SendError> {
     let mut url = url.into_url().unwrap();
-    url.set_path("connect");
-    let my_address = my_address.into_url().unwrap();
+    url.set_path("join");
     let action = || async {
         let response = client
             .post(url.clone())
             .header("content-type", "application/json")
-            .json(&JoinRequest {
-                id: me,
-                account_id: my_account.clone(),
-                url: my_address.clone(),
-            })
+            .json(&participant)
             .send()
             .await
             .map_err(|e| SendError::ReqwestClientError(e))?;
         let status = response.status();
         if status.is_success() {
-            let response = response
-                .json()
-                .await
-                .map_err(|e| SendError::ReqwestBodyError(e))?;
-            Ok(response)
+            Ok(())
         } else {
             let response_bytes = response
                 .bytes()

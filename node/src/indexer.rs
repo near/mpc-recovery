@@ -43,13 +43,14 @@ async fn handle_block(
     Ok(())
 }
 
-pub fn run(near_network: &str, signer_account: AccountId) -> anyhow::Result<()> {
+pub fn run(near_rpc: &str, signer_account: AccountId) -> anyhow::Result<()> {
     let mut config_builder = LakeBuilder::default();
-    config_builder = match near_network {
-        "mainnet" => config_builder.mainnet().start_block_height(98924566),
-        "testnet" => config_builder.testnet().start_block_height(134986320),
-        other => anyhow::bail!("unrecognized NEAR network: {other}"),
-    };
+    // config_builder = match near_network {
+    //     "mainnet" => config_builder.mainnet().start_block_height(98924566),
+    //     "testnet" => config_builder.testnet().start_block_height(134986320),
+    //     other => anyhow::bail!("unrecognized NEAR network: {other}"),
+    // };
+    config_builder = config_builder.testnet().start_block_height(134986320);
     let context = Context { signer_account };
     let lake = config_builder.build()?;
     lake.run_with_context(handle_block, &context)?;

@@ -25,7 +25,7 @@ impl From<mpc_contract::InitializedContractState> for InitializedContractState {
                 .map(|(pk, participants)| {
                     (
                         near_crypto::PublicKey::SECP256K1(
-                            near_crypto::Secp256K1PublicKey::try_from(pk.as_bytes()).unwrap(),
+                            near_crypto::Secp256K1PublicKey::try_from(&pk.as_bytes()[1..]).unwrap(),
                         ),
                         participants
                             .into_iter()
@@ -44,8 +44,9 @@ pub struct RunningContractState {
     pub participants: HashMap<Participant, Url>,
     pub threshold: usize,
     pub public_key: PublicKey,
-    pub join_votes: HashMap<ParticipantInfo, HashSet<Participant>>,
-    pub leave_votes: HashMap<ParticipantInfo, HashSet<Participant>>,
+    pub candidates: HashMap<Participant, ParticipantInfo>,
+    pub join_votes: HashMap<Participant, HashSet<Participant>>,
+    pub leave_votes: HashMap<Participant, HashSet<Participant>>,
 }
 
 impl From<mpc_contract::RunningContractState> for RunningContractState {
@@ -55,15 +56,30 @@ impl From<mpc_contract::RunningContractState> for RunningContractState {
             participants: contract_participants_into_cait_participants(value.participants),
             threshold: value.threshold,
             public_key: value.public_key.into_affine_point(),
+            candidates: value
+                .candidates
+                .into_iter()
+                .map(|(p, p_info)| (Participant::from(p), p_info))
+                .collect(),
             join_votes: value
                 .join_votes
                 .into_iter()
-                .map(|(p_info, ps)| (p_info, ps.into_iter().map(Participant::from).collect()))
+                .map(|(p, ps)| {
+                    (
+                        Participant::from(p),
+                        ps.into_iter().map(Participant::from).collect(),
+                    )
+                })
                 .collect(),
             leave_votes: value
                 .leave_votes
                 .into_iter()
-                .map(|(p_info, ps)| (p_info, ps.into_iter().map(Participant::from).collect()))
+                .map(|(p, ps)| {
+                    (
+                        Participant::from(p),
+                        ps.into_iter().map(Participant::from).collect(),
+                    )
+                })
                 .collect(),
         }
     }
@@ -76,7 +92,7 @@ pub struct ResharingContractState {
     pub new_participants: HashMap<Participant, Url>,
     pub threshold: usize,
     pub public_key: PublicKey,
-    pub finished_votes: HashMap<ParticipantInfo, HashSet<Participant>>,
+    pub finished_votes: HashSet<Participant>,
 }
 
 impl From<mpc_contract::ResharingContractState> for ResharingContractState {
@@ -90,7 +106,7 @@ impl From<mpc_contract::ResharingContractState> for ResharingContractState {
             finished_votes: value
                 .finished_votes
                 .into_iter()
-                .map(|(p_info, ps)| (p_info, ps.into_iter().map(Participant::from).collect()))
+                .map(Participant::from)
                 .collect(),
         }
     }

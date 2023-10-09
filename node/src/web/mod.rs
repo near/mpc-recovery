@@ -7,6 +7,7 @@ use axum::routing::{get, post};
 use axum::{Extension, Json, Router};
 use axum_extra::extract::WithRejection;
 use cait_sith::protocol::Participant;
+use mpc_contract::ParticipantInfo;
 use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
 use near_primitives::types::AccountId;
@@ -84,23 +85,16 @@ async fn msg(
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct JoinRequest {
-    pub id: Participant,
-    pub account_id: AccountId,
-    pub url: Url,
-}
-
 #[tracing::instrument(level = "debug", skip_all)]
 async fn join(
     Extension(state): Extension<Arc<AxumState>>,
-    WithRejection(Json(request), _): WithRejection<Json<JoinRequest>, MpcSignError>,
+    WithRejection(Json(participant), _): WithRejection<Json<Participant>, MpcSignError>,
 ) -> StatusCode {
     let protocol_state = state.protocol_state.read().await;
     match &*protocol_state {
         ProtocolState::Running { .. } => {
             let args = serde_json::json!({
-                "participant": request
+                "participant": participant
             });
             match state
                 .rpc_client
@@ -117,7 +111,7 @@ async fn join(
                 .await
             {
                 Ok(_) => {
-                    tracing::info!(id = ?request.id, "successfully voted for a node to join");
+                    tracing::info!(?participant, "successfully voted for a node to join");
                     StatusCode::OK
                 }
                 Err(e) => {
@@ -127,7 +121,7 @@ async fn join(
             }
         }
         _ => {
-            tracing::debug!(id = ?request.id, "not ready to accept join requests yet");
+            tracing::debug!(?participant, "not ready to accept join requests yet");
             StatusCode::BAD_REQUEST
         }
     }

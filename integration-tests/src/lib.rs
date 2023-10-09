@@ -51,24 +51,21 @@ async fn fetch_validator_keys(
     }
 }
 
-pub struct RelayerCtx<'a> {
+pub struct SandboxCtx<'a> {
     pub sandbox: containers::Sandbox<'a>,
-    pub redis: containers::Redis<'a>,
-    pub relayer: containers::Relayer<'a>,
     pub worker: Worker<Sandbox>,
-    pub creator_account: Account,
 }
 
-pub async fn initialize_relayer<'a>(
+pub async fn initialize_sandbox<'a>(
     docker_client: &'a containers::DockerClient,
     network: &str,
-) -> anyhow::Result<RelayerCtx<'a>> {
-    tracing::info!("Initializing relayer...");
+) -> anyhow::Result<SandboxCtx<'a>> {
+    tracing::info!("initializing sandbox");
     let sandbox = containers::Sandbox::run(docker_client, network).await?;
 
     let validator_key = fetch_validator_keys(docker_client, &sandbox).await?;
 
-    tracing::info!("Initializing sandbox worker...");
+    tracing::info!("initializing sandbox worker");
     let worker = workspaces::sandbox()
         .rpc_addr(&format!(
             "http://localhost:{}",
@@ -81,7 +78,23 @@ pub async fn initialize_relayer<'a>(
             validator_key.secret_key.to_string().parse()?,
         ))
         .await?;
-    tracing::info!("Sandbox worker initialized");
+
+    Ok(SandboxCtx { sandbox, worker })
+}
+
+pub struct RelayerCtx<'a> {
+    pub sandbox: containers::Sandbox<'a>,
+    pub redis: containers::Redis<'a>,
+    pub relayer: containers::Relayer<'a>,
+    pub worker: Worker<Sandbox>,
+    pub creator_account: Account,
+}
+
+pub async fn initialize_relayer<'a>(
+    docker_client: &'a containers::DockerClient,
+    network: &str,
+) -> anyhow::Result<RelayerCtx<'a>> {
+    let SandboxCtx { sandbox, worker } = initialize_sandbox(docker_client, network).await?;
     let social_db = sandbox::initialize_social_db(&worker).await?;
     sandbox::initialize_linkdrop(&worker).await?;
     tracing::info!("Initializing relayer accounts...");

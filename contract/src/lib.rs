@@ -37,8 +37,9 @@ pub struct RunningContractState {
     pub participants: HashMap<AccountId, ParticipantInfo>,
     pub threshold: usize,
     pub public_key: PublicKey,
-    pub join_votes: HashMap<ParticipantInfo, HashSet<ParticipantId>>,
-    pub leave_votes: HashMap<ParticipantInfo, HashSet<ParticipantId>>,
+    pub candidates: HashMap<ParticipantId, ParticipantInfo>,
+    pub join_votes: HashMap<ParticipantId, HashSet<ParticipantId>>,
+    pub leave_votes: HashMap<ParticipantId, HashSet<ParticipantId>>,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
@@ -49,7 +50,7 @@ pub struct ResharingContractState {
     pub new_participants: HashMap<AccountId, ParticipantInfo>,
     pub threshold: usize,
     pub public_key: PublicKey,
-    pub finished_votes: HashMap<ParticipantInfo, HashSet<ParticipantId>>,
+    pub finished_votes: HashSet<ParticipantId>,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
@@ -91,13 +92,41 @@ impl MpcContract {
         self.protocol_state
     }
 
-    pub fn vote_join(&mut self, participant: ParticipantInfo) -> bool {
+    pub fn join(&mut self, participant_id: ParticipantId, url: String) {
+        match &mut self.protocol_state {
+            ProtocolContractState::Running(RunningContractState {
+                participants,
+                candidates,
+                ..
+            }) => {
+                let account_id = env::signer_account_id();
+                if participants.contains_key(&account_id) {
+                    env::panic_str("this participant is already in the participant set");
+                }
+                candidates.insert(
+                    participant_id,
+                    ParticipantInfo {
+                        id: participant_id,
+                        account_id,
+                        url,
+                    },
+                );
+            }
+            ProtocolContractState::NonInitialized => {
+                env::panic_str("protocol state hasn't been initialized yet")
+            }
+            _ => env::panic_str("protocol state can't accept new participants right now"),
+        }
+    }
+
+    pub fn vote_join(&mut self, participant: ParticipantId) -> bool {
         match &mut self.protocol_state {
             ProtocolContractState::Running(RunningContractState {
                 epoch,
                 participants,
                 threshold,
                 public_key,
+                candidates,
                 join_votes,
                 ..
             }) => {
@@ -106,14 +135,14 @@ impl MpcContract {
                     .unwrap_or_else(|| {
                         env::panic_str("calling account is not in the participant set")
                     });
-                if participants.contains_key(&participant.account_id) {
-                    env::panic_str("this participant is already in the participant set")
-                }
-                let voted = join_votes.entry(participant.clone()).or_default();
+                let candidate = candidates
+                    .get(&participant)
+                    .unwrap_or_else(|| env::panic_str("candidate is not registered"));
+                let voted = join_votes.entry(participant).or_default();
                 voted.insert(voting_participant.id);
                 if voted.len() >= *threshold {
                     let mut new_participants = participants.clone();
-                    new_participants.insert(participant.account_id.clone(), participant);
+                    new_participants.insert(candidate.account_id.clone(), candidate.clone());
                     self.protocol_state =
                         ProtocolContractState::Resharing(ResharingContractState {
                             old_epoch: *epoch,
@@ -121,7 +150,7 @@ impl MpcContract {
                             new_participants,
                             threshold: *threshold,
                             public_key: public_key.clone(),
-                            finished_votes: HashMap::new(),
+                            finished_votes: HashSet::new(),
                         });
                     true
                 } else {
@@ -135,13 +164,14 @@ impl MpcContract {
         }
     }
 
-    pub fn vote_leave(&mut self, participant: ParticipantInfo) -> bool {
+    pub fn vote_leave(&mut self, participant: ParticipantId) -> bool {
         match &mut self.protocol_state {
             ProtocolContractState::Running(RunningContractState {
                 epoch,
                 participants,
                 threshold,
                 public_key,
+                candidates,
                 leave_votes,
                 ..
             }) => {
@@ -150,14 +180,14 @@ impl MpcContract {
                     .unwrap_or_else(|| {
                         env::panic_str("calling account is not in the participant set")
                     });
-                if !participants.contains_key(&participant.account_id) {
-                    env::panic_str("this participant is not in the participant set")
-                }
-                let voted = leave_votes.entry(participant.clone()).or_default();
+                let candidate = candidates
+                    .get(&participant)
+                    .unwrap_or_else(|| env::panic_str("candidate is not registered"));
+                let voted = leave_votes.entry(participant).or_default();
                 voted.insert(voting_participant.id);
                 if voted.len() >= *threshold {
                     let mut new_participants = participants.clone();
-                    new_participants.remove(&participant.account_id);
+                    new_participants.remove(&candidate.account_id);
                     self.protocol_state =
                         ProtocolContractState::Resharing(ResharingContractState {
                             old_epoch: *epoch,
@@ -165,7 +195,7 @@ impl MpcContract {
                             new_participants,
                             threshold: *threshold,
                             public_key: public_key.clone(),
-                            finished_votes: HashMap::new(),
+                            finished_votes: HashSet::new(),
                         });
                     true
                 } else {
@@ -199,6 +229,7 @@ impl MpcContract {
                         participants: participants.clone(),
                         threshold: *threshold,
                         public_key,
+                        candidates: HashMap::new(),
                         join_votes: HashMap::new(),
                         leave_votes: HashMap::new(),
                     });
@@ -210,11 +241,13 @@ impl MpcContract {
             ProtocolContractState::NonInitialized => {
                 env::panic_str("protocol state hasn't been initialized yet")
             }
+            ProtocolContractState::Running(state) if state.public_key == public_key => true,
+            ProtocolContractState::Resharing(state) if state.public_key == public_key => true,
             _ => env::panic_str("can't change public key anymore"),
         }
     }
 
-    pub fn vote_reshared(&mut self) -> bool {
+    pub fn vote_reshared(&mut self, epoch: u64) -> bool {
         match &mut self.protocol_state {
             ProtocolContractState::Resharing(ResharingContractState {
                 old_epoch,
@@ -224,21 +257,22 @@ impl MpcContract {
                 public_key,
                 finished_votes,
             }) => {
+                if *old_epoch + 1 != epoch {
+                    env::panic_str("mismatched epochs");
+                }
                 let voting_participant = old_participants
                     .get(&env::signer_account_id())
                     .unwrap_or_else(|| {
                         env::panic_str("calling account is not in the old participant set")
                     });
-                let voted = finished_votes
-                    .entry(voting_participant.clone())
-                    .or_default();
-                voted.insert(voting_participant.id);
-                if voted.len() >= *threshold {
+                finished_votes.insert(voting_participant.id);
+                if finished_votes.len() >= *threshold {
                     self.protocol_state = ProtocolContractState::Running(RunningContractState {
                         epoch: *old_epoch + 1,
                         participants: new_participants.clone(),
                         threshold: *threshold,
                         public_key: public_key.clone(),
+                        candidates: HashMap::new(),
                         join_votes: HashMap::new(),
                         leave_votes: HashMap::new(),
                     });
@@ -249,6 +283,13 @@ impl MpcContract {
             }
             ProtocolContractState::NonInitialized => {
                 env::panic_str("protocol state hasn't been initialized yet")
+            }
+            ProtocolContractState::Running(state) => {
+                if state.epoch == epoch {
+                    true
+                } else {
+                    env::panic_str("protocol is not resharing right now")
+                }
             }
             _ => env::panic_str("protocol is not resharing right now"),
         }

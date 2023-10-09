@@ -124,6 +124,7 @@ impl Progress for ResharingState {
                             ctx.http_client(),
                             url.clone(),
                             MpcMessage::Resharing(ResharingMessage {
+                                epoch: self.old_epoch,
                                 from: ctx.me(),
                                 data: m.clone(),
                             }),
@@ -139,6 +140,7 @@ impl Progress for ResharingState {
                                 ctx.http_client(),
                                 url.clone(),
                                 MpcMessage::Resharing(ResharingMessage {
+                                    epoch: self.old_epoch,
                                     from: ctx.me(),
                                     data: m.clone(),
                                 }),

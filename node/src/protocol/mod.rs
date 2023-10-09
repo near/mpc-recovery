@@ -11,7 +11,7 @@ pub use state::ProtocolState;
 use self::advance::AdvanceCtx;
 use self::progress::ProgressCtx;
 use crate::protocol::advance::Advance;
-use crate::protocol::message_handler::MessageHandler;
+use crate::protocol::message_handler::{MessageHandler, MpcMessageQueue};
 use crate::protocol::progress::Progress;
 use crate::rpc_client::{self};
 use cait_sith::protocol::Participant;
@@ -37,6 +37,10 @@ impl AdvanceCtx for &Ctx {
         self.me
     }
 
+    fn http_client(&self) -> &reqwest::Client {
+        &self.http_client
+    }
+
     fn rpc_client(&self) -> &near_fetch::Client {
         &self.rpc_client
     }
@@ -47,6 +51,10 @@ impl AdvanceCtx for &Ctx {
 
     fn mpc_contract_id(&self) -> &AccountId {
         &self.mpc_contract_id
+    }
+
+    fn my_address(&self) -> &Url {
+        &self.my_address
     }
 }
 
@@ -94,6 +102,7 @@ impl MpcSignProtocol {
 
     pub async fn run(mut self) -> anyhow::Result<()> {
         tracing::info!("running mpc recovery protocol");
+        let mut queue = MpcMessageQueue::default();
         loop {
             tracing::debug!("trying to advance mpc recovery protocol");
             let contract_state = match rpc_client::fetch_mpc_contract_state(
@@ -110,29 +119,31 @@ impl MpcSignProtocol {
                 }
             };
             tracing::debug!(?contract_state);
-            let msg_result = self.receiver.try_recv();
-            let mut state_guard = self.state.write().await;
-            let mut state = std::mem::take(&mut *state_guard);
-            match msg_result {
-                Ok(msg) => {
-                    tracing::debug!("received a new message");
-                    state.handle(msg);
-                }
-                Err(TryRecvError::Empty) => {
-                    tracing::debug!("no new messages received");
-                }
-                Err(TryRecvError::Disconnected) => {
-                    tracing::debug!("communication was disconnected, no more messages will be received, spinning down");
-                    break;
+            loop {
+                let msg_result = self.receiver.try_recv();
+                match msg_result {
+                    Ok(msg) => {
+                        tracing::debug!("received a new message");
+                        queue.push(msg);
+                    }
+                    Err(TryRecvError::Empty) => {
+                        tracing::debug!("no new messages received");
+                        break;
+                    }
+                    Err(TryRecvError::Disconnected) => {
+                        tracing::debug!("communication was disconnected, no more messages will be received, spinning down");
+                        return Ok(());
+                    }
                 }
             }
+            let mut state_guard = self.state.write().await;
+            let mut state = std::mem::take(&mut *state_guard);
             state = state.progress(&self.ctx).await?;
             state = state.advance(&self.ctx, contract_state).await?;
+            state.handle(&mut queue);
             *state_guard = state;
             drop(state_guard);
             tokio::time::sleep(Duration::from_millis(1000)).await;
         }
-
-        Ok(())
     }
 }

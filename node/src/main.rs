@@ -14,9 +14,13 @@ enum Cli {
         /// Node ID
         #[arg(long, value_parser = parse_participant, env("MPC_RECOVERY_NODE_ID"))]
         node_id: Participant,
-        /// NEAR network
-        #[arg(long, env("MPC_RECOVERY_NEAR_NETWORK"))]
-        near_network: String,
+        /// NEAR RPC address
+        #[arg(
+            long,
+            env("MPC_RECOVERY_NEAR_RPC"),
+            default_value("https://rpc.testnet.near.org")
+        )]
+        near_rpc: String,
         /// MPC contract id
         #[arg(long, env("MPC_RECOVERY_CONTRACT_ID"))]
         mpc_contract_id: AccountId,
@@ -53,7 +57,7 @@ fn main() -> anyhow::Result<()> {
     match Cli::parse() {
         Cli::Start {
             node_id,
-            near_network,
+            near_rpc,
             web_port,
             mpc_contract_id,
             account,
@@ -69,11 +73,7 @@ fn main() -> anyhow::Result<()> {
                     let my_ip = local_ip()?;
                     let my_address = Url::parse(&format!("http://{my_ip}:{web_port}"))?;
                     tracing::info!(%my_address, "address detected");
-                    let rpc_client = match near_network.as_str() {
-                        "mainnet" => near_fetch::Client::new("https://rpc.mainnet.near.org"),
-                        "testnet" => near_fetch::Client::new("https://rpc.testnet.near.org"),
-                        _ => anyhow::bail!("unrecognized NEAR network"),
-                    };
+                    let rpc_client = near_fetch::Client::new(&near_rpc);
                     tracing::debug!(rpc_addr = rpc_client.rpc_addr(), "rpc client initialized");
                     let signer = InMemorySigner::from_secret_key(account, account_sk);
                     let (protocol, protocol_state) = MpcSignProtocol::init(
@@ -110,7 +110,7 @@ fn main() -> anyhow::Result<()> {
 
                     anyhow::Ok(())
                 })?;
-            mpc_recovery_node::indexer::run(&near_network, mpc_contract_id)?;
+            mpc_recovery_node::indexer::run(&near_rpc, mpc_contract_id)?;
         }
     }
 

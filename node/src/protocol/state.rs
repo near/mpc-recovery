@@ -42,6 +42,10 @@ pub struct ResharingState {
     pub protocol: ReshareProtocol,
 }
 
+pub struct JoiningState {
+    pub public_key: PublicKey,
+}
+
 pub enum ProtocolState {
     Starting,
     Started(StartedState),
@@ -49,6 +53,7 @@ pub enum ProtocolState {
     WaitingForConsensus(WaitingForConsensusState),
     Running(RunningState),
     Resharing(ResharingState),
+    Joining(JoiningState),
 }
 
 impl Default for ProtocolState {
