@@ -12,6 +12,7 @@ jobs:
       contents: read
       issues: write
       pull-requests: write
+      checks: read
     defaults:
       run:
         working-directory: ./infra
@@ -41,10 +42,22 @@ jobs:
           GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
           PR_NUMBER: ${{ env.PR_NUMBER }}
 
+      - name: Wait for Docker Image to be Ready
+        uses: lewagon/wait-on-check-action@v1.3.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          check-name: 'Build and Push'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+
       # Applies Terraform configuration to the temporary environment
       - name: Terraform Apply
         id: apply
-        run: terraform apply -auto-approve -input=false -no-color -lock-timeout=1h -var-file terraform-dev.tfvars -var "credentials=$GOOGLE_CREDENTIALS" -var "env=dev-$PR_NUMBER"
+        run: |
+          terraform apply -auto-approve -input=false -no-color -lock-timeout=1h -var-file terraform-dev.tfvars \
+            -var "credentials=$GOOGLE_CREDENTIALS" \
+            -var "env=dev-$PR_NUMBER" \
+            -var docker_image=us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev:${{ github.sha }}
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
           PR_NUMBER: ${{ env.PR_NUMBER }}

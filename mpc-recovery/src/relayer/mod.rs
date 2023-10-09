@@ -1,44 +1,33 @@
 pub mod error;
 pub mod msg;
 
+use anyhow::Context;
 use hyper::{Body, Client, Method, Request};
 use near_crypto::PublicKey;
 use near_jsonrpc_client::JsonRpcClient;
 use near_primitives::delegate_action::DelegateAction;
 use near_primitives::hash::CryptoHash;
 use near_primitives::types::{AccountId, BlockHeight, Nonce};
+use near_primitives::views::FinalExecutionStatus;
 
 use self::error::RelayerError;
-use self::msg::{RegisterAccountRequest, SendMetaTxRequest, SendMetaTxResponse};
+use self::msg::{
+    CreateAccountAtomicRequest, RegisterAccountRequest, SendMetaTxRequest, SendMetaTxResponse,
+};
 
+use crate::firewall::allowed::DelegateActionRelayer;
 use crate::nar::{self, CachedAccessKeyNonces};
 
 pub struct NearRpcAndRelayerClient {
     rpc_client: JsonRpcClient,
-    relayer_url: String,
     cached_nonces: CachedAccessKeyNonces,
-    api_key: Option<String>,
-}
-
-impl Clone for NearRpcAndRelayerClient {
-    fn clone(&self) -> Self {
-        Self {
-            rpc_client: self.rpc_client.clone(),
-            relayer_url: self.relayer_url.clone(),
-            api_key: self.api_key.clone(),
-            // all the cached nonces will not get cloned, and instead get invalidated:
-            cached_nonces: Default::default(),
-        }
-    }
 }
 
 impl NearRpcAndRelayerClient {
-    pub fn connect(near_rpc: &str, relayer_url: String, api_key: Option<String>) -> Self {
+    pub fn connect(near_rpc: &str) -> Self {
         Self {
             rpc_client: JsonRpcClient::connect(near_rpc),
-            relayer_url,
             cached_nonces: Default::default(),
-            api_key,
         }
     }
 
@@ -56,32 +45,90 @@ impl NearRpcAndRelayerClient {
     }
 
     #[tracing::instrument(level = "debug", skip_all, fields(account_id = request.account_id.to_string()))]
-    pub async fn register_account(&self, request: RegisterAccountRequest) -> anyhow::Result<()> {
+    pub async fn register_account(
+        &self,
+        request: RegisterAccountRequest,
+        relayer: DelegateActionRelayer,
+    ) -> Result<(), RelayerError> {
         let mut req = Request::builder()
             .method(Method::POST)
-            .uri(format!("{}/register_account", self.relayer_url))
+            .uri(format!("{}/register_account", relayer.url))
             .header("content-type", "application/json");
 
-        if let Some(api_key) = &self.api_key {
+        if let Some(api_key) = relayer.api_key {
             req = req.header("x-api-key", api_key);
         };
 
-        let request = req.body(Body::from(serde_json::to_vec(&request)?)).unwrap();
+        let request = req
+            .body(Body::from(
+                serde_json::to_vec(&request)
+                    .map_err(|e| RelayerError::DataConversionFailure(e.into()))?,
+            ))
+            .map_err(|e| RelayerError::NetworkFailure(e.into()))?;
 
-        tracing::debug!("constructed http request to {}", self.relayer_url);
+        tracing::debug!("constructed http request to {}", relayer.url);
         let client = Client::new();
-        let response = client.request(request).await?;
+        let response = client
+            .request(request)
+            .await
+            .map_err(|e| RelayerError::NetworkFailure(e.into()))?;
 
-        if response.status().is_success() {
-            let response_body = hyper::body::to_bytes(response.into_body()).await?;
-            tracing::debug!("success: {}", std::str::from_utf8(&response_body)?);
+        let status = response.status();
+        let response_body = hyper::body::to_bytes(response.into_body())
+            .await
+            .map_err(|e| RelayerError::NetworkFailure(e.into()))?;
+        let msg = std::str::from_utf8(&response_body)
+            .map_err(|e| RelayerError::DataConversionFailure(e.into()))?;
+
+        if status.is_success() {
+            tracing::debug!("success: {msg}");
             Ok(())
         } else {
-            let response_body = hyper::body::to_bytes(response.into_body()).await?;
-            Err(anyhow::anyhow!(
-                "fail: {}",
-                std::str::from_utf8(&response_body)?
+            Err(RelayerError::RequestFailure(status, msg.to_string()))
+        }
+    }
+
+    #[tracing::instrument(level = "debug", skip_all, fields(account_id = request.account_id.to_string()))]
+    pub async fn create_account_atomic(
+        &self,
+        request: CreateAccountAtomicRequest,
+        relayer: &DelegateActionRelayer,
+    ) -> Result<(), RelayerError> {
+        let mut req = Request::builder()
+            .method(Method::POST)
+            .uri(format!("{}/create_account_atomic", relayer.url))
+            .header("content-type", "application/json");
+
+        if let Some(api_key) = &relayer.api_key {
+            req = req.header("x-api-key", api_key);
+        };
+
+        let request = req
+            .body(Body::from(
+                serde_json::to_vec(&request)
+                    .map_err(|e| RelayerError::DataConversionFailure(e.into()))?,
             ))
+            .map_err(|e| RelayerError::NetworkFailure(e.into()))?;
+
+        tracing::debug!("constructed http request to {}", relayer.url);
+        let client = Client::new();
+        let response = client
+            .request(request)
+            .await
+            .map_err(|e| RelayerError::NetworkFailure(e.into()))?;
+
+        let status = response.status();
+        let response_body = hyper::body::to_bytes(response.into_body())
+            .await
+            .map_err(|e| RelayerError::NetworkFailure(e.into()))?;
+        let msg = std::str::from_utf8(&response_body)
+            .map_err(|e| RelayerError::DataConversionFailure(e.into()))?;
+
+        if status.is_success() {
+            tracing::debug!(response_body = msg, "got response");
+            Ok(())
+        } else {
+            Err(RelayerError::RequestFailure(status, msg.to_string()))
         }
     }
 
@@ -89,37 +136,57 @@ impl NearRpcAndRelayerClient {
     pub async fn send_meta_tx(
         &self,
         request: SendMetaTxRequest,
-    ) -> anyhow::Result<SendMetaTxResponse> {
+        relayer: DelegateActionRelayer,
+    ) -> Result<SendMetaTxResponse, RelayerError> {
         let request = Request::builder()
             .method(Method::POST)
-            .uri(format!("{}/send_meta_tx", self.relayer_url))
+            .uri(format!("{}/send_meta_tx", relayer.url))
             .header("content-type", "application/json")
-            .body(Body::from(serde_json::to_vec(&request)?))
-            .map_err(|err| anyhow::anyhow!("Failed to construct send_meta_tx request {err}"))?;
-
-        tracing::debug!("constructed http request to {}", self.relayer_url);
-        let client = Client::new();
-        let response = client.request(request).await.map_err(|err| {
-            anyhow::anyhow!("Failed to send send_meta_tx request to relayer: {err}")
-        })?;
-
-        if response.status().is_success() {
-            let response_body = hyper::body::to_bytes(response.into_body()).await?;
-            tracing::debug!("body: {}", std::str::from_utf8(&response_body)?);
-            let response: SendMetaTxResponse = serde_json::from_slice(&response_body)?;
-            tracing::debug!("success: {:?}", response);
-
-            Ok(response)
-        } else {
-            let response_body = hyper::body::to_bytes(response.into_body()).await?;
-            Err(anyhow::anyhow!(
-                "fail: {}",
-                std::str::from_utf8(&response_body)?
+            .body(Body::from(
+                serde_json::to_vec(&request)
+                    .map_err(|e| RelayerError::DataConversionFailure(e.into()))?,
             ))
+            .context("failed to construct send_meta_tx request")
+            .map_err(RelayerError::NetworkFailure)?;
+
+        tracing::debug!("constructed http request to {}", relayer.url);
+        let client = Client::new();
+        let response = client
+            .request(request)
+            .await
+            .context("failed to send send_meta_tx request to relayer")
+            .map_err(RelayerError::NetworkFailure)?;
+        let status = response.status();
+        let response_body = hyper::body::to_bytes(response.into_body())
+            .await
+            .map_err(|e| RelayerError::NetworkFailure(e.into()))?;
+        let msg = std::str::from_utf8(&response_body)
+            .map_err(|e| RelayerError::DataConversionFailure(e.into()))?;
+
+        if status.is_success() {
+            tracing::debug!(response_body = msg, "got response");
+            let response: SendMetaTxResponse = serde_json::from_slice(&response_body)
+                .map_err(|e| RelayerError::DataConversionFailure(e.into()))?;
+            match response.status {
+                FinalExecutionStatus::NotStarted | FinalExecutionStatus::Started => {
+                    Err(RelayerError::TxNotReady)
+                }
+                FinalExecutionStatus::Failure(e) => Err(RelayerError::TxExecutionFailure(e)),
+                FinalExecutionStatus::SuccessValue(ref value) => {
+                    tracing::debug!(
+                        value = std::str::from_utf8(value)
+                            .map_err(|e| RelayerError::DataConversionFailure(e.into()))?,
+                        "success"
+                    );
+                    Ok(response)
+                }
+            }
+        } else {
+            Err(RelayerError::RequestFailure(status, msg.to_string()))
         }
     }
 
-    pub(crate) async fn invalidate_cache_if_tx_failed(
+    pub(crate) async fn invalidate_cache_if_acc_creation_failed(
         &self,
         cache_key: &(AccountId, PublicKey),
         err_str: &str,
@@ -132,12 +199,11 @@ impl NearRpcAndRelayerClient {
 mod tests {
     use super::*;
 
-    const RELAYER_URI: &str = "http://34.70.226.83:3030";
     const TESTNET_URL: &str = "https://rpc.testnet.near.org";
 
     #[tokio::test]
     async fn test_access_key() -> anyhow::Result<()> {
-        let testnet = NearRpcAndRelayerClient::connect(TESTNET_URL, RELAYER_URI.to_string(), None);
+        let testnet = NearRpcAndRelayerClient::connect(TESTNET_URL);
         let (block_hash, block_height, nonce) = testnet
             .access_key(
                 "dev-1636354824855-78504059330123".parse()?,

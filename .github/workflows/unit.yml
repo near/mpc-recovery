@@ -21,6 +21,8 @@ jobs:
       - uses: Swatinem/rust-cache@v1
       - name: Install Protoc
         uses: arduino/setup-protoc@v1.1.2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Compile
         run: cargo check
       - name: Test format
@@ -46,5 +48,4 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: audit
-          # Fix RUSTSEC-2023-0001 by upgrading tokio once https://github.com/near/nearcore/issues/8888 is resolved
-          args: --ignore RUSTSEC-2020-0071 --ignore RUSTSEC-2023-0001
+          args: --ignore RUSTSEC-2020-0071 --ignore RUSTSEC-2023-0052 --ignore RUSTSEC-2022-0093

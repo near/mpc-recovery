@@ -1,9 +1,12 @@
+use std::path::PathBuf;
+
 use aes_gcm::{
     aead::{consts::U32, generic_array::GenericArray, KeyInit},
     Aes256Gcm,
 };
 use clap::Parser;
 use mpc_recovery::{
+    firewall::allowed::{OidcProviderList, PartnerList},
     gcp::GcpService,
     oauth::{PagodaFirebaseTokenVerifier, UniversalTokenVerifier},
     sign_node::migration,
@@ -11,6 +14,7 @@ use mpc_recovery::{
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_primitives::types::AccountId;
+use serde::de::DeserializeOwned;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser, Debug)]
@@ -35,16 +39,6 @@ enum Cli {
             default_value("https://rpc.testnet.near.org")
         )]
         near_rpc: String,
-        /// NEAR meta transaction relayer URL
-        #[arg(long, env("MPC_RECOVERY_RELAYER_API_KEY"))]
-        relayer_api_key: Option<String>,
-        /// NEAR meta transaction relayer URL
-        #[arg(
-            long,
-            env("MPC_RECOVERY_RELAYER_URL"),
-            default_value("http://34.70.226.83:3030")
-        )]
-        relayer_url: String,
         /// NEAR root account that has linkdrop contract deployed on it
         #[arg(long, env("MPC_RECOVERY_NEAR_ROOT_ACCOUNT"), default_value("testnet"))]
         near_root_account: String,
@@ -54,9 +48,12 @@ enum Cli {
         /// TEMPORARY - Account creator ed25519 secret key
         #[arg(long, env("MPC_RECOVERY_ACCOUNT_CREATOR_SK"))]
         account_creator_sk: Option<String>,
-        /// Firebase Audience ID
-        #[arg(long, env("PAGODA_FIREBASE_AUDIENCE_ID"))]
-        pagoda_firebase_audience_id: String,
+        /// JSON list of related items to be used to verify OIDC tokens.
+        #[arg(long, env("FAST_AUTH_PARTNERS"))]
+        fast_auth_partners: Option<String>,
+        /// Filepath to a JSON list of related items to be used to verify OIDC tokens.
+        #[arg(long, value_parser, env("FAST_AUTH_PARTNERS_FILEPATH"))]
+        fast_auth_partners_filepath: Option<PathBuf>,
         /// GCP project ID
         #[arg(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
         gcp_project_id: String,
@@ -83,9 +80,12 @@ enum Cli {
         /// The web port for this server
         #[arg(long, env("MPC_RECOVERY_WEB_PORT"))]
         web_port: u16,
-        /// Firebase Audience ID
-        #[arg(long, env("PAGODA_FIREBASE_AUDIENCE_ID"))]
-        pagoda_firebase_audience_id: String,
+        /// JSON list of related items to be used to verify OIDC tokens.
+        #[arg(long, env("OIDC_PROVIDERS"))]
+        oidc_providers: Option<String>,
+        /// Filepath to a JSON list of related items to be used to verify OIDC tokens.
+        #[arg(long, value_parser, env("OIDC_PROVIDERS_FILEPATH"))]
+        oidc_providers_filepath: Option<PathBuf>,
         /// GCP project ID
         #[arg(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
         gcp_project_id: String,
@@ -165,6 +165,35 @@ async fn load_account_creator_sk(
     }
 }
 
+async fn load_entries<T>(
+    gcp_service: &GcpService,
+    env: &str,
+    node_id: &str,
+    data: Option<String>,
+    path: Option<PathBuf>,
+) -> anyhow::Result<T>
+where
+    T: DeserializeOwned,
+{
+    let entries = match (data, path) {
+        (Some(data), None) => serde_json::from_str(&data)?,
+        (None, Some(path)) => {
+            let file = std::fs::File::open(path)?;
+            let reader = std::io::BufReader::new(file);
+            serde_json::from_reader(reader)?
+        }
+        (None, None) => {
+            let name =
+                format!("mpc-recovery-allowed-oidc-providers-{node_id}-{env}/versions/latest");
+            let data = gcp_service.load_secret(name).await?;
+            serde_json::from_str(std::str::from_utf8(&data)?)?
+        }
+        _ => return Err(anyhow::anyhow!("Invalid combination of data and path")),
+    };
+
+    Ok(entries)
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Install global collector configured based on RUST_LOG env var.
@@ -197,12 +226,11 @@ async fn main() -> anyhow::Result<()> {
             web_port,
             sign_nodes,
             near_rpc,
-            relayer_api_key,
-            relayer_url,
             near_root_account,
             account_creator_id,
             account_creator_sk,
-            pagoda_firebase_audience_id,
+            fast_auth_partners: partners,
+            fast_auth_partners_filepath: partners_filepath,
             gcp_project_id,
             gcp_datastore_url,
             test,
@@ -211,6 +239,10 @@ async fn main() -> anyhow::Result<()> {
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
             let account_creator_sk =
                 load_account_creator_sk(&gcp_service, &env, account_creator_sk).await?;
+            let partners = PartnerList {
+                entries: load_entries(&gcp_service, &env, "leader", partners, partners_filepath)
+                    .await?,
+            };
 
             let account_creator_sk = account_creator_sk.parse()?;
 
@@ -219,13 +251,11 @@ async fn main() -> anyhow::Result<()> {
                 port: web_port,
                 sign_nodes,
                 near_rpc,
-                relayer_api_key,
-                relayer_url,
                 near_root_account,
                 // TODO: Create such an account for testnet and mainnet in a secure way
                 account_creator_id,
                 account_creator_sk,
-                pagoda_firebase_audience_id,
+                partners,
             };
 
             if test {
@@ -240,13 +270,24 @@ async fn main() -> anyhow::Result<()> {
             sk_share,
             cipher_key,
             web_port,
-            pagoda_firebase_audience_id,
+            oidc_providers,
+            oidc_providers_filepath,
             gcp_project_id,
             gcp_datastore_url,
             test,
         } => {
             let gcp_service =
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
+            let oidc_providers = OidcProviderList {
+                entries: load_entries(
+                    &gcp_service,
+                    &env,
+                    node_id.to_string().as_str(),
+                    oidc_providers,
+                    oidc_providers_filepath,
+                )
+                .await?,
+            };
             let cipher_key = load_cipher_key(&gcp_service, &env, node_id, cipher_key).await?;
             let cipher_key = hex::decode(cipher_key)?;
             let cipher_key = GenericArray::<u8, U32>::clone_from_slice(&cipher_key);
@@ -263,7 +304,7 @@ async fn main() -> anyhow::Result<()> {
                 node_key: sk_share,
                 cipher,
                 port: web_port,
-                pagoda_firebase_audience_id,
+                oidc_providers,
             };
             if test {
                 mpc_recovery::run_sign_node::<UniversalTokenVerifier>(config).await;

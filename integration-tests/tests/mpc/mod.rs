@@ -1,21 +1,22 @@
 use std::time::Duration;
 
 use mpc_recovery::msg::{NewAccountResponse, UserCredentialsResponse};
+use mpc_recovery::sign_node::oidc::OidcToken;
 use mpc_recovery::transaction::LimitedAccessKey;
 use near_crypto::{PublicKey, SecretKey};
-use workspaces::AccountId;
+use near_workspaces::AccountId;
 
-use crate::{account, check, key, token, MpcCheck, TestContext};
+use crate::{account, check, key, MpcCheck, TestContext};
 
 mod negative;
 mod positive;
 
 pub async fn register_account(
-    ctx: &TestContext<'_>,
+    ctx: &TestContext,
     user_id: &AccountId,
     user_sk: &SecretKey,
     user_pk: &PublicKey,
-    user_oidc: &str,
+    user_oidc: &OidcToken,
     user_lak: Option<LimitedAccessKey>,
 ) -> anyhow::Result<()> {
     // Claim OIDC token
@@ -33,8 +34,8 @@ pub async fn register_account(
     assert!(matches!(new_acc_response, NewAccountResponse::Ok {
             create_account_options: _,
             user_recovery_public_key: _,
-            near_account_id: acc_id,
-        } if acc_id == user_id.to_string()
+            near_account_id,
+        } if &near_account_id == user_id
     ));
 
     tokio::time::sleep(Duration::from_millis(2000)).await;
@@ -44,13 +45,13 @@ pub async fn register_account(
 }
 
 pub async fn new_random_account(
-    ctx: &TestContext<'_>,
+    ctx: &TestContext,
     user_lak: Option<LimitedAccessKey>,
-) -> anyhow::Result<(AccountId, SecretKey, String)> {
-    let account_id = account::random(ctx.worker)?;
+) -> anyhow::Result<(AccountId, SecretKey, OidcToken)> {
+    let account_id = account::random(&ctx.worker)?;
     let user_secret_key = key::random_sk();
     let user_public_key = user_secret_key.public_key();
-    let oidc_token = token::valid_random();
+    let oidc_token = OidcToken::random();
 
     register_account(
         ctx,
@@ -65,9 +66,9 @@ pub async fn new_random_account(
 }
 
 pub async fn fetch_recovery_pk(
-    ctx: &TestContext<'_>,
+    ctx: &TestContext,
     user_sk: &SecretKey,
-    user_oidc: &str,
+    user_oidc: &OidcToken,
 ) -> anyhow::Result<PublicKey> {
     let recovery_pk = match ctx
         .leader_node
@@ -83,10 +84,10 @@ pub async fn fetch_recovery_pk(
 
 /// Add a new random public key or a supplied public key.
 pub async fn add_pk_and_check_validity(
-    ctx: &TestContext<'_>,
+    ctx: &TestContext,
     user_id: &AccountId,
     user_sk: &SecretKey,
-    user_oidc: &str,
+    user_oidc: &OidcToken,
     user_recovery_pk: &PublicKey,
     pk_to_add: Option<PublicKey>,
 ) -> anyhow::Result<PublicKey> {

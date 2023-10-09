@@ -1,2 +1,8 @@
 [workspace]
-members = ["mpc-recovery", "contract", "node", "integration-tests"]
+members = [
+    "mpc-recovery",
+    "contract",
+    "node",
+    "integration-tests",
+    "load-tests",
+]

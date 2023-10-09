@@ -1,21 +1,3 @@
-resource "google_secret_manager_secret" "account_creator_sk" {
-  secret_id = "mpc-recovery-account-creator-sk-${var.env}"
-  replication {
-    automatic = true
-  }
-}
-
-resource "google_secret_manager_secret_version" "account_creator_sk_data" {
-  secret      = google_secret_manager_secret.account_creator_sk.name
-  secret_data = var.account_creator_sk
-}
-
-resource "google_secret_manager_secret_iam_member" "account_creator_secret_access" {
-  secret_id = google_secret_manager_secret.account_creator_sk.id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${var.service_account_email}"
-}
-
 resource "google_cloud_run_v2_service" "leader" {
   name     = "mpc-recovery-leader-${var.env}"
   location = var.region
@@ -45,17 +27,6 @@ resource "google_cloud_run_v2_service" "leader" {
         name  = "MPC_RECOVERY_NEAR_RPC"
         value = var.near_rpc
       }
-      dynamic "env" {
-        for_each = var.relayer_api_key == null ? [] : [1]
-        content {
-          name  = "MPC_RECOVERY_RELAYER_API_KEY"
-          value = var.relayer_api_key
-        }
-      }
-      env {
-        name  = "MPC_RECOVERY_RELAYER_URL"
-        value = var.relayer_url
-      }
       env {
         name  = "MPC_RECOVERY_NEAR_ROOT_ACCOUNT"
         value = var.near_root_account
@@ -65,16 +36,30 @@ resource "google_cloud_run_v2_service" "leader" {
         value = var.account_creator_id
       }
       env {
-        name  = "PAGODA_FIREBASE_AUDIENCE_ID"
-        value = var.firebase_audience_id
-      }
-      env {
         name  = "MPC_RECOVERY_GCP_PROJECT_ID"
         value = var.project
       }
       env {
         name  = "MPC_RECOVERY_ENV"
         value = var.env
+      }
+      env {
+        name = "MPC_RECOVERY_ACCOUNT_CREATOR_SK"
+        value_source {
+          secret_key_ref {
+            secret  = var.account_creator_sk_secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "FAST_AUTH_PARTNERS"
+        value_source {
+          secret_key_ref {
+            secret  = var.fast_auth_partners_secret_id
+            version = "latest"
+          }
+        }
       }
       env {
         name  = "RUST_LOG"
@@ -95,10 +80,6 @@ resource "google_cloud_run_v2_service" "leader" {
       }
     }
   }
-  depends_on = [
-    google_secret_manager_secret_version.account_creator_sk_data,
-    google_secret_manager_secret_iam_member.account_creator_secret_access
-  ]
 }
 
 // Allow unauthenticated requests

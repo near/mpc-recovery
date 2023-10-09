@@ -2,39 +2,37 @@ mod mpc;
 mod multichain;
 
 use curv::elliptic::curves::{Ed25519, Point};
-use futures::future::BoxFuture;
 use hyper::StatusCode;
 use mpc_recovery::{
+    firewall::allowed::DelegateActionRelayer,
     gcp::GcpService,
     msg::{
         ClaimOidcResponse, MpcPkResponse, NewAccountResponse, SignResponse, UserCredentialsResponse,
     },
     GenerateResult,
 };
-use mpc_recovery_integration_tests::{
-    containers::{self},
-    SandboxCtx,
-};
+use mpc_recovery_integration_tests::{containers, SandboxCtx};
+use near_primitives::utils::generate_random_string;
+use near_workspaces::{network::Sandbox, Worker};
+use near_workspaces::{AccountId, Contract, Worker};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
-use workspaces::network::Sandbox;
-use workspaces::{AccountId, Contract, Worker};
 
 const NETWORK: &str = "mpc_it_network";
 const GCP_PROJECT_ID: &str = "mpc-recovery-gcp-project";
-// TODO: figure out how to instantiate an use a local firebase deployment
-const FIREBASE_AUDIENCE_ID: &str = "not actually used in integration tests";
+// TODO: figure out how to instantiate and use a local firebase deployment
+pub const FIREBASE_AUDIENCE_ID: &str = "test_audience";
 
-pub struct TestContext<'a> {
-    leader_node: &'a containers::LeaderNodeApi,
-    pk_set: &'a Vec<Point<Ed25519>>,
-    worker: &'a Worker<Sandbox>,
-    signer_nodes: &'a Vec<containers::SignerNodeApi>,
+pub struct TestContext {
+    leader_node: containers::LeaderNodeApi,
+    pk_set: Vec<Point<Ed25519>>,
+    worker: Worker<Sandbox>,
+    signer_nodes: Vec<containers::SignerNodeApi>,
     gcp_datastore_url: String,
 }
 
-impl<'a> TestContext<'a> {
+impl TestContext {
     pub async fn gcp_service(&self) -> anyhow::Result<GcpService> {
         GcpService::new(
             "dev".into(),
@@ -45,15 +43,17 @@ impl<'a> TestContext<'a> {
     }
 }
 
-async fn with_nodes<F>(nodes: usize, f: F) -> anyhow::Result<()>
+async fn with_nodes<Task, Fut, Val>(nodes: usize, f: Task) -> anyhow::Result<()>
 where
-    F: for<'a> FnOnce(TestContext<'a>) -> BoxFuture<'a, anyhow::Result<()>>,
+    Task: FnOnce(TestContext) -> Fut,
+    Fut: core::future::Future<Output = anyhow::Result<Val>>,
 {
     let docker_client = containers::DockerClient::default();
     docker_client.create_network(NETWORK).await?;
 
+    let relayer_id = generate_random_string(7); // used to distinguish relayer tmp files in multiple tests
     let relayer_ctx_future =
-        mpc_recovery_integration_tests::initialize_relayer(&docker_client, NETWORK);
+        mpc_recovery_integration_tests::initialize_relayer(&docker_client, NETWORK, &relayer_id);
     let datastore_future = containers::Datastore::run(&docker_client, NETWORK, GCP_PROJECT_ID);
 
     let (relayer_ctx, datastore) =
@@ -64,7 +64,7 @@ where
     let GenerateResult { pk_set, secrets } = mpc_recovery::generate(nodes);
     let mut signer_node_futures = Vec::new();
     for (i, (share, cipher_key)) in secrets.iter().enumerate().take(nodes) {
-        let signer_node = containers::SignerNode::run(
+        let signer_node = containers::SignerNode::run_signing_node(
             &docker_client,
             NETWORK,
             i as u64,
@@ -100,16 +100,21 @@ where
     .await?;
 
     f(TestContext {
-        leader_node: &leader_node.api(
+        leader_node: leader_node.api(
             &relayer_ctx.sandbox.local_address,
-            &relayer_ctx.relayer.local_address,
+            &DelegateActionRelayer {
+                url: relayer_ctx.relayer.local_address.clone(),
+                api_key: None,
+            },
         ),
-        pk_set: &pk_set,
-        signer_nodes: &signer_nodes.iter().map(|n| n.api()).collect(),
-        worker: &relayer_ctx.worker,
+        pk_set,
+        signer_nodes: signer_nodes.iter().map(|n| n.api()).collect(),
+        worker: relayer_ctx.worker.clone(),
         gcp_datastore_url: datastore.local_address,
     })
     .await?;
+
+    relayer_ctx.relayer.clean_tmp_files()?;
 
     Ok(())
 }
@@ -264,30 +269,13 @@ mod key {
     }
 }
 
-mod token {
-    use rand::{distributions::Alphanumeric, Rng};
-
-    pub fn valid_random() -> String {
-        let random: String = rand::thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(10)
-            .map(char::from)
-            .collect();
-        format!("validToken:{}", random)
-    }
-
-    pub fn invalid() -> String {
-        "invalidToken".to_string()
-    }
-}
-
 mod check {
     use crate::TestContext;
     use near_crypto::PublicKey;
     use workspaces::AccountId;
 
     pub async fn access_key_exists(
-        ctx: &TestContext<'_>,
+        ctx: &TestContext,
         account_id: &AccountId,
         public_key: &PublicKey,
     ) -> anyhow::Result<()> {
@@ -306,7 +294,7 @@ mod check {
     }
 
     pub async fn access_key_does_not_exists(
-        ctx: &TestContext<'_>,
+        ctx: &TestContext,
         account_id: &AccountId,
         public_key: &str,
     ) -> anyhow::Result<()> {
@@ -362,6 +350,8 @@ trait MpcCheck {
     fn assert_ok(self) -> anyhow::Result<Self::Response>;
     fn assert_bad_request_contains(self, expected: &str) -> anyhow::Result<Self::Response>;
     fn assert_unauthorized_contains(self, expected: &str) -> anyhow::Result<Self::Response>;
+    fn assert_internal_error_contains(self, expected: &str) -> anyhow::Result<Self::Response>;
+    fn assert_dependency_error_contains(self, expected: &str) -> anyhow::Result<Self::Response>;
 
     fn assert_bad_request(self) -> anyhow::Result<Self::Response>
     where
@@ -374,6 +364,12 @@ trait MpcCheck {
         Self: Sized,
     {
         self.assert_unauthorized_contains("")
+    }
+    fn assert_internal_error(self) -> anyhow::Result<Self::Response>
+    where
+        Self: Sized,
+    {
+        self.assert_internal_error_contains("")
     }
 }
 
@@ -398,7 +394,9 @@ macro_rules! impl_mpc_check {
                     let $response::Err { .. } = response else {
                         anyhow::bail!("unexpected Ok with a non-200 http code ({status_code})");
                     };
-                    anyhow::bail!("expected 200, but got {status_code} with response: {response:?}");
+                    anyhow::bail!(
+                        "expected 200, but got {status_code} with response: {response:?}"
+                    );
                 }
             }
 
@@ -410,15 +408,20 @@ macro_rules! impl_mpc_check {
                     let $response::Err { ref msg, .. } = response else {
                         anyhow::bail!("unexpected Ok with a 400 http code");
                     };
-                    assert!(msg.contains(expected));
+                    assert!(msg.contains(expected), "{expected:?} not in {msg:?}");
 
                     Ok(response)
                 } else {
-                    anyhow::bail!("expected 400, but got {status_code} with response: {response:?}");
+                    anyhow::bail!(
+                        "expected 400, but got {status_code} with response: {response:?}"
+                    );
                 }
             }
 
-            fn assert_unauthorized_contains(self, expected: &str) -> anyhow::Result<Self::Response> {
+            fn assert_unauthorized_contains(
+                self,
+                expected: &str,
+            ) -> anyhow::Result<Self::Response> {
                 let status_code = self.0;
                 let response = self.1;
 
@@ -426,11 +429,54 @@ macro_rules! impl_mpc_check {
                     let $response::Err { ref msg, .. } = response else {
                         anyhow::bail!("unexpected Ok with a 401 http code");
                     };
+                    assert!(msg.contains(expected), "{expected:?} not in {msg:?}");
+
+                    Ok(response)
+                } else {
+                    anyhow::bail!(
+                        "expected 401, but got {status_code} with response: {response:?}"
+                    );
+                }
+            }
+            // ideally we should not have situations where we can get INTERNAL_SERVER_ERROR
+            fn assert_internal_error_contains(
+                self,
+                expected: &str,
+            ) -> anyhow::Result<Self::Response> {
+                let status_code = self.0;
+                let response = self.1;
+
+                if status_code == StatusCode::INTERNAL_SERVER_ERROR {
+                    let $response::Err { ref msg, .. } = response else {
+                        anyhow::bail!("unexpected error with a 401 http code");
+                    };
                     assert!(msg.contains(expected));
 
                     Ok(response)
                 } else {
-                    anyhow::bail!("expected 401, but got {status_code} with response: {response:?}");
+                    anyhow::bail!(
+                        "expected 401, but got {status_code} with response: {response:?}"
+                    );
+                }
+            }
+            fn assert_dependency_error_contains(
+                self,
+                expected: &str,
+            ) -> anyhow::Result<Self::Response> {
+                let status_code = self.0;
+                let response = self.1;
+
+                if status_code == StatusCode::FAILED_DEPENDENCY {
+                    let $response::Err { ref msg, .. } = response else {
+                        anyhow::bail!("unexpected error with a 424 http code");
+                    };
+                    assert!(msg.contains(expected));
+
+                    Ok(response)
+                } else {
+                    anyhow::bail!(
+                        "expected 424, but got {status_code} with response: {response:?}"
+                    );
                 }
             }
         }

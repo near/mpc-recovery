@@ -1,13 +1,13 @@
 use clap::Parser;
 use mpc_recovery::GenerateResult;
 use mpc_recovery_integration_tests::containers;
+use near_primitives::utils::generate_random_string;
 use tokio::io::{stdin, AsyncReadExt};
 use tracing_subscriber::EnvFilter;
 
 const NETWORK: &str = "mpc_recovery_dev_network";
 const GCP_PROJECT_ID: &str = "mpc-recovery-dev-gcp-project";
-// TODO: figure out how to instantiate an use a local firebase deployment
-const FIREBASE_AUDIENCE_ID: &str = "not-actually-used-in-integration-tests";
+pub const FIREBASE_AUDIENCE_ID: &str = "test_audience";
 
 #[derive(Parser, Debug)]
 enum Cli {
@@ -25,8 +25,12 @@ async fn main() -> anyhow::Result<()> {
             tracing::info!("Setting up an environment with {} nodes", nodes);
             let docker_client = containers::DockerClient::default();
 
-            let relayer_ctx_future =
-                mpc_recovery_integration_tests::initialize_relayer(&docker_client, NETWORK);
+            let relayer_id = generate_random_string(7);
+            let relayer_ctx_future = mpc_recovery_integration_tests::initialize_relayer(
+                &docker_client,
+                NETWORK,
+                &relayer_id,
+            );
             let datastore_future =
                 containers::Datastore::run(&docker_client, NETWORK, GCP_PROJECT_ID);
 
@@ -40,7 +44,7 @@ async fn main() -> anyhow::Result<()> {
             tracing::info!("Running signer nodes...");
             let mut signer_node_futures = Vec::new();
             for (i, (share, cipher_key)) in secrets.iter().enumerate().take(nodes) {
-                let signer_node = containers::SignerNode::run(
+                let signer_node = containers::SignerNode::run_signing_node(
                     &docker_client,
                     NETWORK,
                     i as u64,
@@ -75,22 +79,12 @@ async fn main() -> anyhow::Result<()> {
                         .container
                         .get_host_port_ipv4(containers::Sandbox::CONTAINER_RPC_PORT)
                 ),
-                "--relayer-url".to_string(),
-                format!(
-                    "http://localhost:{}",
-                    relayer_ctx
-                        .relayer
-                        .container
-                        .get_host_port_ipv4(containers::Relayer::CONTAINER_PORT)
-                ),
                 "--near-root-account".to_string(),
                 near_root_account.id().to_string(),
                 "--account-creator-id".to_string(),
                 relayer_ctx.creator_account.id().to_string(),
                 "--account-creator-sk".to_string(),
                 relayer_ctx.creator_account.secret_key().to_string(),
-                "--pagoda-firebase-audience-id".to_string(),
-                FIREBASE_AUDIENCE_ID.to_string(),
                 "--gcp-project-id".to_string(),
                 GCP_PROJECT_ID.to_string(),
                 "--gcp-datastore-url".to_string(),
@@ -100,6 +94,25 @@ async fn main() -> anyhow::Result<()> {
                         .container
                         .get_host_port_ipv4(containers::Datastore::CONTAINER_PORT)
                 ),
+                "--fast-auth-partners".to_string(),
+                escape_json_string(&serde_json::json!([
+                    {
+                        "oidc_provider": {
+                            "issuer": format!("https://securetoken.google.com/{}", FIREBASE_AUDIENCE_ID.to_string()),
+                            "audience": FIREBASE_AUDIENCE_ID.to_string(),
+                        },
+                        "relayer": {
+                            "url": format!(
+                                "http://localhost:{}",
+                                relayer_ctx
+                                    .relayer
+                                    .container
+                                    .get_host_port_ipv4(containers::Relayer::CONTAINER_PORT)
+                            ),
+                            "api_key": serde_json::Value::Null,
+                        },
+                    },
+                ]).to_string()),
                 "--test".to_string(),
             ];
             for sign_node in signer_urls {
@@ -125,4 +138,25 @@ async fn main() -> anyhow::Result<()> {
     };
 
     Ok(())
+}
+
+fn escape_json_string(input: &str) -> String {
+    let mut result = String::with_capacity(input.len() + 2);
+    result.push('"');
+
+    for c in input.chars() {
+        match c {
+            '"' => result.push_str(r"\\"),
+            '\\' => result.push_str(r"\\"),
+            '\n' => result.push_str(r"\n"),
+            '\r' => result.push_str(r"\r"),
+            '\t' => result.push_str(r"\t"),
+            '\u{08}' => result.push_str(r"\b"), // Backspace
+            '\u{0C}' => result.push_str(r"\f"), // Form feed
+            _ => result.push(c),
+        }
+    }
+
+    result.push('"');
+    result
 }

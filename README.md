@@ -111,7 +111,7 @@ signed by the key you used to claim the oidc token. This does not have to be the
 
     URL: /sign
     Request parameters: {
-        delegate_action: DelegateAction,
+        delegate_action: String, // Base64-encoded borsh serialization of DelegateAction
         oidc_token: String,
         frp_signature: Signature,
         user_credentials_frp_signature: Signature,
@@ -129,10 +129,10 @@ This endpoint can be used to sign a delegate action that can then be sent to the
 
 The frp_signature you send must be an Ed22519 signature of the hash:
 
-    sha256.hash(Borsh.serialize<u32>(SALT + 3) ++ Borsh.serialize<[u8]>(
-        delegate_action,
-        oidc_token_hash,
-    ) ++ [0] ++ Borsh.serialize<[u8]>(frp_public_key))
+    sha256.hash(Borsh.serialize<u32>(SALT + 3) ++
+    Borsh.serialize<[u8]>(delegate_action) ++
+    Borsh.serialize<[u8]>(oidc_token) ++
+    [0] ++ Borsh.serialize<[u8]>(frp_public_key))
 
 The user_credentials_frp_signature is needed to get user recovery PK. It is the same as in user_credentials endpoint.
 
@@ -157,6 +157,15 @@ The expected flow for the client is next:
 Check our integration tests to see how it works in practice.
 
 Registered ID Token will be added to the persistent DB on each Signing node and saved until expiration. Registered Id Tokens are tied to the provided PK.
+
+## Sign flow
+The expected flow for the client is next:
+1. Client uses `/user_credentials` endpoint to get the recovery PK.
+2. Client fetches latest nonce, block hash using obtained recovery PK.
+3. Client creates a delegate action with desired actions, such as add or delete key.
+4. Client serializes the delegate action and encodes it into Base64.
+5. Client gets the signature from the MPC system using `/sign` endpoint.
+6. Client sends the same delegate action to the relayer with obtained signature.
 
 ### Client integration
 

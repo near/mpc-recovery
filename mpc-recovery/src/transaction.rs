@@ -1,6 +1,8 @@
+use crate::error::{AggregateSigningError, LeaderNodeError};
 use crate::msg::{SignNodeRequest, SignShareNodeRequest};
 use crate::sign_node::aggregate_signer::{Reveal, SignedCommitment};
-use anyhow::{anyhow, Context};
+use crate::sign_node::oidc::OidcToken;
+use anyhow::Context;
 use curv::elliptic::curves::{Ed25519, Point};
 use ed25519_dalek::Signature;
 use futures::{future, FutureExt};
@@ -98,15 +100,15 @@ pub fn get_local_signed_delegated_action(
 pub async fn get_mpc_signature(
     client: &reqwest::Client,
     sign_nodes: &[String],
-    oidc_token: &str,
+    oidc_token: &OidcToken,
     delegate_action: DelegateAction,
-    frp_signature: Signature,
+    frp_signature: &Signature,
     frp_public_key: &near_crypto::PublicKey,
-) -> Result<Signature, NodeSignError> {
+) -> Result<Signature, LeaderNodeError> {
     let sig_share_request = SignNodeRequest::SignShare(SignShareNodeRequest {
-        oidc_token: oidc_token.to_string(),
+        oidc_token: oidc_token.clone(),
         delegate_action,
-        frp_signature,
+        frp_signature: *frp_signature,
         frp_public_key: frp_public_key.clone(),
     });
 
@@ -127,7 +129,7 @@ pub async fn sign_payload_with_mpc(
     client: &reqwest::Client,
     sign_nodes: &[String],
     sig_share_request: SignNodeRequest,
-) -> Result<Signature, NodeSignError> {
+) -> Result<Signature, LeaderNodeError> {
     let commitments: Vec<SignedCommitment> =
         call_all_nodes(client, sign_nodes, "commit", sig_share_request).await?;
 
@@ -138,7 +140,7 @@ pub async fn sign_payload_with_mpc(
 
     let raw_sig = aggsig::add_signature_parts(&signature_shares);
 
-    Ok(to_dalek_signature(&raw_sig)?)
+    to_dalek_signature(&raw_sig).map_err(LeaderNodeError::AggregateSigningFailed)
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -158,7 +160,7 @@ pub async fn call_all_nodes<Req: Serialize, Res: DeserializeOwned>(
     sign_nodes: &[String],
     path: &str,
     request: Req,
-) -> Result<Vec<Res>, NodeCallError> {
+) -> Result<Vec<Res>, LeaderNodeError> {
     let responses = sign_nodes.iter().map(|sign_node| {
         client
             .post(format!("{}/{}", sign_node, path))
@@ -166,20 +168,19 @@ pub async fn call_all_nodes<Req: Serialize, Res: DeserializeOwned>(
             .json(&request)
             .send()
             .then(|r| async move {
-                match r {
-                    // Flatten all errors to strings
-                    Ok(ok) => {
-                        let status_code = ok.status();
-                        match ok.json::<Result<Res, String>>().await {
-                            Ok(Ok(res)) => Ok(res),
-                            Ok(Err(e)) if status_code.is_client_error() => {
-                                Err(NodeCallError::ClientError(e, status_code))
-                            }
-                            Ok(Err(e)) => Err(NodeCallError::ServerError(e)),
-                            Err(e) => Err(NodeCallError::Other(anyhow!(e))),
-                        }
+                let ok = r.map_err(LeaderNodeError::NetworkRejection)?;
+                let status_code = ok.status();
+                let ok = ok
+                    .json::<Result<Res, String>>()
+                    .await
+                    .map_err(|e| LeaderNodeError::DataConversionFailure(e.into()))?;
+
+                match ok {
+                    Ok(res) => Ok(res),
+                    Err(e) if status_code.is_client_error() => {
+                        Err(LeaderNodeError::ClientError(e, status_code))
                     }
-                    Err(e) => Err(NodeCallError::Other(anyhow!(e))),
+                    Err(e) => Err(LeaderNodeError::ServerError(e)),
                 }
             })
     });
@@ -195,25 +196,30 @@ pub fn from_dalek_signature(sig: ed25519_dalek::Signature) -> anyhow::Result<pro
     })
 }
 
-pub fn to_dalek_signature(sig: &protocols::Signature) -> anyhow::Result<ed25519_dalek::Signature> {
+pub fn to_dalek_signature(
+    sig: &protocols::Signature,
+) -> Result<ed25519_dalek::Signature, AggregateSigningError> {
     let mut sig_bytes = [0u8; 64];
     sig_bytes[..32].copy_from_slice(&sig.R.to_bytes(true));
     sig_bytes[32..].copy_from_slice(&sig.s.to_bytes());
 
     // let dalek_pub = ed25519_dalek::PublicKey::from_bytes(&*pk.to_bytes(true)).unwrap();
-    ed25519_dalek::Signature::from_bytes(&sig_bytes).context("Signature conversion failed")
+    ed25519_dalek::Signature::from_bytes(&sig_bytes)
+        .context("to dalek signature conversion failed")
+        .map_err(AggregateSigningError::DataConversionFailure)
 }
 
 pub fn to_dalek_combined_public_key(
     public_keys: &[Point<Ed25519>],
-) -> anyhow::Result<ed25519_dalek::PublicKey> {
+) -> Result<ed25519_dalek::PublicKey, AggregateSigningError> {
     let combined = KeyAgg::key_aggregation_n(public_keys, 0).apk;
     to_dalek_public_key(&combined)
 }
 
 pub fn to_dalek_public_key(
     public_key: &Point<Ed25519>,
-) -> anyhow::Result<ed25519_dalek::PublicKey> {
+) -> Result<ed25519_dalek::PublicKey, AggregateSigningError> {
     ed25519_dalek::PublicKey::from_bytes(&public_key.to_bytes(true))
-        .context("Key conversion failed")
+        .context("to dalek key conversion failed")
+        .map_err(AggregateSigningError::DataConversionFailure)
 }

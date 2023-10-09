@@ -2,7 +2,7 @@ use bollard::exec::{CreateExecOptions, StartExecResults};
 use futures::StreamExt;
 use near_crypto::KeyFile;
 use near_units::parse_near;
-use workspaces::{
+use near_workspaces::{
     network::{Sandbox, ValidatorKey},
     Account, Worker,
 };
@@ -66,7 +66,7 @@ pub async fn initialize_sandbox<'a>(
     let validator_key = fetch_validator_keys(docker_client, &sandbox).await?;
 
     tracing::info!("initializing sandbox worker");
-    let worker = workspaces::sandbox()
+    let worker = near_workspaces::sandbox()
         .rpc_addr(&format!(
             "http://localhost:{}",
             sandbox
@@ -93,6 +93,7 @@ pub struct RelayerCtx<'a> {
 pub async fn initialize_relayer<'a>(
     docker_client: &'a containers::DockerClient,
     network: &str,
+    relayer_id: &str,
 ) -> anyhow::Result<RelayerCtx<'a>> {
     let SandboxCtx { sandbox, worker } = initialize_sandbox(docker_client, network).await?;
     let social_db = sandbox::initialize_social_db(&worker).await?;
@@ -115,13 +116,14 @@ pub async fn initialize_relayer<'a>(
         docker_client,
         network,
         &sandbox.address,
-        &redis.address,
+        &redis.full_address,
         relayer_account.id(),
         relayer_account.secret_key(),
         creator_account.id(),
         social_db.id(),
         social_account.id(),
         social_account.secret_key(),
+        relayer_id,
     )
     .await?;
 
