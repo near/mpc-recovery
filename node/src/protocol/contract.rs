@@ -182,8 +182,8 @@ fn contract_participants_into_cait_participants(
     participants: HashMap<AccountId, ParticipantInfo>,
 ) -> HashMap<Participant, Url> {
     participants
-        .into_iter()
-        .map(|(_, p)| {
+        .into_values()
+        .map(|p| {
             (
                 Participant::from(p.id),
                 Url::try_from(p.url.as_str()).unwrap(),

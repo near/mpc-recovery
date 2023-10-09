@@ -1,6 +1,5 @@
 use crate::protocol::MpcMessage;
 use cait_sith::protocol::Participant;
-use mpc_contract::ParticipantInfo;
 use reqwest::{Client, IntoUrl};
 use std::str::Utf8Error;
 use tokio_retry::strategy::{jitter, ExponentialBackoff};
@@ -32,14 +31,14 @@ pub async fn message<U: IntoUrl>(
             .json(&message)
             .send()
             .await
-            .map_err(|e| SendError::ReqwestClientError(e))?;
+            .map_err(SendError::ReqwestClientError)?;
         let status = response.status();
         let response_bytes = response
             .bytes()
             .await
-            .map_err(|e| SendError::ReqwestBodyError(e))?;
+            .map_err(SendError::ReqwestBodyError)?;
         let response_str =
-            std::str::from_utf8(&response_bytes).map_err(|e| SendError::MalformedResponse(e))?;
+            std::str::from_utf8(&response_bytes).map_err(SendError::MalformedResponse)?;
         if status.is_success() {
             Ok(())
         } else {
@@ -71,7 +70,7 @@ pub async fn join<U: IntoUrl>(
             .json(&participant)
             .send()
             .await
-            .map_err(|e| SendError::ReqwestClientError(e))?;
+            .map_err(SendError::ReqwestClientError)?;
         let status = response.status();
         if status.is_success() {
             Ok(())
@@ -79,9 +78,9 @@ pub async fn join<U: IntoUrl>(
             let response_bytes = response
                 .bytes()
                 .await
-                .map_err(|e| SendError::ReqwestBodyError(e))?;
-            let response_str = std::str::from_utf8(&response_bytes)
-                .map_err(|e| SendError::MalformedResponse(e))?;
+                .map_err(SendError::ReqwestBodyError)?;
+            let response_str =
+                std::str::from_utf8(&response_bytes).map_err(SendError::MalformedResponse)?;
             tracing::error!("failed to connect to {}: {}", url, response_str);
             Err(SendError::Unsuccessful(response_str.into()))
         }

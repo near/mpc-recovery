@@ -13,7 +13,7 @@ use mpc_recovery::{
 };
 use mpc_recovery_integration_tests::{containers, SandboxCtx};
 use near_primitives::utils::generate_random_string;
-use near_workspaces::{network::Sandbox, Worker};
+use near_workspaces::network::Sandbox;
 use near_workspaces::{AccountId, Contract, Worker};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -213,8 +213,8 @@ where
 }
 
 mod account {
+    use near_workspaces::{network::Sandbox, AccountId, Worker};
     use rand::{distributions::Alphanumeric, Rng};
-    use workspaces::{network::Sandbox, AccountId, Worker};
 
     pub fn random(worker: &Worker<Sandbox>) -> anyhow::Result<AccountId> {
         let account_id_rand: String = rand::thread_rng()
@@ -272,7 +272,7 @@ mod key {
 mod check {
     use crate::TestContext;
     use near_crypto::PublicKey;
-    use workspaces::AccountId;
+    use near_workspaces::AccountId;
 
     pub async fn access_key_exists(
         ctx: &TestContext,

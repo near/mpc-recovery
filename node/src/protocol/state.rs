@@ -46,7 +46,9 @@ pub struct JoiningState {
     pub public_key: PublicKey,
 }
 
+#[derive(Default)]
 pub enum ProtocolState {
+    #[default]
     Starting,
     Started(StartedState),
     Generating(GeneratingState),
@@ -54,10 +56,4 @@ pub enum ProtocolState {
     Running(RunningState),
     Resharing(ResharingState),
     Joining(JoiningState),
-}
-
-impl Default for ProtocolState {
-    fn default() -> Self {
-        ProtocolState::Starting
-    }
 }

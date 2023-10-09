@@ -1,22 +1,19 @@
 pub mod error;
 pub mod msg;
 
-use anyhow::Context;
-use hyper::{Body, Client, Method, Request};
-use near_crypto::PublicKey;
-use near_jsonrpc_client::JsonRpcClient;
-use near_primitives::delegate_action::DelegateAction;
-use near_primitives::hash::CryptoHash;
-use near_primitives::types::{AccountId, BlockHeight, Nonce};
-use near_primitives::views::FinalExecutionStatus;
-
 use self::error::RelayerError;
 use self::msg::{
     CreateAccountAtomicRequest, RegisterAccountRequest, SendMetaTxRequest, SendMetaTxResponse,
 };
-
 use crate::firewall::allowed::DelegateActionRelayer;
 use crate::nar::{self, CachedAccessKeyNonces};
+use anyhow::Context;
+use hyper::{Body, Client, Method, Request};
+use near_crypto::PublicKey;
+use near_jsonrpc_client::JsonRpcClient;
+use near_primitives::hash::CryptoHash;
+use near_primitives::types::{AccountId, BlockHeight, Nonce};
+use near_primitives::views::FinalExecutionStatus;
 
 pub struct NearRpcAndRelayerClient {
     rpc_client: JsonRpcClient,

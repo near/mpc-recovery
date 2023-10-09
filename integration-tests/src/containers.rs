@@ -952,7 +952,6 @@ pub struct Node<'a> {
     pub container: Container<'a, GenericImage>,
     pub address: String,
     pub local_address: String,
-    node_id: usize,
 }
 
 pub struct NodeApi {
@@ -1020,7 +1019,6 @@ impl<'a> Node<'a> {
             container,
             address: full_address,
             local_address: format!("http://localhost:{host_port}"),
-            node_id: node_id as usize,
         })
     }
 }

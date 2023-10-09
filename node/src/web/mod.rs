@@ -7,14 +7,12 @@ use axum::routing::{get, post};
 use axum::{Extension, Json, Router};
 use axum_extra::extract::WithRejection;
 use cait_sith::protocol::Participant;
-use mpc_contract::ParticipantInfo;
 use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
 use near_primitives::types::AccountId;
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::{mpsc::Sender, RwLock};
-use url::Url;
 
 struct AxumState {
     mpc_contract_id: AccountId,

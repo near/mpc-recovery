@@ -294,8 +294,4 @@ impl MpcContract {
             _ => env::panic_str("protocol is not resharing right now"),
         }
     }
-
-    pub fn sign(payload: Vec<u8>) -> [u8; 32] {
-        env::random_seed_array()
-    }
 }

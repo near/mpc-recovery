@@ -27,7 +27,7 @@ async fn handle_block(
                 if let Some(function_call) = action.as_function_call() {
                     if function_call.method_name() == "sign" {
                         if let Ok(sign_payload) =
-                            serde_json::from_slice::<'_, SignPayload>(&function_call.args())
+                            serde_json::from_slice::<'_, SignPayload>(function_call.args())
                         {
                             tracing::info!(
                                 signer_id = tx.signer_id().to_string(),
@@ -43,7 +43,7 @@ async fn handle_block(
     Ok(())
 }
 
-pub fn run(near_rpc: &str, signer_account: AccountId) -> anyhow::Result<()> {
+pub fn run(_near_rpc: &str, signer_account: AccountId) -> anyhow::Result<()> {
     let mut config_builder = LakeBuilder::default();
     // config_builder = match near_network {
     //     "mainnet" => config_builder.mainnet().start_block_height(98924566),
