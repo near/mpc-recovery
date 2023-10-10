@@ -91,14 +91,14 @@ impl NearRpcAndRelayerClient {
     pub async fn create_account_atomic(
         &self,
         request: CreateAccountAtomicRequest,
-        relayer: DelegateActionRelayer,
+        relayer: &DelegateActionRelayer,
     ) -> Result<(), RelayerError> {
         let mut req = Request::builder()
             .method(Method::POST)
             .uri(format!("{}/create_account_atomic", relayer.url))
             .header("content-type", "application/json");
 
-        if let Some(api_key) = relayer.api_key {
+        if let Some(api_key) = &relayer.api_key {
             req = req.header("x-api-key", api_key);
         };
 

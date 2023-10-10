@@ -348,7 +348,25 @@ async fn process_new_account<T: OAuthTokenVerifier>(
     let oidc_token_claims = T::verify_token(&request.oidc_token, &state.partners.oidc_providers())
         .await
         .map_err(LeaderNodeError::OidcVerificationFailed)?;
+
     let internal_acc_id = oidc_token_claims.get_internal_account_id();
+
+    // TODO: move error message from here to this place
+    let partner = state
+        .partners
+        .find(&oidc_token_claims.iss, &oidc_token_claims.aud)?;
+
+    let mpc_user_recovery_pk = nar::retry(|| async {
+        get_user_recovery_pk(
+            &state.reqwest_client,
+            &state.sign_nodes,
+            &request.oidc_token,
+            &request.user_credentials_frp_signature,
+            &request.frp_public_key,
+        )
+        .await
+    })
+    .await?;
 
     // FIXME: waiting on https://github.com/near/mpc-recovery/issues/193
     // FRP check to prevent invalid PKs and Sigs from getting through. Used to circumvent the
@@ -370,15 +388,6 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             )
             .await
             .map_err(LeaderNodeError::RelayerError)?;
-
-        let mpc_user_recovery_pk = get_user_recovery_pk(
-            &state.reqwest_client,
-            &state.sign_nodes,
-            &request.oidc_token,
-            &request.user_credentials_frp_signature,
-            &request.frp_public_key,
-        )
-        .await?;
 
         // Add recovery key to create account options
         let mut new_account_options = request.create_account_options.clone();
@@ -412,14 +421,9 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             signed_delegate_action,
         };
 
-        // TODO: move error message from here to this place
-        let partner = state
-            .partners
-            .find(&oidc_token_claims.iss, &oidc_token_claims.aud)?;
-
         let result = state
             .client
-            .create_account_atomic(request, partner.relayer)
+            .create_account_atomic(request, &partner.relayer)
             .await;
 
         match result {
@@ -430,7 +434,7 @@ async fn process_new_account<T: OAuthTokenVerifier>(
                 );
                 Ok(NewAccountResponse::Ok {
                     create_account_options: new_account_options,
-                    user_recovery_public_key: mpc_user_recovery_pk,
+                    user_recovery_public_key: mpc_user_recovery_pk.clone(),
                     near_account_id: new_user_account_id.clone(),
                 })
             }
