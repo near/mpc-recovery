@@ -351,6 +351,16 @@ async fn process_new_account<T: OAuthTokenVerifier>(
 
     let internal_acc_id = oidc_token_claims.get_internal_account_id();
 
+    // FIXME: waiting on https://github.com/near/mpc-recovery/issues/193
+    // FRP check to prevent invalid PKs and Sigs from getting through. Used to circumvent the
+    // atomicity of account creation between relayer and the sign nodes. The atomicity
+    // part is being worked on.
+    let frp_pk = &request.frp_public_key;
+    let digest = user_credentials_request_digest(&request.oidc_token, frp_pk)?;
+    check_digest_signature(frp_pk, &request.user_credentials_frp_signature, &digest)
+        .map_err(LeaderNodeError::SignatureVerificationFailed)?;
+    tracing::debug!("user credentials digest signature verified for {new_user_account_id:?}");
+
     // TODO: move error message from here to this place
     let partner = state
         .partners
@@ -367,16 +377,6 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         .await
     })
     .await?;
-
-    // FIXME: waiting on https://github.com/near/mpc-recovery/issues/193
-    // FRP check to prevent invalid PKs and Sigs from getting through. Used to circumvent the
-    // atomicity of account creation between relayer and the sign nodes. The atomicity
-    // part is being worked on.
-    let frp_pk = &request.frp_public_key;
-    let digest = user_credentials_request_digest(&request.oidc_token, frp_pk)?;
-    check_digest_signature(frp_pk, &request.user_credentials_frp_signature, &digest)
-        .map_err(LeaderNodeError::SignatureVerificationFailed)?;
-    tracing::debug!("user credentials digest signature verified for {new_user_account_id:?}");
 
     nar::retry(|| async {
         // Get nonce and recent block hash
