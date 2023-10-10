@@ -12,7 +12,8 @@ RUN sed -i 's#mpc-contract = { path = "../contract" }##' Cargo.toml
 RUN cargo build
 COPY . .
 RUN sed -i 's#"mpc-recovery",##' Cargo.toml
-RUN sed -i 's#"integration-tests"##' Cargo.toml
+RUN sed -i 's#"integration-tests",##' Cargo.toml
+RUN sed -i 's#"load-tests",##' Cargo.toml
 RUN cargo build --package mpc-recovery-node
 
 FROM debian:stable-slim as runtime
