@@ -199,7 +199,7 @@ where
         .await?
         .into_result()?;
 
-    let rpc_client = near_fetch::Client::new(&sandbox.address);
+    let rpc_client = near_fetch::Client::new(&sandbox.local_address);
 
     f(MultichainTestContext {
         worker,

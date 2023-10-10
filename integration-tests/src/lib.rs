@@ -67,12 +67,7 @@ pub async fn initialize_sandbox<'a>(
 
     tracing::info!("initializing sandbox worker");
     let worker = near_workspaces::sandbox()
-        .rpc_addr(&format!(
-            "http://localhost:{}",
-            sandbox
-                .container
-                .get_host_port_ipv4(crate::containers::Sandbox::CONTAINER_RPC_PORT)
-        ))
+        .rpc_addr(&sandbox.local_address)
         .validator_key(ValidatorKey::Known(
             validator_key.account_id.to_string().parse()?,
             validator_key.secret_key.to_string().parse()?,
