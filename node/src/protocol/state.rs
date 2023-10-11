@@ -47,7 +47,7 @@ pub struct JoiningState {
 }
 
 #[derive(Default)]
-pub enum ProtocolState {
+pub enum NodeState {
     #[default]
     Starting,
     Started(StartedState),

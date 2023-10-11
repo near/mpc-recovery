@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 
-use super::state::{GeneratingState, ProtocolState, ResharingState};
+use super::state::{GeneratingState, NodeState, ResharingState};
 use cait_sith::protocol::{MessageData, Participant};
 use serde::{Deserialize, Serialize};
 
@@ -79,11 +79,11 @@ impl MessageHandler for ResharingState {
     }
 }
 
-impl MessageHandler for ProtocolState {
+impl MessageHandler for NodeState {
     fn handle(&mut self, queue: &mut MpcMessageQueue) {
         match self {
-            ProtocolState::Generating(state) => state.handle(queue),
-            ProtocolState::Resharing(state) => state.handle(queue),
+            NodeState::Generating(state) => state.handle(queue),
+            NodeState::Resharing(state) => state.handle(queue),
             _ => {
                 tracing::debug!("skipping message processing")
             }

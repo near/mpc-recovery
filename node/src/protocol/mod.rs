@@ -1,18 +1,18 @@
-mod advance;
+mod consensus;
 mod contract;
-mod message_handler;
-mod progress;
+mod cryptography;
+mod message;
 mod state;
 
-pub use contract::ProtocolContractState;
-pub use message_handler::MpcMessage;
-pub use state::ProtocolState;
+pub use contract::ProtocolState;
+pub use message::MpcMessage;
+pub use state::NodeState;
 
-use self::advance::AdvanceCtx;
-use self::progress::ProgressCtx;
-use crate::protocol::advance::Advance;
-use crate::protocol::message_handler::{MessageHandler, MpcMessageQueue};
-use crate::protocol::progress::Progress;
+use self::consensus::ConsensusCtx;
+use self::cryptography::CryptographicCtx;
+use crate::protocol::consensus::ConsensusProtocol;
+use crate::protocol::cryptography::CryptographicProtocol;
+use crate::protocol::message::{MessageHandler, MpcMessageQueue};
 use crate::rpc_client::{self};
 use cait_sith::protocol::Participant;
 use near_crypto::InMemorySigner;
@@ -32,7 +32,7 @@ struct Ctx {
     http_client: reqwest::Client,
 }
 
-impl AdvanceCtx for &Ctx {
+impl ConsensusCtx for &Ctx {
     fn me(&self) -> Participant {
         self.me
     }
@@ -58,7 +58,7 @@ impl AdvanceCtx for &Ctx {
     }
 }
 
-impl ProgressCtx for &Ctx {
+impl CryptographicCtx for &Ctx {
     fn me(&self) -> Participant {
         self.me
     }
@@ -71,7 +71,7 @@ impl ProgressCtx for &Ctx {
 pub struct MpcSignProtocol {
     ctx: Ctx,
     receiver: mpsc::Receiver<MpcMessage>,
-    state: Arc<RwLock<ProtocolState>>,
+    state: Arc<RwLock<NodeState>>,
 }
 
 impl MpcSignProtocol {
@@ -82,8 +82,8 @@ impl MpcSignProtocol {
         rpc_client: near_fetch::Client,
         signer: InMemorySigner,
         receiver: mpsc::Receiver<MpcMessage>,
-    ) -> (Self, Arc<RwLock<ProtocolState>>) {
-        let state = Arc::new(RwLock::new(ProtocolState::Starting));
+    ) -> (Self, Arc<RwLock<NodeState>>) {
+        let state = Arc::new(RwLock::new(NodeState::Starting));
         let ctx = Ctx {
             me,
             my_address: my_address.into_url().unwrap(),

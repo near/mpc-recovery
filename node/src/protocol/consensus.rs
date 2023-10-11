@@ -1,6 +1,6 @@
-use super::contract::{ProtocolContractState, ResharingContractState};
+use super::contract::{ProtocolState, ResharingContractState};
 use super::state::{
-    JoiningState, PersistentNodeData, ProtocolState, RunningState, StartedState,
+    JoiningState, NodeState, PersistentNodeData, RunningState, StartedState,
     WaitingForConsensusState,
 };
 use crate::protocol::state::{GeneratingState, ResharingState};
@@ -16,7 +16,7 @@ use near_primitives::types::AccountId;
 use std::cmp::Ordering;
 use url::Url;
 
-pub trait AdvanceCtx {
+pub trait ConsensusCtx {
     fn me(&self) -> Participant;
     fn http_client(&self) -> &reqwest::Client;
     fn rpc_client(&self) -> &near_fetch::Client;
@@ -26,7 +26,7 @@ pub trait AdvanceCtx {
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum AdvanceError {
+pub enum ConsensusError {
     #[error("contract state has been rolled back")]
     ContractStateRollback,
     #[error("contract epoch has been rolled back")]
@@ -44,31 +44,31 @@ pub enum AdvanceError {
 }
 
 #[async_trait]
-pub trait Advance {
-    async fn advance<C: AdvanceCtx + Send + Sync>(
+pub trait ConsensusProtocol {
+    async fn advance<C: ConsensusCtx + Send + Sync>(
         self,
         ctx: C,
-        contract_state: ProtocolContractState,
-    ) -> Result<ProtocolState, AdvanceError>;
+        contract_state: ProtocolState,
+    ) -> Result<NodeState, ConsensusError>;
 }
 
 #[async_trait]
-impl Advance for StartedState {
-    async fn advance<C: AdvanceCtx + Send + Sync>(
+impl ConsensusProtocol for StartedState {
+    async fn advance<C: ConsensusCtx + Send + Sync>(
         self,
         ctx: C,
-        contract_state: ProtocolContractState,
-    ) -> Result<ProtocolState, AdvanceError> {
+        contract_state: ProtocolState,
+    ) -> Result<NodeState, ConsensusError> {
         match self.0 {
             Some(PersistentNodeData {
                 epoch,
                 private_share,
                 public_key,
             }) => match contract_state {
-                ProtocolContractState::Initialized(_) => Err(AdvanceError::ContractStateRollback),
-                ProtocolContractState::Running(contract_state) => {
+                ProtocolState::Initialized(_) => Err(ConsensusError::ContractStateRollback),
+                ProtocolState::Running(contract_state) => {
                     if contract_state.public_key != public_key {
-                        return Err(AdvanceError::MismatchedPublicKey);
+                        return Err(ConsensusError::MismatchedPublicKey);
                     }
                     match contract_state.epoch.cmp(&epoch) {
                         Ordering::Greater => {
@@ -77,15 +77,15 @@ impl Advance for StartedState {
                                 epoch,
                                 contract_state.epoch
                             );
-                            Ok(ProtocolState::Joining(JoiningState { public_key }))
+                            Ok(NodeState::Joining(JoiningState { public_key }))
                         }
-                        Ordering::Less => Err(AdvanceError::EpochRollback),
+                        Ordering::Less => Err(ConsensusError::EpochRollback),
                         Ordering::Equal => {
                             if contract_state.participants.contains_key(&ctx.me()) {
                                 tracing::info!(
                                     "contract state is running and we are already a participant"
                                 );
-                                Ok(ProtocolState::Running(RunningState {
+                                Ok(NodeState::Running(RunningState {
                                     epoch,
                                     participants: contract_state.participants,
                                     threshold: contract_state.threshold,
@@ -93,14 +93,14 @@ impl Advance for StartedState {
                                     public_key,
                                 }))
                             } else {
-                                Ok(ProtocolState::Joining(JoiningState { public_key }))
+                                Ok(NodeState::Joining(JoiningState { public_key }))
                             }
                         }
                     }
                 }
-                ProtocolContractState::Resharing(contract_state) => {
+                ProtocolState::Resharing(contract_state) => {
                     if contract_state.public_key != public_key {
-                        return Err(AdvanceError::MismatchedPublicKey);
+                        return Err(ConsensusError::MismatchedPublicKey);
                     }
                     match contract_state.old_epoch.cmp(&epoch) {
                         Ordering::Greater => {
@@ -109,9 +109,9 @@ impl Advance for StartedState {
                                 epoch,
                                 contract_state.old_epoch
                             );
-                            Ok(ProtocolState::Joining(JoiningState { public_key }))
+                            Ok(NodeState::Joining(JoiningState { public_key }))
                         }
-                        Ordering::Less => Err(AdvanceError::EpochRollback),
+                        Ordering::Less => Err(ConsensusError::EpochRollback),
                         Ordering::Equal => {
                             tracing::info!(
                                 "contract state is resharing with us, joining as a participant"
@@ -122,7 +122,7 @@ impl Advance for StartedState {
                 }
             },
             None => match contract_state {
-                ProtocolContractState::Initialized(contract_state) => {
+                ProtocolState::Initialized(contract_state) => {
                     if contract_state.participants.contains_key(&ctx.me()) {
                         tracing::info!("starting key generation as a part of the participant set");
                         let participants = contract_state.participants;
@@ -131,88 +131,84 @@ impl Advance for StartedState {
                             ctx.me(),
                             contract_state.threshold,
                         )?;
-                        Ok(ProtocolState::Generating(GeneratingState {
+                        Ok(NodeState::Generating(GeneratingState {
                             participants,
                             threshold: contract_state.threshold,
                             protocol: Box::new(protocol),
                         }))
                     } else {
                         tracing::info!("we are not a part of the initial participant set, waiting for key generation to complete");
-                        Ok(ProtocolState::Started(self))
+                        Ok(NodeState::Started(self))
                     }
                 }
-                ProtocolContractState::Running(contract_state) => {
-                    Ok(ProtocolState::Joining(JoiningState {
-                        public_key: contract_state.public_key,
-                    }))
-                }
-                ProtocolContractState::Resharing(contract_state) => {
-                    Ok(ProtocolState::Joining(JoiningState {
-                        public_key: contract_state.public_key,
-                    }))
-                }
+                ProtocolState::Running(contract_state) => Ok(NodeState::Joining(JoiningState {
+                    public_key: contract_state.public_key,
+                })),
+                ProtocolState::Resharing(contract_state) => Ok(NodeState::Joining(JoiningState {
+                    public_key: contract_state.public_key,
+                })),
             },
         }
     }
 }
 
 #[async_trait]
-impl Advance for GeneratingState {
-    async fn advance<C: AdvanceCtx + Send + Sync>(
+impl ConsensusProtocol for GeneratingState {
+    async fn advance<C: ConsensusCtx + Send + Sync>(
         self,
         _ctx: C,
-        contract_state: ProtocolContractState,
-    ) -> Result<ProtocolState, AdvanceError> {
+        contract_state: ProtocolState,
+    ) -> Result<NodeState, ConsensusError> {
         match contract_state {
-            ProtocolContractState::Initialized(_) => {
+            ProtocolState::Initialized(_) => {
                 tracing::debug!("continuing generation, contract state has not been finalized yet");
-                Ok(ProtocolState::Generating(self))
+                Ok(NodeState::Generating(self))
             }
-            ProtocolContractState::Running(contract_state) => {
+            ProtocolState::Running(contract_state) => {
                 if contract_state.epoch > 0 {
                     tracing::warn!("contract has already changed epochs, trying to rejoin as a new participant");
-                    return Ok(ProtocolState::Joining(JoiningState {
+                    return Ok(NodeState::Joining(JoiningState {
                         public_key: contract_state.public_key,
                     }));
                 }
                 tracing::info!("contract state has finished key generation, trying to catch up");
                 if self.participants != contract_state.participants {
-                    return Err(AdvanceError::MismatchedParticipants);
+                    return Err(ConsensusError::MismatchedParticipants);
                 }
                 if self.threshold != contract_state.threshold {
-                    return Err(AdvanceError::MismatchedThreshold);
+                    return Err(ConsensusError::MismatchedThreshold);
                 }
-                Ok(ProtocolState::Generating(self))
+                Ok(NodeState::Generating(self))
             }
-            ProtocolContractState::Resharing(contract_state) => {
+            ProtocolState::Resharing(contract_state) => {
                 if contract_state.old_epoch > 0 {
                     tracing::warn!("contract has already changed epochs, trying to rejoin as a new participant");
-                    return Ok(ProtocolState::Joining(JoiningState {
+                    return Ok(NodeState::Joining(JoiningState {
                         public_key: contract_state.public_key,
                     }));
                 }
                 tracing::warn!("contract state is resharing without us, trying to catch up");
                 if self.participants != contract_state.old_participants {
-                    return Err(AdvanceError::MismatchedParticipants);
+                    return Err(ConsensusError::MismatchedParticipants);
                 }
                 if self.threshold != contract_state.threshold {
-                    return Err(AdvanceError::MismatchedThreshold);
+                    return Err(ConsensusError::MismatchedThreshold);
                 }
-                Ok(ProtocolState::Generating(self))
+                Ok(NodeState::Generating(self))
             }
         }
     }
 }
 
 #[async_trait]
-impl Advance for WaitingForConsensusState {
-    async fn advance<C: AdvanceCtx + Send + Sync>(
+impl ConsensusProtocol for WaitingForConsensusState {
+    async fn advance<C: ConsensusCtx + Send + Sync>(
         self,
         ctx: C,
-        contract_state: ProtocolContractState,
-    ) -> Result<ProtocolState, AdvanceError> {
+        contract_state: ProtocolState,
+    ) -> Result<NodeState, ConsensusError> {
         match contract_state {
-            ProtocolContractState::Initialized(contract_state) => {
+            ProtocolState::Initialized(contract_state) => {
                 tracing::debug!("waiting for consensus, contract state has not been finalized yet");
                 let public_key = self.public_key.into_near_public_key();
                 let has_voted = contract_state
@@ -231,54 +227,52 @@ impl Advance for WaitingForConsensusState {
                     .await
                     .unwrap();
                 }
-                Ok(ProtocolState::WaitingForConsensus(self))
+                Ok(NodeState::WaitingForConsensus(self))
             }
-            ProtocolContractState::Running(contract_state) => {
-                match contract_state.epoch.cmp(&self.epoch) {
-                    Ordering::Greater => {
-                        tracing::warn!(
+            ProtocolState::Running(contract_state) => match contract_state.epoch.cmp(&self.epoch) {
+                Ordering::Greater => {
+                    tracing::warn!(
                             "out current epoch is {} while contract state's is {}, trying to rejoin as a new participant",
                             self.epoch,
                             contract_state.epoch
                         );
-                        Ok(ProtocolState::Joining(JoiningState {
-                            public_key: contract_state.public_key,
-                        }))
-                    }
-                    Ordering::Less => Err(AdvanceError::EpochRollback),
-                    Ordering::Equal => {
-                        tracing::info!("contract state has reached consensus");
-                        if contract_state.participants != self.participants {
-                            return Err(AdvanceError::MismatchedParticipants);
-                        }
-                        if contract_state.threshold != self.threshold {
-                            return Err(AdvanceError::MismatchedThreshold);
-                        }
-                        if contract_state.public_key != self.public_key {
-                            return Err(AdvanceError::MismatchedPublicKey);
-                        }
-                        Ok(ProtocolState::Running(RunningState {
-                            epoch: self.epoch,
-                            participants: self.participants,
-                            threshold: self.threshold,
-                            private_share: self.private_share,
-                            public_key: self.public_key,
-                        }))
-                    }
+                    Ok(NodeState::Joining(JoiningState {
+                        public_key: contract_state.public_key,
+                    }))
                 }
-            }
-            ProtocolContractState::Resharing(contract_state) => {
+                Ordering::Less => Err(ConsensusError::EpochRollback),
+                Ordering::Equal => {
+                    tracing::info!("contract state has reached consensus");
+                    if contract_state.participants != self.participants {
+                        return Err(ConsensusError::MismatchedParticipants);
+                    }
+                    if contract_state.threshold != self.threshold {
+                        return Err(ConsensusError::MismatchedThreshold);
+                    }
+                    if contract_state.public_key != self.public_key {
+                        return Err(ConsensusError::MismatchedPublicKey);
+                    }
+                    Ok(NodeState::Running(RunningState {
+                        epoch: self.epoch,
+                        participants: self.participants,
+                        threshold: self.threshold,
+                        private_share: self.private_share,
+                        public_key: self.public_key,
+                    }))
+                }
+            },
+            ProtocolState::Resharing(contract_state) => {
                 match (contract_state.old_epoch + 1).cmp(&self.epoch) {
                     Ordering::Greater if contract_state.old_epoch + 2 == self.epoch => {
                         tracing::info!("contract state is resharing, joining");
                         if contract_state.old_participants != self.participants {
-                            return Err(AdvanceError::MismatchedParticipants);
+                            return Err(ConsensusError::MismatchedParticipants);
                         }
                         if contract_state.threshold != self.threshold {
-                            return Err(AdvanceError::MismatchedThreshold);
+                            return Err(ConsensusError::MismatchedThreshold);
                         }
                         if contract_state.public_key != self.public_key {
-                            return Err(AdvanceError::MismatchedPublicKey);
+                            return Err(ConsensusError::MismatchedPublicKey);
                         }
                         start_resharing(Some(self.private_share), ctx, contract_state)
                     }
@@ -288,11 +282,11 @@ impl Advance for WaitingForConsensusState {
                             self.epoch,
                             contract_state.old_epoch
                         );
-                        Ok(ProtocolState::Joining(JoiningState {
+                        Ok(NodeState::Joining(JoiningState {
                             public_key: contract_state.public_key,
                         }))
                     }
-                    Ordering::Less => Err(AdvanceError::EpochRollback),
+                    Ordering::Less => Err(ConsensusError::EpochRollback),
                     Ordering::Equal => {
                         tracing::debug!(
                             "waiting for resharing consensus, contract state has not been finalized yet"
@@ -312,7 +306,7 @@ impl Advance for WaitingForConsensusState {
                             .await
                             .unwrap();
                         }
-                        Ok(ProtocolState::WaitingForConsensus(self))
+                        Ok(NodeState::WaitingForConsensus(self))
                     }
                 }
             }
@@ -321,43 +315,41 @@ impl Advance for WaitingForConsensusState {
 }
 
 #[async_trait]
-impl Advance for RunningState {
-    async fn advance<C: AdvanceCtx + Send + Sync>(
+impl ConsensusProtocol for RunningState {
+    async fn advance<C: ConsensusCtx + Send + Sync>(
         self,
         ctx: C,
-        contract_state: ProtocolContractState,
-    ) -> Result<ProtocolState, AdvanceError> {
+        contract_state: ProtocolState,
+    ) -> Result<NodeState, ConsensusError> {
         match contract_state {
-            ProtocolContractState::Initialized(_) => Err(AdvanceError::ContractStateRollback),
-            ProtocolContractState::Running(contract_state) => {
-                match contract_state.epoch.cmp(&self.epoch) {
-                    Ordering::Greater => {
-                        tracing::warn!(
+            ProtocolState::Initialized(_) => Err(ConsensusError::ContractStateRollback),
+            ProtocolState::Running(contract_state) => match contract_state.epoch.cmp(&self.epoch) {
+                Ordering::Greater => {
+                    tracing::warn!(
                             "out current epoch is {} while contract state's is {}, trying to rejoin as a new participant",
                             self.epoch,
                             contract_state.epoch
                         );
-                        Ok(ProtocolState::Joining(JoiningState {
-                            public_key: contract_state.public_key,
-                        }))
-                    }
-                    Ordering::Less => Err(AdvanceError::EpochRollback),
-                    Ordering::Equal => {
-                        tracing::debug!("continuing to run as normal");
-                        if contract_state.participants != self.participants {
-                            return Err(AdvanceError::MismatchedParticipants);
-                        }
-                        if contract_state.threshold != self.threshold {
-                            return Err(AdvanceError::MismatchedThreshold);
-                        }
-                        if contract_state.public_key != self.public_key {
-                            return Err(AdvanceError::MismatchedPublicKey);
-                        }
-                        Ok(ProtocolState::Running(self))
-                    }
+                    Ok(NodeState::Joining(JoiningState {
+                        public_key: contract_state.public_key,
+                    }))
                 }
-            }
-            ProtocolContractState::Resharing(contract_state) => {
+                Ordering::Less => Err(ConsensusError::EpochRollback),
+                Ordering::Equal => {
+                    tracing::debug!("continuing to run as normal");
+                    if contract_state.participants != self.participants {
+                        return Err(ConsensusError::MismatchedParticipants);
+                    }
+                    if contract_state.threshold != self.threshold {
+                        return Err(ConsensusError::MismatchedThreshold);
+                    }
+                    if contract_state.public_key != self.public_key {
+                        return Err(ConsensusError::MismatchedPublicKey);
+                    }
+                    Ok(NodeState::Running(self))
+                }
+            },
+            ProtocolState::Resharing(contract_state) => {
                 match contract_state.old_epoch.cmp(&self.epoch) {
                     Ordering::Greater => {
                         tracing::warn!(
@@ -365,20 +357,20 @@ impl Advance for RunningState {
                             self.epoch,
                             contract_state.old_epoch
                         );
-                        Ok(ProtocolState::Joining(JoiningState {
+                        Ok(NodeState::Joining(JoiningState {
                             public_key: contract_state.public_key,
                         }))
                     }
-                    Ordering::Less => Err(AdvanceError::EpochRollback),
+                    Ordering::Less => Err(ConsensusError::EpochRollback),
                     Ordering::Equal => {
                         tracing::info!("contract is resharing");
                         if !contract_state.old_participants.contains_key(&ctx.me())
                             || !contract_state.new_participants.contains_key(&ctx.me())
                         {
-                            return Err(AdvanceError::HasBeenKicked);
+                            return Err(ConsensusError::HasBeenKicked);
                         }
                         if contract_state.public_key != self.public_key {
-                            return Err(AdvanceError::MismatchedPublicKey);
+                            return Err(ConsensusError::MismatchedPublicKey);
                         }
                         start_resharing(Some(self.private_share), ctx, contract_state)
                     }
@@ -389,15 +381,15 @@ impl Advance for RunningState {
 }
 
 #[async_trait]
-impl Advance for ResharingState {
-    async fn advance<C: AdvanceCtx + Send + Sync>(
+impl ConsensusProtocol for ResharingState {
+    async fn advance<C: ConsensusCtx + Send + Sync>(
         self,
         _ctx: C,
-        contract_state: ProtocolContractState,
-    ) -> Result<ProtocolState, AdvanceError> {
+        contract_state: ProtocolState,
+    ) -> Result<NodeState, ConsensusError> {
         match contract_state {
-            ProtocolContractState::Initialized(_) => Err(AdvanceError::ContractStateRollback),
-            ProtocolContractState::Running(contract_state) => {
+            ProtocolState::Initialized(_) => Err(ConsensusError::ContractStateRollback),
+            ProtocolState::Running(contract_state) => {
                 match contract_state.epoch.cmp(&(self.old_epoch + 1)) {
                     Ordering::Greater => {
                         tracing::warn!(
@@ -405,27 +397,27 @@ impl Advance for ResharingState {
                             self.old_epoch + 1,
                             contract_state.epoch
                         );
-                        Ok(ProtocolState::Joining(JoiningState {
+                        Ok(NodeState::Joining(JoiningState {
                             public_key: contract_state.public_key,
                         }))
                     }
-                    Ordering::Less => Err(AdvanceError::EpochRollback),
+                    Ordering::Less => Err(ConsensusError::EpochRollback),
                     Ordering::Equal => {
                         tracing::info!("contract state has finished resharing, trying to catch up");
                         if contract_state.participants != self.new_participants {
-                            return Err(AdvanceError::MismatchedParticipants);
+                            return Err(ConsensusError::MismatchedParticipants);
                         }
                         if contract_state.threshold != self.threshold {
-                            return Err(AdvanceError::MismatchedThreshold);
+                            return Err(ConsensusError::MismatchedThreshold);
                         }
                         if contract_state.public_key != self.public_key {
-                            return Err(AdvanceError::MismatchedPublicKey);
+                            return Err(ConsensusError::MismatchedPublicKey);
                         }
-                        Ok(ProtocolState::Resharing(self))
+                        Ok(NodeState::Resharing(self))
                     }
                 }
             }
-            ProtocolContractState::Resharing(contract_state) => {
+            ProtocolState::Resharing(contract_state) => {
                 match contract_state.old_epoch.cmp(&self.old_epoch) {
                     Ordering::Greater => {
                         tracing::warn!(
@@ -433,26 +425,26 @@ impl Advance for ResharingState {
                             self.old_epoch,
                             contract_state.old_epoch
                         );
-                        Ok(ProtocolState::Joining(JoiningState {
+                        Ok(NodeState::Joining(JoiningState {
                             public_key: contract_state.public_key,
                         }))
                     }
-                    Ordering::Less => Err(AdvanceError::EpochRollback),
+                    Ordering::Less => Err(ConsensusError::EpochRollback),
                     Ordering::Equal => {
                         tracing::debug!("continue to reshare as normal");
                         if contract_state.old_participants != self.old_participants {
-                            return Err(AdvanceError::MismatchedParticipants);
+                            return Err(ConsensusError::MismatchedParticipants);
                         }
                         if contract_state.new_participants != self.new_participants {
-                            return Err(AdvanceError::MismatchedParticipants);
+                            return Err(ConsensusError::MismatchedParticipants);
                         }
                         if contract_state.threshold != self.threshold {
-                            return Err(AdvanceError::MismatchedThreshold);
+                            return Err(ConsensusError::MismatchedThreshold);
                         }
                         if contract_state.public_key != self.public_key {
-                            return Err(AdvanceError::MismatchedPublicKey);
+                            return Err(ConsensusError::MismatchedPublicKey);
                         }
-                        Ok(ProtocolState::Resharing(self))
+                        Ok(NodeState::Resharing(self))
                     }
                 }
             }
@@ -461,15 +453,15 @@ impl Advance for ResharingState {
 }
 
 #[async_trait]
-impl Advance for JoiningState {
-    async fn advance<C: AdvanceCtx + Send + Sync>(
+impl ConsensusProtocol for JoiningState {
+    async fn advance<C: ConsensusCtx + Send + Sync>(
         self,
         ctx: C,
-        contract_state: ProtocolContractState,
-    ) -> Result<ProtocolState, AdvanceError> {
+        contract_state: ProtocolState,
+    ) -> Result<NodeState, ConsensusError> {
         match contract_state {
-            ProtocolContractState::Initialized(_) => Err(AdvanceError::ContractStateRollback),
-            ProtocolContractState::Running(contract_state) => {
+            ProtocolState::Initialized(_) => Err(ConsensusError::ContractStateRollback),
+            ProtocolState::Running(contract_state) => {
                 if contract_state.candidates.contains_key(&ctx.me()) {
                     let voted = contract_state
                         .join_votes
@@ -489,7 +481,7 @@ impl Advance for JoiningState {
                             .await
                             .unwrap()
                     }
-                    Ok(ProtocolState::Joining(self))
+                    Ok(NodeState::Joining(self))
                 } else {
                     tracing::info!("sending a transaction to join the participant set");
                     let args = serde_json::json!({
@@ -509,16 +501,16 @@ impl Advance for JoiningState {
                         )
                         .await
                         .unwrap();
-                    Ok(ProtocolState::Joining(self))
+                    Ok(NodeState::Joining(self))
                 }
             }
-            ProtocolContractState::Resharing(contract_state) => {
+            ProtocolState::Resharing(contract_state) => {
                 if contract_state.new_participants.contains_key(&ctx.me()) {
                     tracing::info!("joining as a new participant");
                     start_resharing(None, ctx, contract_state)
                 } else {
                     tracing::debug!("network is resharing without us, waiting for them to finish");
-                    Ok(ProtocolState::Joining(self))
+                    Ok(NodeState::Joining(self))
                 }
             }
         }
@@ -526,32 +518,32 @@ impl Advance for JoiningState {
 }
 
 #[async_trait]
-impl Advance for ProtocolState {
-    async fn advance<C: AdvanceCtx + Send + Sync>(
+impl ConsensusProtocol for NodeState {
+    async fn advance<C: ConsensusCtx + Send + Sync>(
         self,
         ctx: C,
-        contract_state: ProtocolContractState,
-    ) -> Result<ProtocolState, AdvanceError> {
+        contract_state: ProtocolState,
+    ) -> Result<NodeState, ConsensusError> {
         match self {
-            ProtocolState::Starting => {
+            NodeState::Starting => {
                 // TODO: Load from persistent storage
-                Ok(ProtocolState::Started(StartedState(None)))
+                Ok(NodeState::Started(StartedState(None)))
             }
-            ProtocolState::Started(state) => state.advance(ctx, contract_state).await,
-            ProtocolState::Generating(state) => state.advance(ctx, contract_state).await,
-            ProtocolState::WaitingForConsensus(state) => state.advance(ctx, contract_state).await,
-            ProtocolState::Running(state) => state.advance(ctx, contract_state).await,
-            ProtocolState::Resharing(state) => state.advance(ctx, contract_state).await,
-            ProtocolState::Joining(state) => state.advance(ctx, contract_state).await,
+            NodeState::Started(state) => state.advance(ctx, contract_state).await,
+            NodeState::Generating(state) => state.advance(ctx, contract_state).await,
+            NodeState::WaitingForConsensus(state) => state.advance(ctx, contract_state).await,
+            NodeState::Running(state) => state.advance(ctx, contract_state).await,
+            NodeState::Resharing(state) => state.advance(ctx, contract_state).await,
+            NodeState::Joining(state) => state.advance(ctx, contract_state).await,
         }
     }
 }
 
-fn start_resharing<C: AdvanceCtx>(
+fn start_resharing<C: ConsensusCtx>(
     private_share: Option<PrivateKeyShare>,
     ctx: C,
     contract_state: ResharingContractState,
-) -> Result<ProtocolState, AdvanceError> {
+) -> Result<NodeState, ConsensusError> {
     let protocol = cait_sith::reshare::<Secp256k1>(
         &contract_state
             .old_participants
@@ -569,7 +561,7 @@ fn start_resharing<C: AdvanceCtx>(
         private_share,
         contract_state.public_key,
     )?;
-    Ok(ProtocolState::Resharing(ResharingState {
+    Ok(NodeState::Resharing(ResharingState {
         old_epoch: contract_state.old_epoch,
         old_participants: contract_state.old_participants,
         new_participants: contract_state.new_participants,

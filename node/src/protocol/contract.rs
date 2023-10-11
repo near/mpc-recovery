@@ -1,7 +1,7 @@
 use crate::types::PublicKey;
 use crate::util::NearPublicKeyExt;
 use cait_sith::protocol::Participant;
-use mpc_contract::ParticipantInfo;
+use mpc_contract::{ParticipantInfo, ProtocolContractState};
 use near_sdk::AccountId;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -113,22 +113,20 @@ impl From<mpc_contract::ResharingContractState> for ResharingContractState {
 }
 
 #[derive(Debug)]
-pub enum ProtocolContractState {
+pub enum ProtocolState {
     Initialized(InitializedContractState),
     Running(RunningContractState),
     Resharing(ResharingContractState),
 }
 
-impl ProtocolContractState {
+impl ProtocolState {
     pub fn participants(&self) -> &HashMap<Participant, Url> {
         match self {
-            ProtocolContractState::Initialized(InitializedContractState {
-                participants, ..
-            }) => participants,
-            ProtocolContractState::Running(RunningContractState { participants, .. }) => {
+            ProtocolState::Initialized(InitializedContractState { participants, .. }) => {
                 participants
             }
-            ProtocolContractState::Resharing(ResharingContractState {
+            ProtocolState::Running(RunningContractState { participants, .. }) => participants,
+            ProtocolState::Resharing(ResharingContractState {
                 old_participants, ..
             }) => old_participants,
         }
@@ -136,44 +134,32 @@ impl ProtocolContractState {
 
     pub fn public_key(&self) -> Option<&PublicKey> {
         match self {
-            ProtocolContractState::Initialized { .. } => None,
-            ProtocolContractState::Running(RunningContractState { public_key, .. }) => {
-                Some(public_key)
-            }
-            ProtocolContractState::Resharing(ResharingContractState { public_key, .. }) => {
-                Some(public_key)
-            }
+            ProtocolState::Initialized { .. } => None,
+            ProtocolState::Running(RunningContractState { public_key, .. }) => Some(public_key),
+            ProtocolState::Resharing(ResharingContractState { public_key, .. }) => Some(public_key),
         }
     }
 
     pub fn threshold(&self) -> usize {
         match self {
-            ProtocolContractState::Initialized(InitializedContractState { threshold, .. }) => {
-                *threshold
-            }
-            ProtocolContractState::Running(RunningContractState { threshold, .. }) => *threshold,
-            ProtocolContractState::Resharing(ResharingContractState { threshold, .. }) => {
-                *threshold
-            }
+            ProtocolState::Initialized(InitializedContractState { threshold, .. }) => *threshold,
+            ProtocolState::Running(RunningContractState { threshold, .. }) => *threshold,
+            ProtocolState::Resharing(ResharingContractState { threshold, .. }) => *threshold,
         }
     }
 }
 
-impl TryFrom<mpc_contract::ProtocolContractState> for ProtocolContractState {
+impl TryFrom<ProtocolContractState> for ProtocolState {
     type Error = ();
 
-    fn try_from(value: mpc_contract::ProtocolContractState) -> Result<Self, Self::Error> {
+    fn try_from(value: ProtocolContractState) -> Result<Self, Self::Error> {
         match value {
-            mpc_contract::ProtocolContractState::NonInitialized => Err(()),
-            mpc_contract::ProtocolContractState::Initialized(state) => {
-                Ok(ProtocolContractState::Initialized(state.into()))
+            ProtocolContractState::NonInitialized => Err(()),
+            ProtocolContractState::Initialized(state) => {
+                Ok(ProtocolState::Initialized(state.into()))
             }
-            mpc_contract::ProtocolContractState::Running(state) => {
-                Ok(ProtocolContractState::Running(state.into()))
-            }
-            mpc_contract::ProtocolContractState::Resharing(state) => {
-                Ok(ProtocolContractState::Resharing(state.into()))
-            }
+            ProtocolContractState::Running(state) => Ok(ProtocolState::Running(state.into())),
+            ProtocolContractState::Resharing(state) => Ok(ProtocolState::Resharing(state.into())),
         }
     }
 }

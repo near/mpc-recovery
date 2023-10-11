@@ -1,4 +1,4 @@
-use crate::protocol::ProtocolContractState;
+use crate::protocol::ProtocolState;
 use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
 use near_primitives::types::AccountId;
@@ -8,7 +8,7 @@ use serde_json::json;
 pub async fn fetch_mpc_contract_state(
     rpc_client: &near_fetch::Client,
     mpc_contract_id: &AccountId,
-) -> anyhow::Result<ProtocolContractState> {
+) -> anyhow::Result<ProtocolState> {
     let protocol_state: mpc_contract::ProtocolContractState =
         rpc_client.view(mpc_contract_id, "state", ()).await?;
     protocol_state

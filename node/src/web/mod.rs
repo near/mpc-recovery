@@ -1,7 +1,7 @@
 mod error;
 
 use self::error::MpcSignError;
-use crate::protocol::{MpcMessage, ProtocolState};
+use crate::protocol::{MpcMessage, NodeState};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Extension, Json, Router};
@@ -19,7 +19,7 @@ struct AxumState {
     rpc_client: near_fetch::Client,
     signer: InMemorySigner,
     sender: Sender<MpcMessage>,
-    protocol_state: Arc<RwLock<ProtocolState>>,
+    protocol_state: Arc<RwLock<NodeState>>,
 }
 
 pub async fn run(
@@ -28,7 +28,7 @@ pub async fn run(
     rpc_client: near_fetch::Client,
     signer: InMemorySigner,
     sender: Sender<MpcMessage>,
-    protocol_state: Arc<RwLock<ProtocolState>>,
+    protocol_state: Arc<RwLock<NodeState>>,
 ) -> anyhow::Result<()> {
     tracing::debug!("running a node");
     let axum_state = AxumState {
@@ -90,7 +90,7 @@ async fn join(
 ) -> StatusCode {
     let protocol_state = state.protocol_state.read().await;
     match &*protocol_state {
-        ProtocolState::Running { .. } => {
+        NodeState::Running { .. } => {
             let args = serde_json::json!({
                 "participant": participant
             });

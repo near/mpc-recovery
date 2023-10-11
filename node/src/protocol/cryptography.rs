@@ -1,19 +1,19 @@
-use super::state::{GeneratingState, ProtocolState, ResharingState};
+use super::state::{GeneratingState, NodeState, ResharingState};
 use crate::http_client::{self, SendError};
-use crate::protocol::message_handler::{GeneratingMessage, ResharingMessage};
+use crate::protocol::message::{GeneratingMessage, ResharingMessage};
 use crate::protocol::state::WaitingForConsensusState;
 use crate::protocol::MpcMessage;
 use async_trait::async_trait;
 use cait_sith::protocol::{Action, Participant};
 use k256::elliptic_curve::group::GroupEncoding;
 
-pub trait ProgressCtx {
+pub trait CryptographicCtx {
     fn me(&self) -> Participant;
     fn http_client(&self) -> &reqwest::Client;
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum ProgressError {
+pub enum CryptographicError {
     #[error("failed to send a message: {0}")]
     SendError(#[from] SendError),
     #[error("unknown participant: {0:?}")]
@@ -21,26 +21,26 @@ pub enum ProgressError {
 }
 
 #[async_trait]
-pub trait Progress {
-    async fn progress<C: ProgressCtx + Send + Sync>(
+pub trait CryptographicProtocol {
+    async fn progress<C: CryptographicCtx + Send + Sync>(
         self,
         ctx: C,
-    ) -> Result<ProtocolState, ProgressError>;
+    ) -> Result<NodeState, CryptographicError>;
 }
 
 #[async_trait]
-impl Progress for GeneratingState {
-    async fn progress<C: ProgressCtx + Send + Sync>(
+impl CryptographicProtocol for GeneratingState {
+    async fn progress<C: CryptographicCtx + Send + Sync>(
         mut self,
         ctx: C,
-    ) -> Result<ProtocolState, ProgressError> {
+    ) -> Result<NodeState, CryptographicError> {
         tracing::info!("progressing key generation");
         loop {
             let action = self.protocol.poke().unwrap();
             match action {
                 Action::Wait => {
                     tracing::debug!("waiting");
-                    return Ok(ProtocolState::Generating(self));
+                    return Ok(NodeState::Generating(self));
                 }
                 Action::SendMany(m) => {
                     tracing::debug!("sending a message to many participants");
@@ -75,7 +75,7 @@ impl Progress for GeneratingState {
                             .await?
                         }
                         None => {
-                            return Err(ProgressError::UnknownParticipant(to));
+                            return Err(CryptographicError::UnknownParticipant(to));
                         }
                     }
                 }
@@ -84,15 +84,13 @@ impl Progress for GeneratingState {
                         public_key = hex::encode(r.public_key.to_bytes()),
                         "successfully completed key generation"
                     );
-                    return Ok(ProtocolState::WaitingForConsensus(
-                        WaitingForConsensusState {
-                            epoch: 0,
-                            participants: self.participants,
-                            threshold: self.threshold,
-                            private_share: r.private_share,
-                            public_key: r.public_key,
-                        },
-                    ));
+                    return Ok(NodeState::WaitingForConsensus(WaitingForConsensusState {
+                        epoch: 0,
+                        participants: self.participants,
+                        threshold: self.threshold,
+                        private_share: r.private_share,
+                        public_key: r.public_key,
+                    }));
                 }
             }
         }
@@ -100,18 +98,18 @@ impl Progress for GeneratingState {
 }
 
 #[async_trait]
-impl Progress for ResharingState {
-    async fn progress<C: ProgressCtx + Send + Sync>(
+impl CryptographicProtocol for ResharingState {
+    async fn progress<C: CryptographicCtx + Send + Sync>(
         mut self,
         ctx: C,
-    ) -> Result<ProtocolState, ProgressError> {
+    ) -> Result<NodeState, CryptographicError> {
         tracing::info!("progressing key reshare");
         loop {
             let action = self.protocol.poke().unwrap();
             match action {
                 Action::Wait => {
                     tracing::debug!("waiting");
-                    return Ok(ProtocolState::Resharing(self));
+                    return Ok(NodeState::Resharing(self));
                 }
                 Action::SendMany(m) => {
                     tracing::debug!("sending a message to all participants");
@@ -147,20 +145,18 @@ impl Progress for ResharingState {
                             )
                             .await?;
                         }
-                        None => return Err(ProgressError::UnknownParticipant(to)),
+                        None => return Err(CryptographicError::UnknownParticipant(to)),
                     }
                 }
                 Action::Return(private_share) => {
                     tracing::debug!("successfully completed key reshare");
-                    return Ok(ProtocolState::WaitingForConsensus(
-                        WaitingForConsensusState {
-                            epoch: self.old_epoch + 1,
-                            participants: self.new_participants,
-                            threshold: self.threshold,
-                            private_share,
-                            public_key: self.public_key,
-                        },
-                    ));
+                    return Ok(NodeState::WaitingForConsensus(WaitingForConsensusState {
+                        epoch: self.old_epoch + 1,
+                        participants: self.new_participants,
+                        threshold: self.threshold,
+                        private_share,
+                        public_key: self.public_key,
+                    }));
                 }
             }
         }
@@ -168,14 +164,14 @@ impl Progress for ResharingState {
 }
 
 #[async_trait]
-impl Progress for ProtocolState {
-    async fn progress<C: ProgressCtx + Send + Sync>(
+impl CryptographicProtocol for NodeState {
+    async fn progress<C: CryptographicCtx + Send + Sync>(
         self,
         ctx: C,
-    ) -> Result<ProtocolState, ProgressError> {
+    ) -> Result<NodeState, CryptographicError> {
         match self {
-            ProtocolState::Generating(state) => state.progress(ctx).await,
-            ProtocolState::Resharing(state) => state.progress(ctx).await,
+            NodeState::Generating(state) => state.progress(ctx).await,
+            NodeState::Resharing(state) => state.progress(ctx).await,
             _ => Ok(self),
         }
     }
