@@ -11,6 +11,7 @@ use curv::elliptic::curves::Point;
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 
 pub mod error;
+pub mod firewall;
 pub mod gcp;
 pub mod key_recovery;
 pub mod leader_node;

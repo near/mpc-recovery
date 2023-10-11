@@ -2,6 +2,7 @@ use self::aggregate_signer::{NodeInfo, Reveal, SignedCommitment, SigningState};
 use self::oidc::OidcDigest;
 use self::user_credentials::EncryptedUserCredentials;
 use crate::error::{MpcError, SignNodeError};
+use crate::firewall::allowed::OidcProviderList;
 use crate::gcp::GcpService;
 use crate::msg::{AcceptNodePublicKeysRequest, PublicKeyNodeRequest, SignNodeRequest};
 use crate::oauth::OAuthTokenVerifier;
@@ -20,9 +21,7 @@ use axum_extra::extract::WithRejection;
 use borsh::BorshSerialize;
 use curv::elliptic::curves::{Ed25519, Point};
 use multi_party_eddsa::protocols::{self, ExpandedKeyPair};
-use tokio::sync::RwLock;
 
-use near_crypto::PublicKey;
 use near_primitives::delegate_action::NonDelegateAction;
 use near_primitives::hash::hash;
 use near_primitives::signable_message::{SignableMessage, SignableMessageType};
@@ -43,7 +42,7 @@ pub struct Config {
     pub node_key: ExpandedKeyPair,
     pub cipher: Aes256Gcm,
     pub port: u16,
-    pub pagoda_firebase_audience_id: String,
+    pub oidc_providers: OidcProviderList,
 }
 
 pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
@@ -54,7 +53,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         node_key,
         cipher,
         port,
-        pagoda_firebase_audience_id,
+        oidc_providers,
     } = config;
     let our_index = usize::try_from(our_index).expect("This index is way to big");
 
@@ -63,15 +62,14 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         .await
         .unwrap_or_default();
 
-    let signing_state = Arc::new(RwLock::new(SigningState::new()));
-    let state = SignNodeState {
+    let state = Arc::new(SignNodeState {
         gcp_service,
         node_key,
         cipher,
-        signing_state,
-        pagoda_firebase_audience_id,
+        signing_state: SigningState::new(),
         node_info: NodeInfo::new(our_index, pk_set.map(|set| set.public_keys)),
-    };
+        oidc_providers,
+    });
 
     let app = Router::new()
         // healthcheck endpoint
@@ -98,14 +96,13 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         .unwrap();
 }
 
-#[derive(Clone)]
 struct SignNodeState {
     gcp_service: GcpService,
-    pagoda_firebase_audience_id: String,
     node_key: ExpandedKeyPair,
     cipher: Aes256Gcm,
-    signing_state: Arc<RwLock<SigningState>>,
+    signing_state: SigningState,
     node_info: NodeInfo,
+    oidc_providers: OidcProviderList,
 }
 
 async fn get_or_generate_user_creds(
@@ -143,7 +140,7 @@ async fn get_or_generate_user_creds(
 }
 
 async fn process_commit<T: OAuthTokenVerifier>(
-    state: SignNodeState,
+    state: Arc<SignNodeState>,
     request: SignNodeRequest,
 ) -> Result<SignedCommitment, SignNodeError> {
     tracing::info!(?request, "processing commit request");
@@ -151,16 +148,12 @@ async fn process_commit<T: OAuthTokenVerifier>(
         SignNodeRequest::ClaimOidc(request) => {
             tracing::debug!(?request, "processing oidc claim request");
             // Check ID token hash signature
-            let public_key: PublicKey = request
-                .public_key
-                .parse()
-                .map_err(|e| SignNodeError::MalformedPublicKey(request.public_key.clone(), e))?;
-
+            let public_key = request.public_key;
             let request_digest = claim_oidc_request_digest(&request.oidc_token_hash, &public_key)?;
 
             match check_digest_signature(&public_key, &request.signature, &request_digest) {
                 Ok(()) => tracing::debug!("claim oidc token digest signature verified"),
-                Err(e) => return Err(SignNodeError::SignatureVerificationFailed(e)),
+                Err(e) => return Err(SignNodeError::DigestSignatureVerificationFailed(e)),
             };
 
             // Save info about token in the database, if it's present, throw an error
@@ -207,9 +200,8 @@ async fn process_commit<T: OAuthTokenVerifier>(
             };
             let response = state
                 .signing_state
-                .write()
-                .await
                 .get_commitment(&state.node_key, &state.node_key, payload)
+                .await
                 .map_err(|e| anyhow::anyhow!(e))?;
             tracing::info!("returning signed commitment");
             Ok(response)
@@ -218,10 +210,9 @@ async fn process_commit<T: OAuthTokenVerifier>(
             tracing::debug!(?request, "processing sign share request");
 
             // Check OIDC Token
-            let oidc_token_claims =
-                T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
-                    .await
-                    .map_err(SignNodeError::OidcVerificationFailed)?;
+            let oidc_token_claims = T::verify_token(&request.oidc_token, &state.oidc_providers)
+                .await
+                .map_err(SignNodeError::OidcVerificationFailed)?;
             tracing::debug!(?oidc_token_claims, "oidc token verified");
 
             let frp_pk = request.frp_public_key;
@@ -231,7 +222,7 @@ async fn process_commit<T: OAuthTokenVerifier>(
                 sign_request_digest(&request.delegate_action, &request.oidc_token, &frp_pk)?;
             match check_digest_signature(&frp_pk, &request.frp_signature, &digest) {
                 Ok(()) => tracing::debug!("sign request digest signature verified"),
-                Err(e) => return Err(SignNodeError::SignatureVerificationFailed(e)),
+                Err(e) => return Err(SignNodeError::DigestSignatureVerificationFailed(e)),
             };
 
             // Check if this OIDC token was claimed
@@ -311,13 +302,12 @@ async fn process_commit<T: OAuthTokenVerifier>(
 
             let response = state
                 .signing_state
-                .write()
-                .await
                 .get_commitment(
                     &user_credentials.decrypt_key_pair(&state.cipher)?,
                     &state.node_key,
                     hash,
                 )
+                .await
                 .map_err(|e| anyhow::anyhow!(e))?;
             tracing::info!("returning signed commitment");
             Ok(response)
@@ -327,7 +317,7 @@ async fn process_commit<T: OAuthTokenVerifier>(
 
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn commit<T: OAuthTokenVerifier>(
-    Extension(state): Extension<SignNodeState>,
+    Extension(state): Extension<Arc<SignNodeState>>,
     WithRejection(Json(request), _): WithRejection<Json<SignNodeRequest>, MpcError>,
 ) -> (StatusCode, Json<Result<SignedCommitment, String>>) {
     if let Err(msg) = check_if_ready(&state).await {
@@ -342,7 +332,7 @@ async fn commit<T: OAuthTokenVerifier>(
 
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn reveal(
-    Extension(state): Extension<SignNodeState>,
+    Extension(state): Extension<Arc<SignNodeState>>,
     WithRejection(Json(request), _): WithRejection<Json<Vec<SignedCommitment>>, MpcError>,
 ) -> (StatusCode, Json<Result<Reveal, String>>) {
     if let Err(msg) = check_if_ready(&state).await {
@@ -351,9 +341,7 @@ async fn reveal(
 
     match state
         .signing_state
-        .write()
-        .await
-        .get_reveal(state.node_info, request)
+        .get_reveal(&state.node_info, request)
         .await
     {
         Ok(r) => {
@@ -369,7 +357,7 @@ async fn reveal(
 
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn signature_share(
-    Extension(state): Extension<SignNodeState>,
+    Extension(state): Extension<Arc<SignNodeState>>,
     WithRejection(Json(request), _): WithRejection<Json<Vec<Reveal>>, MpcError>,
 ) -> (StatusCode, Json<Result<protocols::Signature, String>>) {
     if let Err(msg) = check_if_ready(&state).await {
@@ -378,9 +366,8 @@ async fn signature_share(
 
     match state
         .signing_state
-        .write()
+        .get_signature_share(&state.node_info, request)
         .await
-        .get_signature_share(state.node_info, request)
     {
         Ok(r) => {
             tracing::debug!("Successful signature share");
@@ -394,21 +381,20 @@ async fn signature_share(
 }
 
 async fn process_public_key<T: OAuthTokenVerifier>(
-    state: SignNodeState,
+    state: Arc<SignNodeState>,
     request: PublicKeyNodeRequest,
 ) -> Result<Point<Ed25519>, SignNodeError> {
     // Check OIDC Token
-    let oidc_token_claims =
-        T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
-            .await
-            .map_err(SignNodeError::OidcVerificationFailed)?;
+    let oidc_token_claims = T::verify_token(&request.oidc_token, &state.oidc_providers)
+        .await
+        .map_err(SignNodeError::OidcVerificationFailed)?;
 
     let frp_pk = request.frp_public_key;
     // Check the request signature
     let digest = user_credentials_request_digest(&request.oidc_token, &frp_pk)?;
     match check_digest_signature(&frp_pk, &request.frp_signature, &digest) {
         Ok(()) => tracing::debug!("user credentials digest signature verified"),
-        Err(e) => return Err(SignNodeError::SignatureVerificationFailed(e)),
+        Err(e) => return Err(SignNodeError::DigestSignatureVerificationFailed(e)),
     };
 
     // Check if this OIDC token was claimed
@@ -455,7 +441,7 @@ async fn process_public_key<T: OAuthTokenVerifier>(
 
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn public_key<T: OAuthTokenVerifier>(
-    Extension(state): Extension<SignNodeState>,
+    Extension(state): Extension<Arc<SignNodeState>>,
     WithRejection(Json(request), _): WithRejection<Json<PublicKeyNodeRequest>, MpcError>,
 ) -> (StatusCode, Json<Result<Point<Ed25519>, String>>) {
     let result = process_public_key::<T>(state, request).await;
@@ -468,18 +454,21 @@ async fn public_key<T: OAuthTokenVerifier>(
 #[allow(clippy::type_complexity)]
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn public_key_node(
-    Extension(state): Extension<SignNodeState>,
+    Extension(state): Extension<Arc<SignNodeState>>,
     WithRejection(Json(_), _): WithRejection<Json<()>, MpcError>,
 ) -> (StatusCode, Json<Result<(usize, Point<Ed25519>), String>>) {
     (
         StatusCode::OK,
-        Json(Ok((state.node_info.our_index, state.node_key.public_key))),
+        Json(Ok((
+            state.node_info.our_index,
+            state.node_key.public_key.clone(),
+        ))),
     )
 }
 
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn accept_pk_set(
-    Extension(state): Extension<SignNodeState>,
+    Extension(state): Extension<Arc<SignNodeState>>,
     WithRejection(Json(request), _): WithRejection<Json<AcceptNodePublicKeysRequest>, MpcError>,
 ) -> (StatusCode, Json<Result<String, String>>) {
     let index = state.node_info.our_index;
@@ -521,10 +510,13 @@ async fn accept_pk_set(
             StatusCode::OK,
             Json(Ok("Successfully set node public keys".to_string())),
         ),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(Ok("failed to save the keys".to_string())),
-        ),
+        Err(err) => {
+            tracing::error!("Failed to save pk set due to GCP error: {err}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(Ok("failed to save node public keys".to_string())),
+            )
+        }
     }
 }
 

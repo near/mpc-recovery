@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use borsh::{self, BorshDeserialize, BorshSerialize};
 use google_datastore1::api::{Key, PathElement};
 use hex::FromHex;
+use jsonwebtoken as jwt;
+use jwt::DecodingKey;
 use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
 
@@ -15,6 +17,7 @@ use crate::{
         value::{FromValue, IntoValue, Value},
         KeyKind,
     },
+    oauth::IdTokenClaims,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
@@ -69,6 +72,35 @@ impl OidcToken {
             data: "invalidToken".to_string(),
         }
     }
+
+    // NOTE: code taken directly from jsonwebtoken::verify_signature and modified to suit
+    // our needs (i.e. not knowing audience and issuer ahead of time).
+    pub fn decode(
+        &self,
+        key: &DecodingKey,
+    ) -> anyhow::Result<(jwt::Header, IdTokenClaims, String)> {
+        let mut parts = self.as_ref().rsplitn(2, '.');
+        let (Some(signature), Some(message)) = (parts.next(), parts.next()) else {
+            anyhow::bail!("could not split into signature and message for OIDC token");
+        };
+        let mut parts = message.rsplitn(2, '.');
+        let (Some(payload), Some(header)) = (parts.next(), parts.next()) else {
+            anyhow::bail!("could not split into payload and header for OIDC token");
+        };
+        let header: jwt::Header = serde_json::from_slice(&b64_decode(header)?)?;
+        let claims: IdTokenClaims = serde_json::from_slice(&b64_decode(payload)?)?;
+
+        if !jwt::crypto::verify(signature, message.as_bytes(), key, header.alg)? {
+            anyhow::bail!("InvalidSignature");
+        }
+
+        Ok((header, claims, signature.into()))
+    }
+}
+
+fn b64_decode<T: AsRef<[u8]>>(input: T) -> anyhow::Result<Vec<u8>> {
+    base64::Engine::decode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, input)
+        .map_err(Into::into)
 }
 
 impl std::str::FromStr for OidcToken {

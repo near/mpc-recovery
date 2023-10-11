@@ -20,13 +20,13 @@ variable "zone" {
   default = "us-east1-c"
 }
 
+variable "docker_image" {
+  type = string
+}
+
 # Application variables
 variable "account_creator_id" {
   default = "tmp_acount_creator.serhii.testnet"
-}
-
-variable "firebase_audience_id" {
-  default = "pagoda-oboarding-dev"
 }
 
 variable "external_signer_node_urls" {
@@ -35,13 +35,21 @@ variable "external_signer_node_urls" {
 }
 
 # Secrets
-variable "account_creator_sk" {
+variable "account_creator_sk_secret_id" {
+  type = string
 }
 
-variable "cipher_keys" {
-  type = list(string)
+variable "oidc_providers_secret_id" {
+  type = string
 }
 
-variable "sk_shares" {
-  type = list(string)
+variable "fast_auth_partners_secret_id" {
+  type = string
+}
+
+variable "signer_configs" {
+  type = list(object({
+    cipher_key_secret_id = string
+    sk_share_secret_id   = string
+  }))
 }

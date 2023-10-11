@@ -7,6 +7,7 @@ use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::Gene
 use ed25519_dalek::{PublicKey as PublicKeyEd25519, Verifier};
 use futures::{lock::Mutex, StreamExt};
 use hyper::StatusCode;
+use mpc_recovery::firewall::allowed::DelegateActionRelayer;
 use mpc_recovery::sign_node::oidc::OidcToken;
 use mpc_recovery::{
     msg::{
@@ -23,14 +24,12 @@ use mpc_recovery::{
 };
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_crypto::{PublicKey, SecretKey};
-use near_primitives::transaction::DeleteKeyAction;
-use near_primitives::types::{BlockHeight, Nonce};
-use near_primitives::{
-    account::{AccessKey, AccessKeyPermission},
-    delegate_action::{DelegateAction, SignedDelegateAction},
-    transaction::{Action, AddKeyAction},
-    views::FinalExecutionStatus,
-};
+use near_primitives::account::{AccessKey, AccessKeyPermission};
+use near_primitives::borsh::BorshSerialize;
+use near_primitives::delegate_action::{DelegateAction, SignedDelegateAction};
+use near_primitives::transaction::{Action, AddKeyAction, DeleteKeyAction};
+use near_primitives::views::FinalExecutionStatus;
+use near_workspaces::AccountId;
 use once_cell::sync::Lazy;
 use testcontainers::{
     clients::Cli,
@@ -40,9 +39,10 @@ use testcontainers::{
 };
 use tokio::io::AsyncWriteExt;
 use tracing;
-use workspaces::AccountId;
 
-use crate::util;
+use std::fs;
+
+use crate::util::{self, create_key_file, create_relayer_cofig_file};
 
 static NETWORK_MUTEX: Lazy<Mutex<i32>> = Lazy::new(|| Mutex::new(0));
 
@@ -165,6 +165,7 @@ impl Default for DockerClient {
 pub struct Redis<'a> {
     pub container: Container<'a, GenericImage>,
     pub address: String,
+    pub full_address: String,
 }
 
 impl<'a> Redis<'a> {
@@ -179,8 +180,15 @@ impl<'a> Redis<'a> {
             .get_network_ip_address(&container, network)
             .await?;
 
-        tracing::info!("Redis container is running at {}", address);
-        Ok(Redis { container, address })
+        // Note: this port is hardcoded in the Redis image
+        let full_address = format!("redis://{}:{}", address, 6379);
+
+        tracing::info!("Redis container is running at {}", full_address);
+        Ok(Redis {
+            container,
+            address,
+            full_address,
+        })
     }
 }
 
@@ -248,49 +256,101 @@ impl<'a> Sandbox<'a> {
 }
 
 pub struct Relayer<'a> {
+    pub id: String,
     pub container: Container<'a, GenericImage>,
     pub address: String,
     pub local_address: String,
 }
 
+pub struct RelayerConfig {
+    pub ip_address: [u8; 4],
+    pub port: u16,
+    pub relayer_account_id: AccountId,
+    pub keys_filenames: Vec<String>,
+    pub shared_storage_account_id: AccountId,
+    pub shared_storage_keys_filename: String,
+    pub whitelisted_contracts: Vec<AccountId>,
+    pub whitelisted_delegate_action_receiver_ids: Vec<AccountId>,
+    pub redis_url: String,
+    pub social_db_contract_id: AccountId,
+    pub rpc_url: String,
+    pub wallet_url: String,
+    pub explorer_transaction_url: String,
+    pub rpc_api_key: String,
+}
+
 impl<'a> Relayer<'a> {
     pub const CONTAINER_PORT: u16 = 3000;
+    pub const TMP_FOLDER_PATH: &str = "./tmp";
 
     pub async fn run(
         docker_client: &'a DockerClient,
         network: &str,
         near_rpc: &str,
-        redis_hostname: &str,
+        redis_full_address: &str,
         relayer_account_id: &AccountId,
-        relayer_account_sk: &workspaces::types::SecretKey,
+        relayer_account_sk: &near_workspaces::types::SecretKey,
         creator_account_id: &AccountId,
         social_db_id: &AccountId,
         social_account_id: &AccountId,
-        social_account_sk: &workspaces::types::SecretKey,
+        social_account_sk: &near_workspaces::types::SecretKey,
+        relayer_id: &str,
     ) -> anyhow::Result<Relayer<'a>> {
         tracing::info!("Running relayer container...");
-        let image = GenericImage::new("ghcr.io/near/pagoda-relayer-rs-fastauth", "latest")
+
+        // Create tmp folder to store relayer configs
+        let relayer_configs_path = format!("{}/{}", Self::TMP_FOLDER_PATH, relayer_id);
+        std::fs::create_dir_all(&relayer_configs_path)
+            .unwrap_or_else(|_| panic!("Failed to create {relayer_configs_path} directory"));
+
+        // Create dir for keys
+        let keys_path = format!("{relayer_configs_path}/account_keys");
+        std::fs::create_dir_all(&keys_path).expect("Failed to create account_keys directory");
+        let keys_absolute_path =
+            fs::canonicalize(&keys_path).expect("Failed to get absolute path for keys");
+
+        // Create JSON key files
+        create_key_file(relayer_account_id, relayer_account_sk, &keys_path)?;
+        create_key_file(social_account_id, social_account_sk, &keys_path)?;
+
+        // Create relayer config file
+        let config_file_name = "config.toml";
+        let config_absolute_path = create_relayer_cofig_file(
+            RelayerConfig {
+                ip_address: [0, 0, 0, 0],
+                port: Self::CONTAINER_PORT,
+                relayer_account_id: relayer_account_id.clone(),
+                keys_filenames: vec![format!("./account_keys/{}.json", relayer_account_id)],
+                shared_storage_account_id: social_account_id.clone(),
+                shared_storage_keys_filename: format!("./account_keys/{}.json", social_account_id),
+                whitelisted_contracts: vec![creator_account_id.clone()],
+                whitelisted_delegate_action_receiver_ids: vec![creator_account_id.clone()],
+                redis_url: redis_full_address.to_string(),
+                social_db_contract_id: social_db_id.clone(),
+                rpc_url: near_rpc.to_string(),
+                wallet_url: "https://wallet.testnet.near.org".to_string(),
+                explorer_transaction_url: "https://explorer.testnet.near.org/transactions/"
+                    .to_string(),
+                rpc_api_key: "".to_string(),
+            },
+            format!("{relayer_configs_path}/{config_file_name}"),
+        )?;
+
+        let image = GenericImage::new("ghcr.io/near/os-relayer", "latest")
             .with_wait_for(WaitFor::message_on_stdout("listening on"))
             .with_exposed_port(Self::CONTAINER_PORT)
-            .with_env_var("RUST_LOG", "DEBUG")
-            .with_env_var("NETWORK", "custom")
-            .with_env_var("SERVER_PORT", Self::CONTAINER_PORT.to_string())
-            .with_env_var("RELAYER_RPC_URL", near_rpc)
-            .with_env_var("RELAYER_ACCOUNT_ID", relayer_account_id.to_string())
-            .with_env_var("REDIS_HOST", redis_hostname)
-            .with_env_var("PUBLIC_KEY", relayer_account_sk.public_key().to_string())
-            .with_env_var("PRIVATE_KEY", relayer_account_sk.to_string())
-            .with_env_var(
-                "RELAYER_WHITELISTED_CONTRACT",
-                creator_account_id.to_string(),
+            .with_volume(
+                config_absolute_path,
+                format!("/relayer-app/{}", config_file_name),
             )
-            .with_env_var("CUSTOM_SOCIAL_DB_ID", social_db_id.to_string())
-            .with_env_var("STORAGE_ACCOUNT_ID", social_account_id.to_string())
-            .with_env_var(
-                "STORAGE_PUBLIC_KEY",
-                social_account_sk.public_key().to_string(),
+            .with_volume(
+                keys_absolute_path
+                    .to_str()
+                    .expect("Failed to convert keys path to string"),
+                "/relayer-app/account_keys",
             )
-            .with_env_var("STORAGE_PRIVATE_KEY", social_account_sk.to_string());
+            .with_env_var("RUST_LOG", "DEBUG");
+
         let image: RunnableImage<GenericImage> = image.into();
         let image = image.with_network(network);
         let container = docker_client.cli.run(image);
@@ -301,11 +361,19 @@ impl<'a> Relayer<'a> {
 
         let full_address = format!("http://{}:{}", ip_address, Self::CONTAINER_PORT);
         tracing::info!("Relayer container is running at {}", full_address);
+
         Ok(Relayer {
             container,
             address: full_address,
             local_address: format!("http://localhost:{host_port}"),
+            id: relayer_id.to_string(),
         })
+    }
+
+    pub fn clean_tmp_files(&self) -> anyhow::Result<(), anyhow::Error> {
+        std::fs::remove_dir_all(format!("{}/{}", Self::TMP_FOLDER_PATH, self.id))
+            .unwrap_or_else(|_| panic!("Failed to clean tmp files for relayer {}", self.id));
+        Ok(())
     }
 }
 
@@ -392,7 +460,7 @@ impl<'a> SignerNode<'a> {
     // Container port used for the docker network, does not have to be unique
     const CONTAINER_PORT: u16 = 3000;
 
-    pub async fn run(
+    pub async fn run_signing_node(
         docker_client: &'a DockerClient,
         network: &str,
         node_id: u64,
@@ -420,8 +488,13 @@ impl<'a> SignerNode<'a> {
                 hex::encode(cipher_key),
                 "--web-port".to_string(),
                 Self::CONTAINER_PORT.to_string(),
-                "--pagoda-firebase-audience-id".to_string(),
-                firebase_audience_id.to_string(),
+                "--oidc-providers".to_string(),
+                serde_json::json!([
+                    {
+                        "issuer": format!("https://securetoken.google.com/{}", firebase_audience_id),
+                        "audience": firebase_audience_id,
+                    },
+                ]).to_string(),
                 "--gcp-project-id".to_string(),
                 gcp_project_id.to_string(),
                 "--gcp-datastore-url".to_string(),
@@ -517,6 +590,7 @@ pub struct LeaderNode<'a> {
 
 pub struct LeaderNodeApi {
     pub address: String,
+    pub relayer: DelegateActionRelayer,
     client: NearRpcAndRelayerClient,
 }
 
@@ -534,7 +608,7 @@ impl<'a> LeaderNode<'a> {
         gcp_project_id: &str,
         near_root_account: &AccountId,
         account_creator_id: &AccountId,
-        account_creator_sk: &workspaces::types::SecretKey,
+        account_creator_sk: &near_workspaces::types::SecretKey,
         firebase_audience_id: &str,
     ) -> anyhow::Result<LeaderNode<'a>> {
         tracing::info!("Running leader node container...");
@@ -549,16 +623,25 @@ impl<'a> LeaderNode<'a> {
             Self::CONTAINER_PORT.to_string(),
             "--near-rpc".to_string(),
             near_rpc.to_string(),
-            "--relayer-url".to_string(),
-            relayer_url.to_string(),
             "--near-root-account".to_string(),
             near_root_account.to_string(),
             "--account-creator-id".to_string(),
             account_creator_id.to_string(),
             "--account-creator-sk".to_string(),
             account_creator_sk.to_string(),
-            "--pagoda-firebase-audience-id".to_string(),
-            firebase_audience_id.to_string(),
+            "--fast-auth-partners".to_string(),
+            serde_json::json!([
+                {
+                    "oidc_provider": {
+                        "issuer": format!("https://securetoken.google.com/{}", firebase_audience_id),
+                        "audience": firebase_audience_id,
+                    },
+                    "relayer": {
+                        "url": relayer_url.to_string(),
+                        "api_key": serde_json::Value::Null,
+                    },
+                },
+            ]).to_string(),
             "--gcp-project-id".to_string(),
             gcp_project_id.to_string(),
             "--gcp-datastore-url".to_string(),
@@ -591,10 +674,11 @@ impl<'a> LeaderNode<'a> {
         })
     }
 
-    pub fn api(&self, near_rpc: &str, relayer_url: &str) -> LeaderNodeApi {
+    pub fn api(&self, near_rpc: &str, relayer: &DelegateActionRelayer) -> LeaderNodeApi {
         LeaderNodeApi {
             address: self.local_address.clone(),
-            client: NearRpcAndRelayerClient::connect(near_rpc, relayer_url.to_string(), None),
+            client: NearRpcAndRelayerClient::connect(near_rpc),
+            relayer: relayer.clone(),
         }
     }
 }
@@ -632,11 +716,9 @@ impl LeaderNodeApi {
         util::post(format!("{}/new_account", self.address), request).await
     }
 
-    // TODO: move to utils
-    // TODO: I would say this need to replace the regular `new_account` once FRP is enforced
     pub async fn new_account_with_helper(
         &self,
-        account_id: &str,
+        account_id: &AccountId,
         user_fa_public_key: &PublicKey,
         user_la_public_key: Option<LimitedAccessKey>,
         user_secret_key: &SecretKey,
@@ -662,7 +744,7 @@ impl LeaderNodeApi {
         };
 
         let new_account_request = NewAccountRequest {
-            near_account_id: account_id.to_string(),
+            near_account_id: account_id.clone(),
             create_account_options,
             oidc_token: oidc_token.clone(),
             user_credentials_frp_signature: frp_signature,
@@ -672,7 +754,6 @@ impl LeaderNodeApi {
         self.new_account(new_account_request).await
     }
 
-    // TODO: add_key should me moved to utils in the future, it is not a part of the API
     pub async fn add_key_with_helper(
         &self,
         account_id: &AccountId,
@@ -683,44 +764,45 @@ impl LeaderNodeApi {
         frp_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
-        let (block_height, nonce) = self
-            .get_key_info_with_helper(account_id, recovery_pk)
+        let (_, block_height, nonce) = self
+            .client
+            .access_key(account_id.clone(), recovery_pk.clone())
             .await?;
 
-        let add_key_delegate_action = self.get_add_key_delegate_action(
-            account_id,
-            public_key,
-            recovery_pk,
+        let add_key_delegate_action = DelegateAction {
+            sender_id: account_id.clone(),
+            receiver_id: account_id.clone(),
+            actions: vec![Action::AddKey(AddKeyAction {
+                public_key: public_key.clone(),
+                access_key: AccessKey {
+                    nonce: 0,
+                    permission: AccessKeyPermission::FullAccess,
+                },
+            })
+            .try_into()?],
             nonce,
-            block_height,
-        )?;
-
-        let sign_request_digest: Vec<u8> =
-            sign_request_digest(&add_key_delegate_action, oidc_token, frp_pk)?;
-
-        let frp_signature = sign_digest(&sign_request_digest, frp_sk)?;
-        let user_credentials_request_digest = user_credentials_request_digest(oidc_token, frp_pk)?;
-        let user_credentials_frp_signature = sign_digest(&user_credentials_request_digest, frp_sk)?;
-
-        let sign_request = SignRequest {
-            delegate_action: add_key_delegate_action.clone(),
-            oidc_token: oidc_token.clone(),
-            frp_signature,
-            user_credentials_frp_signature,
-            frp_public_key: frp_pk.clone(),
+            max_block_height: block_height + 100,
+            public_key: recovery_pk.clone(),
         };
+
+        let (status_code, sign_response) = self
+            .sign_with_helper(&add_key_delegate_action, oidc_token, frp_sk, frp_pk)
+            .await?;
+
         // Send SignRequest to leader node
-        let (status_code, sign_response): (_, SignResponse) = self.sign(sign_request).await?;
         let signature = match &sign_response {
             SignResponse::Ok { signature } => signature,
             SignResponse::Err { .. } => return Ok((status_code, sign_response)),
         };
         let response = self
             .client
-            .send_meta_tx(SignedDelegateAction {
-                delegate_action: add_key_delegate_action,
-                signature: near_crypto::Signature::ED25519(*signature),
-            })
+            .send_meta_tx(
+                SignedDelegateAction {
+                    delegate_action: add_key_delegate_action,
+                    signature: near_crypto::Signature::ED25519(*signature),
+                },
+                self.relayer.clone(),
+            )
             .await?;
         if matches!(response.status, FinalExecutionStatus::SuccessValue(_)) {
             Ok((status_code, sign_response))
@@ -739,44 +821,41 @@ impl LeaderNodeApi {
         frp_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
-        let (block_height, nonce) = self
-            .get_key_info_with_helper(account_id, recovery_pk)
+        let (_, block_height, nonce) = self
+            .client
+            .access_key(account_id.clone(), recovery_pk.clone())
             .await?;
 
-        let delete_key_delegate_action = self.get_delete_key_delegate_action(
-            account_id,
-            public_key,
-            recovery_pk,
+        let delete_key_delegate_action = DelegateAction {
+            sender_id: account_id.clone(),
+            receiver_id: account_id.clone(),
+            actions: vec![Action::DeleteKey(DeleteKeyAction {
+                public_key: public_key.clone(),
+            })
+            .try_into()?],
             nonce,
-            block_height,
-        )?;
-
-        let sign_request_digest =
-            sign_request_digest(&delete_key_delegate_action, oidc_token, frp_pk)?;
-
-        let frp_signature = sign_digest(&sign_request_digest, frp_sk)?;
-        let user_credentials_request_digest = user_credentials_request_digest(oidc_token, frp_pk)?;
-        let user_credentials_frp_signature = sign_digest(&user_credentials_request_digest, frp_sk)?;
-
-        let sign_request = SignRequest {
-            delegate_action: delete_key_delegate_action.clone(),
-            oidc_token: oidc_token.clone(),
-            frp_signature,
-            user_credentials_frp_signature,
-            frp_public_key: frp_pk.clone(),
+            max_block_height: block_height + 100,
+            public_key: recovery_pk.clone(),
         };
+
+        let (status_code, sign_response) = self
+            .sign_with_helper(&delete_key_delegate_action, oidc_token, frp_sk, frp_pk)
+            .await?;
+
         // Send SignRequest to leader node
-        let (status_code, sign_response): (_, SignResponse) = self.sign(sign_request).await?;
         let signature = match &sign_response {
             SignResponse::Ok { signature } => signature,
             SignResponse::Err { .. } => return Ok((status_code, sign_response)),
         };
         let response = self
             .client
-            .send_meta_tx(SignedDelegateAction {
-                delegate_action: delete_key_delegate_action,
-                signature: near_crypto::Signature::ED25519(*signature),
-            })
+            .send_meta_tx(
+                SignedDelegateAction {
+                    delegate_action: delete_key_delegate_action,
+                    signature: near_crypto::Signature::ED25519(*signature),
+                },
+                self.relayer.clone(),
+            )
             .await?;
         if matches!(response.status, FinalExecutionStatus::SuccessValue(_)) {
             Ok((status_code, sign_response))
@@ -788,7 +867,7 @@ impl LeaderNodeApi {
         }
     }
 
-    pub async fn perform_delegate_action_with_helper(
+    pub async fn sign_with_helper(
         &self,
         delegate_action: &DelegateAction,
         oidc_token: &OidcToken,
@@ -802,7 +881,7 @@ impl LeaderNodeApi {
         let user_credentials_frp_signature = sign_digest(&user_credentials_request_digest, frp_sk)?;
 
         let sign_request = SignRequest {
-            delegate_action: delegate_action.clone(),
+            delegate_action: delegate_action.try_to_vec()?,
             oidc_token: oidc_token.clone(),
             frp_signature,
             user_credentials_frp_signature,
@@ -813,7 +892,6 @@ impl LeaderNodeApi {
         Ok((status_code, sign_response))
     }
 
-    // TODO: move to utils
     pub async fn claim_oidc_with_helper(
         &self,
         oidc_token: &OidcToken,
@@ -827,7 +905,7 @@ impl LeaderNodeApi {
 
         let oidc_request = ClaimOidcRequest {
             oidc_token_hash,
-            frp_public_key: user_public_key.to_string(),
+            frp_public_key: user_public_key.clone(),
             frp_signature: request_digest_signature,
         };
 
@@ -867,63 +945,5 @@ impl LeaderNodeApi {
             frp_public_key: client_pk.clone(),
         })
         .await
-    }
-
-    pub fn get_add_key_delegate_action(
-        &self,
-        account_id: &AccountId,
-        public_key: &PublicKey,
-        recovery_pk: &PublicKey,
-        nonce: u64,
-        block_height: u64,
-    ) -> anyhow::Result<DelegateAction> {
-        Ok(DelegateAction {
-            sender_id: account_id.clone(),
-            receiver_id: account_id.clone(),
-            actions: vec![Action::AddKey(AddKeyAction {
-                public_key: public_key.clone(),
-                access_key: AccessKey {
-                    nonce: 0,
-                    permission: AccessKeyPermission::FullAccess,
-                },
-            })
-            .try_into()?],
-            nonce,
-            max_block_height: block_height + 100,
-            public_key: recovery_pk.clone(),
-        })
-    }
-
-    pub fn get_delete_key_delegate_action(
-        &self,
-        account_id: &AccountId,
-        public_key: &PublicKey,
-        recovery_pk: &PublicKey,
-        nonce: u64,
-        block_height: u64,
-    ) -> anyhow::Result<DelegateAction> {
-        Ok(DelegateAction {
-            sender_id: account_id.clone(),
-            receiver_id: account_id.clone(),
-            actions: vec![Action::DeleteKey(DeleteKeyAction {
-                public_key: public_key.clone(),
-            })
-            .try_into()?],
-            nonce,
-            max_block_height: block_height + 100,
-            public_key: recovery_pk.clone(),
-        })
-    }
-
-    pub async fn get_key_info_with_helper(
-        &self,
-        account_id: &AccountId,
-        pk: &PublicKey,
-    ) -> anyhow::Result<(BlockHeight, Nonce)> {
-        let (_, block_height, nonce) = self
-            .client
-            .access_key(account_id.clone(), pk.clone())
-            .await?;
-        Ok((block_height, nonce))
     }
 }

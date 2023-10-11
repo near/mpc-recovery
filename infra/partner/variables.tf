@@ -4,19 +4,19 @@ variable "env" {
 variable "project" {
 }
 
+variable "credentials_file" {}
+
 variable "region" {
+  default = "us-east1"
 }
 
 variable "zone" {
-}
-
-variable "service_account_email" {
+  default = "us-east1-c"
 }
 
 variable "docker_image" {
 }
 
-# Application variables
 variable "node_id" {
 }
 

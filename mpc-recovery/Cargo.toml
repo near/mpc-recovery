@@ -15,6 +15,7 @@ async-trait = "0.1"
 axum = "0.6.19"
 axum-extra = "0.7"
 axum-tracing-opentelemetry = "0.13.1"
+base64 = "0.21"
 borsh = "0.10.3"
 chrono = "0.4.24"
 clap = { version = "4.2", features = ["derive", "env"] }
@@ -37,6 +38,7 @@ rand8 = { package = "rand", version = "0.8" }
 reqwest = { version = "0.11.16", features = ["blocking"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+serde_with = "3.3.0"
 thiserror = "1"
 tokio = { version = "1.28", features = ["full"] }
 tokio-retry = "0.3"

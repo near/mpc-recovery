@@ -1,4 +1,5 @@
 use crate::error::{LeaderNodeError, MpcError};
+use crate::firewall::allowed::PartnerList;
 use crate::key_recovery::get_user_recovery_pk;
 use crate::msg::{
     AcceptNodePublicKeysRequest, ClaimOidcNodeRequest, ClaimOidcRequest, ClaimOidcResponse,
@@ -6,13 +7,15 @@ use crate::msg::{
     SignRequest, SignResponse, UserCredentialsRequest, UserCredentialsResponse,
 };
 use crate::oauth::OAuthTokenVerifier;
-use crate::relayer::msg::RegisterAccountRequest;
+use crate::relayer::msg::{CreateAccountAtomicRequest, RegisterAccountRequest};
 use crate::relayer::NearRpcAndRelayerClient;
 use crate::transaction::{
     get_create_account_delegate_action, get_local_signed_delegated_action, get_mpc_signature,
     sign_payload_with_mpc, to_dalek_combined_public_key,
 };
+use crate::utils::{check_digest_signature, user_credentials_request_digest};
 use crate::{metrics, nar};
+
 use anyhow::Context;
 use axum::extract::MatchedPath;
 use axum::middleware::{self, Next};
@@ -25,15 +28,17 @@ use axum::{
 };
 use axum_extra::extract::WithRejection;
 use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
+use borsh::BorshDeserialize;
 use curv::elliptic::curves::{Ed25519, Point};
 use near_crypto::SecretKey;
-use near_primitives::delegate_action::NonDelegateAction;
+use near_primitives::delegate_action::{DelegateAction, NonDelegateAction};
 use near_primitives::transaction::{Action, DeleteKeyAction};
 use near_primitives::types::AccountId;
-use near_primitives::views::FinalExecutionStatus;
 use prometheus::{Encoder, TextEncoder};
 use rand::{distributions::Alphanumeric, Rng};
+
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Instant;
 
 pub struct Config {
@@ -41,13 +46,11 @@ pub struct Config {
     pub port: u16,
     pub sign_nodes: Vec<String>,
     pub near_rpc: String,
-    pub relayer_api_key: Option<String>,
-    pub relayer_url: String,
     pub near_root_account: String,
     pub account_creator_id: AccountId,
     // TODO: temporary solution
     pub account_creator_sk: SecretKey,
-    pub pagoda_firebase_audience_id: String,
+    pub partners: PartnerList,
 }
 
 pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
@@ -56,36 +59,39 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         port,
         sign_nodes,
         near_rpc,
-        relayer_api_key,
-        relayer_url,
         near_root_account,
         account_creator_id,
         account_creator_sk,
-        pagoda_firebase_audience_id,
+        partners,
     } = config;
     let _span = tracing::debug_span!("run", env, port);
     tracing::debug!(?sign_nodes, "running a leader node");
 
-    let client = NearRpcAndRelayerClient::connect(&near_rpc, relayer_url, relayer_api_key);
+    let client = NearRpcAndRelayerClient::connect(&near_rpc);
     // FIXME: Internal account id is retrieved from the ID token. We don't have a token for ourselves,
     // but are still forced to allocate allowance.
     // Using randomly generated internal account id ensures the uniqueness of user idenrifier on the relayer side so
     // we can update the allowance on each server run.
-    let fake_internal_account_id: String = rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(16)
-        .map(char::from)
-        .collect();
-    client
-        .register_account(RegisterAccountRequest {
-            account_id: account_creator_id.clone(),
-            allowance: 18_000_000_000_000_000_000, // should be enough to create 700_000+ accs
-            oauth_token: fake_internal_account_id,
-        })
-        .await
-        .unwrap();
+    for partner in partners.entries.iter() {
+        let fake_internal_account_id: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(16)
+            .map(char::from)
+            .collect();
+        client
+            .register_account(
+                RegisterAccountRequest {
+                    account_id: account_creator_id.clone(),
+                    allowance: 18_000_000_000_000_000_000, // should be enough to create 700_000+ accs
+                    oauth_token: fake_internal_account_id,
+                },
+                partner.relayer.clone(),
+            )
+            .await
+            .unwrap();
+    }
 
-    let state = LeaderState {
+    let state = Arc::new(LeaderState {
         env,
         sign_nodes,
         client,
@@ -93,8 +99,8 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         near_root_account: near_root_account.parse().unwrap(),
         account_creator_id,
         account_creator_sk,
-        pagoda_firebase_audience_id,
-    };
+        partners,
+    });
 
     // Get keys from all sign nodes, and broadcast them out as a set.
     let pk_set = match gather_sign_node_pk_shares(&state).await {
@@ -114,7 +120,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
     };
     tracing::debug!(?messages, "broadcasted public key statuses");
 
-    //TODO: not secure, allow only for testnet, whitelist endpoint etc. for mainnet
+    // Cors layer is move to load balancer
     let cors_layer = tower_http::cors::CorsLayer::permissive();
 
     let app = Router::new()
@@ -203,14 +209,16 @@ async fn metrics() -> (StatusCode, String) {
 
     match grab_metrics() {
         Ok(response) => (StatusCode::OK, response),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "failed to generate prometheus metrics".to_string(),
-        ),
+        Err(err) => {
+            tracing::error!("failed to generate prometheus metrics: {err}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to generate prometheus metrics".to_string(),
+            )
+        }
     }
 }
 
-#[derive(Clone)]
 struct LeaderState {
     env: String,
     sign_nodes: Vec<String>,
@@ -220,11 +228,11 @@ struct LeaderState {
     account_creator_id: AccountId,
     // TODO: temporary solution
     account_creator_sk: SecretKey,
-    pagoda_firebase_audience_id: String,
+    partners: PartnerList,
 }
 
 async fn mpc_public_key(
-    Extension(state): Extension<LeaderState>,
+    Extension(state): Extension<Arc<LeaderState>>,
     WithRejection(Json(_), _): WithRejection<Json<MpcPkRequest>, MpcError>,
 ) -> (StatusCode, Json<MpcPkResponse>) {
     // Getting MPC PK from sign nodes
@@ -241,7 +249,7 @@ async fn mpc_public_key(
     };
 
     let mpc_pk = match to_dalek_combined_public_key(&pk_set) {
-        Ok(mpc_pk) => hex::encode(mpc_pk.to_bytes()),
+        Ok(mpc_pk) => mpc_pk,
         Err(err) => {
             return (
                 err.code(),
@@ -257,12 +265,12 @@ async fn mpc_public_key(
 
 #[tracing::instrument(level = "info", skip_all, fields(env = state.env))]
 async fn claim_oidc(
-    Extension(state): Extension<LeaderState>,
+    Extension(state): Extension<Arc<LeaderState>>,
     WithRejection(Json(claim_oidc_request), _): WithRejection<Json<ClaimOidcRequest>, MpcError>,
 ) -> (StatusCode, Json<ClaimOidcResponse>) {
     tracing::info!(
         oidc_hash = hex::encode(&claim_oidc_request.oidc_token_hash),
-        pk = claim_oidc_request.frp_public_key,
+        pk = claim_oidc_request.frp_public_key.to_string(),
         sig = claim_oidc_request.frp_signature.to_string(),
         "claim_oidc request"
     );
@@ -291,7 +299,7 @@ async fn claim_oidc(
 
 #[tracing::instrument(level = "info", skip_all, fields(env = state.env))]
 async fn user_credentials<T: OAuthTokenVerifier>(
-    Extension(state): Extension<LeaderState>,
+    Extension(state): Extension<Arc<LeaderState>>,
     WithRejection(Json(request), _): WithRejection<Json<UserCredentialsRequest>, MpcError>,
 ) -> (StatusCode, Json<UserCredentialsResponse>) {
     tracing::info!(
@@ -317,10 +325,10 @@ async fn user_credentials<T: OAuthTokenVerifier>(
 }
 
 async fn process_user_credentials<T: OAuthTokenVerifier>(
-    state: LeaderState,
+    state: Arc<LeaderState>,
     request: UserCredentialsRequest,
 ) -> Result<UserCredentialsResponse, LeaderNodeError> {
-    T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
+    T::verify_token(&request.oidc_token, &state.partners.oidc_providers())
         .await
         .map_err(LeaderNodeError::OidcVerificationFailed)?;
 
@@ -329,7 +337,7 @@ async fn process_user_credentials<T: OAuthTokenVerifier>(
             &state.reqwest_client,
             &state.sign_nodes,
             &request.oidc_token,
-            request.frp_signature,
+            &request.frp_signature,
             &request.frp_public_key,
         )
         .await?;
@@ -342,28 +350,43 @@ async fn process_user_credentials<T: OAuthTokenVerifier>(
 }
 
 async fn process_new_account<T: OAuthTokenVerifier>(
-    state: LeaderState,
+    state: Arc<LeaderState>,
     request: NewAccountRequest,
 ) -> Result<NewAccountResponse, LeaderNodeError> {
     // Create a transaction to create new NEAR account
-    let new_user_account_id: AccountId = request
-        .near_account_id
-        .parse()
-        .map_err(|e| LeaderNodeError::MalformedAccountId(request.near_account_id, e))?;
-    let oidc_token_claims =
-        T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
-            .await
-            .map_err(LeaderNodeError::OidcVerificationFailed)?;
+    let new_user_account_id = request.near_account_id;
+    let oidc_token_claims = T::verify_token(&request.oidc_token, &state.partners.oidc_providers())
+        .await
+        .map_err(LeaderNodeError::OidcVerificationFailed)?;
+
     let internal_acc_id = oidc_token_claims.get_internal_account_id();
 
-    state
-        .client
-        .register_account(RegisterAccountRequest {
-            account_id: new_user_account_id.clone(),
-            allowance: 300_000_000_000_000,
-            oauth_token: internal_acc_id.clone(),
-        })
-        .await?;
+    // TODO: move error message from here to this place
+    let partner = state
+        .partners
+        .find(&oidc_token_claims.iss, &oidc_token_claims.aud)?;
+
+    let mpc_user_recovery_pk = nar::retry(|| async {
+        get_user_recovery_pk(
+            &state.reqwest_client,
+            &state.sign_nodes,
+            &request.oidc_token,
+            &request.user_credentials_frp_signature,
+            &request.frp_public_key,
+        )
+        .await
+    })
+    .await?;
+
+    // FIXME: waiting on https://github.com/near/mpc-recovery/issues/193
+    // FRP check to prevent invalid PKs and Sigs from getting through. Used to circumvent the
+    // atomicity of account creation between relayer and the sign nodes. The atomicity
+    // part is being worked on.
+    let frp_pk = &request.frp_public_key;
+    let digest = user_credentials_request_digest(&request.oidc_token, frp_pk)?;
+    check_digest_signature(frp_pk, &request.user_credentials_frp_signature, &digest)
+        .map_err(LeaderNodeError::SignatureVerificationFailed)?;
+    tracing::debug!("user credentials digest signature verified for {new_user_account_id:?}");
 
     nar::retry(|| async {
         // Get nonce and recent block hash
@@ -375,15 +398,6 @@ async fn process_new_account<T: OAuthTokenVerifier>(
             )
             .await
             .map_err(LeaderNodeError::RelayerError)?;
-
-        let mpc_user_recovery_pk = get_user_recovery_pk(
-            &state.reqwest_client,
-            &state.sign_nodes,
-            &request.oidc_token,
-            request.user_credentials_frp_signature,
-            &request.frp_public_key,
-        )
-        .await?;
 
         // Add recovery key to create account options
         let mut new_account_options = request.create_account_options.clone();
@@ -410,34 +424,45 @@ async fn process_new_account<T: OAuthTokenVerifier>(
         );
 
         // Send delegate action to relayer
-        let result = state.client.send_meta_tx(signed_delegate_action).await;
-        if let Err(err) = &result {
-            let err_str = format!("{:?}", err);
-            state
-                .client
-                .invalidate_cache_if_tx_failed(
-                    &(
-                        state.account_creator_id.clone(),
-                        state.account_creator_sk.public_key(),
-                    ),
-                    &err_str,
-                )
-                .await;
-        }
-        let response = result?;
+        let request = CreateAccountAtomicRequest {
+            account_id: new_user_account_id.clone(),
+            allowance: 300_000_000_000_000,
+            oauth_token: internal_acc_id.clone(),
+            signed_delegate_action,
+        };
 
-        // TODO: Probably need to check more fields
-        if matches!(response.status, FinalExecutionStatus::SuccessValue(_)) {
-            Ok(NewAccountResponse::Ok {
-                create_account_options: new_account_options,
-                user_recovery_public_key: mpc_user_recovery_pk.to_string(),
-                near_account_id: new_user_account_id.to_string(),
-            })
-        } else {
-            Err(LeaderNodeError::Other(anyhow::anyhow!(
-                "transaction failed with {:?}",
-                response.status
-            )))
+        let result = state
+            .client
+            .create_account_atomic(request, &partner.relayer)
+            .await;
+
+        match result {
+            Ok(_) => {
+                tracing::info!(
+                    "account creation succeeded: {new_user_account_id:?}",
+                    new_user_account_id = new_user_account_id
+                );
+                Ok(NewAccountResponse::Ok {
+                    create_account_options: new_account_options,
+                    user_recovery_public_key: mpc_user_recovery_pk.clone(),
+                    near_account_id: new_user_account_id.clone(),
+                })
+            }
+            Err(err) => {
+                tracing::error!("account creation failed: {err}");
+                let err_str = format!("{:?}", err);
+                state
+                    .client
+                    .invalidate_cache_if_acc_creation_failed(
+                        &(
+                            state.account_creator_id.clone(),
+                            state.account_creator_sk.public_key(),
+                        ),
+                        &err_str,
+                    )
+                    .await;
+                Err(LeaderNodeError::RelayerError(err))
+            }
         }
     })
     .await
@@ -445,11 +470,11 @@ async fn process_new_account<T: OAuthTokenVerifier>(
 
 #[tracing::instrument(level = "info", skip_all, fields(env = state.env))]
 async fn new_account<T: OAuthTokenVerifier>(
-    Extension(state): Extension<LeaderState>,
+    Extension(state): Extension<Arc<LeaderState>>,
     WithRejection(Json(request), _): WithRejection<Json<NewAccountRequest>, MpcError>,
 ) -> (StatusCode, Json<NewAccountResponse>) {
     tracing::info!(
-        near_account_id = request.near_account_id.clone(),
+        near_account_id = request.near_account_id.to_string(),
         create_account_options = request.create_account_options.to_string(),
         oidc_token = format!("{:.5}...", request.oidc_token),
         "new_account request"
@@ -468,16 +493,20 @@ async fn new_account<T: OAuthTokenVerifier>(
 }
 
 async fn process_sign<T: OAuthTokenVerifier>(
-    state: LeaderState,
+    state: Arc<LeaderState>,
     request: SignRequest,
 ) -> Result<SignResponse, LeaderNodeError> {
+    // Deserialize the included delegate action via borsh
+    let delegate_action = DelegateAction::try_from_slice(&request.delegate_action)
+        .map_err(LeaderNodeError::MalformedDelegateAction)?;
+
     // Check OIDC token
-    T::verify_token(&request.oidc_token, &state.pagoda_firebase_audience_id)
+    T::verify_token(&request.oidc_token, &state.partners.oidc_providers())
         .await
         .map_err(LeaderNodeError::OidcVerificationFailed)?;
 
     // Prevent recovery key delition
-    let requested_delegate_actions: &Vec<NonDelegateAction> = &request.delegate_action.actions;
+    let requested_delegate_actions: &Vec<NonDelegateAction> = &delegate_action.actions;
 
     let requested_actions: &Vec<Action> = &requested_delegate_actions
         .iter()
@@ -497,7 +526,7 @@ async fn process_sign<T: OAuthTokenVerifier>(
             &state.reqwest_client,
             &state.sign_nodes,
             &request.oidc_token,
-            request.user_credentials_frp_signature,
+            &request.user_credentials_frp_signature,
             &request.frp_public_key,
         )
         .await?;
@@ -529,8 +558,8 @@ async fn process_sign<T: OAuthTokenVerifier>(
             &state.reqwest_client,
             &state.sign_nodes,
             &request.oidc_token,
-            request.delegate_action.clone(),
-            request.frp_signature,
+            delegate_action.clone(),
+            &request.frp_signature,
             &request.frp_public_key,
         )
         .await?;
@@ -542,7 +571,7 @@ async fn process_sign<T: OAuthTokenVerifier>(
 
 #[tracing::instrument(level = "info", skip_all, fields(env = state.env))]
 async fn sign<T: OAuthTokenVerifier>(
-    Extension(state): Extension<LeaderState>,
+    Extension(state): Extension<Arc<LeaderState>>,
     WithRejection(Json(request), _): WithRejection<Json<SignRequest>, MpcError>,
 ) -> (StatusCode, Json<SignResponse>) {
     tracing::info!(

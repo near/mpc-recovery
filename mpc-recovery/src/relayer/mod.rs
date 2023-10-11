@@ -10,36 +10,23 @@ use near_primitives::types::{AccountId, BlockHeight, Nonce};
 use near_primitives::views::FinalExecutionStatus;
 
 use self::error::RelayerError;
-use self::msg::{RegisterAccountRequest, SendMetaTxRequest, SendMetaTxResponse};
+use self::msg::{
+    CreateAccountAtomicRequest, RegisterAccountRequest, SendMetaTxRequest, SendMetaTxResponse,
+};
 
+use crate::firewall::allowed::DelegateActionRelayer;
 use crate::nar::{self, CachedAccessKeyNonces};
 
 pub struct NearRpcAndRelayerClient {
     rpc_client: JsonRpcClient,
-    relayer_url: String,
     cached_nonces: CachedAccessKeyNonces,
-    api_key: Option<String>,
-}
-
-impl Clone for NearRpcAndRelayerClient {
-    fn clone(&self) -> Self {
-        Self {
-            rpc_client: self.rpc_client.clone(),
-            relayer_url: self.relayer_url.clone(),
-            api_key: self.api_key.clone(),
-            // all the cached nonces will not get cloned, and instead get invalidated:
-            cached_nonces: Default::default(),
-        }
-    }
 }
 
 impl NearRpcAndRelayerClient {
-    pub fn connect(near_rpc: &str, relayer_url: String, api_key: Option<String>) -> Self {
+    pub fn connect(near_rpc: &str) -> Self {
         Self {
             rpc_client: JsonRpcClient::connect(near_rpc),
-            relayer_url,
             cached_nonces: Default::default(),
-            api_key,
         }
     }
 
@@ -60,13 +47,14 @@ impl NearRpcAndRelayerClient {
     pub async fn register_account(
         &self,
         request: RegisterAccountRequest,
+        relayer: DelegateActionRelayer,
     ) -> Result<(), RelayerError> {
         let mut req = Request::builder()
             .method(Method::POST)
-            .uri(format!("{}/register_account", self.relayer_url))
+            .uri(format!("{}/register_account", relayer.url))
             .header("content-type", "application/json");
 
-        if let Some(api_key) = &self.api_key {
+        if let Some(api_key) = relayer.api_key {
             req = req.header("x-api-key", api_key);
         };
 
@@ -77,7 +65,7 @@ impl NearRpcAndRelayerClient {
             ))
             .map_err(|e| RelayerError::NetworkFailure(e.into()))?;
 
-        tracing::debug!("constructed http request to {}", self.relayer_url);
+        tracing::debug!("constructed http request to {}", relayer.url);
         let client = Client::new();
         let response = client
             .request(request)
@@ -99,14 +87,59 @@ impl NearRpcAndRelayerClient {
         }
     }
 
+    #[tracing::instrument(level = "debug", skip_all, fields(account_id = request.account_id.to_string()))]
+    pub async fn create_account_atomic(
+        &self,
+        request: CreateAccountAtomicRequest,
+        relayer: &DelegateActionRelayer,
+    ) -> Result<(), RelayerError> {
+        let mut req = Request::builder()
+            .method(Method::POST)
+            .uri(format!("{}/create_account_atomic", relayer.url))
+            .header("content-type", "application/json");
+
+        if let Some(api_key) = &relayer.api_key {
+            req = req.header("x-api-key", api_key);
+        };
+
+        let request = req
+            .body(Body::from(
+                serde_json::to_vec(&request)
+                    .map_err(|e| RelayerError::DataConversionFailure(e.into()))?,
+            ))
+            .map_err(|e| RelayerError::NetworkFailure(e.into()))?;
+
+        tracing::debug!("constructed http request to {}", relayer.url);
+        let client = Client::new();
+        let response = client
+            .request(request)
+            .await
+            .map_err(|e| RelayerError::NetworkFailure(e.into()))?;
+
+        let status = response.status();
+        let response_body = hyper::body::to_bytes(response.into_body())
+            .await
+            .map_err(|e| RelayerError::NetworkFailure(e.into()))?;
+        let msg = std::str::from_utf8(&response_body)
+            .map_err(|e| RelayerError::DataConversionFailure(e.into()))?;
+
+        if status.is_success() {
+            tracing::debug!(response_body = msg, "got response");
+            Ok(())
+        } else {
+            Err(RelayerError::RequestFailure(status, msg.to_string()))
+        }
+    }
+
     #[tracing::instrument(level = "debug", skip_all, fields(receiver_id = request.delegate_action.receiver_id.to_string()))]
     pub async fn send_meta_tx(
         &self,
         request: SendMetaTxRequest,
+        relayer: DelegateActionRelayer,
     ) -> Result<SendMetaTxResponse, RelayerError> {
         let request = Request::builder()
             .method(Method::POST)
-            .uri(format!("{}/send_meta_tx", self.relayer_url))
+            .uri(format!("{}/send_meta_tx", relayer.url))
             .header("content-type", "application/json")
             .body(Body::from(
                 serde_json::to_vec(&request)
@@ -115,7 +148,7 @@ impl NearRpcAndRelayerClient {
             .context("failed to construct send_meta_tx request")
             .map_err(RelayerError::NetworkFailure)?;
 
-        tracing::debug!("constructed http request to {}", self.relayer_url);
+        tracing::debug!("constructed http request to {}", relayer.url);
         let client = Client::new();
         let response = client
             .request(request)
@@ -152,7 +185,7 @@ impl NearRpcAndRelayerClient {
         }
     }
 
-    pub(crate) async fn invalidate_cache_if_tx_failed(
+    pub(crate) async fn invalidate_cache_if_acc_creation_failed(
         &self,
         cache_key: &(AccountId, PublicKey),
         err_str: &str,
@@ -165,12 +198,11 @@ impl NearRpcAndRelayerClient {
 mod tests {
     use super::*;
 
-    const RELAYER_URI: &str = "http://34.70.226.83:3030";
     const TESTNET_URL: &str = "https://rpc.testnet.near.org";
 
     #[tokio::test]
     async fn test_access_key() -> anyhow::Result<()> {
-        let testnet = NearRpcAndRelayerClient::connect(TESTNET_URL, RELAYER_URI.to_string(), None);
+        let testnet = NearRpcAndRelayerClient::connect(TESTNET_URL);
         let (block_hash, block_height, nonce) = testnet
             .access_key(
                 "dev-1636354824855-78504059330123".parse()?,
