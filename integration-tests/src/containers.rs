@@ -723,7 +723,7 @@ impl<'a> LeaderNode<'a> {
         LeaderNodeApi {
             address: self.local_address.clone(),
             // NOTE: integration tests uses public relayer
-            client: NearRpcAndRelayerClient::connect(near_rpc, true),
+            client: NearRpcAndRelayerClient::connect(near_rpc),
             relayer: relayer.clone(),
         }
     }

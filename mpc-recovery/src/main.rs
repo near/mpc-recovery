@@ -62,10 +62,6 @@ enum Cli {
         /// URL to the public key used to sign JWT tokens
         #[arg(long, env("MPC_RECOVERY_JWT_SIGNATURE_PK_URL"))]
         jwt_signature_pk_url: String,
-        // TODO/HACK: remove the need for this, once relayer is merged as one.
-        /// Whether to use the public relayer
-        #[arg(long, env("MPC_PUBLIC_RELAYER"), default_value("false"))]
-        public_relayer: bool,
     },
     StartSign {
         /// Environment to run in (`dev` or `prod`)
@@ -237,7 +233,6 @@ async fn main() -> anyhow::Result<()> {
             jwt_signature_pk_url,
             gcp_project_id,
             gcp_datastore_url,
-            public_relayer,
         } => {
             let gcp_service =
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
@@ -261,7 +256,6 @@ async fn main() -> anyhow::Result<()> {
                 account_creator_sk,
                 partners,
                 jwt_signature_pk_url,
-                public_relayer,
             };
 
             mpc_recovery::run_leader_node(config).await;

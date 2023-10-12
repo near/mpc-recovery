@@ -51,7 +51,6 @@ pub struct Config {
     pub account_creator_sk: SecretKey,
     pub partners: PartnerList,
     pub jwt_signature_pk_url: String,
-    pub public_relayer: bool,
 }
 
 pub async fn run(config: Config) {
@@ -65,12 +64,11 @@ pub async fn run(config: Config) {
         account_creator_sk,
         partners,
         jwt_signature_pk_url,
-        public_relayer,
     } = config;
     let _span = tracing::debug_span!("run", env, port);
     tracing::debug!(?sign_nodes, "running a leader node");
 
-    let client = NearRpcAndRelayerClient::connect(&near_rpc, public_relayer);
+    let client = NearRpcAndRelayerClient::connect(&near_rpc);
     // FIXME: Internal account id is retrieved from the ID token. We don't have a token for ourselves,
     // but are still forced to allocate allowance.
     // Using randomly generated internal account id ensures the uniqueness of user idenrifier on the relayer side so

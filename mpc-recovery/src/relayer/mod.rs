@@ -17,27 +17,16 @@ use self::msg::{
 use crate::firewall::allowed::DelegateActionRelayer;
 use crate::nar::{self, CachedAccessKeyNonces};
 
-// TODO: get rid of this when relayers have been merged
-const fn endpoint(public_relayer: bool) -> &'static str {
-    if public_relayer {
-        "register_account_and_allowance"
-    } else {
-        "register_account"
-    }
-}
-
 pub struct NearRpcAndRelayerClient {
     rpc_client: JsonRpcClient,
     cached_nonces: CachedAccessKeyNonces,
-    public_relayer: bool,
 }
 
 impl NearRpcAndRelayerClient {
-    pub fn connect(near_rpc: &str, public_relayer: bool) -> Self {
+    pub fn connect(near_rpc: &str) -> Self {
         Self {
             rpc_client: JsonRpcClient::connect(near_rpc),
             cached_nonces: Default::default(),
-            public_relayer,
         }
     }
 
@@ -62,7 +51,7 @@ impl NearRpcAndRelayerClient {
     ) -> Result<(), RelayerError> {
         let mut req = Request::builder()
             .method(Method::POST)
-            .uri(format!("{}/{}", relayer.url, endpoint(self.public_relayer)))
+            .uri(format!("{}/register_account", relayer.url))
             .header("content-type", "application/json");
 
         if let Some(api_key) = relayer.api_key {
