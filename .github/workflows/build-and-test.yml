@@ -1,22 +1,48 @@
-name: Integration
+name: Build Image and Test
 
 on:
-  workflow_run:
-    workflows: ["Docker Image"]
-    types:
-      - completed
+  push:
+    branches:
+      - develop
+  pull_request:
 
-env:
-  RUSTFLAGS: -D warnings
 jobs:
-  test:
-    name: Test
+  build-image:
+    runs-on: ubuntu-latest
+    name: Build and Push
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Login to GCP Artifact Registry
+        run: echo "$GOOGLE_CREDENTIALS" | docker login -u _json_key --password-stdin https://us-east1-docker.pkg.dev
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          tags: us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev:${{ github.sha }}
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Push Docker image
+        run: docker push us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev:${{ github.sha }}
+
+  integrations:
+    needs: build-image
+    name: Integration
     strategy:
       matrix:
         # FIXME: macos-latest-xl is disabled since colima is erroring out right now
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - uses: actions/checkout@v3
@@ -39,7 +65,7 @@ jobs:
 
       - name: Pull Relayer & Sandbox Docker Images
         run: |
-          docker pull ghcr.io/near/pagoda-relayer-rs-fastauth
+          docker pull ghcr.io/near/os-relayer
           docker pull ghcr.io/near/sandbox
 
       - name: Build OIDC Provider Dcoker Image

@@ -51,6 +51,7 @@ pub struct Config {
     pub account_creator_sk: SecretKey,
     pub partners: PartnerList,
     pub jwt_signature_pk_url: String,
+    pub public_relayer: bool,
 }
 
 pub async fn run(config: Config) {
@@ -64,11 +65,12 @@ pub async fn run(config: Config) {
         account_creator_sk,
         partners,
         jwt_signature_pk_url,
+        public_relayer,
     } = config;
     let _span = tracing::debug_span!("run", env, port);
     tracing::debug!(?sign_nodes, "running a leader node");
 
-    let client = NearRpcAndRelayerClient::connect(&near_rpc);
+    let client = NearRpcAndRelayerClient::connect(&near_rpc, public_relayer);
     // FIXME: Internal account id is retrieved from the ID token. We don't have a token for ourselves,
     // but are still forced to allocate allowance.
     // Using randomly generated internal account id ensures the uniqueness of user idenrifier on the relayer side so
@@ -364,6 +366,16 @@ async fn process_new_account(
     .map_err(LeaderNodeError::OidcVerificationFailed)?;
     let internal_acc_id = oidc_token_claims.get_internal_account_id();
 
+    // FIXME: waiting on https://github.com/near/mpc-recovery/issues/193
+    // FRP check to prevent invalid PKs and Sigs from getting through. Used to circumvent the
+    // atomicity of account creation between relayer and the sign nodes. The atomicity
+    // part is being worked on.
+    let frp_pk = &request.frp_public_key;
+    let digest = user_credentials_request_digest(&request.oidc_token, frp_pk)?;
+    check_digest_signature(frp_pk, &request.user_credentials_frp_signature, &digest)
+        .map_err(LeaderNodeError::SignatureVerificationFailed)?;
+    tracing::debug!("user credentials digest signature verified for {new_user_account_id:?}");
+
     // TODO: move error message from here to this place
     let partner = state
         .partners
@@ -380,16 +392,6 @@ async fn process_new_account(
         .await
     })
     .await?;
-
-    // FIXME: waiting on https://github.com/near/mpc-recovery/issues/193
-    // FRP check to prevent invalid PKs and Sigs from getting through. Used to circumvent the
-    // atomicity of account creation between relayer and the sign nodes. The atomicity
-    // part is being worked on.
-    let frp_pk = &request.frp_public_key;
-    let digest = user_credentials_request_digest(&request.oidc_token, frp_pk)?;
-    check_digest_signature(frp_pk, &request.user_credentials_frp_signature, &digest)
-        .map_err(LeaderNodeError::SignatureVerificationFailed)?;
-    tracing::debug!("user credentials digest signature verified for {new_user_account_id:?}");
 
     nar::retry(|| async {
         // Get nonce and recent block hash
