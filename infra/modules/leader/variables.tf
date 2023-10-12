@@ -6,6 +6,16 @@ variable "project" {
   type = string
 }
 
+variable "connector_id" {
+  description = "VPC connector ID for internal traffic"
+}
+
+variable "metadata_annotations" {
+  type        = map(any)
+  default     = null
+  description = "Annotations for the metadata associated with this Service."
+}
+
 variable "region" {
   type = string
 }

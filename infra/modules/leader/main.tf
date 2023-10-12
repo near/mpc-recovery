@@ -6,6 +6,13 @@ resource "google_cloud_run_v2_service" "leader" {
   template {
     service_account = var.service_account_email
 
+    annotations = var.metadata_annotations == null ? null : var.metadata_annotations
+
+    vpc_access {
+      connector = var.connector_id
+      egress    = "ALL_TRAFFIC"
+    }
+
     scaling {
       min_instance_count = 1
       max_instance_count = 1
@@ -79,6 +86,23 @@ resource "google_cloud_run_v2_service" "leader" {
         }
       }
     }
+  }
+
+  lifecycle {
+    # List of fields we don't want to see a diff for in terraform. Most of these fields are set
+    # by GCP and is metadata we don't want to account when considering changes in the service.
+    ignore_changes = [
+      metadata[0].annotations["client.knative.dev/user-image"],
+      metadata[0].annotations["run.googleapis.com/client-name"],
+      metadata[0].annotations["run.googleapis.com/client-version"],
+      metadata[0].annotations["run.googleapis.com/launch-stage"],
+      metadata[0].annotations["run.googleapis.com/operation-id"],
+      template[0].metadata[0].annotations["client.knative.dev/user-image"],
+      template[0].metadata[0].annotations["run.googleapis.com/client-version"],
+      template[0].metadata[0].annotations["run.googleapis.com/client-name"],
+      template[0].metadata[0].labels["client.knative.dev/nonce"],
+      template[0].metadata[0].labels["run.googleapis.com/startupProbeType"],
+    ]
   }
 }
 

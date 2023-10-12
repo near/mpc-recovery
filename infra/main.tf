@@ -104,6 +104,27 @@ resource "google_secret_manager_secret_iam_member" "fast_auth_partners_secret_ac
   member    = "serviceAccount:${google_service_account.service_account.email}"
 }
 
+module "mpc-signer-lb" {
+
+  count         = length(var.signer_configs)
+  source        = "./modules/internal_cloudrun_lb"
+  name          = "mpc-${var.env}-signer-${count.index}"
+  network_id    = var.env
+  subnetwork_id = "${var.env}-us-central1"
+  project_id    = var.project
+  region        = "us-central1"
+  service_name  = module.signer.google_cloud_run_v2_service.name
+}
+
+module "mpc-leader-lb" {
+  source        = "./modules/internal_cloudrun_lb"
+  name          = "mpc-${var.env}-leader"
+  network_id    = var.env
+  subnetwork_id = "${var.env}-us-central1"
+  project_id    = var.project
+  region        = "us-central1"
+  service_name  = module.leader.google_cloud_run_v2_service.name
+}
 /*
  * Create multiple signer nodes
  */
@@ -117,6 +138,7 @@ module "signer" {
   zone                  = var.zone
   service_account_email = google_service_account.service_account.email
   docker_image          = var.docker_image
+  connector_id          = "projects/pagoda-shared-infrastructure/locations/us-central1/connectors/${var.env}-connector"
 
   node_id = count.index
 
@@ -143,6 +165,7 @@ module "leader" {
   zone                  = var.zone
   service_account_email = google_service_account.service_account.email
   docker_image          = var.docker_image
+  connector_id          = "projects/pagoda-shared-infrastructure/locations/us-central1/connectors/${var.env}-connector"
 
   signer_node_urls   = concat(module.signer.*.node.uri, var.external_signer_node_urls)
   near_rpc           = local.workspace.near_rpc
