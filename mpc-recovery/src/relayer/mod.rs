@@ -202,7 +202,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_access_key() -> anyhow::Result<()> {
-        let testnet = NearRpcAndRelayerClient::connect(TESTNET_URL, true);
+        let testnet = NearRpcAndRelayerClient::connect(TESTNET_URL);
         let (block_hash, block_height, nonce) = testnet
             .access_key(
                 "dev-1636354824855-78504059330123".parse()?,
