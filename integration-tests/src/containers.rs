@@ -647,6 +647,8 @@ impl<'a> LeaderNode<'a> {
             "--gcp-datastore-url".to_string(),
             datastore_url.to_string(),
             "--test".to_string(),
+            // TODO: remove once relayer is merged as one
+            "--public-relayer".to_string(),
         ];
         for sign_node in sign_nodes {
             cmd.push("--sign-nodes".to_string());
@@ -677,7 +679,8 @@ impl<'a> LeaderNode<'a> {
     pub fn api(&self, near_rpc: &str, relayer: &DelegateActionRelayer) -> LeaderNodeApi {
         LeaderNodeApi {
             address: self.local_address.clone(),
-            client: NearRpcAndRelayerClient::connect(near_rpc),
+            // NOTE: integration tests uses public relayer
+            client: NearRpcAndRelayerClient::connect(near_rpc, true),
             relayer: relayer.clone(),
         }
     }

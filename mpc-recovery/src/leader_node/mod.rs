@@ -50,6 +50,7 @@ pub struct Config {
     // TODO: temporary solution
     pub account_creator_sk: SecretKey,
     pub partners: PartnerList,
+    pub public_relayer: bool,
 }
 
 pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
@@ -62,11 +63,12 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         account_creator_id,
         account_creator_sk,
         partners,
+        public_relayer,
     } = config;
     let _span = tracing::debug_span!("run", env, port);
     tracing::debug!(?sign_nodes, "running a leader node");
 
-    let client = NearRpcAndRelayerClient::connect(&near_rpc);
+    let client = NearRpcAndRelayerClient::connect(&near_rpc, public_relayer);
     // FIXME: Internal account id is retrieved from the ID token. We don't have a token for ourselves,
     // but are still forced to allocate allowance.
     // Using randomly generated internal account id ensures the uniqueness of user idenrifier on the relayer side so
