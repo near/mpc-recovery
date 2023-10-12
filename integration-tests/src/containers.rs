@@ -690,8 +690,6 @@ impl<'a> LeaderNode<'a> {
             datastore_url.to_string(),
             "--jwt-signature-pk-url".to_string(),
             oidc_provider_url.to_string(),
-            // TODO: remove once relayer is merged as one
-            "--public-relayer".to_string(),
         ];
         for sign_node in sign_nodes {
             cmd.push("--sign-nodes".to_string());
