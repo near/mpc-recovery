@@ -294,7 +294,7 @@ async fn main() -> anyhow::Result<()> {
                 EnvFilter::from_default_env(),
                 &logging_options,
                 env.clone(),
-                "leader".to_string(),
+                node_id.to_string(),
             )
             .await
             .global();
@@ -348,7 +348,7 @@ async fn main() -> anyhow::Result<()> {
                 EnvFilter::from_default_env(),
                 &logging_options,
                 env.clone(),
-                "leader".to_string(),
+                node_id.to_string(),
             )
             .await
             .global();

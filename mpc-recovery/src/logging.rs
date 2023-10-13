@@ -2,6 +2,7 @@ use opentelemetry::sdk::trace::{self, RandomIdGenerator, Sampler, Tracer};
 use opentelemetry::sdk::Resource;
 use opentelemetry::KeyValue;
 use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_semantic_conventions::resource::SERVICE_NAME;
 use std::sync::OnceLock;
 use tracing::subscriber::DefaultGuard;
 use tracing_appender::non_blocking::NonBlocking;
@@ -59,6 +60,10 @@ pub struct Options {
     /// Enables export of span data using opentelemetry exporters.
     #[clap(long, value_enum, default_value = "off")]
     opentelemetry: OpenTelemetryLevel,
+
+    /// Opentelemetry gRPC collector endpoint.
+    #[clap(long, default_value = "http://localhost:4317")]
+    otlp_endpoint: String,
 
     /// Whether the log needs to be colored.
     #[clap(long, value_enum, default_value = "auto")]
@@ -121,6 +126,7 @@ where
 /// Constructs an OpenTelemetryConfig which sends span data to an external collector.
 async fn add_opentelemetry_layer<S>(
     opentelemetry_level: OpenTelemetryLevel,
+    otlp_endpoint: &str,
     env: String,
     node_id: String,
     subscriber: S,
@@ -136,14 +142,18 @@ where
     };
     let (filter, handle) = reload::Layer::<LevelFilter, S>::new(filter);
 
-    let resource = vec![KeyValue::new("env", env), KeyValue::new("node_id", node_id)];
+    let resource = vec![
+        KeyValue::new(SERVICE_NAME, format!("mpc:{}", node_id)),
+        KeyValue::new("env", env),
+        KeyValue::new("node_id", node_id),
+    ];
 
     let tracer = opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_exporter(
             opentelemetry_otlp::new_exporter()
                 .tonic()
-                .with_endpoint("http://localhost:4317"),
+                .with_endpoint(otlp_endpoint),
         )
         .with_trace_config(
             trace::config()
@@ -235,8 +245,14 @@ pub async fn default_subscriber_with_opentelemetry(
         .set(handle)
         .unwrap_or_else(|_| panic!("Failed to set Log Layer Filter"));
 
-    let (subscriber, handle) =
-        add_opentelemetry_layer(options.opentelemetry, env, node_id, subscriber).await;
+    let (subscriber, handle) = add_opentelemetry_layer(
+        options.opentelemetry,
+        &options.otlp_endpoint,
+        env,
+        node_id,
+        subscriber,
+    )
+    .await;
     OTLP_LAYER_RELOAD_HANDLE
         .set(handle)
         .unwrap_or_else(|_| panic!("Failed to set OTLP Layer Filter"));

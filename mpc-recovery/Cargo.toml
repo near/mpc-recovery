@@ -30,6 +30,7 @@ jsonwebtoken = "8.3.0"
 lazy_static = "1.4.0"
 opentelemetry = "0.20.0"
 opentelemetry-otlp = "0.13.0"
+opentelemetry-semantic-conventions = "0.12.0"
 prometheus = { version = "0.13.3", features = ["process"] }
 rand = "0.7"
 rand8 = { package = "rand", version = "0.8" }
