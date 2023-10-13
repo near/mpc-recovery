@@ -4,7 +4,7 @@ use mpc_recovery::msg::{NewAccountResponse, UserCredentialsResponse};
 use mpc_recovery::sign_node::oidc::OidcToken;
 use mpc_recovery::transaction::LimitedAccessKey;
 use near_crypto::{PublicKey, SecretKey};
-use workspaces::AccountId;
+use near_workspaces::AccountId;
 
 use crate::{account, check, key, MpcCheck, TestContext};
 

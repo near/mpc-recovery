@@ -12,9 +12,10 @@ aes-gcm = "0.10"
 actix-rt = "2.8"
 anyhow = "1"
 async-trait = "0.1"
+atty = "0.2"
 axum = "0.6.19"
 axum-extra = "0.7"
-axum-tracing-opentelemetry = "0.13.1"
+axum-tracing-opentelemetry = "0.14.1"
 base64 = "0.21"
 borsh = "0.10.3"
 chrono = "0.4.24"
@@ -25,13 +26,10 @@ google-secretmanager1 = "5"
 hex = "0.4.3"
 hyper = { version = "0.14", features = ["full"] }
 hyper-rustls = { version = "=0.23", features = ["http2"] }
-init-tracing-opentelemetry = { version = "0.13.1", features = [
-    "tracing_subscriber_ext",
-    "stdout",
-] }
 jsonwebtoken = "8.3.0"
 lazy_static = "1.4.0"
 opentelemetry = "0.20.0"
+opentelemetry-otlp = "0.13.0"
 prometheus = { version = "0.13.3", features = ["process"] }
 rand = "0.7"
 rand8 = { package = "rand", version = "0.8" }
@@ -43,7 +41,9 @@ thiserror = "1"
 tokio = { version = "1.28", features = ["full"] }
 tokio-retry = "0.3"
 tracing = "0.1"
+tracing-appender = "0.2.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-opentelemetry = "0.21.0"
 near-jsonrpc-client = "0.6"
 near-jsonrpc-primitives = "0.17"
 near-primitives = "0.17"

@@ -4,7 +4,7 @@ use crate::mpc::{add_pk_and_check_validity, fetch_recovery_pk, new_random_accoun
 use crate::{account, key, with_nodes, MpcCheck};
 
 use hyper::StatusCode;
-use workspaces::types::AccessKeyPermission;
+use near_workspaces::types::AccessKeyPermission;
 
 use mpc_recovery::{
     gcp::value::{FromValue, IntoValue},

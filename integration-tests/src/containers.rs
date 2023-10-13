@@ -512,7 +512,7 @@ impl<'a> SignerNode<'a> {
 
         container.exec(ExecCommand {
             cmd: format!("bash -c 'while [[ \"$(curl -s -o /dev/null -w ''%{{http_code}}'' localhost:{})\" != \"200\" ]]; do sleep 1; done'", Self::CONTAINER_PORT),
-            ready_conditions: vec![WaitFor::message_on_stdout("node is ready to accept connections")]
+            ready_conditions: vec![WaitFor::message_on_stderr("node is ready to accept connections")]
         });
 
         let full_address = format!("http://{ip_address}:{}", Self::CONTAINER_PORT);
@@ -662,7 +662,7 @@ impl<'a> LeaderNode<'a> {
 
         container.exec(ExecCommand {
             cmd: format!("bash -c 'while [[ \"$(curl -s -o /dev/null -w ''%{{http_code}}'' localhost:{})\" != \"200\" ]]; do sleep 1; done'", Self::CONTAINER_PORT),
-            ready_conditions: vec![WaitFor::message_on_stdout("node is ready to accept connections")]
+            ready_conditions: vec![WaitFor::message_on_stderr("node is ready to accept connections")]
         });
 
         let full_address = format!("http://{ip_address}:{}", Self::CONTAINER_PORT);

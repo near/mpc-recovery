@@ -1,13 +1,9 @@
-use std::path::PathBuf;
-
 use aes_gcm::{
     aead::{consts::U32, generic_array::GenericArray, KeyInit},
     Aes256Gcm,
 };
 use clap::Parser;
-use init_tracing_opentelemetry::tracing_subscriber_ext::{
-    build_loglevel_filter_layer, build_otel_layer,
-};
+use mpc_recovery::logging;
 use mpc_recovery::{
     firewall::allowed::{OidcProviderList, PartnerList},
     gcp::GcpService,
@@ -18,10 +14,8 @@ use mpc_recovery::{
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_primitives::types::AccountId;
 use serde::de::DeserializeOwned;
-use tracing::Subscriber;
-use tracing_subscriber::{
-    fmt::format::FmtSpan, prelude::__tracing_subscriber_SubscriberExt, registry::LookupSpan, Layer,
-};
+use std::path::PathBuf;
+use tracing_subscriber::EnvFilter;
 
 #[derive(Parser, Debug)]
 enum Cli {
@@ -69,6 +63,9 @@ enum Cli {
         /// Whether to accept test tokens
         #[arg(long, env("MPC_RECOVERY_TEST"), default_value("false"))]
         test: bool,
+        /// Enables export of span data using opentelemetry protocol.
+        #[clap(flatten)]
+        logging_options: logging::Options,
     },
     StartSign {
         /// Environment to run in (`dev` or `prod`)
@@ -101,6 +98,9 @@ enum Cli {
         /// Whether to accept test tokens
         #[arg(long, env("MPC_RECOVERY_TEST"), default_value("false"))]
         test: bool,
+        /// Enables export of span data using opentelemetry protocol.
+        #[clap(flatten)]
+        logging_options: logging::Options,
     },
     RotateSignNodeCipher {
         /// Environment to run in (`dev` or `prod`)
@@ -124,6 +124,9 @@ enum Cli {
         /// GCP datastore URL
         #[arg(long, env("MPC_RECOVERY_GCP_DATASTORE_URL"))]
         gcp_datastore_url: Option<String>,
+        /// Enables export of span data using opentelemetry protocol.
+        #[clap(flatten)]
+        logging_options: logging::Options,
     },
 }
 
@@ -171,24 +174,6 @@ async fn load_account_creator_sk(
     }
 }
 
-fn build_tracing_layer<S>() -> Box<dyn Layer<S> + Send + Sync + 'static>
-where
-    S: Subscriber + for<'a> LookupSpan<'a>,
-{
-    let mut layer = tracing_subscriber::fmt::layer()
-        .pretty()
-        .with_line_number(true)
-        .with_thread_names(true)
-        .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
-        .with_timer(tracing_subscriber::fmt::time::uptime());
-    // Check if running in Google Cloud Run: https://cloud.google.com/run/docs/container-contract#services-env-vars
-    if std::env::var("K_SERVICE").is_ok() {
-        // Disable colored logging as it messes up Google's log formatting
-        layer = layer.with_ansi(false);
-    }
-    Box::new(layer)
-}
-
 async fn load_entries<T>(
     gcp_service: &GcpService,
     env: &str,
@@ -218,38 +203,20 @@ where
     Ok(entries)
 }
 
-fn init_subscribers() -> anyhow::Result<()> {
-    // Setup a temporary subscriber to log output during setup
-    let subscriber = tracing_subscriber::registry()
-        .with(build_loglevel_filter_layer())
-        .with(build_tracing_layer());
-    let _guard = tracing::subscriber::set_default(subscriber);
-    tracing::info!("init logging & tracing");
-
-    let subscriber = tracing_subscriber::registry()
-        .with(build_otel_layer()?)
-        .with(build_loglevel_filter_layer())
-        .with(build_tracing_layer());
-    tracing::subscriber::set_global_default(subscriber)?;
-    Ok(())
-}
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    init_subscribers()?;
-
     let _span = tracing::trace_span!("cli").entered();
     match Cli::parse() {
         Cli::Generate { n } => {
             let GenerateResult { pk_set, secrets } = mpc_recovery::generate(n);
-            tracing::info!("Public key set: {}", serde_json::to_string(&pk_set)?);
+            println!("Public key set: {}", serde_json::to_string(&pk_set)?);
             for (i, (sk_share, cipher_key)) in secrets.iter().enumerate() {
-                tracing::info!(
+                println!(
                     "Secret key share {}: {}",
                     i,
                     serde_json::to_string(sk_share)?
                 );
-                tracing::info!("Cipher {}: {}", i, hex::encode(cipher_key));
+                println!("Cipher {}: {}", i, hex::encode(cipher_key));
             }
         }
         Cli::StartLeader {
@@ -265,7 +232,16 @@ async fn main() -> anyhow::Result<()> {
             gcp_project_id,
             gcp_datastore_url,
             test,
+            logging_options,
         } => {
+            let _subscriber_guard = logging::default_subscriber_with_opentelemetry(
+                EnvFilter::from_default_env(),
+                &logging_options,
+                env.clone(),
+                "leader".to_string(),
+            )
+            .await
+            .global();
             let gcp_service =
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
             let account_creator_sk =
@@ -306,7 +282,16 @@ async fn main() -> anyhow::Result<()> {
             gcp_project_id,
             gcp_datastore_url,
             test,
+            logging_options,
         } => {
+            let _subscriber_guard = logging::default_subscriber_with_opentelemetry(
+                EnvFilter::from_default_env(),
+                &logging_options,
+                env.clone(),
+                "leader".to_string(),
+            )
+            .await
+            .global();
             let gcp_service =
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
             let oidc_providers = OidcProviderList {
@@ -351,7 +336,16 @@ async fn main() -> anyhow::Result<()> {
             new_cipher_key,
             gcp_project_id,
             gcp_datastore_url,
+            logging_options,
         } => {
+            let _subscriber_guard = logging::default_subscriber_with_opentelemetry(
+                EnvFilter::from_default_env(),
+                &logging_options,
+                env.clone(),
+                "leader".to_string(),
+            )
+            .await
+            .global();
             let gcp_service = GcpService::new(
                 env.clone(),
                 gcp_project_id.clone(),

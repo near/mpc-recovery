@@ -15,6 +15,7 @@ pub mod firewall;
 pub mod gcp;
 pub mod key_recovery;
 pub mod leader_node;
+pub mod logging;
 pub mod metrics;
 pub mod msg;
 pub mod nar;
