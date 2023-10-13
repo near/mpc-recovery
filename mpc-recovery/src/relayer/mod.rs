@@ -51,7 +51,7 @@ impl NearRpcAndRelayerClient {
     ) -> Result<(), RelayerError> {
         let mut req = Request::builder()
             .method(Method::POST)
-            .uri(format!("{}/register_account_and_allowance", relayer.url))
+            .uri(format!("{}/register_account", relayer.url))
             .header("content-type", "application/json");
 
         if let Some(api_key) = relayer.api_key {
