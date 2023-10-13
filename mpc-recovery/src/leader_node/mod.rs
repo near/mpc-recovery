@@ -15,7 +15,6 @@ use crate::transaction::{
 };
 use crate::utils::{check_digest_signature, user_credentials_request_digest};
 use crate::{metrics, nar};
-
 use anyhow::Context;
 use axum::extract::MatchedPath;
 use axum::middleware::{self, Next};
@@ -27,7 +26,6 @@ use axum::{
     Extension, Json, Router,
 };
 use axum_extra::extract::WithRejection;
-use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 use borsh::BorshDeserialize;
 use curv::elliptic::curves::{Ed25519, Point};
 use near_crypto::SecretKey;
@@ -36,7 +34,6 @@ use near_primitives::transaction::{Action, DeleteKeyAction};
 use near_primitives::types::AccountId;
 use prometheus::{Encoder, TextEncoder};
 use rand::{distributions::Alphanumeric, Rng};
-
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Instant;
@@ -142,24 +139,15 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         .route("/metrics", get(metrics))
         .route_layer(middleware::from_fn(track_metrics))
         .layer(Extension(state))
-        // Include trace context as header into the response
-        .layer(OtelInResponseLayer::default())
-        // Start OpenTelemetry trace on incoming request
-        .layer(OtelAxumLayer::default())
         .layer(cors_layer);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::debug!(?addr, "starting http server");
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
-        // .with_graceful_shutdown(shutdown_signal())
         .await
         .unwrap();
 }
-
-// async fn shutdown_signal() {
-//     opentelemetry::global::shutdown_tracer_provider();
-// }
 
 async fn track_metrics<B>(req: Request<B>, next: Next<B>) -> impl IntoResponse {
     let timer = Instant::now();
