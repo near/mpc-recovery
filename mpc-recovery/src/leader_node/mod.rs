@@ -80,7 +80,7 @@ pub async fn run(config: Config) {
             .map(char::from)
             .collect();
         client
-            .register_account(
+            .register_account_and_allowance(
                 RegisterAccountRequest {
                     account_id: account_creator_id.clone(),
                     allowance: 18_000_000_000_000_000_000, // should be enough to create 700_000+ accs
