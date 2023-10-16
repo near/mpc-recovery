@@ -649,7 +649,12 @@ impl<'a> LeaderNode<'a> {
             near_rpc: ctx.relayer_ctx.sandbox.address.clone(),
             near_root_account: ctx.relayer_ctx.worker.root_account()?.id().to_string(),
             account_creator_id: account_creator.id().clone(),
-            account_creator_sk: vec![account_creator.secret_key().to_string()],
+            account_creator_sk: ctx
+                .relayer_ctx
+                .creator_account_keys
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
             fast_auth_partners: Some(
                 serde_json::json!([
                     {
