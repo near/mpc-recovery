@@ -377,6 +377,45 @@ impl<'a> Relayer<'a> {
     }
 }
 
+pub struct OidcProvider<'a> {
+    pub container: Container<'a, GenericImage>,
+    pub jwt_pk_url: String,
+}
+
+impl<'a> OidcProvider<'a> {
+    pub const CONTAINER_PORT: u16 = 3000;
+
+    pub async fn run(
+        docker_client: &'a DockerClient,
+        network: &str,
+    ) -> anyhow::Result<OidcProvider<'a>> {
+        tracing::info!("Running OIDC provider container...");
+        let image = GenericImage::new("near/test-oidc-provider", "latest")
+            .with_wait_for(WaitFor::Nothing)
+            .with_exposed_port(Self::CONTAINER_PORT)
+            .with_env_var("RUST_LOG", "DEBUG");
+        let image: RunnableImage<GenericImage> = image.into();
+        let image = image.with_network(network);
+        let container = docker_client.cli.run(image);
+
+        let ip_address = docker_client
+            .get_network_ip_address(&container, network)
+            .await?;
+
+        let full_address = format!("http://{}:{}", ip_address, Self::CONTAINER_PORT);
+        let jwt_pk_url = format!("{}/jwt_signature_public_keys", full_address);
+
+        tracing::info!(
+            "OIDC provider container is running, jwt signature pk url: {}",
+            jwt_pk_url
+        );
+        Ok(OidcProvider {
+            container,
+            jwt_pk_url,
+        })
+    }
+}
+
 pub struct Datastore<'a> {
     pub container: Container<'a, GenericImage>,
     pub address: String,
@@ -470,6 +509,7 @@ impl<'a> SignerNode<'a> {
         datastore_local_url: &str,
         gcp_project_id: &str,
         firebase_audience_id: &str,
+        oidc_provider_url: &str,
     ) -> anyhow::Result<SignerNode<'a>> {
         tracing::info!("Running signer node container {}...", node_id);
         let image: GenericImage = GenericImage::new("near/mpc-recovery", "latest")
@@ -499,7 +539,8 @@ impl<'a> SignerNode<'a> {
                 gcp_project_id.to_string(),
                 "--gcp-datastore-url".to_string(),
                 datastore_url.to_string(),
-                "--test".to_string(),
+                "--jwt-signature-pk-url".to_string(),
+                oidc_provider_url.to_string(),
             ],
         )
             .into();
@@ -610,6 +651,7 @@ impl<'a> LeaderNode<'a> {
         account_creator_id: &AccountId,
         account_creator_sk: &near_workspaces::types::SecretKey,
         firebase_audience_id: &str,
+        oidc_provider_url: &str,
     ) -> anyhow::Result<LeaderNode<'a>> {
         tracing::info!("Running leader node container...");
 
@@ -646,9 +688,8 @@ impl<'a> LeaderNode<'a> {
             gcp_project_id.to_string(),
             "--gcp-datastore-url".to_string(),
             datastore_url.to_string(),
-            "--test".to_string(),
-            // TODO: remove once relayer is merged as one
-            "--public-relayer".to_string(),
+            "--jwt-signature-pk-url".to_string(),
+            oidc_provider_url.to_string(),
         ];
         for sign_node in sign_nodes {
             cmd.push("--sign-nodes".to_string());
@@ -680,7 +721,7 @@ impl<'a> LeaderNode<'a> {
         LeaderNodeApi {
             address: self.local_address.clone(),
             // NOTE: integration tests uses public relayer
-            client: NearRpcAndRelayerClient::connect(near_rpc, true),
+            client: NearRpcAndRelayerClient::connect(near_rpc),
             relayer: relayer.clone(),
         }
     }

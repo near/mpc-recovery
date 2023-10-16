@@ -18,6 +18,11 @@ docker build . -t near/mpc-recovery
 
 **Note**. You will need to re-build the Docker image each time you make a code change and want to run the integration tests.
 
+Build OIDC Provider test image
+```bash
+docker build -t near/test-oidc-provider ./test-oidc-provider
+```
+
 Finally, run the integration tests:
 
 ```BASH

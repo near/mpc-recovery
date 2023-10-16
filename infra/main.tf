@@ -124,6 +124,8 @@ module "signer" {
   cipher_key_secret_id     = var.signer_configs[count.index].cipher_key_secret_id
   sk_share_secret_id       = var.signer_configs[count.index].sk_share_secret_id
 
+  jwt_signature_pk_url = var.jwt_signature_pk_url
+
   depends_on = [
     google_secret_manager_secret_iam_member.cipher_key_secret_access,
     google_secret_manager_secret_iam_member.secret_share_secret_access,
@@ -151,6 +153,8 @@ module "leader" {
 
   account_creator_sk_secret_id = var.account_creator_sk_secret_id
   fast_auth_partners_secret_id = var.fast_auth_partners_secret_id
+
+  jwt_signature_pk_url = var.jwt_signature_pk_url
 
   depends_on = [
     google_secret_manager_secret_iam_member.account_creator_secret_access,

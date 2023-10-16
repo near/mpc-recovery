@@ -68,6 +68,9 @@ jobs:
           docker pull ghcr.io/near/os-relayer
           docker pull ghcr.io/near/sandbox
 
+      - name: Build OIDC Provider Dcoker Image
+        run: docker build -t near/test-oidc-provider ./test-oidc-provider
+
       - name: Login to GCP Artifact Registry
         run: echo "$GOOGLE_CREDENTIALS" | docker login -u _json_key --password-stdin https://us-east1-docker.pkg.dev
         env:

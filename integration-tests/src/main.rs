@@ -34,10 +34,15 @@ async fn main() -> anyhow::Result<()> {
             let datastore_future =
                 containers::Datastore::run(&docker_client, NETWORK, GCP_PROJECT_ID);
 
-            let (relayer_ctx, datastore) =
-                futures::future::join(relayer_ctx_future, datastore_future).await;
+            let oidc_provider_future = containers::OidcProvider::run(&docker_client, NETWORK);
+
+            let (relayer_ctx, datastore, oidc_provider) =
+                futures::future::join3(relayer_ctx_future, datastore_future, oidc_provider_future)
+                    .await;
+
             let relayer_ctx = relayer_ctx?;
             let datastore = datastore?;
+            let oidc_provider = oidc_provider?;
 
             tracing::info!("Generating secrets");
             let GenerateResult { secrets, .. } = mpc_recovery::generate(nodes);
@@ -54,6 +59,7 @@ async fn main() -> anyhow::Result<()> {
                     &datastore.local_address,
                     GCP_PROJECT_ID,
                     FIREBASE_AUDIENCE_ID,
+                    &oidc_provider.jwt_pk_url,
                 );
                 signer_node_futures.push(signer_node);
             }
@@ -113,7 +119,9 @@ async fn main() -> anyhow::Result<()> {
                         },
                     },
                 ]).to_string()),
-                "--test".to_string(),
+                "--jwt-signature-pk-url".to_string(),
+                oidc_provider.jwt_pk_url,
+
             ];
             for sign_node in signer_urls {
                 cmd.push("--sign-nodes".to_string());
@@ -128,7 +136,7 @@ async fn main() -> anyhow::Result<()> {
             tracing::info!("====================================");
             tracing::info!("You can now interact with your local service manually. For example:");
             tracing::info!(
-                r#"curl -X POST -H "Content-Type: application/json" -d '{{"oidc_token": "validToken:1", "near_account_id": "abc45436676.near", "create_account_options": {{"full_access_keys": ["ed25519:4fnCz9NTEMhkfwAHDhFDkPS1mD58QHdRyago5n4vtCS2"]}}}}' http://localhost:3000/new_account"#
+                r#"curl -X POST -H "Content-Type: application/json" -d '{{"oidc_token": <valid_token>, "near_account_id": "abc45436676.near", "create_account_options": {{"full_access_keys": ["ed25519:4fnCz9NTEMhkfwAHDhFDkPS1mD58QHdRyago5n4vtCS2"]}}}}' http://localhost:3000/new_account"#
             );
 
             tracing::info!("Press any button to exit and destroy all containers...");

@@ -53,3 +53,7 @@ variable "signer_configs" {
     sk_share_secret_id   = string
   }))
 }
+
+variable "jwt_signature_pk_url" {
+  type = string
+}

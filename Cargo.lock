@@ -3745,6 +3745,8 @@ dependencies = [
  "regex",
  "serde_json",
  "thiserror",
+ "tokio",
+ "tokio-stream",
 ]
 
 [[package]]
@@ -5527,6 +5529,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "test-oidc-provider"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

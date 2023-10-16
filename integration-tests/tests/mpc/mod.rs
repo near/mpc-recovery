@@ -51,7 +51,7 @@ pub async fn new_random_account(
     let account_id = account::random(&ctx.worker)?;
     let user_secret_key = key::random_sk();
     let user_public_key = user_secret_key.public_key();
-    let oidc_token = OidcToken::random();
+    let oidc_token = OidcToken::random_valid();
 
     register_account(
         ctx,

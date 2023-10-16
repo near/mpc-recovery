@@ -16,7 +16,6 @@ use near_workspaces::{network::Sandbox, Worker};
 
 const NETWORK: &str = "mpc_it_network";
 const GCP_PROJECT_ID: &str = "mpc-recovery-gcp-project";
-// TODO: figure out how to instantiate and use a local firebase deployment
 pub const FIREBASE_AUDIENCE_ID: &str = "test_audience";
 
 pub struct TestContext {
@@ -51,10 +50,13 @@ where
         mpc_recovery_integration_tests::initialize_relayer(&docker_client, NETWORK, &relayer_id);
     let datastore_future = containers::Datastore::run(&docker_client, NETWORK, GCP_PROJECT_ID);
 
-    let (relayer_ctx, datastore) =
-        futures::future::join(relayer_ctx_future, datastore_future).await;
+    let oidc_provider_future = containers::OidcProvider::run(&docker_client, NETWORK);
+
+    let (relayer_ctx, datastore, oidc_provider) =
+        futures::future::join3(relayer_ctx_future, datastore_future, oidc_provider_future).await;
     let relayer_ctx = relayer_ctx?;
     let datastore = datastore?;
+    let oidc_provider = oidc_provider?;
 
     let GenerateResult { pk_set, secrets } = mpc_recovery::generate(nodes);
     let mut signer_node_futures = Vec::new();
@@ -69,6 +71,7 @@ where
             &datastore.local_address,
             GCP_PROJECT_ID,
             FIREBASE_AUDIENCE_ID,
+            &oidc_provider.jwt_pk_url,
         );
         signer_node_futures.push(signer_node);
     }
@@ -91,6 +94,7 @@ where
         relayer_ctx.creator_account.id(),
         relayer_ctx.creator_account.secret_key(),
         FIREBASE_AUDIENCE_ID,
+        &oidc_provider.jwt_pk_url,
     )
     .await?;
 
