@@ -1,15 +1,19 @@
 use std::{
     fs::{self, File},
     io::Write,
+    path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Ok};
+use anyhow::Context;
+use async_process::{Child, Command, Stdio};
 use hyper::{Body, Client, Method, Request, StatusCode, Uri};
 use serde::{Deserialize, Serialize};
 use toml::Value;
 use workspaces::{types::SecretKey, AccountId};
 
 use crate::containers::RelayerConfig;
+
+const EXECUTABLE: &str = "mpc-recovery";
 
 pub async fn post<U, Req: Serialize, Resp>(
     uri: U,
@@ -43,6 +47,26 @@ where
         serde_json::from_slice(&data).context("failed to deserialize the response body")?;
 
     Ok((status, response))
+}
+
+pub async fn get<U>(uri: U) -> anyhow::Result<StatusCode>
+where
+    Uri: TryFrom<U>,
+    <Uri as TryFrom<U>>::Error: Into<hyper::http::Error>,
+{
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(uri)
+        .header("content-type", "application/json")
+        .body(Body::empty())
+        .context("failed to build the request")?;
+
+    let client = Client::new();
+    let response = client
+        .request(req)
+        .await
+        .context("failed to send the request")?;
+    Ok(response.status())
 }
 
 #[derive(Deserialize, Serialize)]
@@ -173,4 +197,64 @@ pub fn create_relayer_cofig_file(
         .to_str()
         .expect("Failed to convert config file path to string")
         .to_string())
+}
+
+/// Request an unused port from the OS.
+pub async fn pick_unused_port() -> anyhow::Result<u16> {
+    // Port 0 means the OS gives us an unused port
+    // Important to use localhost as using 0.0.0.0 leads to users getting brief firewall popups to
+    // allow inbound connections on MacOS.
+    let addr = std::net::SocketAddrV4::new(std::net::Ipv4Addr::LOCALHOST, 0);
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let port = listener.local_addr()?.port();
+    Ok(port)
+}
+
+pub async fn ping_until_ok(addr: &str, timeout: u64) -> anyhow::Result<()> {
+    tokio::time::timeout(std::time::Duration::from_secs(timeout), async {
+        loop {
+            match get(addr).await {
+                Ok(status) if status == StatusCode::OK => break,
+                _ => tokio::time::sleep(std::time::Duration::from_millis(500)).await,
+            }
+        }
+    })
+    .await?;
+    Ok(())
+}
+
+pub fn target_dir() -> Option<PathBuf> {
+    let mut out_dir = Path::new(std::env!("OUT_DIR"));
+    loop {
+        if out_dir.ends_with("target") {
+            break Some(out_dir.to_path_buf());
+        }
+
+        match out_dir.parent() {
+            Some(parent) => out_dir = parent,
+            None => break None, // We've reached the root directory and didn't find "target"
+        }
+    }
+}
+
+pub fn executable(release: bool) -> Option<PathBuf> {
+    let executable = target_dir()?
+        .join(if release { "release" } else { "debug" })
+        .join(EXECUTABLE);
+    Some(executable)
+}
+
+pub fn spawn_mpc(release: bool, node: &str, args: &[String]) -> anyhow::Result<Child> {
+    let executable = executable(release)
+        .with_context(|| format!("could not find target dir while starting {node} node"))?;
+
+    Command::new(&executable)
+        .args(args)
+        .env("RUST_LOG", "mpc_recovery=INFO")
+        .envs(std::env::vars())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .kill_on_drop(true)
+        .spawn()
+        .with_context(|| format!("failed to run {node} node: {}", executable.display()))
 }

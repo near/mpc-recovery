@@ -29,7 +29,6 @@ use axum::{
 use axum_extra::extract::WithRejection;
 use borsh::BorshDeserialize;
 use curv::elliptic::curves::{Ed25519, Point};
-use near_crypto::SecretKey;
 use near_fetch::signer::KeyRotatingSigner;
 use near_primitives::delegate_action::{DelegateAction, NonDelegateAction};
 use near_primitives::transaction::{Action, DeleteKeyAction};
@@ -49,7 +48,6 @@ pub struct Config {
     pub near_root_account: String,
     pub account_creator_id: AccountId,
     // TODO: temporary solution
-    pub account_creator_sk: SecretKey,
     pub account_creator_signer: KeyRotatingSigner,
     pub partners: PartnerList,
     pub jwt_signature_pk_url: String,
@@ -63,7 +61,6 @@ pub async fn run(config: Config) {
         near_rpc,
         near_root_account,
         account_creator_id,
-        account_creator_sk,
         account_creator_signer,
         partners,
         jwt_signature_pk_url,
@@ -102,7 +99,6 @@ pub async fn run(config: Config) {
         reqwest_client: reqwest::Client::new(),
         near_root_account: near_root_account.parse().unwrap(),
         account_creator_id,
-        account_creator_sk,
         account_creator_signer,
         partners,
         jwt_signature_pk_url,
@@ -224,7 +220,6 @@ struct LeaderState {
     near_root_account: AccountId,
     account_creator_id: AccountId,
     // TODO: temporary solution
-    account_creator_sk: SecretKey,
     account_creator_signer: KeyRotatingSigner,
     partners: PartnerList,
     jwt_signature_pk_url: String,
@@ -397,13 +392,12 @@ async fn process_new_account(
     .await?;
 
     nar::retry(|| async {
+        let account_creator = state.account_creator_signer.fetch_and_rotate_signer();
+
         // Get nonce and recent block hash
         let (_hash, block_height, nonce) = state
             .client
-            .access_key(
-                &state.account_creator_id,
-                state.account_creator_signer.public_key(),
-            )
+            .access_key(&account_creator.account_id, &account_creator.public_key)
             .await
             .map_err(LeaderNodeError::RelayerError)?;
 
@@ -415,8 +409,8 @@ async fn process_new_account(
         }
 
         let delegate_action = get_create_account_delegate_action(
-            &state.account_creator_id,
-            &state.account_creator_sk.public_key(),
+            &account_creator.account_id,
+            &account_creator.public_key,
             &new_user_account_id,
             new_account_options.clone(),
             &state.near_root_account,
@@ -460,8 +454,8 @@ async fn process_new_account(
                     .client
                     .invalidate_cache_if_acc_creation_failed(
                         &(
-                            state.account_creator_id.clone(),
-                            state.account_creator_sk.public_key(),
+                            account_creator.account_id.clone(),
+                            account_creator.public_key.clone(),
                         ),
                         &err_str,
                     )

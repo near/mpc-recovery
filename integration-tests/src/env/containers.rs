@@ -1,7 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use aes_gcm::{Aes256Gcm, KeyInit};
-use anyhow::{anyhow, Ok};
+use anyhow::anyhow;
 use bollard::{container::LogsOptions, network::CreateNetworkOptions, service::Ipam, Docker};
 use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::GenericArray};
 use ed25519_dalek::{PublicKey as PublicKeyEd25519, Verifier};
@@ -42,6 +42,7 @@ use workspaces::AccountId;
 
 use std::fs;
 
+use crate::env::{Context, LeaderNodeApi, SignerNodeApi};
 use crate::util::{self, create_key_file, create_relayer_cofig_file};
 
 static NETWORK_MUTEX: Lazy<Mutex<i32>> = Lazy::new(|| Mutex::new(0));
@@ -134,7 +135,7 @@ impl DockerClient {
         tokio::spawn(async move {
             let mut stdout = tokio::io::stdout();
 
-            while let Some(Result::Ok(output)) = output.next().await {
+            while let Some(Ok(output)) = output.next().await {
                 stdout
                     .write_all(output.into_bytes().as_ref())
                     .await
@@ -166,12 +167,16 @@ pub struct Redis<'a> {
     pub container: Container<'a, GenericImage>,
     pub address: String,
     pub full_address: String,
+    pub local_address: String,
 }
 
 impl<'a> Redis<'a> {
+    const CONTAINER_PORT: u16 = 3000;
+
     pub async fn run(docker_client: &'a DockerClient, network: &str) -> anyhow::Result<Redis<'a>> {
         tracing::info!("Running Redis container...");
         let image = GenericImage::new("redis", "latest")
+            .with_exposed_port(Self::CONTAINER_PORT)
             .with_wait_for(WaitFor::message_on_stdout("Ready to accept connections"));
         let image: RunnableImage<GenericImage> = image.into();
         let image = image.with_network(network);
@@ -182,12 +187,14 @@ impl<'a> Redis<'a> {
 
         // Note: this port is hardcoded in the Redis image
         let full_address = format!("redis://{}:{}", address, 6379);
+        let host_port = container.get_host_port_ipv4(Self::CONTAINER_PORT);
 
         tracing::info!("Redis container is running at {}", full_address);
         Ok(Redis {
             container,
             address,
             full_address,
+            local_address: format!("http://127.0.0.1:{host_port}"),
         })
     }
 }
@@ -250,7 +257,7 @@ impl<'a> Sandbox<'a> {
         Ok(Sandbox {
             container,
             address: full_address,
-            local_address: format!("http://localhost:{host_port}"),
+            local_address: format!("http://127.0.0.1:{host_port}"),
         })
     }
 }
@@ -365,7 +372,7 @@ impl<'a> Relayer<'a> {
         Ok(Relayer {
             container,
             address: full_address,
-            local_address: format!("http://localhost:{host_port}"),
+            local_address: format!("http://127.0.0.1:{host_port}"),
             id: relayer_id.to_string(),
         })
     }
@@ -380,6 +387,7 @@ impl<'a> Relayer<'a> {
 pub struct OidcProvider<'a> {
     pub container: Container<'a, GenericImage>,
     pub jwt_pk_url: String,
+    pub jwt_pk_local_url: String,
 }
 
 impl<'a> OidcProvider<'a> {
@@ -402,8 +410,10 @@ impl<'a> OidcProvider<'a> {
             .get_network_ip_address(&container, network)
             .await?;
 
+        let host_port = container.get_host_port_ipv4(Self::CONTAINER_PORT);
         let full_address = format!("http://{}:{}", ip_address, Self::CONTAINER_PORT);
         let jwt_pk_url = format!("{}/jwt_signature_public_keys", full_address);
+        let jwt_local_url = format!("http://127.0.0.1:{}/jwt_signature_public_keys", host_port);
 
         tracing::info!(
             "OIDC provider container is running, jwt signature pk url: {}",
@@ -412,6 +422,7 @@ impl<'a> OidcProvider<'a> {
         Ok(OidcProvider {
             container,
             jwt_pk_url,
+            jwt_pk_local_url: jwt_local_url,
         })
     }
 }
@@ -465,7 +476,7 @@ impl<'a> Datastore<'a> {
         let host_port = container.get_host_port_ipv4(Self::CONTAINER_PORT);
 
         let full_address = format!("http://{}:{}/", ip_address, Self::CONTAINER_PORT);
-        let local_address = format!("http://localhost:{}/", host_port);
+        let local_address = format!("http://127.0.0.1:{}/", host_port);
         tracing::info!("Datastore container is running at {}", full_address);
         Ok(Datastore {
             container,
@@ -479,6 +490,8 @@ pub struct SignerNode<'a> {
     pub container: Container<'a, GenericImage>,
     pub address: String,
     pub local_address: String,
+
+    env: String,
     node_id: usize,
     sk_share: ExpandedKeyPair,
     cipher_key: GenericArray<u8, U32>,
@@ -486,68 +499,49 @@ pub struct SignerNode<'a> {
     gcp_datastore_local_url: String,
 }
 
-pub struct SignerNodeApi {
-    pub address: String,
-    pub node_id: usize,
-    pub sk_share: ExpandedKeyPair,
-    pub cipher_key: GenericArray<u8, U32>,
-    pub gcp_project_id: String,
-    pub gcp_datastore_local_url: String,
-}
-
-impl<'a> SignerNode<'a> {
+impl SignerNode<'_> {
     // Container port used for the docker network, does not have to be unique
     const CONTAINER_PORT: u16 = 3000;
 
-    pub async fn run_signing_node(
-        docker_client: &'a DockerClient,
-        network: &str,
-        node_id: u64,
+    pub async fn run<'a>(
+        ctx: &super::Context<'a>,
+        node_id: usize,
         sk_share: &ExpandedKeyPair,
         cipher_key: &GenericArray<u8, U32>,
-        datastore_url: &str,
-        datastore_local_url: &str,
-        gcp_project_id: &str,
-        firebase_audience_id: &str,
-        oidc_provider_url: &str,
     ) -> anyhow::Result<SignerNode<'a>> {
         tracing::info!("Running signer node container {}...", node_id);
+        let args = mpc_recovery::Cli::StartSign {
+            env: ctx.env.clone(),
+            node_id: node_id as u64,
+            web_port: Self::CONTAINER_PORT,
+            sk_share: Some(serde_json::to_string(&sk_share)?),
+            cipher_key: Some(hex::encode(cipher_key)),
+            oidc_providers_filepath: None,
+            oidc_providers: Some(
+                serde_json::json!([
+                    {
+                        "issuer": ctx.issuer,
+                        "audience": ctx.audience_id,
+                    },
+                ])
+                .to_string(),
+            ),
+            gcp_project_id: ctx.gcp_project_id.clone(),
+            gcp_datastore_url: Some(ctx.datastore.address.clone()),
+            jwt_signature_pk_url: ctx.oidc_provider.jwt_pk_url.clone(),
+        }
+        .into_str_args();
+
         let image: GenericImage = GenericImage::new("near/mpc-recovery", "latest")
             .with_wait_for(WaitFor::Nothing)
             .with_exposed_port(Self::CONTAINER_PORT)
             .with_env_var("RUST_LOG", "mpc_recovery=DEBUG");
-        let image: RunnableImage<GenericImage> = (
-            image,
-            vec![
-                "start-sign".to_string(),
-                "--node-id".to_string(),
-                node_id.to_string(),
-                "--sk-share".to_string(),
-                serde_json::to_string(&sk_share)?,
-                "--cipher-key".to_string(),
-                hex::encode(cipher_key),
-                "--web-port".to_string(),
-                Self::CONTAINER_PORT.to_string(),
-                "--oidc-providers".to_string(),
-                serde_json::json!([
-                    {
-                        "issuer": format!("https://securetoken.google.com/{}", firebase_audience_id),
-                        "audience": firebase_audience_id,
-                    },
-                ]).to_string(),
-                "--gcp-project-id".to_string(),
-                gcp_project_id.to_string(),
-                "--gcp-datastore-url".to_string(),
-                datastore_url.to_string(),
-                "--jwt-signature-pk-url".to_string(),
-                oidc_provider_url.to_string(),
-            ],
-        )
-            .into();
-        let image = image.with_network(network);
-        let container = docker_client.cli.run(image);
-        let ip_address = docker_client
-            .get_network_ip_address(&container, network)
+        let image: RunnableImage<GenericImage> = (image, args).into();
+        let image = image.with_network(&ctx.docker_network);
+        let container = ctx.docker_client.cli.run(image);
+        let ip_address = ctx
+            .docker_client
+            .get_network_ip_address(&container, &ctx.docker_network)
             .await?;
         let host_port = container.get_host_port_ipv4(Self::CONTAINER_PORT);
 
@@ -565,17 +559,20 @@ impl<'a> SignerNode<'a> {
         Ok(SignerNode {
             container,
             address: full_address,
-            local_address: format!("http://localhost:{host_port}"),
-            node_id: node_id as usize,
+            local_address: format!("http://127.0.0.1:{host_port}"),
+
+            env: ctx.env.clone(),
+            node_id,
             sk_share: sk_share.clone(),
             cipher_key: *cipher_key,
-            gcp_project_id: gcp_project_id.to_string(),
-            gcp_datastore_local_url: datastore_local_url.to_string(),
+            gcp_project_id: ctx.gcp_project_id.clone(),
+            gcp_datastore_local_url: ctx.datastore.local_address.clone(),
         })
     }
 
     pub fn api(&self) -> SignerNodeApi {
         SignerNodeApi {
+            env: self.env.clone(),
             address: self.local_address.clone(),
             node_id: self.node_id,
             sk_share: self.sk_share.clone(),
@@ -598,9 +595,8 @@ impl SignerNodeApi {
         &self,
         new_cipher_key: &GenericArray<u8, U32>,
     ) -> anyhow::Result<(Aes256Gcm, Aes256Gcm)> {
-        let env = "dev".to_string();
         let gcp_service = mpc_recovery::gcp::GcpService::new(
-            env,
+            self.env.clone(),
             self.gcp_project_id.clone(),
             Some(self.gcp_datastore_local_url.clone()),
         )
@@ -627,82 +623,57 @@ pub struct LeaderNode<'a> {
     pub container: Container<'a, GenericImage>,
     pub address: String,
     local_address: String,
-}
-
-pub struct LeaderNodeApi {
-    pub address: String,
-    pub relayer: DelegateActionRelayer,
-    client: NearRpcAndRelayerClient,
+    local_rpc_url: String,
+    local_relayer_url: String,
 }
 
 impl<'a> LeaderNode<'a> {
     // Container port used for the docker network, does not have to be unique
     const CONTAINER_PORT: u16 = 3000;
 
-    pub async fn run(
-        docker_client: &'a DockerClient,
-        network: &str,
-        sign_nodes: Vec<String>,
-        near_rpc: &str,
-        relayer_url: &str,
-        datastore_url: &str,
-        gcp_project_id: &str,
-        near_root_account: &AccountId,
-        account_creator_id: &AccountId,
-        account_creator_sks: &[workspaces::types::SecretKey],
-        firebase_audience_id: &str,
-        oidc_provider_url: &str,
-    ) -> anyhow::Result<LeaderNode<'a>> {
+    pub async fn run(ctx: &Context<'a>, sign_nodes: Vec<String>) -> anyhow::Result<LeaderNode<'a>> {
         tracing::info!("Running leader node container...");
+        let account_creator = &ctx.relayer_ctx.creator_account;
+        let args = mpc_recovery::Cli::StartLeader {
+            env: ctx.env.clone(),
+            web_port: Self::CONTAINER_PORT,
+            sign_nodes,
+            near_rpc: ctx.relayer_ctx.sandbox.address.clone(),
+            near_root_account: ctx.relayer_ctx.worker.root_account()?.id().to_string(),
+            account_creator_id: account_creator.id().clone(),
+            account_creator_sk: vec![account_creator.secret_key().to_string()],
+            fast_auth_partners: Some(
+                serde_json::json!([
+                    {
+                        "oidc_provider": {
+                            "issuer": ctx.issuer,
+                            "audience": ctx.audience_id,
+                        },
+                        "relayer": {
+                            "url": &ctx.relayer_ctx.relayer.address,
+                            "api_key": serde_json::Value::Null,
+                        },
+                    },
+                ])
+                .to_string(),
+            ),
+            fast_auth_partners_filepath: None,
+            gcp_project_id: ctx.gcp_project_id.clone(),
+            gcp_datastore_url: Some(ctx.datastore.address.to_string()),
+            jwt_signature_pk_url: ctx.oidc_provider.jwt_pk_url.to_string(),
+        }
+        .into_str_args();
 
         let image = GenericImage::new("near/mpc-recovery", "latest")
             .with_wait_for(WaitFor::Nothing)
             .with_exposed_port(Self::CONTAINER_PORT)
             .with_env_var("RUST_LOG", "mpc_recovery=DEBUG");
-        let mut cmd = vec![
-            "start-leader".to_string(),
-            "--web-port".to_string(),
-            Self::CONTAINER_PORT.to_string(),
-            "--near-rpc".to_string(),
-            near_rpc.to_string(),
-            "--near-root-account".to_string(),
-            near_root_account.to_string(),
-            "--account-creator-id".to_string(),
-            account_creator_id.to_string(),
-            "--fast-auth-partners".to_string(),
-            serde_json::json!([
-                {
-                    "oidc_provider": {
-                        "issuer": format!("https://securetoken.google.com/{}", firebase_audience_id),
-                        "audience": firebase_audience_id,
-                    },
-                    "relayer": {
-                        "url": relayer_url.to_string(),
-                        "api_key": serde_json::Value::Null,
-                    },
-                },
-            ]).to_string(),
-            "--gcp-project-id".to_string(),
-            gcp_project_id.to_string(),
-            "--gcp-datastore-url".to_string(),
-            datastore_url.to_string(),
-            "--jwt-signature-pk-url".to_string(),
-            oidc_provider_url.to_string(),
-        ];
-        for sign_node in sign_nodes {
-            cmd.push("--sign-nodes".to_string());
-            cmd.push(sign_node);
-        }
-        for sk in account_creator_sks {
-            cmd.push("--account-creator-multi-sk".to_string());
-            cmd.push(sk.to_string());
-        }
-
-        let image: RunnableImage<GenericImage> = (image, cmd).into();
-        let image = image.with_network(network);
-        let container = docker_client.cli.run(image);
-        let ip_address = docker_client
-            .get_network_ip_address(&container, network)
+        let image: RunnableImage<GenericImage> = (image, args).into();
+        let image = image.with_network(&ctx.docker_network);
+        let container = ctx.docker_client.cli.run(image);
+        let ip_address = ctx
+            .docker_client
+            .get_network_ip_address(&container, &ctx.docker_network)
             .await?;
         let host_port = container.get_host_port_ipv4(Self::CONTAINER_PORT);
 
@@ -716,16 +687,20 @@ impl<'a> LeaderNode<'a> {
         Ok(LeaderNode {
             container,
             address: full_address,
-            local_address: format!("http://localhost:{host_port}"),
+            local_address: format!("http://127.0.0.1:{host_port}"),
+            local_rpc_url: ctx.relayer_ctx.sandbox.local_address.clone(),
+            local_relayer_url: ctx.relayer_ctx.relayer.local_address.clone(),
         })
     }
 
-    pub fn api(&self, near_rpc: &str, relayer: &DelegateActionRelayer) -> LeaderNodeApi {
+    pub fn api(&self) -> LeaderNodeApi {
         LeaderNodeApi {
             address: self.local_address.clone(),
-            // NOTE: integration tests uses public relayer
-            client: NearRpcAndRelayerClient::connect(near_rpc),
-            relayer: relayer.clone(),
+            client: NearRpcAndRelayerClient::connect(&self.local_rpc_url),
+            relayer: DelegateActionRelayer {
+                url: self.local_relayer_url.clone(),
+                api_key: None,
+            },
         }
     }
 }

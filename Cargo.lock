@@ -2986,6 +2986,7 @@ version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
+ "async-process",
  "bollard",
  "clap 4.4.2",
  "curv-kzen",
