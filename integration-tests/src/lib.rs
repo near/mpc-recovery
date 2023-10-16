@@ -5,7 +5,7 @@ use near_units::parse_near;
 use workspaces::{
     network::{Sandbox, ValidatorKey},
     types::SecretKey,
-    AccessKey, Account, Worker,
+    Account, Worker,
 };
 
 use crate::env::containers;
@@ -92,7 +92,11 @@ pub async fn initialize_relayer<'a>(
     tracing::info!("Initializing relayer accounts...");
     let relayer_account =
         sandbox::create_account(&worker, "relayer", parse_near!("1000 N")).await?;
+    let relayer_account_keys = sandbox::gen_rotating_keys(&relayer_account, 5).await?;
+
     let creator_account = sandbox::create_account(&worker, "creator", parse_near!("200 N")).await?;
+    let creator_account_keys = sandbox::gen_rotating_keys(&creator_account, 5).await?;
+
     let social_account = sandbox::create_account(&worker, "social", parse_near!("1000 N")).await?;
     tracing::info!(
         "Relayer accounts initialized. Relayer account: {}, Creator account: {}, Social account: {}",
@@ -101,34 +105,14 @@ pub async fn initialize_relayer<'a>(
         social_account.id()
     );
 
-    // Generate an additional 5 secret keys to rotate on account creation:
-    let mut creator_account_keys = vec![creator_account.secret_key().clone()];
-    for _ in 0..5 {
-        let sk = SecretKey::from_seed(
-            workspaces::types::KeyType::ED25519,
-            &rand::Rng::sample_iter(rand::thread_rng(), &rand::distributions::Alphanumeric)
-                .take(10)
-                .map(char::from)
-                .collect::<String>(),
-        );
-        creator_account
-            .batch(creator_account.id())
-            .add_key(sk.public_key(), AccessKey::full_access())
-            .transact()
-            .await?
-            .into_result()?;
-        creator_account_keys.push(sk);
-    }
-
     let redis = containers::Redis::run(docker_client, network).await?;
-
     let relayer = containers::Relayer::run(
         docker_client,
         network,
         &sandbox.address,
         &redis.full_address,
         relayer_account.id(),
-        relayer_account.secret_key(),
+        &relayer_account_keys,
         creator_account.id(),
         social_db.id(),
         social_account.id(),

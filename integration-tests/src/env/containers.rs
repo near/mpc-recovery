@@ -43,7 +43,9 @@ use workspaces::AccountId;
 use std::fs;
 
 use crate::env::{Context, LeaderNodeApi, SignerNodeApi};
-use crate::util::{self, create_key_file, create_relayer_cofig_file};
+use crate::util::{
+    self, create_key_file, create_key_file_with_filepath, create_relayer_cofig_file,
+};
 
 static NETWORK_MUTEX: Lazy<Mutex<i32>> = Lazy::new(|| Mutex::new(0));
 
@@ -296,7 +298,7 @@ impl<'a> Relayer<'a> {
         near_rpc: &str,
         redis_full_address: &str,
         relayer_account_id: &AccountId,
-        relayer_account_sk: &workspaces::types::SecretKey,
+        relayer_account_sks: &[workspaces::types::SecretKey],
         creator_account_id: &AccountId,
         social_db_id: &AccountId,
         social_account_id: &AccountId,
@@ -311,14 +313,20 @@ impl<'a> Relayer<'a> {
             .unwrap_or_else(|_| panic!("Failed to create {relayer_configs_path} directory"));
 
         // Create dir for keys
-        let keys_path = format!("{relayer_configs_path}/account_keys");
-        std::fs::create_dir_all(&keys_path).expect("Failed to create account_keys directory");
+        let key_dir = format!("{relayer_configs_path}/account_keys");
+        std::fs::create_dir_all(&key_dir).expect("Failed to create account_keys directory");
         let keys_absolute_path =
-            fs::canonicalize(&keys_path).expect("Failed to get absolute path for keys");
+            fs::canonicalize(&key_dir).expect("Failed to get absolute path for keys");
 
         // Create JSON key files
-        create_key_file(relayer_account_id, relayer_account_sk, &keys_path)?;
-        create_key_file(social_account_id, social_account_sk, &keys_path)?;
+        create_key_file(social_account_id, social_account_sk, &key_dir)?;
+        let mut relayer_keyfiles = Vec::with_capacity(relayer_account_sks.len());
+        for (i, relayer_sk) in relayer_account_sks.iter().enumerate() {
+            let filename = format!("{i}-{relayer_account_id}");
+            let keypath = format!("{key_dir}/{filename}.json");
+            create_key_file_with_filepath(relayer_account_id, relayer_sk, &keypath)?;
+            relayer_keyfiles.push(format!("./account_keys/{filename}.json"));
+        }
 
         // Create relayer config file
         let config_file_name = "config.toml";
@@ -327,7 +335,7 @@ impl<'a> Relayer<'a> {
                 ip_address: [0, 0, 0, 0],
                 port: Self::CONTAINER_PORT,
                 relayer_account_id: relayer_account_id.clone(),
-                keys_filenames: vec![format!("./account_keys/{}.json", relayer_account_id)],
+                keys_filenames: relayer_keyfiles,
                 shared_storage_account_id: social_account_id.clone(),
                 shared_storage_keys_filename: format!("./account_keys/{}.json", social_account_id),
                 whitelisted_contracts: vec![creator_account_id.clone()],

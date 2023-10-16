@@ -10,8 +10,8 @@ use crate::oauth::verify_oidc_token;
 use crate::relayer::msg::{CreateAccountAtomicRequest, RegisterAccountRequest};
 use crate::relayer::NearRpcAndRelayerClient;
 use crate::transaction::{
-    get_create_account_delegate_action, get_local_signed_delegated_action, get_mpc_signature,
-    sign_payload_with_mpc, to_dalek_combined_public_key,
+    get_mpc_signature, new_create_account_delegate_action, sign_payload_with_mpc,
+    to_dalek_combined_public_key,
 };
 use crate::utils::{check_digest_signature, user_credentials_request_digest};
 use crate::{metrics, nar};
@@ -29,12 +29,13 @@ use axum::{
 use axum_extra::extract::WithRejection;
 use borsh::BorshDeserialize;
 use curv::elliptic::curves::{Ed25519, Point};
+use prometheus::{Encoder, TextEncoder};
+use rand::{distributions::Alphanumeric, Rng};
+
 use near_fetch::signer::KeyRotatingSigner;
 use near_primitives::delegate_action::{DelegateAction, NonDelegateAction};
 use near_primitives::transaction::{Action, DeleteKeyAction};
 use near_primitives::types::AccountId;
-use prometheus::{Encoder, TextEncoder};
-use rand::{distributions::Alphanumeric, Rng};
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -98,7 +99,6 @@ pub async fn run(config: Config) {
         client,
         reqwest_client: reqwest::Client::new(),
         near_root_account: near_root_account.parse().unwrap(),
-        account_creator_id,
         account_creator_signer,
         partners,
         jwt_signature_pk_url,
@@ -218,7 +218,6 @@ struct LeaderState {
     client: NearRpcAndRelayerClient,
     reqwest_client: reqwest::Client,
     near_root_account: AccountId,
-    account_creator_id: AccountId,
     // TODO: temporary solution
     account_creator_signer: KeyRotatingSigner,
     partners: PartnerList,
@@ -408,9 +407,9 @@ async fn process_new_account(
             None => new_account_options.full_access_keys = Some(vec![mpc_user_recovery_pk.clone()]),
         }
 
-        let delegate_action = get_create_account_delegate_action(
-            &account_creator.account_id,
-            &account_creator.public_key,
+        // We create accounts using the local key
+        let signed_delegate_action = new_create_account_delegate_action(
+            account_creator,
             &new_user_account_id,
             new_account_options.clone(),
             &state.near_root_account,
@@ -418,9 +417,6 @@ async fn process_new_account(
             block_height + 100,
         )
         .map_err(LeaderNodeError::Other)?;
-        // We create accounts using the local key
-        let signed_delegate_action =
-            get_local_signed_delegated_action(delegate_action, &state.account_creator_signer);
 
         // Send delegate action to relayer
         let request = CreateAccountAtomicRequest {
