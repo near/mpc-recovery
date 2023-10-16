@@ -41,6 +41,5 @@ tokio-util = { version = "0.7", features = ["full"] }
 reqwest = "0.11.16"
 
 [features]
-default = ["drop-containers"]
-drop-containers = []
+default = []
 docker-test = []
