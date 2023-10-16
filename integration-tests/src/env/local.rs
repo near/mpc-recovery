@@ -54,7 +54,7 @@ impl SignerNode {
 
         let sign_node_id = format!("sign/{node_id}");
         let process = util::spawn_mpc(ctx.release, &sign_node_id, &args)?;
-        let address = format!("http://localhost:{web_port}");
+        let address = format!("http://127.0.0.1:{web_port}");
         tracing::info!("Signer node is starting at {}", address);
         util::ping_until_ok(&address, 60).await?;
         tracing::info!("Signer node started [node_id={node_id}, {address}]");
@@ -130,7 +130,7 @@ impl LeaderNode {
         .into_str_args();
 
         let process = util::spawn_mpc(ctx.release, "leader", &args)?;
-        let address = format!("http://localhost:{web_port}");
+        let address = format!("http://127.0.0.1:{web_port}");
         tracing::info!("Leader node container is starting at {}", address);
         util::ping_until_ok(&address, 60).await?;
         tracing::info!("Leader node running at {address}");

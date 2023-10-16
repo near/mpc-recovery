@@ -74,7 +74,7 @@ pub async fn initialize_relayer<'a>(
     tracing::info!("Initializing sandbox worker...");
     let worker = workspaces::sandbox()
         .rpc_addr(&format!(
-            "http://localhost:{}",
+            "http://127.0.0.1:{}",
             sandbox
                 .container
                 .get_host_port_ipv4(crate::containers::Sandbox::CONTAINER_RPC_PORT)

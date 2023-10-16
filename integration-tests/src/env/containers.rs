@@ -194,7 +194,7 @@ impl<'a> Redis<'a> {
             container,
             address,
             full_address,
-            local_address: format!("http://localhost:{host_port}"),
+            local_address: format!("http://127.0.0.1:{host_port}"),
         })
     }
 }
@@ -257,7 +257,7 @@ impl<'a> Sandbox<'a> {
         Ok(Sandbox {
             container,
             address: full_address,
-            local_address: format!("http://localhost:{host_port}"),
+            local_address: format!("http://127.0.0.1:{host_port}"),
         })
     }
 }
@@ -372,7 +372,7 @@ impl<'a> Relayer<'a> {
         Ok(Relayer {
             container,
             address: full_address,
-            local_address: format!("http://localhost:{host_port}"),
+            local_address: format!("http://127.0.0.1:{host_port}"),
             id: relayer_id.to_string(),
         })
     }
@@ -413,7 +413,7 @@ impl<'a> OidcProvider<'a> {
         let host_port = container.get_host_port_ipv4(Self::CONTAINER_PORT);
         let full_address = format!("http://{}:{}", ip_address, Self::CONTAINER_PORT);
         let jwt_pk_url = format!("{}/jwt_signature_public_keys", full_address);
-        let jwt_local_url = format!("http://localhost:{}/jwt_signature_public_keys", host_port);
+        let jwt_local_url = format!("http://127.0.0.1:{}/jwt_signature_public_keys", host_port);
 
         tracing::info!(
             "OIDC provider container is running, jwt signature pk url: {}",
@@ -476,7 +476,7 @@ impl<'a> Datastore<'a> {
         let host_port = container.get_host_port_ipv4(Self::CONTAINER_PORT);
 
         let full_address = format!("http://{}:{}/", ip_address, Self::CONTAINER_PORT);
-        let local_address = format!("http://localhost:{}/", host_port);
+        let local_address = format!("http://127.0.0.1:{}/", host_port);
         tracing::info!("Datastore container is running at {}", full_address);
         Ok(Datastore {
             container,
@@ -559,7 +559,7 @@ impl SignerNode<'_> {
         Ok(SignerNode {
             container,
             address: full_address,
-            local_address: format!("http://localhost:{host_port}"),
+            local_address: format!("http://127.0.0.1:{host_port}"),
 
             env: ctx.env.clone(),
             node_id,
@@ -687,7 +687,7 @@ impl<'a> LeaderNode<'a> {
         Ok(LeaderNode {
             container,
             address: full_address,
-            local_address: format!("http://localhost:{host_port}"),
+            local_address: format!("http://127.0.0.1:{host_port}"),
             local_rpc_url: ctx.relayer_ctx.sandbox.local_address.clone(),
             local_relayer_url: ctx.relayer_ctx.relayer.local_address.clone(),
         })
