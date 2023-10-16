@@ -387,7 +387,7 @@ impl<'a> Relayer<'a> {
 pub struct OidcProvider<'a> {
     pub container: Container<'a, GenericImage>,
     pub jwt_pk_url: String,
-    pub jwt_local_url: String,
+    pub jwt_pk_local_url: String,
 }
 
 impl<'a> OidcProvider<'a> {
@@ -422,7 +422,7 @@ impl<'a> OidcProvider<'a> {
         Ok(OidcProvider {
             container,
             jwt_pk_url,
-            jwt_local_url,
+            jwt_pk_local_url: jwt_local_url,
         })
     }
 }

@@ -35,7 +35,7 @@ async fn main() -> anyhow::Result<()> {
             println!("  root:    {}", ctx.relayer_ctx.worker.root_account()?.id());
 
             println!("\nExternal services:");
-            println!("  oidc-provider: {}", ctx.oidc_provider.jwt_local_url);
+            println!("  oidc-provider: {}", ctx.oidc_provider.jwt_pk_local_url);
             println!("  datastore:     {}", nodes.datastore_addr());
             println!("  sandbox:       {}", ctx.relayer_ctx.sandbox.local_address);
             println!("  relayer:       {}", ctx.relayer_ctx.relayer.local_address);
