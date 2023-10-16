@@ -40,7 +40,9 @@ use tokio::io::AsyncWriteExt;
 use tracing;
 use workspaces::AccountId;
 
-use crate::util;
+use std::fs;
+
+use crate::util::{self, create_key_file, create_relayer_cofig_file};
 
 static NETWORK_MUTEX: Lazy<Mutex<i32>> = Lazy::new(|| Mutex::new(0));
 
@@ -163,6 +165,7 @@ impl Default for DockerClient {
 pub struct Redis<'a> {
     pub container: Container<'a, GenericImage>,
     pub address: String,
+    pub full_address: String,
 }
 
 impl<'a> Redis<'a> {
@@ -177,8 +180,15 @@ impl<'a> Redis<'a> {
             .get_network_ip_address(&container, network)
             .await?;
 
-        tracing::info!("Redis container is running at {}", address);
-        Ok(Redis { container, address })
+        // Note: this port is hardcoded in the Redis image
+        let full_address = format!("redis://{}:{}", address, 6379);
+
+        tracing::info!("Redis container is running at {}", full_address);
+        Ok(Redis {
+            container,
+            address,
+            full_address,
+        })
     }
 }
 
@@ -246,50 +256,100 @@ impl<'a> Sandbox<'a> {
 }
 
 pub struct Relayer<'a> {
+    pub id: String,
     pub container: Container<'a, GenericImage>,
     pub address: String,
     pub local_address: String,
 }
 
+pub struct RelayerConfig {
+    pub ip_address: [u8; 4],
+    pub port: u16,
+    pub relayer_account_id: AccountId,
+    pub keys_filenames: Vec<String>,
+    pub shared_storage_account_id: AccountId,
+    pub shared_storage_keys_filename: String,
+    pub whitelisted_contracts: Vec<AccountId>,
+    pub whitelisted_delegate_action_receiver_ids: Vec<AccountId>,
+    pub redis_url: String,
+    pub social_db_contract_id: AccountId,
+    pub rpc_url: String,
+    pub wallet_url: String,
+    pub explorer_transaction_url: String,
+    pub rpc_api_key: String,
+}
+
 impl<'a> Relayer<'a> {
     pub const CONTAINER_PORT: u16 = 3000;
+    pub const TMP_FOLDER_PATH: &str = "./tmp";
 
     pub async fn run(
         docker_client: &'a DockerClient,
         network: &str,
         near_rpc: &str,
-        redis_hostname: &str,
+        redis_full_address: &str,
         relayer_account_id: &AccountId,
         relayer_account_sk: &workspaces::types::SecretKey,
         creator_account_id: &AccountId,
         social_db_id: &AccountId,
         social_account_id: &AccountId,
         social_account_sk: &workspaces::types::SecretKey,
+        relayer_id: &str,
     ) -> anyhow::Result<Relayer<'a>> {
         tracing::info!("Running relayer container...");
-        let image = GenericImage::new("pagoda-relayer-rs-fastauth", "latest")
+
+        // Create tmp folder to store relayer configs
+        let relayer_configs_path = format!("{}/{}", Self::TMP_FOLDER_PATH, relayer_id);
+        std::fs::create_dir_all(&relayer_configs_path)
+            .unwrap_or_else(|_| panic!("Failed to create {relayer_configs_path} directory"));
+
+        // Create dir for keys
+        let keys_path = format!("{relayer_configs_path}/account_keys");
+        std::fs::create_dir_all(&keys_path).expect("Failed to create account_keys directory");
+        let keys_absolute_path =
+            fs::canonicalize(&keys_path).expect("Failed to get absolute path for keys");
+
+        // Create JSON key files
+        create_key_file(relayer_account_id, relayer_account_sk, &keys_path)?;
+        create_key_file(social_account_id, social_account_sk, &keys_path)?;
+
+        // Create relayer config file
+        let config_file_name = "config.toml";
+        let config_absolute_path = create_relayer_cofig_file(
+            RelayerConfig {
+                ip_address: [0, 0, 0, 0],
+                port: Self::CONTAINER_PORT,
+                relayer_account_id: relayer_account_id.clone(),
+                keys_filenames: vec![format!("./account_keys/{}.json", relayer_account_id)],
+                shared_storage_account_id: social_account_id.clone(),
+                shared_storage_keys_filename: format!("./account_keys/{}.json", social_account_id),
+                whitelisted_contracts: vec![creator_account_id.clone()],
+                whitelisted_delegate_action_receiver_ids: vec![creator_account_id.clone()],
+                redis_url: redis_full_address.to_string(),
+                social_db_contract_id: social_db_id.clone(),
+                rpc_url: near_rpc.to_string(),
+                wallet_url: "https://wallet.testnet.near.org".to_string(),
+                explorer_transaction_url: "https://explorer.testnet.near.org/transactions/"
+                    .to_string(),
+                rpc_api_key: "".to_string(),
+            },
+            format!("{relayer_configs_path}/{config_file_name}"),
+        )?;
+
+        let image = GenericImage::new("ghcr.io/near/os-relayer", "latest")
             .with_wait_for(WaitFor::message_on_stdout("listening on"))
             .with_exposed_port(Self::CONTAINER_PORT)
-            .with_env_var("RUST_LOG", "DEBUG")
-            .with_env_var("NETWORK", "custom")
-            .with_env_var("SERVER_PORT", Self::CONTAINER_PORT.to_string())
-            .with_env_var("RELAYER_RPC_URL", near_rpc)
-            .with_env_var("RELAYER_ACCOUNT_ID", relayer_account_id.to_string())
-            .with_env_var("REDIS_HOST", redis_hostname)
-            .with_env_var("OVERRIDE_RPC_CONF", "true")
-            .with_env_var("PUBLIC_KEY", relayer_account_sk.public_key().to_string())
-            .with_env_var("PRIVATE_KEY", relayer_account_sk.to_string())
-            .with_env_var("KEYS_FILENAMES", format!("{relayer_account_id}.json"))
-            .with_env_var("WHITELISTED_CONTRACT", creator_account_id.to_string())
-            .with_env_var("WHITELISTED_RECEIVER_IDS", creator_account_id.to_string())
-            .with_env_var("CUSTOM_SOCIAL_DB_ID", social_db_id.to_string())
-            .with_env_var("STORAGE_ACCOUNT_ID", social_account_id.to_string())
-            .with_env_var(
-                "STORAGE_PUBLIC_KEY",
-                social_account_sk.public_key().to_string(),
+            .with_volume(
+                config_absolute_path,
+                format!("/relayer-app/{}", config_file_name),
             )
-            .with_env_var("STORAGE_PRIVATE_KEY", social_account_sk.to_string())
-            .with_env_var("NUM_KEYS", "1");
+            .with_volume(
+                keys_absolute_path
+                    .to_str()
+                    .expect("Failed to convert keys path to string"),
+                "/relayer-app/account_keys",
+            )
+            .with_env_var("RUST_LOG", "DEBUG");
 
         let image: RunnableImage<GenericImage> = image.into();
         let image = image.with_network(network);
@@ -301,10 +361,57 @@ impl<'a> Relayer<'a> {
 
         let full_address = format!("http://{}:{}", ip_address, Self::CONTAINER_PORT);
         tracing::info!("Relayer container is running at {}", full_address);
+
         Ok(Relayer {
             container,
             address: full_address,
             local_address: format!("http://localhost:{host_port}"),
+            id: relayer_id.to_string(),
+        })
+    }
+
+    pub fn clean_tmp_files(&self) -> anyhow::Result<(), anyhow::Error> {
+        std::fs::remove_dir_all(format!("{}/{}", Self::TMP_FOLDER_PATH, self.id))
+            .unwrap_or_else(|_| panic!("Failed to clean tmp files for relayer {}", self.id));
+        Ok(())
+    }
+}
+
+pub struct OidcProvider<'a> {
+    pub container: Container<'a, GenericImage>,
+    pub jwt_pk_url: String,
+}
+
+impl<'a> OidcProvider<'a> {
+    pub const CONTAINER_PORT: u16 = 3000;
+
+    pub async fn run(
+        docker_client: &'a DockerClient,
+        network: &str,
+    ) -> anyhow::Result<OidcProvider<'a>> {
+        tracing::info!("Running OIDC provider container...");
+        let image = GenericImage::new("near/test-oidc-provider", "latest")
+            .with_wait_for(WaitFor::Nothing)
+            .with_exposed_port(Self::CONTAINER_PORT)
+            .with_env_var("RUST_LOG", "DEBUG");
+        let image: RunnableImage<GenericImage> = image.into();
+        let image = image.with_network(network);
+        let container = docker_client.cli.run(image);
+
+        let ip_address = docker_client
+            .get_network_ip_address(&container, network)
+            .await?;
+
+        let full_address = format!("http://{}:{}", ip_address, Self::CONTAINER_PORT);
+        let jwt_pk_url = format!("{}/jwt_signature_public_keys", full_address);
+
+        tracing::info!(
+            "OIDC provider container is running, jwt signature pk url: {}",
+            jwt_pk_url
+        );
+        Ok(OidcProvider {
+            container,
+            jwt_pk_url,
         })
     }
 }
@@ -402,6 +509,7 @@ impl<'a> SignerNode<'a> {
         datastore_local_url: &str,
         gcp_project_id: &str,
         firebase_audience_id: &str,
+        oidc_provider_url: &str,
     ) -> anyhow::Result<SignerNode<'a>> {
         tracing::info!("Running signer node container {}...", node_id);
         let image: GenericImage = GenericImage::new("near/mpc-recovery", "latest")
@@ -431,7 +539,8 @@ impl<'a> SignerNode<'a> {
                 gcp_project_id.to_string(),
                 "--gcp-datastore-url".to_string(),
                 datastore_url.to_string(),
-                "--test".to_string(),
+                "--jwt-signature-pk-url".to_string(),
+                oidc_provider_url.to_string(),
             ],
         )
             .into();
@@ -542,6 +651,7 @@ impl<'a> LeaderNode<'a> {
         account_creator_id: &AccountId,
         account_creator_sks: &[workspaces::types::SecretKey],
         firebase_audience_id: &str,
+        oidc_provider_url: &str,
     ) -> anyhow::Result<LeaderNode<'a>> {
         tracing::info!("Running leader node container...");
 
@@ -576,7 +686,8 @@ impl<'a> LeaderNode<'a> {
             gcp_project_id.to_string(),
             "--gcp-datastore-url".to_string(),
             datastore_url.to_string(),
-            "--test".to_string(),
+            "--jwt-signature-pk-url".to_string(),
+            oidc_provider_url.to_string(),
         ];
         for sign_node in sign_nodes {
             cmd.push("--sign-nodes".to_string());
@@ -612,6 +723,7 @@ impl<'a> LeaderNode<'a> {
     pub fn api(&self, near_rpc: &str, relayer: &DelegateActionRelayer) -> LeaderNodeApi {
         LeaderNodeApi {
             address: self.local_address.clone(),
+            // NOTE: integration tests uses public relayer
             client: NearRpcAndRelayerClient::connect(near_rpc),
             relayer: relayer.clone(),
         }

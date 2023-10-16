@@ -1,57 +1,3 @@
-resource "google_secret_manager_secret" "cipher_key" {
-  secret_id = "mpc-recovery-encryption-cipher-${var.node_id}-${var.env}"
-  replication {
-    automatic = true
-  }
-}
-
-resource "google_secret_manager_secret_version" "cipher_key_data" {
-  secret      = google_secret_manager_secret.cipher_key.name
-  secret_data = var.cipher_key
-}
-
-resource "google_secret_manager_secret_iam_member" "cipher_key_secret_access" {
-  secret_id = google_secret_manager_secret.cipher_key.id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${var.service_account_email}"
-}
-
-resource "google_secret_manager_secret" "secret_share" {
-  secret_id = "mpc-recovery-secret-share-${var.node_id}-${var.env}"
-  replication {
-    automatic = true
-  }
-}
-
-resource "google_secret_manager_secret_version" "secret_share_data" {
-  secret      = google_secret_manager_secret.secret_share.name
-  secret_data = var.sk_share
-}
-
-resource "google_secret_manager_secret_iam_member" "secret_share_secret_access" {
-  secret_id = google_secret_manager_secret.secret_share.id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${var.service_account_email}"
-}
-
-resource "google_secret_manager_secret" "oidc_providers" {
-  secret_id = "mpc-recovery-allowed-oidc-providers-${var.node_id}-${var.env}"
-  replication {
-    automatic = true
-  }
-}
-
-resource "google_secret_manager_secret_version" "oidc_providers_data" {
-  secret      = google_secret_manager_secret.oidc_providers.name
-  secret_data = jsonencode(var.oidc_providers)
-}
-
-resource "google_secret_manager_secret_iam_member" "oidc_providers_secret_access" {
-  secret_id = google_secret_manager_secret.oidc_providers.id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${var.service_account_email}"
-}
-
 resource "google_cloud_run_v2_service" "signer" {
   name     = "mpc-recovery-signer-${var.node_id}-${var.env}"
   location = var.region
@@ -86,6 +32,37 @@ resource "google_cloud_run_v2_service" "signer" {
         value = var.env
       }
       env {
+        name = "MPC_RECOVERY_CIPHER_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = var.cipher_key_secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "MPC_RECOVERY_SK_SHARE"
+        value_source {
+          secret_key_ref {
+            secret  = var.sk_share_secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "OIDC_PROVIDERS"
+        value_source {
+          secret_key_ref {
+            secret  = var.oidc_providers_secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name  = "MPC_RECOVERY_JWT_SIGNATURE_PK_URL"
+        value = var.jwt_signature_pk_url
+      }
+      env {
         name  = "RUST_LOG"
         value = "mpc_recovery=debug"
       }
@@ -104,14 +81,6 @@ resource "google_cloud_run_v2_service" "signer" {
       }
     }
   }
-  depends_on = [
-    google_secret_manager_secret_version.cipher_key_data,
-    google_secret_manager_secret_version.secret_share_data,
-    google_secret_manager_secret_version.oidc_providers_data,
-    google_secret_manager_secret_iam_member.cipher_key_secret_access,
-    google_secret_manager_secret_iam_member.secret_share_secret_access,
-    google_secret_manager_secret_iam_member.oidc_providers_secret_access
-  ]
 }
 
 // Allow unauthenticated requests

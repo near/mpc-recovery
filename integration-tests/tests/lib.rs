@@ -1,7 +1,6 @@
 mod mpc;
 
 use curv::elliptic::curves::{Ed25519, Point};
-use futures::future::BoxFuture;
 use hyper::StatusCode;
 use mpc_recovery::{
     firewall::allowed::DelegateActionRelayer,
@@ -12,11 +11,11 @@ use mpc_recovery::{
     GenerateResult,
 };
 use mpc_recovery_integration_tests::containers;
+use near_primitives::utils::generate_random_string;
 use workspaces::{network::Sandbox, Worker};
 
 const NETWORK: &str = "mpc_it_network";
 const GCP_PROJECT_ID: &str = "mpc-recovery-gcp-project";
-// TODO: figure out how to instantiate and use a local firebase deployment
 pub const FIREBASE_AUDIENCE_ID: &str = "test_audience";
 
 pub struct TestContext {
@@ -38,21 +37,26 @@ impl TestContext {
     }
 }
 
-async fn with_nodes<F>(nodes: usize, f: F) -> anyhow::Result<()>
+async fn with_nodes<Task, Fut, Val>(nodes: usize, f: Task) -> anyhow::Result<()>
 where
-    F: FnOnce(TestContext) -> BoxFuture<'static, anyhow::Result<()>>,
+    Task: FnOnce(TestContext) -> Fut,
+    Fut: core::future::Future<Output = anyhow::Result<Val>>,
 {
     let docker_client = containers::DockerClient::default();
     docker_client.create_network(NETWORK).await?;
 
+    let relayer_id = generate_random_string(7); // used to distinguish relayer tmp files in multiple tests
     let relayer_ctx_future =
-        mpc_recovery_integration_tests::initialize_relayer(&docker_client, NETWORK);
+        mpc_recovery_integration_tests::initialize_relayer(&docker_client, NETWORK, &relayer_id);
     let datastore_future = containers::Datastore::run(&docker_client, NETWORK, GCP_PROJECT_ID);
 
-    let (relayer_ctx, datastore) =
-        futures::future::join(relayer_ctx_future, datastore_future).await;
+    let oidc_provider_future = containers::OidcProvider::run(&docker_client, NETWORK);
+
+    let (relayer_ctx, datastore, oidc_provider) =
+        futures::future::join3(relayer_ctx_future, datastore_future, oidc_provider_future).await;
     let relayer_ctx = relayer_ctx?;
     let datastore = datastore?;
+    let oidc_provider = oidc_provider?;
 
     let GenerateResult { pk_set, secrets } = mpc_recovery::generate(nodes);
     let mut signer_node_futures = Vec::new();
@@ -67,6 +71,7 @@ where
             &datastore.local_address,
             GCP_PROJECT_ID,
             FIREBASE_AUDIENCE_ID,
+            &oidc_provider.jwt_pk_url,
         );
         signer_node_futures.push(signer_node);
     }
@@ -89,6 +94,7 @@ where
         relayer_ctx.creator_account.id(),
         &relayer_ctx.creator_account_keys,
         FIREBASE_AUDIENCE_ID,
+        &oidc_provider.jwt_pk_url,
     )
     .await?;
 
@@ -106,6 +112,8 @@ where
         gcp_datastore_url: datastore.local_address,
     })
     .await?;
+
+    relayer_ctx.relayer.clean_tmp_files()?;
 
     Ok(())
 }

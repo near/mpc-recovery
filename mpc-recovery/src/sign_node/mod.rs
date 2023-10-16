@@ -5,7 +5,7 @@ use crate::error::{MpcError, SignNodeError};
 use crate::firewall::allowed::OidcProviderList;
 use crate::gcp::GcpService;
 use crate::msg::{AcceptNodePublicKeysRequest, PublicKeyNodeRequest, SignNodeRequest};
-use crate::oauth::OAuthTokenVerifier;
+use crate::oauth::verify_oidc_token;
 use crate::primitives::InternalAccountId;
 use crate::sign_node::pk_set::SignerNodePkSet;
 use crate::utils::{
@@ -43,9 +43,10 @@ pub struct Config {
     pub cipher: Aes256Gcm,
     pub port: u16,
     pub oidc_providers: OidcProviderList,
+    pub jwt_signature_pk_url: String,
 }
 
-pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
+pub async fn run(config: Config) {
     tracing::debug!("running a sign node");
     let Config {
         gcp_service,
@@ -54,6 +55,7 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         cipher,
         port,
         oidc_providers,
+        jwt_signature_pk_url,
     } = config;
     let our_index = usize::try_from(our_index).expect("This index is way to big");
 
@@ -62,15 +64,16 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         .await
         .unwrap_or_default();
 
-    let signing_state = Arc::new(SigningState::new());
-    let state = SignNodeState {
+    let state = Arc::new(SignNodeState {
         gcp_service,
+        reqwest_client: reqwest::Client::new(),
         node_key,
         cipher,
-        signing_state,
+        signing_state: SigningState::new(),
         node_info: NodeInfo::new(our_index, pk_set.map(|set| set.public_keys)),
         oidc_providers,
-    };
+        jwt_signature_pk_url,
+    });
 
     let app = Router::new()
         // healthcheck endpoint
@@ -81,10 +84,10 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
                 StatusCode::OK
             }),
         )
-        .route("/commit", post(commit::<T>))
+        .route("/commit", post(commit))
         .route("/reveal", post(reveal))
         .route("/signature_share", post(signature_share))
-        .route("/public_key", post(public_key::<T>))
+        .route("/public_key", post(public_key))
         .route("/public_key_node", post(public_key_node))
         .route("/accept_pk_set", post(accept_pk_set))
         .layer(Extension(state));
@@ -97,14 +100,15 @@ pub async fn run<T: OAuthTokenVerifier + 'static>(config: Config) {
         .unwrap();
 }
 
-#[derive(Clone)]
 struct SignNodeState {
     gcp_service: GcpService,
+    reqwest_client: reqwest::Client,
     node_key: ExpandedKeyPair,
     cipher: Aes256Gcm,
-    signing_state: Arc<SigningState>,
+    signing_state: SigningState,
     node_info: NodeInfo,
     oidc_providers: OidcProviderList,
+    jwt_signature_pk_url: String,
 }
 
 async fn get_or_generate_user_creds(
@@ -141,8 +145,8 @@ async fn get_or_generate_user_creds(
     }
 }
 
-async fn process_commit<T: OAuthTokenVerifier>(
-    state: SignNodeState,
+async fn process_commit(
+    state: Arc<SignNodeState>,
     request: SignNodeRequest,
 ) -> Result<SignedCommitment, SignNodeError> {
     tracing::info!(?request, "processing commit request");
@@ -212,9 +216,14 @@ async fn process_commit<T: OAuthTokenVerifier>(
             tracing::debug!(?request, "processing sign share request");
 
             // Check OIDC Token
-            let oidc_token_claims = T::verify_token(&request.oidc_token, &state.oidc_providers)
-                .await
-                .map_err(SignNodeError::OidcVerificationFailed)?;
+            let oidc_token_claims = verify_oidc_token(
+                &request.oidc_token,
+                &state.oidc_providers,
+                &state.reqwest_client,
+                &state.jwt_signature_pk_url,
+            )
+            .await
+            .map_err(SignNodeError::OidcVerificationFailed)?;
             tracing::debug!(?oidc_token_claims, "oidc token verified");
 
             let frp_pk = request.frp_public_key;
@@ -318,15 +327,15 @@ async fn process_commit<T: OAuthTokenVerifier>(
 }
 
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
-async fn commit<T: OAuthTokenVerifier>(
-    Extension(state): Extension<SignNodeState>,
+async fn commit(
+    Extension(state): Extension<Arc<SignNodeState>>,
     WithRejection(Json(request), _): WithRejection<Json<SignNodeRequest>, MpcError>,
 ) -> (StatusCode, Json<Result<SignedCommitment, String>>) {
     if let Err(msg) = check_if_ready(&state).await {
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(Err(msg)));
     }
 
-    match process_commit::<T>(state, request).await {
+    match process_commit(state, request).await {
         Ok(signed_commitment) => (StatusCode::OK, Json(Ok(signed_commitment))),
         Err(e) => (e.code(), Json(Err(e.to_string()))),
     }
@@ -334,7 +343,7 @@ async fn commit<T: OAuthTokenVerifier>(
 
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn reveal(
-    Extension(state): Extension<SignNodeState>,
+    Extension(state): Extension<Arc<SignNodeState>>,
     WithRejection(Json(request), _): WithRejection<Json<Vec<SignedCommitment>>, MpcError>,
 ) -> (StatusCode, Json<Result<Reveal, String>>) {
     if let Err(msg) = check_if_ready(&state).await {
@@ -343,7 +352,7 @@ async fn reveal(
 
     match state
         .signing_state
-        .get_reveal(state.node_info, request)
+        .get_reveal(&state.node_info, request)
         .await
     {
         Ok(r) => {
@@ -359,7 +368,7 @@ async fn reveal(
 
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn signature_share(
-    Extension(state): Extension<SignNodeState>,
+    Extension(state): Extension<Arc<SignNodeState>>,
     WithRejection(Json(request), _): WithRejection<Json<Vec<Reveal>>, MpcError>,
 ) -> (StatusCode, Json<Result<protocols::Signature, String>>) {
     if let Err(msg) = check_if_ready(&state).await {
@@ -368,7 +377,7 @@ async fn signature_share(
 
     match state
         .signing_state
-        .get_signature_share(state.node_info, request)
+        .get_signature_share(&state.node_info, request)
         .await
     {
         Ok(r) => {
@@ -382,14 +391,19 @@ async fn signature_share(
     }
 }
 
-async fn process_public_key<T: OAuthTokenVerifier>(
-    state: SignNodeState,
+async fn process_public_key(
+    state: Arc<SignNodeState>,
     request: PublicKeyNodeRequest,
 ) -> Result<Point<Ed25519>, SignNodeError> {
     // Check OIDC Token
-    let oidc_token_claims = T::verify_token(&request.oidc_token, &state.oidc_providers)
-        .await
-        .map_err(SignNodeError::OidcVerificationFailed)?;
+    let oidc_token_claims = verify_oidc_token(
+        &request.oidc_token,
+        &state.oidc_providers,
+        &state.reqwest_client,
+        &state.jwt_signature_pk_url,
+    )
+    .await
+    .map_err(SignNodeError::OidcVerificationFailed)?;
 
     let frp_pk = request.frp_public_key;
     // Check the request signature
@@ -442,11 +456,11 @@ async fn process_public_key<T: OAuthTokenVerifier>(
 }
 
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
-async fn public_key<T: OAuthTokenVerifier>(
-    Extension(state): Extension<SignNodeState>,
+async fn public_key(
+    Extension(state): Extension<Arc<SignNodeState>>,
     WithRejection(Json(request), _): WithRejection<Json<PublicKeyNodeRequest>, MpcError>,
 ) -> (StatusCode, Json<Result<Point<Ed25519>, String>>) {
-    let result = process_public_key::<T>(state, request).await;
+    let result = process_public_key(state, request).await;
     match result {
         Ok(pk_point) => (StatusCode::OK, Json(Ok(pk_point))),
         Err(e) => (e.code(), Json(Err(e.to_string()))),
@@ -456,18 +470,21 @@ async fn public_key<T: OAuthTokenVerifier>(
 #[allow(clippy::type_complexity)]
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn public_key_node(
-    Extension(state): Extension<SignNodeState>,
+    Extension(state): Extension<Arc<SignNodeState>>,
     WithRejection(Json(_), _): WithRejection<Json<()>, MpcError>,
 ) -> (StatusCode, Json<Result<(usize, Point<Ed25519>), String>>) {
     (
         StatusCode::OK,
-        Json(Ok((state.node_info.our_index, state.node_key.public_key))),
+        Json(Ok((
+            state.node_info.our_index,
+            state.node_key.public_key.clone(),
+        ))),
     )
 }
 
 #[tracing::instrument(level = "debug", skip_all, fields(id = state.node_info.our_index))]
 async fn accept_pk_set(
-    Extension(state): Extension<SignNodeState>,
+    Extension(state): Extension<Arc<SignNodeState>>,
     WithRejection(Json(request), _): WithRejection<Json<AcceptNodePublicKeysRequest>, MpcError>,
 ) -> (StatusCode, Json<Result<String, String>>) {
     let index = state.node_info.our_index;

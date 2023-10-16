@@ -22,14 +22,6 @@ pub struct NearRpcAndRelayerClient {
     rpc_client: near_fetch::Client,
 }
 
-impl Clone for NearRpcAndRelayerClient {
-    fn clone(&self) -> Self {
-        Self {
-            rpc_client: self.rpc_client.clone(),
-        }
-    }
-}
-
 impl NearRpcAndRelayerClient {
     pub fn connect(near_rpc: &str) -> Self {
         Self {
@@ -66,7 +58,7 @@ impl NearRpcAndRelayerClient {
     }
 
     #[tracing::instrument(level = "debug", skip_all, fields(account_id = request.account_id.to_string()))]
-    pub async fn register_account(
+    pub async fn register_account_and_allowance(
         &self,
         request: RegisterAccountRequest,
         relayer: DelegateActionRelayer,
@@ -113,14 +105,14 @@ impl NearRpcAndRelayerClient {
     pub async fn create_account_atomic(
         &self,
         request: CreateAccountAtomicRequest,
-        relayer: DelegateActionRelayer,
+        relayer: &DelegateActionRelayer,
     ) -> Result<(), RelayerError> {
         let mut req = Request::builder()
             .method(Method::POST)
             .uri(format!("{}/create_account_atomic", relayer.url))
             .header("content-type", "application/json");
 
-        if let Some(api_key) = relayer.api_key {
+        if let Some(api_key) = &relayer.api_key {
             req = req.header("x-api-key", api_key);
         };
 

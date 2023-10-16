@@ -2,4 +2,6 @@
 members = [
     "mpc-recovery",
     "integration-tests",
+    "load-tests",
+    "test-oidc-provider",
 ]

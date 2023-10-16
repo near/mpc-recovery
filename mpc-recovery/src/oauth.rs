@@ -1,155 +1,84 @@
-use chrono::Utc;
 use jsonwebtoken::{Algorithm, DecodingKey};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::HashMap;
 
 use crate::firewall::allowed::OidcProviderList;
 use crate::primitives::InternalAccountId;
 use crate::sign_node::oidc::OidcToken;
 
-#[async_trait::async_trait]
-pub trait OAuthTokenVerifier {
-    async fn verify_token(
-        token: &OidcToken,
-        oidc_providers: &OidcProviderList,
-    ) -> anyhow::Result<IdTokenClaims>;
+// Specs for ID token verification:
+// Google: https://developers.google.com/identity/openid-connect/openid-connect#validatinganidtoken
+// Firebase: https://firebase.google.com/docs/auth/admin/verify-id-tokens#verify_id_tokens_using_a_third-party_jwt_library
+pub async fn verify_oidc_token(
+    token: &OidcToken,
+    oidc_providers: &OidcProviderList,
+    client: &reqwest::Client,
+    jwt_signature_pk_url: &str,
+) -> anyhow::Result<IdTokenClaims> {
+    let public_keys = get_pagoda_firebase_public_keys(client, jwt_signature_pk_url)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to get Firebase public key: {e}"))?;
 
-    /// This function validates JWT (OIDC ID token) by checking the signature received
-    /// from the issuer, issuer, audience, and expiration time.
-    fn validate_jwt(
-        token: &OidcToken,
-        public_key: &[u8],
-        oidc_providers: &OidcProviderList,
-    ) -> anyhow::Result<IdTokenClaims> {
-        tracing::info!(
-            oidc_token = format!("{:.5}...", token),
-            public_key = String::from_utf8(public_key.to_vec()).unwrap_or_default(),
-            "validate_jwt call"
-        );
-
-        let decoding_key = DecodingKey::from_rsa_pem(public_key)?;
-        let (header, claims, _sig) = token.decode(&decoding_key)?;
-        let IdTokenClaims {
-            iss: issuer,
-            aud: audience,
-            ..
-        } = &claims;
-
-        if !oidc_providers.contains(issuer, audience) {
-            anyhow::bail!("UnauthorizedTokenIssuerOrAudience: iss={issuer}, aud={audience}");
-        }
-
-        tracing::info!(
-            oidc_token = format!("{:.5}...", token),
-            issuer = issuer,
-            audience = audience,
-            "validate_jwt call decoded"
-        );
-
-        // algorithm used by jsonwebtoken library
-        if header.alg != Algorithm::RS256 {
-            anyhow::bail!("InvalidAlgorithm: {:?}", header.alg);
-        }
-
-        tracing::info!(
-            claims = format!("{:?}", claims),
-            "validate_jwt call successful"
-        );
-
-        Ok(claims)
-    }
-}
-
-pub enum SupportedTokenVerifiers {
-    PagodaFirebaseTokenVerifier,
-    TestTokenVerifier,
-}
-
-/* Universal token verifier */
-pub struct UniversalTokenVerifier {}
-
-#[async_trait::async_trait]
-impl OAuthTokenVerifier for UniversalTokenVerifier {
-    async fn verify_token(
-        token: &OidcToken,
-        oidc_providers: &OidcProviderList,
-    ) -> anyhow::Result<IdTokenClaims> {
-        match get_token_verifier_type(token) {
-            SupportedTokenVerifiers::PagodaFirebaseTokenVerifier => {
-                return PagodaFirebaseTokenVerifier::verify_token(token, oidc_providers).await;
+    let mut last_occured_error =
+        anyhow::anyhow!("Unexpected error. Firebase public keys not found");
+    for public_key in public_keys {
+        match validate_jwt(token, public_key.as_bytes(), oidc_providers) {
+            Ok(claims) => {
+                tracing::info!("Access token is valid");
+                return Ok(claims);
             }
-            SupportedTokenVerifiers::TestTokenVerifier => {
-                return TestTokenVerifier::verify_token(token, oidc_providers).await;
+            Err(e) => {
+                tracing::info!("Access token verification failed: {}", e);
+                last_occured_error = e;
             }
         }
     }
+    Err(last_occured_error)
 }
 
-fn get_token_verifier_type(token: &OidcToken) -> SupportedTokenVerifiers {
-    match token.as_ref().len() > 30 {
-        // TODO: add real token type detection, now the system can be bypassed by passing a short token
-        true => {
-            tracing::info!("Using PagodaFirebaseTokenVerifier");
-            SupportedTokenVerifiers::PagodaFirebaseTokenVerifier
-        }
-        false => {
-            tracing::info!("Using TestTokenVerifier");
-            SupportedTokenVerifiers::TestTokenVerifier
-        }
+/// This function validates JWT (OIDC ID token) by checking the signature received
+/// from the issuer, issuer, audience, and expiration time.
+fn validate_jwt(
+    token: &OidcToken,
+    public_key: &[u8],
+    oidc_providers: &OidcProviderList,
+) -> anyhow::Result<IdTokenClaims> {
+    tracing::info!(
+        oidc_token = format!("{:.5}...", token),
+        public_key = String::from_utf8(public_key.to_vec()).unwrap_or_default(),
+        "validate_jwt call"
+    );
+
+    let decoding_key = DecodingKey::from_rsa_pem(public_key)?;
+    let (header, claims, _sig) = token.decode(&decoding_key)?;
+    let IdTokenClaims {
+        iss: issuer,
+        aud: audience,
+        ..
+    } = &claims;
+
+    if !oidc_providers.contains(issuer, audience) {
+        anyhow::bail!("UnauthorizedTokenIssuerOrAudience: iss={issuer}, aud={audience}");
     }
-}
 
-/* Pagoda/Firebase verifier */
-pub struct PagodaFirebaseTokenVerifier {}
+    tracing::info!(
+        oidc_token = format!("{:.5}...", token),
+        issuer = issuer,
+        audience = audience,
+        "validate_jwt call decoded"
+    );
 
-#[async_trait::async_trait]
-impl OAuthTokenVerifier for PagodaFirebaseTokenVerifier {
-    // Specs for ID token verification:
-    // Google: https://developers.google.com/identity/openid-connect/openid-connect#validatinganidtoken
-    // Firebase: https://firebase.google.com/docs/auth/admin/verify-id-tokens#verify_id_tokens_using_a_third-party_jwt_library
-    async fn verify_token(
-        token: &OidcToken,
-        oidc_providers: &OidcProviderList,
-    ) -> anyhow::Result<IdTokenClaims> {
-        let public_keys = get_pagoda_firebase_public_keys()
-            .map_err(|e| anyhow::anyhow!("failed to get Firebase public key: {e}"))?;
-
-        let mut last_occured_error =
-            anyhow::anyhow!("Unexpected error. Firebase public keys not found");
-        for public_key in public_keys {
-            match Self::validate_jwt(token, public_key.as_bytes(), oidc_providers) {
-                Ok(claims) => {
-                    tracing::info!(target: "pagoda-firebase-token-verifier", "access token is valid");
-                    return Ok(claims);
-                }
-                Err(e) => {
-                    tracing::info!(target: "pagoda-firebase-token-verifier", "access token verification failed: {}", e);
-                    last_occured_error = e;
-                }
-            }
-        }
-        Err(last_occured_error)
+    // algorithm used by jsonwebtoken library
+    if header.alg != Algorithm::RS256 {
+        anyhow::bail!("InvalidAlgorithm: {:?}", header.alg);
     }
-}
 
-/* Test verifier */
-pub struct TestTokenVerifier {}
+    tracing::info!(
+        claims = format!("{:?}", claims),
+        "validate_jwt call successful"
+    );
 
-#[async_trait::async_trait]
-impl OAuthTokenVerifier for TestTokenVerifier {
-    async fn verify_token(
-        token: &OidcToken,
-        _oidc_providers: &OidcProviderList,
-    ) -> anyhow::Result<IdTokenClaims> {
-        if let Some(aud) = token.as_ref().strip_prefix("validToken:") {
-            tracing::info!(target: "test-token-verifier", "access token is valid");
-            Ok(get_test_claims(aud.to_string()))
-        } else {
-            tracing::info!(target: "test-token-verifier", "access token verification failed");
-            Err(anyhow::anyhow!("Invalid token".to_string()))
-        }
-    }
+    Ok(claims)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -166,33 +95,15 @@ impl IdTokenClaims {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-struct OpenIdConfig {
-    jwks_uri: String,
-}
-
-#[derive(Serialize, Deserialize)]
-struct Jwks {
-    keys: Vec<Value>,
-}
-
-fn get_pagoda_firebase_public_keys() -> anyhow::Result<Vec<String>> {
-    let url =
-        "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
-    let client = reqwest::blocking::Client::new();
-    let response = client.get(url).send()?;
-    let json: HashMap<String, String> = response.json()?;
+pub async fn get_pagoda_firebase_public_keys(
+    client: &reqwest::Client,
+    jwt_signature_pk_url: &str,
+) -> anyhow::Result<Vec<String>> {
+    let response = client.get(jwt_signature_pk_url).send().await?;
+    let json: HashMap<String, String> = response.json().await?;
     let keys: Vec<String> = json.values().cloned().collect();
+    tracing::info!("get_pagoda_firebase_public_keys keys: {:?}", keys);
     Ok(keys)
-}
-
-pub fn get_test_claims(sub: String) -> IdTokenClaims {
-    IdTokenClaims {
-        iss: format!("https://securetoken.google.com/{}", "test_audience"),
-        sub,
-        aud: "test_audience".to_string(),
-        exp: Utc::now().timestamp() as usize + 3600,
-    }
 }
 
 #[cfg(test)]
@@ -206,34 +117,12 @@ mod tests {
         RsaPrivateKey, RsaPublicKey,
     };
 
-    fn allowlist_from_claims(claims: &IdTokenClaims) -> OidcProviderList {
-        let mut oidc_providers = OidcProviderList::default();
-        oidc_providers.insert(crate::firewall::allowed::OidcProvider {
-            issuer: claims.iss.clone(),
-            audience: claims.aud.clone(),
-        });
-        oidc_providers
-    }
-
-    fn allowlist_random() -> OidcProviderList {
-        allowlist_from_claims(&IdTokenClaims {
-            iss: "rand".into(),
-            sub: "rand".into(),
-            aud: "rand".into(),
-            exp: Utc::now().timestamp() as usize + 3600,
-        })
-    }
-
-    pub fn compare_claims(claims1: IdTokenClaims, claims2: IdTokenClaims) -> bool {
-        claims1.iss == claims2.iss
-            && claims1.sub == claims2.sub
-            && claims1.aud == claims2.aud
-            && claims1.exp == claims2.exp
-    }
-
-    #[test]
-    fn test_get_pagoda_firebase_public_key() {
-        let pk = get_pagoda_firebase_public_keys().unwrap();
+    #[tokio::test]
+    async fn test_get_pagoda_firebase_public_key() {
+        let url =
+        "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
+        let client = reqwest::Client::new();
+        let pk = get_pagoda_firebase_public_keys(&client, url).await.unwrap();
         assert!(!pk.is_empty());
     }
 
@@ -259,16 +148,11 @@ mod tests {
         };
 
         // Valid token and claims
-        PagodaFirebaseTokenVerifier::validate_jwt(&token, &public_key_der, &oidc_providers)
-            .unwrap();
+        validate_jwt(&token, &public_key_der, &oidc_providers).unwrap();
 
         // Invalid public key
         let (invalid_public_key, _invalid_private_key) = get_rsa_pem_key_pair();
-        match PagodaFirebaseTokenVerifier::validate_jwt(
-            &token,
-            &invalid_public_key,
-            &oidc_providers,
-        ) {
+        match validate_jwt(&token, &invalid_public_key, &oidc_providers) {
             Ok(_) => panic!("Token validation should fail"),
             Err(e) => assert_eq!(e.to_string(), "InvalidSignature"),
         }
@@ -288,64 +172,10 @@ mod tests {
             Ok(t) => OidcToken::new(t.as_str()),
             Err(e) => panic!("Failed to encode token: {}", e),
         };
-        match PagodaFirebaseTokenVerifier::validate_jwt(&token, &public_key_der, &oidc_providers) {
+        match validate_jwt(&token, &public_key_der, &oidc_providers) {
             Ok(_) => panic!("Token validation should fail on invalid issuer or audience"),
             Err(e) => assert_eq!(e.to_string(), "UnauthorizedTokenIssuerOrAudience: iss=unauthorized_issuer, aud=unauthorized_audience", "{:?}", e),
         }
-    }
-
-    #[tokio::test]
-    async fn test_verify_token_valid() {
-        let token = OidcToken::new("validToken:test-subject");
-        let test_claims = get_test_claims("test-subject".to_string());
-        let oidc_providers = allowlist_from_claims(&test_claims);
-
-        let claims = TestTokenVerifier::verify_token(&token, &oidc_providers)
-            .await
-            .unwrap();
-        assert!(compare_claims(claims, test_claims));
-    }
-
-    #[tokio::test]
-    async fn test_verify_token_invalid_with_test_verifier() {
-        let token = OidcToken::invalid();
-        let result = TestTokenVerifier::verify_token(&token, &allowlist_random()).await;
-        match result {
-            Ok(_) => panic!("Token verification should fail"),
-            Err(e) => assert_eq!(e.to_string(), "Invalid token"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_verify_token_valid_with_test_verifier() {
-        let token = OidcToken::new("validToken:test-subject");
-        let test_claims = get_test_claims("test-subject".to_string());
-        let oidc_providers = allowlist_from_claims(&test_claims);
-        let claims = TestTokenVerifier::verify_token(&token, &oidc_providers)
-            .await
-            .unwrap();
-        assert!(compare_claims(claims, test_claims));
-    }
-
-    #[tokio::test]
-    async fn test_verify_token_invalid_with_universal_verifier() {
-        let token = OidcToken::invalid();
-        let result = UniversalTokenVerifier::verify_token(&token, &allowlist_random()).await;
-        match result {
-            Ok(_) => panic!("Token verification should fail"),
-            Err(e) => assert_eq!(e.to_string(), "Invalid token"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_verify_token_valid_with_universal_verifier() {
-        let token = OidcToken::new("validToken:test-subject");
-        let test_claims = get_test_claims("test-subject".to_string());
-        let oidc_providers = allowlist_from_claims(&test_claims);
-        let claims = UniversalTokenVerifier::verify_token(&token, &oidc_providers)
-            .await
-            .unwrap();
-        assert!(compare_claims(claims, test_claims));
     }
 
     pub fn get_rsa_pem_key_pair() -> (Vec<u8>, Vec<u8>) {
@@ -366,5 +196,14 @@ mod tests {
             .to_vec();
 
         (private_key_der, public_key_der)
+    }
+
+    fn allowlist_from_claims(claims: &IdTokenClaims) -> OidcProviderList {
+        let mut oidc_providers = OidcProviderList::default();
+        oidc_providers.insert(crate::firewall::allowed::OidcProvider {
+            issuer: claims.iss.clone(),
+            audience: claims.aud.clone(),
+        });
+        oidc_providers
     }
 }
