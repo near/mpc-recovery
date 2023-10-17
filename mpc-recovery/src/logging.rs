@@ -3,6 +3,7 @@ use opentelemetry::sdk::Resource;
 use opentelemetry::KeyValue;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_semantic_conventions::resource::SERVICE_NAME;
+use std::fmt::Display;
 use std::sync::OnceLock;
 use tracing::subscriber::DefaultGuard;
 use tracing_appender::non_blocking::NonBlocking;
@@ -43,6 +44,18 @@ pub enum OpenTelemetryLevel {
     TRACE,
 }
 
+impl Display for OpenTelemetryLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            OpenTelemetryLevel::OFF => "off",
+            OpenTelemetryLevel::INFO => "info",
+            OpenTelemetryLevel::DEBUG => "debug",
+            OpenTelemetryLevel::TRACE => "trace",
+        };
+        write!(f, "{}", str)
+    }
+}
+
 /// Whether to use colored log format.
 /// Option `Auto` enables color output only if the logging is done to a terminal and
 /// `NO_COLOR` environment variable is not set.
@@ -52,6 +65,17 @@ pub enum ColorOutput {
     Auto,
     Always,
     Never,
+}
+
+impl Display for ColorOutput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            ColorOutput::Auto => "auto",
+            ColorOutput::Always => "always",
+            ColorOutput::Never => "never",
+        };
+        write!(f, "{}", str)
+    }
 }
 
 /// Configures exporter of span and trace data.
@@ -73,6 +97,23 @@ pub struct Options {
     /// together with the span duration and used/idle CPU time.
     #[clap(long)]
     log_span_events: bool,
+}
+
+impl Options {
+    pub fn into_str_args(self) -> Vec<String> {
+        let mut buf = vec![
+            "--opentelemetry".to_string(),
+            self.opentelemetry.to_string(),
+            "--otlp-endpoint".to_string(),
+            self.otlp_endpoint,
+            "--color".to_string(),
+            self.color.to_string(),
+        ];
+        if self.log_span_events {
+            buf.push("--log-span-events".to_string());
+        }
+        buf
+    }
 }
 
 fn use_color_output(options: &Options) -> bool {

@@ -7,7 +7,9 @@ use near_workspaces::{
     Account, Worker,
 };
 
-pub mod containers;
+use crate::env::containers;
+
+pub mod env;
 pub mod sandbox;
 pub mod util;
 
@@ -72,7 +74,7 @@ pub async fn initialize_relayer<'a>(
     tracing::info!("Initializing sandbox worker...");
     let worker = near_workspaces::sandbox()
         .rpc_addr(&format!(
-            "http://localhost:{}",
+            "http://127.0.0.1:{}",
             sandbox
                 .container
                 .get_host_port_ipv4(crate::containers::Sandbox::CONTAINER_RPC_PORT)

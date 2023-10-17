@@ -7,36 +7,7 @@ on:
   pull_request:
 
 jobs:
-  build-image:
-    runs-on: ubuntu-latest
-    name: Build and Push
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Login to GCP Artifact Registry
-        run: echo "$GOOGLE_CREDENTIALS" | docker login -u _json_key --password-stdin https://us-east1-docker.pkg.dev
-        env:
-          GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          tags: us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev:${{ github.sha }}
-          load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Push Docker image
-        run: docker push us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev:${{ github.sha }}
-
   integrations:
-    needs: build-image
     name: Integration
     strategy:
       matrix:
@@ -76,11 +47,6 @@ jobs:
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
 
-      - name: Pull MPC Recovery Docker Image
-        run: |
-          docker pull us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev:${{ github.sha }}
-          docker tag us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev:${{ github.sha }} near/mpc-recovery:latest
-
       - name: Install stable toolchain
         uses: actions-rs/toolchain@v1
         with:
@@ -93,6 +59,10 @@ jobs:
         uses: arduino/setup-protoc@v1.1.2
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build MPC Recovery Binary Locally
+        run: |
+          cargo build -p mpc-recovery --release
 
       - name: Test
         run: cargo test -p mpc-recovery-integration-tests --jobs 1 -- --test-threads 1
