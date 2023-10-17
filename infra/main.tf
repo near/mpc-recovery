@@ -1,5 +1,6 @@
 terraform {
   backend "gcs" {
+    bucket = "mpc-recovery-terraform-dev"
     prefix = "state/mpc-recovery"
   }
 
@@ -109,21 +110,21 @@ module "mpc-signer-lb" {
   count         = length(var.signer_configs)
   source        = "./modules/internal_cloudrun_lb"
   name          = "mpc-${var.env}-signer-${count.index}"
-  network_id    = var.env
-  subnetwork_id = "${var.env}-us-central1"
+  network_id    = var.env == "dev" ? data.google_compute_network.dev_network.id : data.google_compute_network.prod_network.id
+  subnetwork_id = var.env == "dev" ? data.google_compute_subnetwork.dev_subnetwork.id : data.google_compute_subnetwork.prod_subnetwork.id
   project_id    = var.project
   region        = "us-central1"
-  service_name  = module.signer.google_cloud_run_v2_service.name
+  service_name  = "mpc-recovery-signer-${count.index}-${var.env}"
 }
 
 module "mpc-leader-lb" {
   source        = "./modules/internal_cloudrun_lb"
   name          = "mpc-${var.env}-leader"
-  network_id    = var.env
-  subnetwork_id = "${var.env}-us-central1"
+  network_id    = var.env == "dev" ? data.google_compute_network.dev_network.id : data.google_compute_network.prod_network.id
+  subnetwork_id = var.env == "dev" ? data.google_compute_subnetwork.dev_subnetwork.id : data.google_compute_subnetwork.prod_subnetwork.id
   project_id    = var.project
   region        = "us-central1"
-  service_name  = module.leader.google_cloud_run_v2_service.name
+  service_name  = "mpc-recovery-leader-${var.env}"
 }
 /*
  * Create multiple signer nodes
@@ -138,7 +139,7 @@ module "signer" {
   zone                  = var.zone
   service_account_email = google_service_account.service_account.email
   docker_image          = var.docker_image
-  connector_id          = "projects/pagoda-shared-infrastructure/locations/us-central1/connectors/${var.env}-connector"
+  connector_id          = var.env == "dev" ? var.dev-connector : var.prod-connector
 
   node_id = count.index
 
@@ -165,7 +166,7 @@ module "leader" {
   zone                  = var.zone
   service_account_email = google_service_account.service_account.email
   docker_image          = var.docker_image
-  connector_id          = "projects/pagoda-shared-infrastructure/locations/us-central1/connectors/${var.env}-connector"
+  connector_id          = var.env == "dev" ? var.dev-connector : var.prod-connector
 
   signer_node_urls   = concat(module.signer.*.node.uri, var.external_signer_node_urls)
   near_rpc           = local.workspace.near_rpc
