@@ -51,7 +51,7 @@ pub struct LimitedAccessKey {
 pub fn new_create_account_delegate_action(
     signer: &InMemorySigner,
     new_account_id: &AccountId,
-    new_account_options: CreateAccountOptions,
+    new_account_options: &CreateAccountOptions,
     near_root_account: &AccountId,
     nonce: Nonce,
     max_block_height: u64,

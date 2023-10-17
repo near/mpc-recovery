@@ -411,7 +411,7 @@ async fn process_new_account(
         let signed_delegate_action = new_create_account_delegate_action(
             account_creator,
             &new_user_account_id,
-            new_account_options.clone(),
+            &new_account_options,
             &state.near_root_account,
             nonce,
             block_height + 100,

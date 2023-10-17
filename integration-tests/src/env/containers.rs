@@ -775,7 +775,7 @@ impl LeaderNodeApi {
 
         let frp_signature = match user_secret_key.sign(&user_credentials_request_digest) {
             near_crypto::Signature::ED25519(k) => k,
-            _ => return Err(anyhow::anyhow!("Wrong signature type")),
+            _ => anyhow::bail!("Wrong signature type"),
         };
 
         let new_account_request = NewAccountRequest {
@@ -783,7 +783,7 @@ impl LeaderNodeApi {
             create_account_options,
             oidc_token: oidc_token.clone(),
             user_credentials_frp_signature: frp_signature,
-            frp_public_key: user_pk.clone(),
+            frp_public_key: user_pk,
         };
 
         self.new_account(new_account_request).await

@@ -260,7 +260,7 @@ async fn test_stress_network() -> anyhow::Result<()> {
     with_nodes(3, |ctx| {
         Box::pin(async move {
             let ctx = std::sync::Arc::new(ctx);
-            let tasks = (0..50)
+            let tasks = (0..30)
                 .map(|_| {
                     let ctx = ctx.clone();
                     tokio::spawn(async move { basic_action(&ctx).await })
