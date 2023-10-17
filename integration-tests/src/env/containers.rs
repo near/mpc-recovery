@@ -653,8 +653,8 @@ impl<'a> LeaderNode<'a> {
                 .relayer_ctx
                 .creator_account_keys
                 .iter()
-                .map(ToString::to_string)
-                .collect(),
+                .map(|k| k.to_string().parse())
+                .collect::<Result<Vec<_>, _>>()?,
             fast_auth_partners: Some(
                 serde_json::json!([
                     {
