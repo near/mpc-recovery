@@ -4,7 +4,7 @@ use mpc_recovery::msg::{NewAccountResponse, UserCredentialsResponse};
 use mpc_recovery::sign_node::oidc::OidcToken;
 use mpc_recovery::transaction::LimitedAccessKey;
 use near_crypto::{PublicKey, SecretKey};
-use workspaces::AccountId;
+use near_workspaces::AccountId;
 
 use crate::{account, check, key, MpcCheck, TestContext};
 
@@ -51,7 +51,7 @@ pub async fn new_random_account(
     let account_id = account::random(&ctx.worker)?;
     let user_secret_key = key::random_sk();
     let user_public_key = user_secret_key.public_key();
-    let oidc_token = OidcToken::random();
+    let oidc_token = OidcToken::random_valid();
 
     register_account(
         ctx,

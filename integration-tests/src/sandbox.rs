@@ -1,9 +1,9 @@
-use workspaces::{network::Sandbox, Account, Contract, Worker};
+use near_workspaces::{network::Sandbox, Account, Contract, Worker};
 
 pub async fn initialize_social_db(worker: &Worker<Sandbox>) -> anyhow::Result<Contract> {
     tracing::info!("Initializing social DB contract...");
     let social_db = worker
-        .import_contract(&"social.near".parse()?, &workspaces::mainnet().await?)
+        .import_contract(&"social.near".parse()?, &near_workspaces::mainnet().await?)
         .transact()
         .await?;
     social_db

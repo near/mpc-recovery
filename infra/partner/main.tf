@@ -87,6 +87,8 @@ module "signer" {
   sk_share_secret_id       = var.sk_share_secret_id
   oidc_providers_secret_id = var.oidc_providers_secret_id
 
+  jwt_signature_pk_url = var.jwt_signature_pk_url
+
   depends_on = [
     google_secret_manager_secret_iam_member.cipher_key_secret_access,
     google_secret_manager_secret_iam_member.secret_share_secret_access,

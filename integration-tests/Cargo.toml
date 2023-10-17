@@ -7,9 +7,11 @@ publish = false
 [dependencies]
 aes-gcm = "0.10"
 anyhow = { version = "1.0", features = ["backtrace"] }
+async-process = "1"
 bollard = "0.11"
 clap = { version = "4.2", features = ["derive", "env"] }
-ed25519-dalek = {version = "1.0.1", features = ["serde"]}
+curv = { package = "curv-kzen", version = "0.9", default-features = false }
+ed25519-dalek = { version = "1.0.1", features = ["serde"] }
 futures = "0.3"
 hex = "0.4.3"
 hyper = { version = "0.14", features = ["full"] }
@@ -26,7 +28,7 @@ serde_json = "1"
 testcontainers = { version = "0.14", features = ["experimental"] }
 tokio = { version = "1.28", features = ["full"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-workspaces = { git = "https://github.com/near/workspaces-rs", branch = "main" }
+near-workspaces = { git = "https://github.com/near/workspaces-rs", branch = "main" }
 toml = "0.8.1"
 
 [dev-dependencies]
@@ -36,9 +38,8 @@ test-log = { version = "0.2.12", features = ["log", "trace"] }
 env_logger = "0.10.0"
 tracing-log = "0.1.3"
 tokio-util = { version = "0.7", features = ["full"] }
-curv = { package = "curv-kzen", version = "0.9", default-features = false }
 reqwest = "0.11.16"
 
 [features]
-drop-containers = []
-default = ["drop-containers"]
+default = []
+docker-test = []

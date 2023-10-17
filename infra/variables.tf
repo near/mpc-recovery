@@ -54,6 +54,7 @@ variable "signer_configs" {
   }))
 }
 
+
 variable "dev-connector" {
   default = "projects/pagoda-shared-infrastructure/locations/us-east1/connectors/dev-connector1"
 }
@@ -83,3 +84,8 @@ data "google_compute_network" "prod_network" {
   name    = "prod"
   project = "pagoda-shared-infrastructure"
 }
+
+variable "jwt_signature_pk_url" {
+  type = string
+}
+
