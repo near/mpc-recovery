@@ -1,13 +1,11 @@
-use workspaces::types::SecretKey;
-use workspaces::AccessKey;
-use workspaces::{network::Sandbox, Account, Contract, Worker};
+use near_workspaces::{network::Sandbox, types::SecretKey, AccessKey, Account, Contract, Worker};
 
 const BATCH_COUNT_LIMIT: usize = 100;
 
 pub async fn initialize_social_db(worker: &Worker<Sandbox>) -> anyhow::Result<Contract> {
     tracing::info!("Initializing social DB contract...");
     let social_db = worker
-        .import_contract(&"social.near".parse()?, &workspaces::mainnet().await?)
+        .import_contract(&"social.near".parse()?, &near_workspaces::mainnet().await?)
         .transact()
         .await?;
     social_db
@@ -77,7 +75,7 @@ pub async fn gen_rotating_keys(account: &Account, amount: usize) -> anyhow::Resu
         let mut batch_tx = account.batch(account.id());
         for _ in 0..batch_count {
             let sk = SecretKey::from_seed(
-                workspaces::types::KeyType::ED25519,
+                near_workspaces::types::KeyType::ED25519,
                 &rand::Rng::sample_iter(rand::thread_rng(), &rand::distributions::Alphanumeric)
                     .take(10)
                     .map(char::from)

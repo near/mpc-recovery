@@ -19,9 +19,9 @@ use near_primitives::{
         DeployContractAction, FunctionCallAction, StakeAction, TransferAction,
     },
 };
+use near_workspaces::AccountId;
 use std::{str::FromStr, time::Duration};
 use test_log::test;
-use workspaces::AccountId;
 
 #[test(tokio::test)]
 async fn whitlisted_actions_test() -> anyhow::Result<()> {

@@ -2,6 +2,7 @@ use aes_gcm::aead::consts::U32;
 use aes_gcm::aead::generic_array::GenericArray;
 use async_process::Child;
 use mpc_recovery::firewall::allowed::DelegateActionRelayer;
+use mpc_recovery::logging;
 use mpc_recovery::relayer::NearRpcAndRelayerClient;
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 
@@ -49,6 +50,7 @@ impl SignerNode {
             gcp_project_id: ctx.gcp_project_id.clone(),
             gcp_datastore_url: Some(ctx.datastore.local_address.clone()),
             jwt_signature_pk_url: ctx.oidc_provider.jwt_pk_local_url.clone(),
+            logging_options: logging::Options::default(),
         }
         .into_str_args();
 
@@ -131,6 +133,7 @@ impl LeaderNode {
             gcp_project_id: ctx.gcp_project_id.clone(),
             gcp_datastore_url: Some(ctx.datastore.local_address.clone()),
             jwt_signature_pk_url: ctx.oidc_provider.jwt_pk_local_url.clone(),
+            logging_options: logging::Options::default(),
         }
         .into_str_args();
 

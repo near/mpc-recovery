@@ -8,6 +8,7 @@ use ed25519_dalek::{PublicKey as PublicKeyEd25519, Verifier};
 use futures::{lock::Mutex, StreamExt};
 use hyper::StatusCode;
 use mpc_recovery::firewall::allowed::DelegateActionRelayer;
+use mpc_recovery::logging;
 use mpc_recovery::sign_node::oidc::OidcToken;
 use mpc_recovery::{
     msg::{
@@ -29,6 +30,7 @@ use near_primitives::borsh::BorshSerialize;
 use near_primitives::delegate_action::{DelegateAction, SignedDelegateAction};
 use near_primitives::transaction::{Action, AddKeyAction, DeleteKeyAction};
 use near_primitives::views::FinalExecutionStatus;
+use near_workspaces::AccountId;
 use once_cell::sync::Lazy;
 use testcontainers::{
     clients::Cli,
@@ -38,7 +40,6 @@ use testcontainers::{
 };
 use tokio::io::AsyncWriteExt;
 use tracing;
-use workspaces::AccountId;
 
 use std::fs;
 
@@ -298,11 +299,11 @@ impl<'a> Relayer<'a> {
         near_rpc: &str,
         redis_full_address: &str,
         relayer_account_id: &AccountId,
-        relayer_account_sks: &[workspaces::types::SecretKey],
+        relayer_account_sks: &[near_workspaces::types::SecretKey],
         creator_account_id: &AccountId,
         social_db_id: &AccountId,
         social_account_id: &AccountId,
-        social_account_sk: &workspaces::types::SecretKey,
+        social_account_sk: &near_workspaces::types::SecretKey,
         relayer_id: &str,
     ) -> anyhow::Result<Relayer<'a>> {
         tracing::info!("Running relayer container...");
@@ -537,6 +538,7 @@ impl SignerNode<'_> {
             gcp_project_id: ctx.gcp_project_id.clone(),
             gcp_datastore_url: Some(ctx.datastore.address.clone()),
             jwt_signature_pk_url: ctx.oidc_provider.jwt_pk_url.clone(),
+            logging_options: logging::Options::default(),
         }
         .into_str_args();
 
@@ -555,7 +557,7 @@ impl SignerNode<'_> {
 
         container.exec(ExecCommand {
             cmd: format!("bash -c 'while [[ \"$(curl -s -o /dev/null -w ''%{{http_code}}'' localhost:{})\" != \"200\" ]]; do sleep 1; done'", Self::CONTAINER_PORT),
-            ready_conditions: vec![WaitFor::message_on_stdout("node is ready to accept connections")]
+            ready_conditions: vec![WaitFor::message_on_stderr("node is ready to accept connections")]
         });
 
         let full_address = format!("http://{ip_address}:{}", Self::CONTAINER_PORT);
@@ -674,6 +676,7 @@ impl<'a> LeaderNode<'a> {
             gcp_project_id: ctx.gcp_project_id.clone(),
             gcp_datastore_url: Some(ctx.datastore.address.to_string()),
             jwt_signature_pk_url: ctx.oidc_provider.jwt_pk_url.to_string(),
+            logging_options: logging::Options::default(),
         }
         .into_str_args();
 
@@ -692,7 +695,7 @@ impl<'a> LeaderNode<'a> {
 
         container.exec(ExecCommand {
             cmd: format!("bash -c 'while [[ \"$(curl -s -o /dev/null -w ''%{{http_code}}'' localhost:{})\" != \"200\" ]]; do sleep 1; done'", Self::CONTAINER_PORT),
-            ready_conditions: vec![WaitFor::message_on_stdout("node is ready to accept connections")]
+            ready_conditions: vec![WaitFor::message_on_stderr("node is ready to accept connections")]
         });
 
         let full_address = format!("http://{ip_address}:{}", Self::CONTAINER_PORT);

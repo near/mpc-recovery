@@ -10,7 +10,7 @@ use mpc_recovery::{
 };
 use mpc_recovery_integration_tests::env;
 use mpc_recovery_integration_tests::env::containers::DockerClient;
-use workspaces::{network::Sandbox, Worker};
+use near_workspaces::{network::Sandbox, Worker};
 
 pub struct TestContext {
     env: String,
@@ -58,8 +58,8 @@ where
 }
 
 mod account {
+    use near_workspaces::{network::Sandbox, AccountId, Worker};
     use rand::{distributions::Alphanumeric, Rng};
-    use workspaces::{network::Sandbox, AccountId, Worker};
 
     pub fn random(worker: &Worker<Sandbox>) -> anyhow::Result<AccountId> {
         let account_id_rand: String = rand::thread_rng()
@@ -117,7 +117,7 @@ mod key {
 mod check {
     use crate::TestContext;
     use near_crypto::PublicKey;
-    use workspaces::AccountId;
+    use near_workspaces::AccountId;
 
     pub async fn access_key_exists(
         ctx: &TestContext,

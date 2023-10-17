@@ -5,7 +5,7 @@ use crate::{account, key, with_nodes, MpcCheck, TestContext};
 
 use futures::stream::FuturesUnordered;
 use hyper::StatusCode;
-use workspaces::types::AccessKeyPermission;
+use near_workspaces::types::AccessKeyPermission;
 
 use mpc_recovery::{
     gcp::value::{FromValue, IntoValue},

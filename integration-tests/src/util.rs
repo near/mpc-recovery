@@ -7,9 +7,9 @@ use std::{
 use anyhow::Context;
 use async_process::{Child, Command, Stdio};
 use hyper::{Body, Client, Method, Request, StatusCode, Uri};
+use near_workspaces::{types::SecretKey, AccountId};
 use serde::{Deserialize, Serialize};
 use toml::Value;
-use workspaces::{types::SecretKey, AccountId};
 
 use crate::containers::RelayerConfig;
 

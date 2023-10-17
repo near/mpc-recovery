@@ -15,7 +15,6 @@ use crate::transaction::{
 };
 use crate::utils::{check_digest_signature, user_credentials_request_digest};
 use crate::{metrics, nar};
-
 use anyhow::Context;
 use axum::extract::MatchedPath;
 use axum::middleware::{self, Next};
