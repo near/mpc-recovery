@@ -7,7 +7,9 @@ use near_workspaces::{
     Account, Worker,
 };
 
-pub mod containers;
+use crate::env::containers;
+
+pub mod env;
 pub mod sandbox;
 pub mod util;
 
@@ -91,6 +93,7 @@ pub async fn initialize_relayer<'a>(
     relayer_id: &str,
 ) -> anyhow::Result<RelayerCtx<'a>> {
     let SandboxCtx { sandbox, worker } = initialize_sandbox(docker_client, network).await?;
+
     let social_db = sandbox::initialize_social_db(&worker).await?;
     sandbox::initialize_linkdrop(&worker).await?;
     tracing::info!("Initializing relayer accounts...");

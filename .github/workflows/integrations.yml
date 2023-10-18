@@ -1,22 +1,19 @@
-name: Integration
+name: Build Image and Test
 
 on:
-  workflow_run:
-    workflows: ["Docker Image"]
-    types:
-      - completed
+  push:
+    branches:
+      - develop
+  pull_request:
 
-env:
-  RUSTFLAGS: -D warnings
 jobs:
-  test:
-    name: Test
+  integrations:
+    name: Integration
     strategy:
       matrix:
         # FIXME: macos-latest-xl is disabled since colima is erroring out right now
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - uses: actions/checkout@v3
@@ -39,18 +36,16 @@ jobs:
 
       - name: Pull Relayer & Sandbox Docker Images
         run: |
-          docker pull ghcr.io/near/pagoda-relayer-rs-fastauth
+          docker pull ghcr.io/near/os-relayer
           docker pull ghcr.io/near/sandbox
+
+      - name: Build OIDC Provider Dcoker Image
+        run: docker build -t near/test-oidc-provider ./test-oidc-provider
 
       - name: Login to GCP Artifact Registry
         run: echo "$GOOGLE_CREDENTIALS" | docker login -u _json_key --password-stdin https://us-east1-docker.pkg.dev
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
-
-      - name: Pull MPC Recovery Docker Image
-        run: |
-          docker pull us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev:${{ github.sha }}
-          docker tag us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev:${{ github.sha }} near/mpc-recovery:latest
 
       - name: Install stable toolchain
         uses: actions-rs/toolchain@v1
@@ -67,6 +62,10 @@ jobs:
 
       - name: Compile Contract
         run: cargo build -p mpc-contract --target wasm32-unknown-unknown --release
+
+      - name: Build MPC Recovery Binary Locally
+        run: |
+          cargo build -p mpc-recovery --release
 
       - name: Test
         run: cargo test -p mpc-recovery-integration-tests mpc --jobs 1 -- --test-threads 1

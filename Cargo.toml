@@ -5,4 +5,5 @@ members = [
     "node",
     "integration-tests",
     "load-tests",
+    "test-oidc-provider",
 ]

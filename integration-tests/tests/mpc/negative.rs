@@ -29,7 +29,7 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
         let account_id = account::random(&ctx.worker)?;
         let user_secret_key = near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519);
         let user_public_key = user_secret_key.public_key();
-        let oidc_token = OidcToken::random();
+        let oidc_token = OidcToken::random_valid();
 
         // Claim OIDC token
         ctx.leader_node
@@ -194,9 +194,9 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
         let account_id = account::random(&ctx.worker)?;
         let user_secret_key = near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519);
         let user_public_key = user_secret_key.public_key();
-        let oidc_token_1 = OidcToken::random();
-        let oidc_token_2 = OidcToken::random();
-        let wrong_oidc_token = OidcToken::random();
+        let oidc_token_1 = OidcToken::random_valid();
+        let oidc_token_2 = OidcToken::random_valid();
+        let wrong_oidc_token = OidcToken::random_valid();
 
         // Create account before claiming OIDC token
         ctx.leader_node
@@ -310,7 +310,7 @@ async fn negative_front_running_protection() -> anyhow::Result<()> {
         }
 
         // It should not be possible to make the claiming with another key
-        let new_oidc_token = OidcToken::random();
+        let new_oidc_token = OidcToken::random_valid();
         let user_sk = key::random_sk();
         let user_pk = user_sk.public_key();
         let atacker_sk = key::random_sk();
@@ -358,7 +358,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
         let account_id = account::random(&ctx.worker)?;
         let user_secret_key = key::random_sk();
         let user_public_key = user_secret_key.public_key();
-        let oidc_token = OidcToken::random();
+        let oidc_token = OidcToken::random_valid();
         let invalid_oidc_token = OidcToken::invalid();
 
         // Claim OIDC token
@@ -475,7 +475,7 @@ async fn test_reject_new_pk_set() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
-    let user_oidc = OidcToken::random();
+    let user_oidc = OidcToken::random_valid();
     let (user_sk, user_pk) = key::random();
     let digest = user_credentials_request_digest(&user_oidc, &user_pk)?;
     let near_crypto::Signature::ED25519(frp_signature) = user_sk.sign(&digest) else {
@@ -525,7 +525,7 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
             ),
             (
                 invalid_oidc_token_req,
-                (StatusCode::UNAUTHORIZED, "failed to verify oidc token: Invalid token"),
+                (StatusCode::UNAUTHORIZED, "failed to verify oidc token"),
             ),
             (
                 invalid_frp_signature_req,
@@ -595,7 +595,7 @@ async fn test_account_creation_should_work_on_second_attempt() -> anyhow::Result
         let account_id = account::random(&ctx.worker)?;
         let user_secret_key = key::random_sk();
         let user_public_key = user_secret_key.public_key();
-        let oidc_token = OidcToken::random();
+        let oidc_token = OidcToken::random_valid();
 
         ctx.leader_node
             .new_account_with_helper(
@@ -631,7 +631,7 @@ async fn test_creation_of_two_account_with_the_same_oidc_should_not_be_possible(
         let account_id_2 = account::random(&ctx.worker)?;
         let user_secret_key = key::random_sk();
         let user_public_key = user_secret_key.public_key();
-        let oidc_token = OidcToken::random();
+        let oidc_token = OidcToken::random_valid();
 
         ctx.leader_node
             .claim_oidc_with_helper(&oidc_token, &user_public_key, &user_secret_key)

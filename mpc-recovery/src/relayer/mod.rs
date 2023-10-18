@@ -42,7 +42,7 @@ impl NearRpcAndRelayerClient {
     }
 
     #[tracing::instrument(level = "debug", skip_all, fields(account_id = request.account_id.to_string()))]
-    pub async fn register_account(
+    pub async fn register_account_and_allowance(
         &self,
         request: RegisterAccountRequest,
         relayer: DelegateActionRelayer,
