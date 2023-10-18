@@ -14,7 +14,7 @@ use multi_party_eddsa::protocols::ExpandedKeyPair;
 use serde::de::DeserializeOwned;
 use tracing_subscriber::EnvFilter;
 
-use near_crypto::{InMemorySigner, SecretKey};
+use near_crypto::InMemorySigner;
 use near_fetch::signer::KeyRotatingSigner;
 use near_primitives::types::AccountId;
 
@@ -101,7 +101,7 @@ pub enum Cli {
             env("MPC_RECOVERY_ACCOUNT_CREATOR_SK"),
             default_value("[]")
         )]
-        account_creator_sk: Vec<SecretKey>,
+        account_creator_sk: Vec<String>,
         /// JSON list of related items to be used to verify OIDC tokens.
         #[arg(long, env("FAST_AUTH_PARTNERS"))]
         fast_auth_partners: Option<String>,
@@ -391,7 +391,7 @@ async fn load_account_creator(
     gcp_service: &GcpService,
     env: &str,
     account_creator_id: &AccountId,
-    account_creator_sk: Vec<SecretKey>,
+    account_creator_sk: Vec<String>,
 ) -> anyhow::Result<KeyRotatingSigner> {
     let sks = if account_creator_sk.is_empty() {
         let name = format!("mpc-recovery-account-creator-sk-{env}/versions/latest");
@@ -399,6 +399,9 @@ async fn load_account_creator(
         serde_json::from_str(std::str::from_utf8(&data)?)?
     } else {
         account_creator_sk
+            .into_iter()
+            .map(|sk| sk.parse())
+            .collect::<Result<Vec<_>, _>>()?
     };
 
     Ok(KeyRotatingSigner::from_signers(sks.into_iter().map(|sk| {
