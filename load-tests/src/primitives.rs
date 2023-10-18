@@ -1,5 +1,5 @@
 use mpc_recovery::sign_node::oidc::OidcToken;
-use near_crypto::SecretKey;
+use near_crypto::{PublicKey, SecretKey};
 use near_primitives::types::AccountId;
 use serde::{Deserialize, Serialize};
 
@@ -16,4 +16,5 @@ pub struct UserSession {
     pub near_account_id: AccountId,
     pub fa_sk: SecretKey,
     pub la_sk: SecretKey,
+    pub recovery_pk: Option<PublicKey>,
 }

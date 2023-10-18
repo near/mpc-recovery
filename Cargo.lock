@@ -2828,9 +2828,11 @@ name = "load-tests"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "env_logger 0.10.0",
  "goose",
  "goose-eggs",
  "jsonwebtoken",
+ "log",
  "mpc-recovery",
  "near-crypto 0.17.0",
  "near-primitives 0.17.0",
