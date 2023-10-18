@@ -1,3 +1,4 @@
+pub mod cli;
 pub mod http_client;
 pub mod indexer;
 pub mod protocol;

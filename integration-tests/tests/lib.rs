@@ -2,6 +2,7 @@ mod mpc;
 mod multichain;
 
 use curv::elliptic::curves::{Ed25519, Point};
+use futures::future::BoxFuture;
 use hyper::StatusCode;
 use mpc_recovery::{
     gcp::GcpService,
@@ -58,95 +59,20 @@ where
     Ok(())
 }
 
-pub struct MultichainTestContext {
-    worker: Worker<Sandbox>,
+pub struct MultichainTestContext<'a> {
+    nodes: mpc_recovery_integration_tests::multichain::Nodes<'a>,
     rpc_client: near_fetch::Client,
-    mpc_contract: Contract,
-    near_rpc: String,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct Participant {
-    id: u32,
-    account_id: AccountId,
-    url: String,
-}
-
-async fn with_multichain_nodes<F, Fut>(nodes: usize, f: F) -> anyhow::Result<()>
+async fn with_multichain_nodes<F>(nodes: usize, f: F) -> anyhow::Result<()>
 where
-    F: FnOnce(MultichainTestContext) -> Fut,
-    Fut: core::future::Future<Output = anyhow::Result<()>>,
+    F: for<'a> FnOnce(MultichainTestContext<'a>) -> BoxFuture<'a, anyhow::Result<()>>,
 {
-    let docker_client = containers::DockerClient::default();
-    docker_client.create_network(NETWORK).await?;
+    let docker_client = DockerClient::default();
+    let nodes = mpc_recovery_integration_tests::multichain::run(nodes, &docker_client).await?;
 
-    let SandboxCtx { sandbox, worker } =
-        mpc_recovery_integration_tests::initialize_sandbox(&docker_client, NETWORK).await?;
-
-    tracing::info!("deploying mpc contract");
-    let mpc_contract = worker
-        .dev_deploy(include_bytes!(
-            "../../target/wasm32-unknown-unknown/release/mpc_contract.wasm"
-        ))
-        .await?;
-    tracing::info!("deployed mpc contract");
-
-    let accounts = futures::future::join_all((0..nodes).map(|_| worker.dev_create_account()))
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()?;
-    let mut node_futures = Vec::new();
-    for (i, account) in accounts.iter().enumerate() {
-        let node = containers::Node::run(
-            &docker_client,
-            NETWORK,
-            i as u64,
-            &sandbox.address,
-            mpc_contract.id(),
-            account.id(),
-            account.secret_key(),
-        );
-        node_futures.push(node);
-    }
-    let nodes = futures::future::join_all(node_futures)
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()?;
-    let participants: HashMap<AccountId, Participant> = accounts
-        .iter()
-        .cloned()
-        .enumerate()
-        .zip(&nodes)
-        .map(|((i, account), node)| {
-            (
-                account.id().clone(),
-                Participant {
-                    id: i as u32,
-                    account_id: account.id().clone(),
-                    url: node.address.clone(),
-                },
-            )
-        })
-        .collect();
-    mpc_contract
-        .call("init")
-        .args_json(json!({
-            "threshold": 2,
-            "participants": participants
-        }))
-        .transact()
-        .await?
-        .into_result()?;
-
-    let rpc_client = near_fetch::Client::new(&sandbox.local_address);
-
-    f(MultichainTestContext {
-        worker,
-        rpc_client,
-        mpc_contract,
-        near_rpc: sandbox.address,
-    })
-    .await?;
+    let rpc_client = near_fetch::Client::new(&nodes.ctx().sandbox.local_address);
+    f(MultichainTestContext { nodes, rpc_client }).await?;
 
     Ok(())
 }
@@ -259,14 +185,14 @@ mod wait_for {
     use mpc_contract::ProtocolContractState;
     use mpc_contract::RunningContractState;
 
-    pub async fn running_mpc(
-        ctx: &MultichainTestContext,
+    pub async fn running_mpc<'a>(
+        ctx: &MultichainTestContext<'a>,
         epoch: u64,
     ) -> anyhow::Result<RunningContractState> {
         let is_running = || async {
             let state: ProtocolContractState = ctx
                 .rpc_client
-                .view(ctx.mpc_contract.id(), "state", ())
+                .view(ctx.nodes.ctx().mpc_contract.id(), "state", ())
                 .await?;
 
             match state {

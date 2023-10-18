@@ -12,6 +12,7 @@ use std::{
 use toml::Value;
 
 const EXECUTABLE: &str = "mpc-recovery";
+const EXECUTABLE_MULTICHAIN: &str = "mpc-recovery-node";
 
 pub async fn post<U, Req: Serialize, Resp>(
     uri: U,
@@ -235,20 +236,35 @@ pub fn target_dir() -> Option<PathBuf> {
     }
 }
 
-pub fn executable(release: bool) -> Option<PathBuf> {
+pub fn executable(release: bool, executable: &str) -> Option<PathBuf> {
     let executable = target_dir()?
         .join(if release { "release" } else { "debug" })
-        .join(EXECUTABLE);
+        .join(executable);
     Some(executable)
 }
 
 pub fn spawn_mpc(release: bool, node: &str, args: &[String]) -> anyhow::Result<Child> {
-    let executable = executable(release)
+    let executable = executable(release, EXECUTABLE)
         .with_context(|| format!("could not find target dir while starting {node} node"))?;
 
     Command::new(&executable)
         .args(args)
         .env("RUST_LOG", "mpc_recovery=INFO")
+        .envs(std::env::vars())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .kill_on_drop(true)
+        .spawn()
+        .with_context(|| format!("failed to run {node} node: {}", executable.display()))
+}
+
+pub fn spawn_mpc_multichain(release: bool, node: &str, args: &[String]) -> anyhow::Result<Child> {
+    let executable = executable(release, EXECUTABLE_MULTICHAIN)
+        .with_context(|| format!("could not find target dir while starting {node} node"))?;
+
+    Command::new(&executable)
+        .args(args)
+        .env("RUST_LOG", "mpc_recovery_node=INFO")
         .envs(std::env::vars())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())

@@ -34,8 +34,7 @@ use once_cell::sync::Lazy;
 use testcontainers::{
     clients::Cli,
     core::{ExecCommand, WaitFor},
-    images::generic::GenericImage,
-    Container, Image, RunnableImage,
+    Container, GenericImage, Image, RunnableImage,
 };
 use tokio::io::AsyncWriteExt;
 use tracing;
@@ -970,80 +969,5 @@ impl LeaderNodeApi {
             frp_public_key: client_pk.clone(),
         })
         .await
-    }
-}
-
-pub struct Node<'a> {
-    pub container: Container<'a, GenericImage>,
-    pub address: String,
-    pub local_address: String,
-}
-
-pub struct NodeApi {
-    pub address: String,
-    pub node_id: usize,
-    pub sk_share: ExpandedKeyPair,
-    pub cipher_key: GenericArray<u8, U32>,
-    pub gcp_project_id: String,
-    pub gcp_datastore_local_url: String,
-}
-
-impl<'a> Node<'a> {
-    // Container port used for the docker network, does not have to be unique
-    const CONTAINER_PORT: u16 = 3000;
-
-    pub async fn run(
-        docker_client: &'a DockerClient,
-        network: &str,
-        node_id: u64,
-        near_rpc: &str,
-        signer_account: &AccountId,
-        account: &AccountId,
-        account_sk: &near_workspaces::types::SecretKey,
-    ) -> anyhow::Result<Node<'a>> {
-        tracing::info!(node_id, "running node container");
-        let image: GenericImage = GenericImage::new("near/mpc-recovery-node", "latest")
-            .with_wait_for(WaitFor::Nothing)
-            .with_exposed_port(Self::CONTAINER_PORT)
-            .with_env_var("RUST_LOG", "mpc_recovery_node=DEBUG")
-            .with_env_var("RUST_BACKTRACE", "1");
-        let image: RunnableImage<GenericImage> = (
-            image,
-            vec![
-                "start".to_string(),
-                "--node-id".to_string(),
-                node_id.to_string(),
-                "--near-rpc".to_string(),
-                near_rpc.to_string(),
-                "--mpc-contract-id".to_string(),
-                signer_account.to_string(),
-                "--account".to_string(),
-                account.to_string(),
-                "--account-sk".to_string(),
-                account_sk.to_string(),
-                "--web-port".to_string(),
-                Self::CONTAINER_PORT.to_string(),
-            ],
-        )
-            .into();
-        let image = image.with_network(network);
-        let container = docker_client.cli.run(image);
-        let ip_address = docker_client
-            .get_network_ip_address(&container, network)
-            .await?;
-        let host_port = container.get_host_port_ipv4(Self::CONTAINER_PORT);
-
-        container.exec(ExecCommand {
-            cmd: format!("bash -c 'while [[ \"$(curl -s -o /dev/null -w ''%{{http_code}}'' localhost:{})\" != \"200\" ]]; do sleep 1; done'", Self::CONTAINER_PORT),
-            ready_conditions: vec![WaitFor::message_on_stdout("node is ready to accept connections")]
-        });
-
-        let full_address = format!("http://{ip_address}:{}", Self::CONTAINER_PORT);
-        tracing::info!(node_id, full_address, "node container is running");
-        Ok(Node {
-            container,
-            address: full_address,
-            local_address: format!("http://localhost:{host_port}"),
-        })
     }
 }
