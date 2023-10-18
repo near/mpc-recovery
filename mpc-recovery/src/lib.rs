@@ -14,7 +14,7 @@ use multi_party_eddsa::protocols::ExpandedKeyPair;
 use serde::de::DeserializeOwned;
 use tracing_subscriber::EnvFilter;
 
-use near_crypto::InMemorySigner;
+use near_crypto::{InMemorySigner, SecretKey};
 use near_fetch::signer::KeyRotatingSigner;
 use near_primitives::types::AccountId;
 
@@ -96,12 +96,11 @@ pub enum Cli {
         /// TEMPORARY - Account creator ed25519 secret keys
         #[arg(
             long,
-            value_parser,
-            value_delimiter = ',',
+            value_parser = parse_json_str::<Vec<SecretKey>>,
             env("MPC_RECOVERY_ACCOUNT_CREATOR_SK"),
             default_value("[]")
         )]
-        account_creator_sk: Vec<String>,
+        account_creator_sk: ::std::vec::Vec<SecretKey>,
         /// JSON list of related items to be used to verify OIDC tokens.
         #[arg(long, env("FAST_AUTH_PARTNERS"))]
         fast_auth_partners: Option<String>,
@@ -391,7 +390,7 @@ async fn load_account_creator(
     gcp_service: &GcpService,
     env: &str,
     account_creator_id: &AccountId,
-    account_creator_sk: Vec<String>,
+    account_creator_sk: Vec<SecretKey>,
 ) -> anyhow::Result<KeyRotatingSigner> {
     let sks = if account_creator_sk.is_empty() {
         let name = format!("mpc-recovery-account-creator-sk-{env}/versions/latest");
@@ -399,9 +398,6 @@ async fn load_account_creator(
         serde_json::from_str(std::str::from_utf8(&data)?)?
     } else {
         account_creator_sk
-            .into_iter()
-            .map(|sk| sk.parse())
-            .collect::<Result<Vec<_>, _>>()?
     };
 
     Ok(KeyRotatingSigner::from_signers(sks.into_iter().map(|sk| {
@@ -493,10 +489,9 @@ impl Cli {
                     buf.push("--sign-nodes".to_string());
                     buf.push(sign_node);
                 }
-                for sk in account_creator_sk {
-                    buf.push("--account-creator-sk".to_string());
-                    buf.push(sk.to_string());
-                }
+                let account_creator_sk = serde_json::to_string(&account_creator_sk).unwrap();
+                buf.push("--account-creator-sk".to_string());
+                buf.push(account_creator_sk);
                 buf.extend(logging_options.into_str_args());
 
                 buf
@@ -592,4 +587,11 @@ impl Cli {
             }
         }
     }
+}
+
+fn parse_json_str<T>(val: &str) -> Result<T, String>
+where
+    for<'a> T: serde::Deserialize<'a>,
+{
+    serde_json::from_str(val).map_err(|e| e.to_string())
 }
