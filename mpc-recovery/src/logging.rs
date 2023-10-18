@@ -1,3 +1,6 @@
+use opentelemetry::sdk::propagation::{
+    BaggagePropagator, TextMapCompositePropagator, TraceContextPropagator,
+};
 use opentelemetry::sdk::trace::{self, RandomIdGenerator, Sampler, Tracer};
 use opentelemetry::sdk::Resource;
 use opentelemetry::KeyValue;
@@ -83,20 +86,20 @@ impl Display for ColorOutput {
 pub struct Options {
     /// Enables export of span data using opentelemetry exporters.
     #[clap(long, value_enum, default_value = "off")]
-    opentelemetry: OpenTelemetryLevel,
+    pub opentelemetry: OpenTelemetryLevel,
 
     /// Opentelemetry gRPC collector endpoint.
     #[clap(long, default_value = "http://localhost:4317")]
-    otlp_endpoint: String,
+    pub otlp_endpoint: String,
 
     /// Whether the log needs to be colored.
     #[clap(long, value_enum, default_value = "auto")]
-    color: ColorOutput,
+    pub color: ColorOutput,
 
     /// Enable logging of spans. For instance, this prints timestamps of entering and exiting a span,
     /// together with the span duration and used/idle CPU time.
     #[clap(long)]
-    log_span_events: bool,
+    pub log_span_events: bool,
 }
 
 impl Options {
@@ -204,10 +207,16 @@ where
         )
         .install_batch(opentelemetry::runtime::Tokio)
         .unwrap();
+
+    init_propagator();
     let layer = tracing_opentelemetry::layer()
         .with_tracer(tracer)
         .with_filter(filter);
     (subscriber.with(layer), handle)
+}
+
+pub fn init_propagator() {
+    opentelemetry::global::set_text_map_propagator(TraceContextPropagator::new());
 }
 
 fn set_default_otlp_level(options: &Options) {

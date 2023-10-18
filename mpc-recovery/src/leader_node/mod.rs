@@ -26,17 +26,22 @@ use axum::{
     Extension, Json, Router,
 };
 use axum_extra::extract::WithRejection;
+use axum_tracing_opentelemetry;
+use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 use borsh::BorshDeserialize;
 use curv::elliptic::curves::{Ed25519, Point};
 use near_crypto::SecretKey;
 use near_primitives::delegate_action::{DelegateAction, NonDelegateAction};
 use near_primitives::transaction::{Action, DeleteKeyAction};
 use near_primitives::types::AccountId;
+use opentelemetry::trace::TraceContextExt;
 use prometheus::{Encoder, TextEncoder};
 use rand::{distributions::Alphanumeric, Rng};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Instant;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
+use tracing_opentelemetry_instrumentation_sdk::{find_current_context, find_current_trace_id};
 
 pub struct Config {
     pub env: String,
@@ -140,7 +145,11 @@ pub async fn run(config: Config) {
         .route("/metrics", get(metrics))
         .route_layer(middleware::from_fn(track_metrics))
         .layer(Extension(state))
-        .layer(cors_layer);
+        .layer(cors_layer)
+        // Include trace context as header into the response
+        .layer(OtelInResponseLayer::default())
+        // Start OpenTelemetry trace on incoming request
+        .layer(OtelAxumLayer::default());
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::debug!(?addr, "starting http server");
@@ -227,6 +236,16 @@ async fn mpc_public_key(
     Extension(state): Extension<Arc<LeaderState>>,
     WithRejection(Json(_), _): WithRejection<Json<MpcPkRequest>, MpcError>,
 ) -> (StatusCode, Json<MpcPkResponse>) {
+    let ctx = find_current_context();
+    let span = ctx.span();
+    let span_context = span.span_context();
+    println!(
+        "valid: {}, trace_id: {:?}, parent_id: {}",
+        span_context.is_valid(),
+        find_current_trace_id(),
+        span_context.span_id()
+    );
+
     // Getting MPC PK from sign nodes
     let pk_set = match gather_sign_node_pk_shares(&state).await {
         Ok(pk_set) => pk_set,

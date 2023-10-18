@@ -7,7 +7,7 @@ use multi_party_eddsa::protocols::ExpandedKeyPair;
 
 use crate::env::{LeaderNodeApi, SignerNodeApi};
 use crate::util;
-use mpc_recovery::logging;
+use mpc_recovery::logging::{self, OpenTelemetryLevel};
 
 pub struct SignerNode {
     pub address: String,
@@ -50,7 +50,11 @@ impl SignerNode {
             gcp_project_id: ctx.gcp_project_id.clone(),
             gcp_datastore_url: Some(ctx.datastore.local_address.clone()),
             jwt_signature_pk_url: ctx.oidc_provider.jwt_pk_local_url.clone(),
-            logging_options: logging::Options::default(),
+            logging_options: logging::Options {
+                opentelemetry: OpenTelemetryLevel::INFO,
+                otlp_endpoint: "http://172.18.0.2:4317".to_string(),
+                ..Default::default()
+            },
         }
         .into_str_args();
 
@@ -128,7 +132,11 @@ impl LeaderNode {
             gcp_project_id: ctx.gcp_project_id.clone(),
             gcp_datastore_url: Some(ctx.datastore.local_address.clone()),
             jwt_signature_pk_url: ctx.oidc_provider.jwt_pk_local_url.clone(),
-            logging_options: logging::Options::default(),
+            logging_options: logging::Options {
+                opentelemetry: OpenTelemetryLevel::INFO,
+                otlp_endpoint: "http://172.18.0.2:4317".to_string(),
+                ..Default::default()
+            },
         }
         .into_str_args();
 
