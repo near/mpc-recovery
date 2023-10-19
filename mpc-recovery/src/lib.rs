@@ -93,7 +93,7 @@ pub enum Cli {
         /// Account creator ID
         #[arg(long, env("MPC_RECOVERY_ACCOUNT_CREATOR_ID"))]
         account_creator_id: AccountId,
-        /// TEMPORARY - Account creator ed25519 secret keys
+        /// Account creator's secret key(s)
         #[arg(
             long,
             value_parser = parse_json_str::<Vec<SecretKey>>,
