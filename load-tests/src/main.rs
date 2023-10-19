@@ -57,12 +57,28 @@ async fn main() -> Result<(), GooseError> {
                 ),
         )
         .register_scenario(
-            scenario!("simpleMpcPublicKey").register_transaction(transaction!(mpc_public_key)),
-        )
-        .register_scenario(
             scenario!("simpleClaimOidc")
                 .register_transaction(transaction!(prepare_user_credentials).set_sequence(1))
-                .register_transaction(transaction!(claim_oidc).set_sequence(2)),
+                .register_transaction(
+                    transaction!(claim_oidc)
+                        .set_sequence(2)
+                        .set_weight(100)
+                        .expect("Failed to set weight"),
+                ),
+        )
+        .register_scenario(
+            scenario!("simpleUserCredentials")
+                .register_transaction(transaction!(prepare_user_credentials).set_sequence(1))
+                .register_transaction(transaction!(claim_oidc).set_sequence(2))
+                .register_transaction(
+                    transaction!(user_credentials)
+                        .set_sequence(3)
+                        .set_weight(100)
+                        .expect("Failed to set weight"),
+                ),
+        )
+        .register_scenario(
+            scenario!("simpleMpcPublicKey").register_transaction(transaction!(mpc_public_key)),
         )
         .execute()
         .await?;
@@ -176,6 +192,7 @@ async fn user_credentials(user: &mut GooseUser) -> TransactionResult {
 }
 
 async fn mpc_public_key(user: &mut GooseUser) -> TransactionResult {
+    info!("mpc_public_key");
     let body_json = serde_json::to_string(&MpcPkRequest {}).expect("json serialization failed");
     build_send_and_check_request(user, "mpc_public_key", &body_json).await
 }
@@ -253,8 +270,8 @@ async fn sign(user: &mut GooseUser) -> TransactionResult {
     let new_secret_key = SecretKey::from_random(near_crypto::KeyType::ED25519);
     let new_public_key = new_secret_key.public_key();
 
-    let nonce = 0; // TODO: get nonce from near node
-    let block_height = 0; // TODO: get block height from near node
+    let nonce = 0; // Set real nonce in case transaction is entend to be executed
+    let block_height = 0; // Set real block height in case transaction is entend to be executed
 
     let add_key_delegate_action = DelegateAction {
         sender_id: account_id.clone(),
