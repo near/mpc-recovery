@@ -5,7 +5,7 @@ This directory contains load tests for the MPC Recovery service. It is build usi
 To run the tests, you need to have Rust installed. You can install Rust using [rustup](https://rustup.rs/).
 To start the tests, run the following command:
 ```bash
-cargo run --release -- --host <host> --report-file=load_test_results.html --test-plan "$(cat ./test_plans/short.txt)" --scenarios simplempcpublickey
+RUST_LOG=info cargo run --release -- --host <host> --report-file=load_test_results.html --test-plan "$(cat ./test_plans/short.txt)" --scenarios simpleMpcPublicKey
 ```
 You can run Load Tests against your local development environment (check `/integration-tests` for more info) or against the staging environment by setting the `--host` parameter.
 

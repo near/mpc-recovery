@@ -109,7 +109,7 @@ async fn prepare_user_credentials(user: &mut GooseUser) -> TransactionResult {
 
     let near_account_id: AccountId = format!("acc-{}.near", account_id_rand.to_lowercase())
         .try_into()
-        .unwrap();
+        .expect("Failed to generate random account Id");
 
     let session = UserSession {
         jwt_token: oidc_token,
@@ -137,10 +137,10 @@ async fn user_credentials(user: &mut GooseUser) -> TransactionResult {
     let near_account_id = sesion.near_account_id.clone();
 
     let user_credentials_request_digest =
-        user_credentials_request_digest(&oidc_token, &fa_pk).unwrap();
+        user_credentials_request_digest(&oidc_token, &fa_pk).expect("Failed to create digest");
 
     let user_credentials_frp_signature =
-        sign_digest(&user_credentials_request_digest, &fa_sk).unwrap();
+        sign_digest(&user_credentials_request_digest, &fa_sk).expect("Failed to sign digest");
 
     let user_credentials_request = UserCredentialsRequest {
         oidc_token: oidc_token.clone(),
@@ -206,8 +206,10 @@ async fn claim_oidc(user: &mut GooseUser) -> TransactionResult {
     let frp_secret_key = sesion.fa_sk.clone();
     let frp_public_key = frp_secret_key.public_key();
 
-    let request_digest = claim_oidc_request_digest(&oidc_token_hash, &frp_public_key).unwrap();
-    let frp_signature = sign_digest(&request_digest, &frp_secret_key).unwrap();
+    let request_digest = claim_oidc_request_digest(&oidc_token_hash, &frp_public_key)
+        .expect("Failed to create digest");
+    let frp_signature =
+        sign_digest(&request_digest, &frp_secret_key).expect("Failed to sign digest");
 
     let claim_oidc_request = ClaimOidcRequest {
         oidc_token_hash: oidc_token_hash.to_owned(),
@@ -236,10 +238,12 @@ async fn new_account(user: &mut GooseUser) -> TransactionResult {
     };
 
     let user_credentials_request_digest =
-        user_credentials_request_digest(&oidc_token, &fa_public_key).unwrap();
+        user_credentials_request_digest(&oidc_token, &fa_public_key)
+            .expect("Failed to create digest");
 
     let user_credentials_frp_signature =
-        sign_digest(&user_credentials_request_digest, &fa_secret_key).unwrap();
+        sign_digest(&user_credentials_request_digest, &fa_secret_key)
+            .expect("Failed to sign digest");
 
     let new_account_request = NewAccountRequest {
         near_account_id: user_account_id,
@@ -291,16 +295,22 @@ async fn sign(user: &mut GooseUser) -> TransactionResult {
     };
 
     let sign_request_digest =
-        sign_request_digest(&add_key_delegate_action, &oidc_token, &fa_public_key).unwrap();
-    let sign_request_frp_signature = sign_digest(&sign_request_digest, &fa_secret_key).unwrap();
+        sign_request_digest(&add_key_delegate_action, &oidc_token, &fa_public_key)
+            .expect("Failed to create digest");
+    let sign_request_frp_signature =
+        sign_digest(&sign_request_digest, &fa_secret_key).expect("Failed to sign digest");
 
     let user_credentials_request_digest =
-        user_credentials_request_digest(&oidc_token, &fa_public_key).unwrap();
+        user_credentials_request_digest(&oidc_token, &fa_public_key)
+            .expect("Failed to create digest");
     let user_credentials_frp_signature =
-        sign_digest(&user_credentials_request_digest, &fa_secret_key).unwrap();
+        sign_digest(&user_credentials_request_digest, &fa_secret_key)
+            .expect("Failed to sign digest");
 
     let sign_request = SignRequest {
-        delegate_action: add_key_delegate_action.try_to_vec().unwrap(),
+        delegate_action: add_key_delegate_action
+            .try_to_vec()
+            .expect("Failed to serialize delegate action"),
         oidc_token,
         frp_signature: sign_request_frp_signature,
         user_credentials_frp_signature,
