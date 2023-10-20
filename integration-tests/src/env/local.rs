@@ -5,7 +5,8 @@ use mpc_recovery::relayer::NearRpcAndRelayerClient;
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 
 use crate::env::{LeaderNodeApi, SignerNodeApi};
-use crate::util::{self, NodeProcess};
+use crate::mpc::{self, NodeProcess};
+use crate::util;
 use mpc_recovery::logging;
 
 pub struct SignerNode {
@@ -52,7 +53,7 @@ impl SignerNode {
         };
 
         let sign_node_id = format!("sign-{node_id}");
-        let process = util::spawn_mpc(ctx.release, &sign_node_id, args).await?;
+        let process = mpc::spawn(ctx.release, &sign_node_id, args).await?;
         let address = format!("http://127.0.0.1:{web_port}");
         tracing::info!("Signer node is starting at {}", address);
         util::ping_until_ok(&address, 60).await?;
@@ -127,7 +128,7 @@ impl LeaderNode {
             logging_options: logging::Options::default(),
         };
 
-        let process = util::spawn_mpc(ctx.release, "leader", args).await?;
+        let process = mpc::spawn(ctx.release, "leader", args).await?;
         let address = format!("http://127.0.0.1:{web_port}");
         tracing::info!("Leader node container is starting at {}", address);
         util::ping_until_ok(&address, 60).await?;
