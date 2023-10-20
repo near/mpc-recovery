@@ -38,6 +38,22 @@ Finally, run the integration tests with the built docker image:
 cargo test -p mpc-recovery-integration-tests --features docker-test
 ```
 
+## Profiling: Flamegraphs
+
+To profile code and get a flamegraph, run the following:
+
+```sh
+cargo flamegraph --root --profile flamegraph --test lib
+```
+
+Or for a singular test like `test_basic_action`:
+
+```sh
+cargo flamegraph --root --profile flamegraph --test lib -- test_basic_action
+```
+
+This will generate a `flamegraph.svg`. Open this on a browser and inspect each of the callstacks.
+
 ## FAQ
 
 ### I want to run a test, but keep the docker containers from being destroyed
