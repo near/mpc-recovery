@@ -10,25 +10,26 @@ anyhow = { version = "1.0", features = ["backtrace"] }
 async-process = "1"
 bollard = "0.11"
 clap = { version = "4.2", features = ["derive", "env"] }
-curv = { package = "curv-kzen", version = "0.9", default-features = false }
+curv = { package = "curv-kzen", version = "0.9" }
 ed25519-dalek = { version = "1.0.1", features = ["serde"] }
 futures = "0.3"
 hex = "0.4.3"
 hyper = { version = "0.14", features = ["full"] }
-mpc-recovery = { path = "../mpc-recovery" }
+mpc-recovery = { path = "../mpc-recovery", default-features = false }
 multi-party-eddsa = { git = "https://github.com/DavidM-D/multi-party-eddsa.git", rev = "25ae4fdc5ff7819ae70e73ab4afacf1c24fc4da1" }
 tracing = "0.1"
 near-crypto = "0.17"
 near-jsonrpc-client = "0.6"
 near-primitives = "0.17"
 near-units = "0.2.0"
+nix = { version = "0.27", features = ["signal"] }
 once_cell = "1"
 serde = "1"
 serde_json = "1"
 testcontainers = { version = "0.14", features = ["experimental"] }
 tokio = { version = "1.28", features = ["full"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-near-workspaces =  "0.8.0"
+near-workspaces = "0.8.0"
 toml = "0.8.1"
 
 [dev-dependencies]
@@ -43,3 +44,4 @@ reqwest = "0.11.16"
 [features]
 default = []
 docker-test = []
+flamegraph = ["mpc-recovery/disable-open-telemetry"]

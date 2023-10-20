@@ -60,10 +60,6 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build MPC Recovery Binary Locally
-        run: |
-          cargo build -p mpc-recovery --release
-
       - name: Test
         run: cargo test -p mpc-recovery-integration-tests --jobs 1 -- --test-threads 1
         env:

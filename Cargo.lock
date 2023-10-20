@@ -2948,6 +2948,7 @@ dependencies = [
  "near-primitives 0.17.0",
  "near-units",
  "near-workspaces",
+ "nix",
  "once_cell",
  "rand 0.7.3",
  "rand 0.8.5",

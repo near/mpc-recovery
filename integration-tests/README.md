@@ -16,12 +16,6 @@ Build OIDC Provider test image
 docker build -t near/test-oidc-provider ./test-oidc-provider
 ```
 
-Now, build mpc-recovery from the project's root:
-
-```BASH
-cargo build --release
-```
-
 Then run the integration tests:
 
 ```BASH

@@ -58,3 +58,7 @@ sha2 = "0.9.9"
 
 [dev-dependencies]
 rsa = "0.8.2"
+
+[features]
+default = []
+disable-open-telemetry = []

@@ -304,3 +304,26 @@ pub async fn default_subscriber_with_opentelemetry(
         writer_guard: Some(writer_guard),
     }
 }
+
+pub enum FeatureGuard<S> {
+    Noop,
+    Default(DefaultSubscriberGuard<S>),
+}
+
+pub async fn subscribe_global(
+    env_filter: EnvFilter,
+    options: &Options,
+    env: String,
+    node_id: String,
+) -> FeatureGuard<impl tracing::Subscriber + Send + Sync> {
+    if cfg!(feature = "disable-open-telemetry") {
+        FeatureGuard::Noop
+    } else {
+        let subscriber_guard =
+            default_subscriber_with_opentelemetry(env_filter, options, env, node_id)
+                .await
+                .global();
+
+        FeatureGuard::Default(subscriber_guard)
+    }
+}
