@@ -14,6 +14,8 @@ use multi_party_eddsa::protocols::ExpandedKeyPair;
 use serde::de::DeserializeOwned;
 use tracing_subscriber::EnvFilter;
 
+use near_crypto::{InMemorySigner, SecretKey};
+use near_fetch::signer::KeyRotatingSigner;
 use near_primitives::types::AccountId;
 
 use crate::firewall::allowed::{OidcProviderList, PartnerList};
@@ -91,9 +93,14 @@ pub enum Cli {
         /// Account creator ID
         #[arg(long, env("MPC_RECOVERY_ACCOUNT_CREATOR_ID"))]
         account_creator_id: AccountId,
-        /// TEMPORARY - Account creator ed25519 secret key
-        #[arg(long, env("MPC_RECOVERY_ACCOUNT_CREATOR_SK"))]
-        account_creator_sk: Option<String>,
+        /// Account creator's secret key(s)
+        #[arg(
+            long,
+            value_parser = parse_json_str::<Vec<SecretKey>>,
+            env("MPC_RECOVERY_ACCOUNT_CREATOR_SK"),
+            default_value("[]")
+        )]
+        account_creator_sk: ::std::vec::Vec<SecretKey>,
         /// JSON list of related items to be used to verify OIDC tokens.
         #[arg(long, env("FAST_AUTH_PARTNERS"))]
         fast_auth_partners: Option<String>,
@@ -214,14 +221,13 @@ pub async fn run(cmd: Cli) -> anyhow::Result<()> {
             .await;
             let gcp_service =
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
-            let account_creator_sk =
-                load_account_creator_sk(&gcp_service, &env, account_creator_sk).await?;
+            let account_creator_signer =
+                load_account_creator(&gcp_service, &env, &account_creator_id, account_creator_sk)
+                    .await?;
             let partners = PartnerList {
                 entries: load_entries(&gcp_service, &env, "leader", partners, partners_filepath)
                     .await?,
             };
-
-            let account_creator_sk = account_creator_sk.parse()?;
 
             let config = LeaderConfig {
                 env,
@@ -231,7 +237,7 @@ pub async fn run(cmd: Cli) -> anyhow::Result<()> {
                 near_root_account,
                 // TODO: Create such an account for testnet and mainnet in a secure way
                 account_creator_id,
-                account_creator_sk,
+                account_creator_signer,
                 partners,
                 jwt_signature_pk_url,
             };
@@ -377,18 +383,23 @@ async fn load_cipher_key(
     }
 }
 
-async fn load_account_creator_sk(
+async fn load_account_creator(
     gcp_service: &GcpService,
     env: &str,
-    account_creator_sk_arg: Option<String>,
-) -> anyhow::Result<String> {
-    match account_creator_sk_arg {
-        Some(account_creator_sk) => Ok(account_creator_sk),
-        None => {
-            let name = format!("mpc-recovery-account-creator-sk-{env}/versions/latest");
-            Ok(std::str::from_utf8(&gcp_service.load_secret(name).await?)?.to_string())
-        }
-    }
+    account_creator_id: &AccountId,
+    account_creator_sk: Vec<SecretKey>,
+) -> anyhow::Result<KeyRotatingSigner> {
+    let sks = if account_creator_sk.is_empty() {
+        let name = format!("mpc-recovery-account-creator-sk-{env}/versions/latest");
+        let data = gcp_service.load_secret(name).await?;
+        serde_json::from_str(std::str::from_utf8(&data)?)?
+    } else {
+        account_creator_sk
+    };
+
+    Ok(KeyRotatingSigner::from_signers(sks.into_iter().map(|sk| {
+        InMemorySigner::from_secret_key(account_creator_id.clone(), sk)
+    })))
 }
 
 async fn load_entries<T>(
@@ -459,10 +470,6 @@ impl Cli {
                     jwt_signature_pk_url,
                 ];
 
-                if let Some(key) = account_creator_sk {
-                    buf.push("--account-creator-sk".to_string());
-                    buf.push(key);
-                }
                 if let Some(partners) = fast_auth_partners {
                     buf.push("--fast-auth-partners".to_string());
                     buf.push(partners);
@@ -479,6 +486,9 @@ impl Cli {
                     buf.push("--sign-nodes".to_string());
                     buf.push(sign_node);
                 }
+                let account_creator_sk = serde_json::to_string(&account_creator_sk).unwrap();
+                buf.push("--account-creator-sk".to_string());
+                buf.push(account_creator_sk);
                 buf.extend(logging_options.into_str_args());
 
                 buf
@@ -574,4 +584,11 @@ impl Cli {
             }
         }
     }
+}
+
+fn parse_json_str<T>(val: &str) -> Result<T, String>
+where
+    for<'a> T: serde::Deserialize<'a>,
+{
+    serde_json::from_str(val).map_err(|e| e.to_string())
 }

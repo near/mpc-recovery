@@ -2,6 +2,7 @@ use crate::error::{AggregateSigningError, LeaderNodeError};
 use crate::msg::{SignNodeRequest, SignShareNodeRequest};
 use crate::sign_node::aggregate_signer::{Reveal, SignedCommitment};
 use crate::sign_node::oidc::OidcToken;
+
 use anyhow::Context;
 use curv::elliptic::curves::{Ed25519, Point};
 use ed25519_dalek::Signature;
@@ -9,14 +10,15 @@ use futures::{future, FutureExt};
 use hyper::StatusCode;
 use multi_party_eddsa::protocols::aggsig::KeyAgg;
 use multi_party_eddsa::protocols::{self, aggsig};
-use near_crypto::{InMemorySigner, PublicKey, SecretKey};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+
+use near_crypto::{InMemorySigner, PublicKey};
 use near_primitives::delegate_action::{DelegateAction, NonDelegateAction, SignedDelegateAction};
 use near_primitives::signable_message::{SignableMessage, SignableMessageType};
 use near_primitives::transaction::{Action, FunctionCallAction};
 use near_primitives::types::{AccountId, Nonce};
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CreateAccountOptions {
@@ -46,15 +48,14 @@ pub struct LimitedAccessKey {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn get_create_account_delegate_action(
-    signer_id: &AccountId,
-    signer_pk: &PublicKey,
+pub fn new_create_account_delegate_action(
+    signer: &InMemorySigner,
     new_account_id: &AccountId,
-    new_account_options: CreateAccountOptions,
+    new_account_options: &CreateAccountOptions,
     near_root_account: &AccountId,
     nonce: Nonce,
     max_block_height: u64,
-) -> anyhow::Result<DelegateAction> {
+) -> anyhow::Result<SignedDelegateAction> {
     let create_acc_action = Action::FunctionCall(FunctionCallAction {
         method_name: "create_account_advanced".to_string(),
         args: json!({
@@ -70,31 +71,22 @@ pub fn get_create_account_delegate_action(
     let delegate_create_acc_action = NonDelegateAction::try_from(create_acc_action)?;
 
     let delegate_action = DelegateAction {
-        sender_id: signer_id.clone(),
+        sender_id: signer.account_id.clone(),
         receiver_id: near_root_account.clone(),
         actions: vec![delegate_create_acc_action],
         nonce,
         max_block_height,
-        public_key: signer_pk.clone(),
+        public_key: signer.public_key.clone(),
     };
 
-    Ok(delegate_action)
-}
-
-pub fn get_local_signed_delegated_action(
-    delegate_action: DelegateAction,
-    signer_id: AccountId,
-    signer_sk: SecretKey,
-) -> SignedDelegateAction {
-    let signer = InMemorySigner::from_secret_key(signer_id, signer_sk);
     let signable_message =
         SignableMessage::new(&delegate_action, SignableMessageType::DelegateAction);
-    let signature = signable_message.sign(&signer);
+    let signature = signable_message.sign(signer);
 
-    SignedDelegateAction {
+    Ok(SignedDelegateAction {
         delegate_action,
         signature,
-    }
+    })
 }
 
 pub async fn get_mpc_signature(

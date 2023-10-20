@@ -63,7 +63,6 @@ fn validate_jwt(
     }
 
     tracing::info!(
-        oidc_token = format!("{:.5}...", token),
         issuer = issuer,
         audience = audience,
         "validate_jwt call decoded"
