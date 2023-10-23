@@ -2,12 +2,12 @@ use aes_gcm::aead::consts::U32;
 use aes_gcm::aead::generic_array::GenericArray;
 use async_process::Child;
 use mpc_recovery::firewall::allowed::DelegateActionRelayer;
+use mpc_recovery::logging;
 use mpc_recovery::relayer::NearRpcAndRelayerClient;
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 
 use crate::env::{LeaderNodeApi, SignerNodeApi};
 use crate::util;
-use mpc_recovery::logging;
 
 pub struct SignerNode {
     pub address: String,
@@ -98,7 +98,12 @@ impl LeaderNode {
             near_rpc: ctx.relayer_ctx.sandbox.local_address.clone(),
             near_root_account: ctx.relayer_ctx.worker.root_account()?.id().to_string(),
             account_creator_id: account_creator.id().clone(),
-            account_creator_sk: Some(account_creator.secret_key().to_string()),
+            account_creator_sk: ctx
+                .relayer_ctx
+                .creator_account_keys
+                .iter()
+                .map(|k| k.to_string().parse())
+                .collect::<Result<Vec<_>, _>>()?,
             fast_auth_partners_filepath: None,
             fast_auth_partners: Some(
                 serde_json::json!([

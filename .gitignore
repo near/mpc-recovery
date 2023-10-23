@@ -1,3 +1,4 @@
 /target
 .direnv
 .DS_Store
+tmp
