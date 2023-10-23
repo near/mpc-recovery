@@ -6,39 +6,52 @@ use self::msg::{
     CreateAccountAtomicRequest, RegisterAccountRequest, SendMetaTxRequest, SendMetaTxResponse,
 };
 use crate::firewall::allowed::DelegateActionRelayer;
-use crate::nar::{self, CachedAccessKeyNonces};
 use anyhow::Context;
 use hyper::{Body, Client, Method, Request};
 use near_crypto::PublicKey;
-use near_jsonrpc_client::JsonRpcClient;
+use near_jsonrpc_client::errors::{JsonRpcError, JsonRpcServerError};
+use near_jsonrpc_primitives::types::query::RpcQueryError;
 use near_primitives::hash::CryptoHash;
 use near_primitives::types::{AccountId, BlockHeight, Nonce};
 use near_primitives::views::FinalExecutionStatus;
 
 pub struct NearRpcAndRelayerClient {
-    rpc_client: JsonRpcClient,
-    cached_nonces: CachedAccessKeyNonces,
+    rpc_client: near_fetch::Client,
 }
 
 impl NearRpcAndRelayerClient {
     pub fn connect(near_rpc: &str) -> Self {
         Self {
-            rpc_client: JsonRpcClient::connect(near_rpc),
-            cached_nonces: Default::default(),
+            rpc_client: near_fetch::Client::new(near_rpc),
         }
     }
 
     pub async fn access_key(
         &self,
-        account_id: AccountId,
-        public_key: PublicKey,
+        account_id: &AccountId,
+        public_key: &PublicKey,
     ) -> Result<(CryptoHash, BlockHeight, Nonce), RelayerError> {
-        nar::fetch_tx_nonce(
-            &self.cached_nonces,
-            &self.rpc_client,
-            &(account_id, public_key),
-        )
-        .await
+        let (nonce, hash, height) = self
+            .rpc_client
+            .fetch_nonce(account_id, public_key)
+            .await
+            .map_err(|e| match e {
+                near_fetch::error::Error::RpcQueryError(JsonRpcError::ServerError(
+                    JsonRpcServerError::HandlerError(RpcQueryError::UnknownAccount {
+                        requested_account_id,
+                        ..
+                    }),
+                )) => RelayerError::UnknownAccount(requested_account_id),
+                near_fetch::error::Error::RpcQueryError(JsonRpcError::ServerError(
+                    JsonRpcServerError::HandlerError(RpcQueryError::UnknownAccessKey {
+                        public_key,
+                        ..
+                    }),
+                )) => RelayerError::UnknownAccessKey(public_key),
+                _ => anyhow::anyhow!(e).into(),
+            })?;
+
+        Ok((hash, height, nonce))
     }
 
     #[tracing::instrument(level = "debug", skip_all, fields(account_id = request.account_id.to_string()))]
@@ -188,7 +201,13 @@ impl NearRpcAndRelayerClient {
         cache_key: &(AccountId, PublicKey),
         err_str: &str,
     ) {
-        nar::invalidate_nonce_if_tx_failed(&self.cached_nonces, cache_key, err_str).await;
+        // InvalidNonce, cached nonce is potentially very far behind, so invalidate it.
+        if err_str.contains("InvalidNonce")
+            || err_str.contains("DelegateActionInvalidNonce")
+            || err_str.contains("must be larger than nonce of the used access key")
+        {
+            self.rpc_client.invalidate_cache(cache_key).await;
+        }
     }
 }
 
@@ -203,8 +222,8 @@ mod tests {
         let testnet = NearRpcAndRelayerClient::connect(TESTNET_URL);
         let (block_hash, block_height, nonce) = testnet
             .access_key(
-                "dev-1636354824855-78504059330123".parse()?,
-                "ed25519:8n5HXTibTDtXKAnEUPFUXXJoKqa5A1c2vWXt6LbRAcGn".parse()?,
+                &"dev-1636354824855-78504059330123".parse()?,
+                &"ed25519:8n5HXTibTDtXKAnEUPFUXXJoKqa5A1c2vWXt6LbRAcGn".parse()?,
             )
             .await?;
 

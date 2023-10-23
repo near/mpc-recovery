@@ -78,7 +78,19 @@ struct KeyFile {
 pub fn create_key_file(
     account_id: &AccountId,
     account_sk: &SecretKey,
-    key_path: &str,
+    key_dir: &str,
+) -> anyhow::Result<(), anyhow::Error> {
+    create_key_file_with_filepath(
+        account_id,
+        account_sk,
+        &format!("{key_dir}/{account_id}.json"),
+    )
+}
+
+pub fn create_key_file_with_filepath(
+    account_id: &AccountId,
+    account_sk: &SecretKey,
+    filepath: &str,
 ) -> anyhow::Result<(), anyhow::Error> {
     let key_file = KeyFile {
         account_id: account_id.to_string(),
@@ -86,9 +98,7 @@ pub fn create_key_file(
         private_key: account_sk.to_string(),
     };
     let key_json_str = serde_json::to_string(&key_file).expect("Failed to serialize to JSON");
-    let key_json_file_path = format!("{key_path}/{account_id}.json");
-    let mut json_key_file =
-        File::create(key_json_file_path).expect("Failed to create JSON key file");
+    let mut json_key_file = File::create(filepath).expect("Failed to create JSON key file");
     json_key_file
         .write_all(key_json_str.as_bytes())
         .expect("Failed to write to JSON key file");

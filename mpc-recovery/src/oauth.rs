@@ -62,7 +62,6 @@ fn validate_jwt(
     }
 
     tracing::info!(
-        oidc_token = format!("{:.5}...", token),
         issuer = issuer,
         audience = audience,
         "validate_jwt call decoded"
@@ -101,9 +100,7 @@ pub async fn get_pagoda_firebase_public_keys(
 ) -> anyhow::Result<Vec<String>> {
     let response = client.get(jwt_signature_pk_url).send().await?;
     let json: HashMap<String, String> = response.json().await?;
-    let keys: Vec<String> = json.values().cloned().collect();
-    tracing::info!("get_pagoda_firebase_public_keys keys: {:?}", keys);
-    Ok(keys)
+    Ok(json.into_values().collect())
 }
 
 #[cfg(test)]

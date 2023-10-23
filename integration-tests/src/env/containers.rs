@@ -8,6 +8,7 @@ use ed25519_dalek::{PublicKey as PublicKeyEd25519, Verifier};
 use futures::{lock::Mutex, StreamExt};
 use hyper::StatusCode;
 use mpc_recovery::firewall::allowed::DelegateActionRelayer;
+use mpc_recovery::logging;
 use mpc_recovery::sign_node::oidc::OidcToken;
 use mpc_recovery::{
     msg::{
@@ -42,8 +43,9 @@ use tracing;
 use std::fs;
 
 use crate::env::{Context, LeaderNodeApi, SignerNodeApi};
-use crate::util::{self, create_key_file, create_relayer_cofig_file};
-use mpc_recovery::logging;
+use crate::util::{
+    self, create_key_file, create_key_file_with_filepath, create_relayer_cofig_file,
+};
 
 static NETWORK_MUTEX: Lazy<Mutex<i32>> = Lazy::new(|| Mutex::new(0));
 
@@ -296,7 +298,7 @@ impl<'a> Relayer<'a> {
         near_rpc: &str,
         redis_full_address: &str,
         relayer_account_id: &AccountId,
-        relayer_account_sk: &near_workspaces::types::SecretKey,
+        relayer_account_sks: &[near_workspaces::types::SecretKey],
         creator_account_id: &AccountId,
         social_db_id: &AccountId,
         social_account_id: &AccountId,
@@ -311,14 +313,20 @@ impl<'a> Relayer<'a> {
             .unwrap_or_else(|_| panic!("Failed to create {relayer_configs_path} directory"));
 
         // Create dir for keys
-        let keys_path = format!("{relayer_configs_path}/account_keys");
-        std::fs::create_dir_all(&keys_path).expect("Failed to create account_keys directory");
+        let key_dir = format!("{relayer_configs_path}/account_keys");
+        std::fs::create_dir_all(&key_dir).expect("Failed to create account_keys directory");
         let keys_absolute_path =
-            fs::canonicalize(&keys_path).expect("Failed to get absolute path for keys");
+            fs::canonicalize(&key_dir).expect("Failed to get absolute path for keys");
 
         // Create JSON key files
-        create_key_file(relayer_account_id, relayer_account_sk, &keys_path)?;
-        create_key_file(social_account_id, social_account_sk, &keys_path)?;
+        create_key_file(social_account_id, social_account_sk, &key_dir)?;
+        let mut relayer_keyfiles = Vec::with_capacity(relayer_account_sks.len());
+        for (i, relayer_sk) in relayer_account_sks.iter().enumerate() {
+            let filename = format!("{i}-{relayer_account_id}");
+            let keypath = format!("{key_dir}/{filename}.json");
+            create_key_file_with_filepath(relayer_account_id, relayer_sk, &keypath)?;
+            relayer_keyfiles.push(format!("./account_keys/{filename}.json"));
+        }
 
         // Create relayer config file
         let config_file_name = "config.toml";
@@ -327,7 +335,7 @@ impl<'a> Relayer<'a> {
                 ip_address: [0, 0, 0, 0],
                 port: Self::CONTAINER_PORT,
                 relayer_account_id: relayer_account_id.clone(),
-                keys_filenames: vec![format!("./account_keys/{}.json", relayer_account_id)],
+                keys_filenames: relayer_keyfiles,
                 shared_storage_account_id: social_account_id.clone(),
                 shared_storage_keys_filename: format!("./account_keys/{}.json", social_account_id),
                 whitelisted_contracts: vec![creator_account_id.clone()],
@@ -642,7 +650,12 @@ impl<'a> LeaderNode<'a> {
             near_rpc: ctx.relayer_ctx.sandbox.address.clone(),
             near_root_account: ctx.relayer_ctx.worker.root_account()?.id().to_string(),
             account_creator_id: account_creator.id().clone(),
-            account_creator_sk: Some(account_creator.secret_key().to_string()),
+            account_creator_sk: ctx
+                .relayer_ctx
+                .creator_account_keys
+                .iter()
+                .map(|k| k.to_string().parse())
+                .collect::<Result<Vec<_>, _>>()?,
             fast_auth_partners: Some(
                 serde_json::json!([
                     {
@@ -764,7 +777,7 @@ impl LeaderNodeApi {
 
         let frp_signature = match user_secret_key.sign(&user_credentials_request_digest) {
             near_crypto::Signature::ED25519(k) => k,
-            _ => return Err(anyhow::anyhow!("Wrong signature type")),
+            _ => anyhow::bail!("Wrong signature type"),
         };
 
         let new_account_request = NewAccountRequest {
@@ -772,7 +785,7 @@ impl LeaderNodeApi {
             create_account_options,
             oidc_token: oidc_token.clone(),
             user_credentials_frp_signature: frp_signature,
-            frp_public_key: user_pk.clone(),
+            frp_public_key: user_pk,
         };
 
         self.new_account(new_account_request).await
@@ -788,10 +801,7 @@ impl LeaderNodeApi {
         frp_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
-        let (_, block_height, nonce) = self
-            .client
-            .access_key(account_id.clone(), recovery_pk.clone())
-            .await?;
+        let (_, block_height, nonce) = self.client.access_key(account_id, recovery_pk).await?;
 
         let add_key_delegate_action = DelegateAction {
             sender_id: account_id.clone(),
@@ -845,10 +855,7 @@ impl LeaderNodeApi {
         frp_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
-        let (_, block_height, nonce) = self
-            .client
-            .access_key(account_id.clone(), recovery_pk.clone())
-            .await?;
+        let (_, block_height, nonce) = self.client.access_key(account_id, recovery_pk).await?;
 
         let delete_key_delegate_action = DelegateAction {
             sender_id: account_id.clone(),
