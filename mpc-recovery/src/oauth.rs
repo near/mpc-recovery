@@ -11,7 +11,7 @@ use crate::sign_node::oidc::OidcToken;
 // Firebase: https://firebase.google.com/docs/auth/admin/verify-id-tokens#verify_id_tokens_using_a_third-party_jwt_library
 pub async fn verify_oidc_token(
     token: &OidcToken,
-    oidc_providers: &OidcProviderList,
+    oidc_providers: Option<&OidcProviderList>,
     client: &reqwest::Client,
     jwt_signature_pk_url: &str,
 ) -> anyhow::Result<IdTokenClaims> {
@@ -41,7 +41,7 @@ pub async fn verify_oidc_token(
 fn validate_jwt(
     token: &OidcToken,
     public_key: &[u8],
-    oidc_providers: &OidcProviderList,
+    oidc_providers: Option<&OidcProviderList>,
 ) -> anyhow::Result<IdTokenClaims> {
     tracing::info!(
         oidc_token = format!("{:.5}...", token),
@@ -57,8 +57,17 @@ fn validate_jwt(
         ..
     } = &claims;
 
-    if !oidc_providers.contains(issuer, audience) {
-        anyhow::bail!("UnauthorizedTokenIssuerOrAudience: iss={issuer}, aud={audience}");
+    match oidc_providers {
+        Some(oidc_providers) => {
+            if !oidc_providers.contains(issuer, audience) {
+                anyhow::bail!("UnauthorizedTokenIssuerOrAudience: iss={issuer}, aud={audience}");
+            }
+        }
+        None => {
+            // If no OIDC providers are specified in the allowlist, we allow any issuer and audience.
+            // Should be used in signing nodes only.
+            tracing::warn!("No OIDC providers found in the allowlist");
+        }
     }
 
     tracing::info!(
@@ -148,11 +157,11 @@ mod tests {
         };
 
         // Valid token and claims
-        validate_jwt(&token, &public_key_der, &oidc_providers).unwrap();
+        validate_jwt(&token, &public_key_der, Some(&oidc_providers)).unwrap();
 
         // Invalid public key
         let (invalid_public_key, _invalid_private_key) = get_rsa_pem_key_pair();
-        match validate_jwt(&token, &invalid_public_key, &oidc_providers) {
+        match validate_jwt(&token, &invalid_public_key, Some(&oidc_providers)) {
             Ok(_) => panic!("Token validation should fail"),
             Err(e) => assert_eq!(e.to_string(), "InvalidSignature"),
         }
@@ -172,9 +181,36 @@ mod tests {
             Ok(t) => OidcToken::new(t.as_str()),
             Err(e) => panic!("Failed to encode token: {}", e),
         };
-        match validate_jwt(&token, &public_key_der, &oidc_providers) {
+        match validate_jwt(&token, &public_key_der, Some(&oidc_providers)) {
             Ok(_) => panic!("Token validation should fail on invalid issuer or audience"),
             Err(e) => assert_eq!(e.to_string(), "UnauthorizedTokenIssuerOrAudience: iss=unauthorized_issuer, aud=unauthorized_audience", "{:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_validate_jwt_without_oidc() {
+        let (private_key_der, public_key_der): (Vec<u8>, Vec<u8>) = get_rsa_pem_key_pair();
+
+        let my_claims = IdTokenClaims {
+            iss: "test_issuer".to_string(),
+            sub: "test_subject".to_string(),
+            aud: "test_audience".to_string(),
+            exp: (Utc::now() + Duration::hours(1)).timestamp() as usize,
+        };
+
+        let token = match encode(
+            &Header::new(Algorithm::RS256),
+            &my_claims,
+            &EncodingKey::from_rsa_pem(&private_key_der).unwrap(),
+        ) {
+            Ok(t) => OidcToken::new(t.as_str()),
+            Err(e) => panic!("Failed to encode token: {}", e),
+        };
+
+        // Valid token and claims
+        match validate_jwt(&token, &public_key_der, None) {
+            Ok(_) => (),
+            Err(e) => panic!("Token validation should succeed: {}", e),
         }
     }
 

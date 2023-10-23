@@ -62,12 +62,6 @@ resource "google_secret_manager_secret_iam_member" "secret_share_secret_access" 
   member    = "serviceAccount:${google_service_account.service_account.email}"
 }
 
-resource "google_secret_manager_secret_iam_member" "oidc_providers_secret_access" {
-  secret_id = var.oidc_providers_secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.service_account.email}"
-}
-
 /*
  * Create a partner signer node
  */
@@ -85,7 +79,6 @@ module "signer" {
 
   cipher_key_secret_id     = var.cipher_key_secret_id
   sk_share_secret_id       = var.sk_share_secret_id
-  oidc_providers_secret_id = var.oidc_providers_secret_id
 
   jwt_signature_pk_url = var.jwt_signature_pk_url
 

@@ -322,7 +322,7 @@ async fn process_user_credentials(
 ) -> Result<UserCredentialsResponse, LeaderNodeError> {
     verify_oidc_token(
         &request.oidc_token,
-        &state.partners.oidc_providers(),
+        Some(&state.partners.oidc_providers()),
         &state.reqwest_client,
         &state.jwt_signature_pk_url,
     )
@@ -354,7 +354,7 @@ async fn process_new_account(
     let new_user_account_id = request.near_account_id;
     let oidc_token_claims = verify_oidc_token(
         &request.oidc_token,
-        &state.partners.oidc_providers(),
+        Some(&state.partners.oidc_providers()),
         &state.reqwest_client,
         &state.jwt_signature_pk_url,
     )
@@ -504,7 +504,7 @@ async fn process_sign(
     // Check OIDC token
     verify_oidc_token(
         &request.oidc_token,
-        &state.partners.oidc_providers(),
+        Some(&state.partners.oidc_providers()),
         &state.reqwest_client,
         &state.jwt_signature_pk_url,
     )

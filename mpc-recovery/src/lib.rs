@@ -262,16 +262,6 @@ pub async fn run(cmd: Cli) -> anyhow::Result<()> {
             .global();
             let gcp_service =
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
-            let oidc_providers = OidcProviderList {
-                entries: load_entries(
-                    &gcp_service,
-                    &env,
-                    node_id.to_string().as_str(),
-                    oidc_providers,
-                    oidc_providers_filepath,
-                )
-                .await?,
-            };
             let cipher_key = load_cipher_key(&gcp_service, &env, node_id, cipher_key).await?;
             let cipher_key = hex::decode(cipher_key)?;
             let cipher_key = GenericArray::<u8, U32>::clone_from_slice(&cipher_key);
@@ -288,7 +278,6 @@ pub async fn run(cmd: Cli) -> anyhow::Result<()> {
                 node_key: sk_share,
                 cipher,
                 port: web_port,
-                oidc_providers,
                 jwt_signature_pk_url,
             };
             run_sign_node(config).await;

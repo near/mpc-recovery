@@ -39,10 +39,6 @@ variable "account_creator_sk_secret_id" {
   type = string
 }
 
-variable "oidc_providers_secret_id" {
-  type = string
-}
-
 variable "fast_auth_partners_secret_id" {
   type = string
 }

@@ -2,7 +2,6 @@ use self::aggregate_signer::{NodeInfo, Reveal, SignedCommitment, SigningState};
 use self::oidc::OidcDigest;
 use self::user_credentials::EncryptedUserCredentials;
 use crate::error::{MpcError, SignNodeError};
-use crate::firewall::allowed::OidcProviderList;
 use crate::gcp::GcpService;
 use crate::msg::{AcceptNodePublicKeysRequest, PublicKeyNodeRequest, SignNodeRequest};
 use crate::oauth::verify_oidc_token;
@@ -42,7 +41,6 @@ pub struct Config {
     pub node_key: ExpandedKeyPair,
     pub cipher: Aes256Gcm,
     pub port: u16,
-    pub oidc_providers: OidcProviderList,
     pub jwt_signature_pk_url: String,
 }
 
@@ -54,7 +52,6 @@ pub async fn run(config: Config) {
         node_key,
         cipher,
         port,
-        oidc_providers,
         jwt_signature_pk_url,
     } = config;
     let our_index = usize::try_from(our_index).expect("This index is way to big");
@@ -71,7 +68,6 @@ pub async fn run(config: Config) {
         cipher,
         signing_state: SigningState::new(),
         node_info: NodeInfo::new(our_index, pk_set.map(|set| set.public_keys)),
-        oidc_providers,
         jwt_signature_pk_url,
     });
 
@@ -107,7 +103,6 @@ struct SignNodeState {
     cipher: Aes256Gcm,
     signing_state: SigningState,
     node_info: NodeInfo,
-    oidc_providers: OidcProviderList,
     jwt_signature_pk_url: String,
 }
 
@@ -218,7 +213,7 @@ async fn process_commit(
             // Check OIDC Token
             let oidc_token_claims = verify_oidc_token(
                 &request.oidc_token,
-                &state.oidc_providers,
+                None,
                 &state.reqwest_client,
                 &state.jwt_signature_pk_url,
             )
@@ -398,7 +393,7 @@ async fn process_public_key(
     // Check OIDC Token
     let oidc_token_claims = verify_oidc_token(
         &request.oidc_token,
-        &state.oidc_providers,
+        None,
         &state.reqwest_client,
         &state.jwt_signature_pk_url,
     )
