@@ -39,10 +39,10 @@ impl Nodes<'_> {
         tracing::info!(%account, "adding one more node");
         match self {
             Nodes::Local { ctx, nodes } => {
-                nodes.push(local::Node::run(&ctx, node_id, account, account_sk).await?)
+                nodes.push(local::Node::run(ctx, node_id, account, account_sk).await?)
             }
             Nodes::Docker { ctx, nodes } => {
-                nodes.push(containers::Node::run(&ctx, node_id, account, account_sk).await?)
+                nodes.push(containers::Node::run(ctx, node_id, account, account_sk).await?)
             }
         }
 
@@ -64,7 +64,7 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
     let docker_network = NETWORK;
     docker_client.create_network(docker_network).await?;
 
-    let SandboxCtx { sandbox, worker } = initialize_sandbox(&docker_client, NETWORK).await?;
+    let SandboxCtx { sandbox, worker } = initialize_sandbox(docker_client, NETWORK).await?;
 
     let mpc_contract = worker
         .dev_deploy(include_bytes!(

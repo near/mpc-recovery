@@ -71,6 +71,10 @@ jobs:
       - name: Compile Contract
         run: cargo build -p mpc-contract --target wasm32-unknown-unknown --release
 
+      - name: Build MPC Recovery Binary Locally
+        run: |
+          cargo build -p mpc-recovery-node --release
+
       - name: Test
         run: cargo test -p mpc-recovery-integration-tests multichain --jobs 1 -- --test-threads 1
         env:
