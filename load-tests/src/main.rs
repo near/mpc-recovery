@@ -3,9 +3,9 @@ mod primitives;
 pub mod utils;
 
 use core::panic;
-use log::info;
 use reqwest::{header::CONTENT_TYPE, Body};
 use std::{time::Duration, vec};
+use tracing_subscriber::{filter, prelude::*};
 
 use constants::VALID_OIDC_PROVIDER_KEY;
 use goose::prelude::*;
@@ -35,7 +35,12 @@ use utils::build_send_and_check_request;
 
 #[tokio::main]
 async fn main() -> Result<(), GooseError> {
-    env_logger::init();
+    let stdout_log = tracing_subscriber::fmt::layer().pretty();
+
+    tracing_subscriber::registry()
+        .with(stdout_log.with_filter(filter::LevelFilter::INFO))
+        .init();
+
     GooseAttack::initialize()?
         .register_scenario(
             scenario!("registration")
@@ -87,7 +92,7 @@ async fn main() -> Result<(), GooseError> {
 }
 
 async fn prepare_user_credentials(user: &mut GooseUser) -> TransactionResult {
-    info!("prepare_user_credentials");
+    tracing::info!("prepare_user_credentials");
     // Generate 2 key pairs
     let fa_sk = SecretKey::from_random(near_crypto::KeyType::ED25519);
     let la_sk = SecretKey::from_random(near_crypto::KeyType::ED25519);
@@ -125,7 +130,7 @@ async fn prepare_user_credentials(user: &mut GooseUser) -> TransactionResult {
 }
 
 async fn user_credentials(user: &mut GooseUser) -> TransactionResult {
-    info!("user_credentials");
+    tracing::info!("user_credentials");
     let sesion = user
         .get_session_data::<UserSession>()
         .expect("Session Data must be set");
@@ -172,7 +177,7 @@ async fn user_credentials(user: &mut GooseUser) -> TransactionResult {
         .expect("Failed to parse user credentials response");
 
     if let UserCredentialsResponse::Ok { recovery_pk } = user_credentials_response {
-        info!("UserCredentialsResponce has Ok, setting session data");
+        tracing::info!("UserCredentialsResponce has Ok, setting session data");
         let session = UserSession {
             jwt_token: oidc_token,
             near_account_id,
@@ -192,13 +197,13 @@ async fn user_credentials(user: &mut GooseUser) -> TransactionResult {
 }
 
 async fn mpc_public_key(user: &mut GooseUser) -> TransactionResult {
-    info!("mpc_public_key");
+    tracing::info!("mpc_public_key");
     let body_json = serde_json::to_string(&MpcPkRequest {}).expect("json serialization failed");
     build_send_and_check_request(user, "mpc_public_key", &body_json).await
 }
 
 async fn claim_oidc(user: &mut GooseUser) -> TransactionResult {
-    info!("claim_oidc");
+    tracing::info!("claim_oidc");
     let sesion = user
         .get_session_data::<UserSession>()
         .expect("Session Data must be set");
@@ -258,7 +263,7 @@ async fn new_account(user: &mut GooseUser) -> TransactionResult {
 }
 
 async fn sign(user: &mut GooseUser) -> TransactionResult {
-    info!("sign");
+    tracing::info!("sign");
     let session = user
         .get_session_data::<UserSession>()
         .expect("Session Data must be set");
