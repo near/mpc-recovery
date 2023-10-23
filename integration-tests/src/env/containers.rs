@@ -517,16 +517,6 @@ impl SignerNode<'_> {
             web_port: Self::CONTAINER_PORT,
             sk_share: Some(serde_json::to_string(&sk_share)?),
             cipher_key: Some(hex::encode(cipher_key)),
-            oidc_providers_filepath: None,
-            oidc_providers: Some(
-                serde_json::json!([
-                    {
-                        "issuer": ctx.issuer,
-                        "audience": ctx.audience_id,
-                    },
-                ])
-                .to_string(),
-            ),
             gcp_project_id: ctx.gcp_project_id.clone(),
             gcp_datastore_url: Some(ctx.datastore.address.clone()),
             jwt_signature_pk_url: ctx.oidc_provider.jwt_pk_url.clone(),

@@ -16,7 +16,7 @@ use tracing_subscriber::EnvFilter;
 
 use near_primitives::types::AccountId;
 
-use crate::firewall::allowed::{OidcProviderList, PartnerList};
+use crate::firewall::allowed::PartnerList;
 use crate::gcp::GcpService;
 use crate::sign_node::migration;
 
@@ -129,12 +129,6 @@ pub enum Cli {
         /// The web port for this server
         #[arg(long, env("MPC_RECOVERY_WEB_PORT"))]
         web_port: u16,
-        /// JSON list of related items to be used to verify OIDC tokens.
-        #[arg(long, env("OIDC_PROVIDERS"))]
-        oidc_providers: Option<String>,
-        /// Filepath to a JSON list of related items to be used to verify OIDC tokens.
-        #[arg(long, value_parser, env("OIDC_PROVIDERS_FILEPATH"))]
-        oidc_providers_filepath: Option<PathBuf>,
         /// GCP project ID
         #[arg(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
         gcp_project_id: String,
@@ -245,8 +239,6 @@ pub async fn run(cmd: Cli) -> anyhow::Result<()> {
             sk_share,
             cipher_key,
             web_port,
-            oidc_providers,
-            oidc_providers_filepath,
             gcp_project_id,
             gcp_datastore_url,
             jwt_signature_pk_url,
@@ -481,8 +473,6 @@ impl Cli {
                 web_port,
                 cipher_key,
                 sk_share,
-                oidc_providers,
-                oidc_providers_filepath,
                 gcp_project_id,
                 gcp_datastore_url,
                 jwt_signature_pk_url,
@@ -508,14 +498,6 @@ impl Cli {
                 if let Some(share) = sk_share {
                     buf.push("--sk-share".to_string());
                     buf.push(share);
-                }
-                if let Some(providers) = oidc_providers {
-                    buf.push("--oidc-providers".to_string());
-                    buf.push(providers);
-                }
-                if let Some(providers_filepath) = oidc_providers_filepath {
-                    buf.push("--oidc-providers-filepath".to_string());
-                    buf.push(providers_filepath.to_str().unwrap().to_string());
                 }
                 if let Some(gcp_datastore_url) = gcp_datastore_url {
                     buf.push("--gcp-datastore-url".to_string());
