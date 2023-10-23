@@ -85,6 +85,5 @@ module "signer" {
   depends_on = [
     google_secret_manager_secret_iam_member.cipher_key_secret_access,
     google_secret_manager_secret_iam_member.secret_share_secret_access,
-    google_secret_manager_secret_iam_member.oidc_providers_secret_access
   ]
 }
