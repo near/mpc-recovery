@@ -77,8 +77,8 @@ module "signer" {
 
   node_id = var.node_id
 
-  cipher_key_secret_id     = var.cipher_key_secret_id
-  sk_share_secret_id       = var.sk_share_secret_id
+  cipher_key_secret_id = var.cipher_key_secret_id
+  sk_share_secret_id   = var.sk_share_secret_id
 
   jwt_signature_pk_url = var.jwt_signature_pk_url
 
