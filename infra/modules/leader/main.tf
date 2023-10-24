@@ -1,5 +1,5 @@
 resource "google_cloud_run_v2_service" "leader" {
-  name     = "mpc-recovery-leader-${var.env}"
+  name     = var.service_name
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
 
@@ -76,7 +76,6 @@ resource "google_cloud_run_v2_service" "leader" {
       ports {
         container_port = 3000
       }
-
       resources {
         cpu_idle = false
 

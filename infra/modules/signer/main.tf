@@ -1,5 +1,5 @@
 resource "google_cloud_run_v2_service" "signer" {
-  name     = "mpc-recovery-signer-${var.node_id}-${var.env}"
+  name     = var.service_name
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
 
