@@ -20,3 +20,4 @@ signer_configs = [
     sk_share_secret_id   = "mpc-sk-share-2-dev"
   }
 ]
+jwt_signature_pk_url = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"

@@ -61,3 +61,6 @@ variable "fast_auth_partners_secret_id" {
 variable "service_name" {
   type = string
 }
+variable "jwt_signature_pk_url" {
+  type = string
+}

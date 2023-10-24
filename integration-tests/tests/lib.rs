@@ -3,35 +3,30 @@ mod mpc;
 use curv::elliptic::curves::{Ed25519, Point};
 use hyper::StatusCode;
 use mpc_recovery::{
-    firewall::allowed::DelegateActionRelayer,
     gcp::GcpService,
     msg::{
         ClaimOidcResponse, MpcPkResponse, NewAccountResponse, SignResponse, UserCredentialsResponse,
     },
-    GenerateResult,
 };
-use mpc_recovery_integration_tests::containers;
-use near_primitives::utils::generate_random_string;
-use workspaces::{network::Sandbox, Worker};
-
-const NETWORK: &str = "mpc_it_network";
-const GCP_PROJECT_ID: &str = "mpc-recovery-gcp-project";
-// TODO: figure out how to instantiate and use a local firebase deployment
-pub const FIREBASE_AUDIENCE_ID: &str = "test_audience";
+use mpc_recovery_integration_tests::env;
+use mpc_recovery_integration_tests::env::containers::DockerClient;
+use near_workspaces::{network::Sandbox, Worker};
 
 pub struct TestContext {
-    leader_node: containers::LeaderNodeApi,
+    env: String,
+    leader_node: env::LeaderNodeApi,
     pk_set: Vec<Point<Ed25519>>,
     worker: Worker<Sandbox>,
-    signer_nodes: Vec<containers::SignerNodeApi>,
+    signer_nodes: Vec<env::SignerNodeApi>,
+    gcp_project_id: String,
     gcp_datastore_url: String,
 }
 
 impl TestContext {
     pub async fn gcp_service(&self) -> anyhow::Result<GcpService> {
         GcpService::new(
-            "dev".into(),
-            GCP_PROJECT_ID.into(),
+            self.env.clone(),
+            self.gcp_project_id.clone(),
             Some(self.gcp_datastore_url.clone()),
         )
         .await
@@ -43,80 +38,28 @@ where
     Task: FnOnce(TestContext) -> Fut,
     Fut: core::future::Future<Output = anyhow::Result<Val>>,
 {
-    let docker_client = containers::DockerClient::default();
-    docker_client.create_network(NETWORK).await?;
-
-    let relayer_id = generate_random_string(7); // used to distinguish relayer tmp files in multiple tests
-    let relayer_ctx_future =
-        mpc_recovery_integration_tests::initialize_relayer(&docker_client, NETWORK, &relayer_id);
-    let datastore_future = containers::Datastore::run(&docker_client, NETWORK, GCP_PROJECT_ID);
-
-    let (relayer_ctx, datastore) =
-        futures::future::join(relayer_ctx_future, datastore_future).await;
-    let relayer_ctx = relayer_ctx?;
-    let datastore = datastore?;
-
-    let GenerateResult { pk_set, secrets } = mpc_recovery::generate(nodes);
-    let mut signer_node_futures = Vec::new();
-    for (i, (share, cipher_key)) in secrets.iter().enumerate().take(nodes) {
-        let signer_node = containers::SignerNode::run_signing_node(
-            &docker_client,
-            NETWORK,
-            i as u64,
-            share,
-            cipher_key,
-            &datastore.address,
-            &datastore.local_address,
-            GCP_PROJECT_ID,
-            FIREBASE_AUDIENCE_ID,
-        );
-        signer_node_futures.push(signer_node);
-    }
-    let signer_nodes = futures::future::join_all(signer_node_futures)
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()?;
-    let signer_urls: &Vec<_> = &signer_nodes.iter().map(|n| n.address.clone()).collect();
-
-    let near_root_account = relayer_ctx.worker.root_account()?;
-    let leader_node = containers::LeaderNode::run(
-        &docker_client,
-        NETWORK,
-        signer_urls.clone(),
-        &relayer_ctx.sandbox.address,
-        &relayer_ctx.relayer.address,
-        &datastore.address,
-        GCP_PROJECT_ID,
-        near_root_account.id(),
-        relayer_ctx.creator_account.id(),
-        relayer_ctx.creator_account.secret_key(),
-        FIREBASE_AUDIENCE_ID,
-    )
-    .await?;
+    let docker_client = DockerClient::default();
+    let nodes = env::run(nodes, &docker_client).await?;
 
     f(TestContext {
-        leader_node: leader_node.api(
-            &relayer_ctx.sandbox.local_address,
-            &DelegateActionRelayer {
-                url: relayer_ctx.relayer.local_address.clone(),
-                api_key: None,
-            },
-        ),
-        pk_set,
-        signer_nodes: signer_nodes.iter().map(|n| n.api()).collect(),
-        worker: relayer_ctx.worker.clone(),
-        gcp_datastore_url: datastore.local_address,
+        env: nodes.ctx().env.clone(),
+        pk_set: nodes.pk_set(),
+        leader_node: nodes.leader_api(),
+        signer_nodes: nodes.signer_apis(),
+        worker: nodes.ctx().relayer_ctx.worker.clone(),
+        gcp_project_id: nodes.ctx().gcp_project_id.clone(),
+        gcp_datastore_url: nodes.datastore_addr(),
     })
     .await?;
 
-    relayer_ctx.relayer.clean_tmp_files()?;
+    nodes.ctx().relayer_ctx.relayer.clean_tmp_files()?;
 
     Ok(())
 }
 
 mod account {
+    use near_workspaces::{network::Sandbox, AccountId, Worker};
     use rand::{distributions::Alphanumeric, Rng};
-    use workspaces::{network::Sandbox, AccountId, Worker};
 
     pub fn random(worker: &Worker<Sandbox>) -> anyhow::Result<AccountId> {
         let account_id_rand: String = rand::thread_rng()
@@ -174,7 +117,7 @@ mod key {
 mod check {
     use crate::TestContext;
     use near_crypto::PublicKey;
-    use workspaces::AccountId;
+    use near_workspaces::AccountId;
 
     pub async fn access_key_exists(
         ctx: &TestContext,
