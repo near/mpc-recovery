@@ -1,22 +1,19 @@
 pub mod error;
 pub mod msg;
 
+use self::error::RelayerError;
+use self::msg::{
+    CreateAccountAtomicRequest, RegisterAccountRequest, SendMetaTxRequest, SendMetaTxResponse,
+};
+use crate::firewall::allowed::DelegateActionRelayer;
 use anyhow::Context;
 use hyper::{Body, Client, Method, Request};
-
 use near_crypto::PublicKey;
 use near_jsonrpc_client::errors::{JsonRpcError, JsonRpcServerError};
 use near_jsonrpc_primitives::types::query::RpcQueryError;
 use near_primitives::hash::CryptoHash;
 use near_primitives::types::{AccountId, BlockHeight, Nonce};
 use near_primitives::views::FinalExecutionStatus;
-
-use self::error::RelayerError;
-use self::msg::{
-    CreateAccountAtomicRequest, RegisterAccountRequest, SendMetaTxRequest, SendMetaTxResponse,
-};
-
-use crate::firewall::allowed::DelegateActionRelayer;
 
 pub struct NearRpcAndRelayerClient {
     rpc_client: near_fetch::Client,

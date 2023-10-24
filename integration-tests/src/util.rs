@@ -3,13 +3,12 @@ use std::{
     io::Write,
 };
 
+use crate::containers::RelayerConfig;
 use anyhow::Context;
 use hyper::{Body, Client, Method, Request, StatusCode, Uri};
 use near_workspaces::{types::SecretKey, AccountId};
 use serde::{Deserialize, Serialize};
 use toml::Value;
-
-use crate::containers::RelayerConfig;
 
 pub async fn post<U, Req: Serialize, Resp>(
     uri: U,

@@ -18,11 +18,14 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
+          target: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v1
       - name: Install Protoc
         uses: arduino/setup-protoc@v1.1.2
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compile Contract
+        run: cargo build -p mpc-contract --target wasm32-unknown-unknown --release
       - name: Compile
         run: cargo check
       - name: Test format

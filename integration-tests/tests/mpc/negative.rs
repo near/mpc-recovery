@@ -1,6 +1,5 @@
 use crate::mpc::{fetch_recovery_pk, register_account};
 use crate::{account, check, key, with_nodes, MpcCheck};
-
 use anyhow::Context;
 use ed25519_dalek::{PublicKey as PublicKeyEd25519, Signature, Verifier};
 use hyper::StatusCode;

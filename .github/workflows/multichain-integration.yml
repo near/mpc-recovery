@@ -1,4 +1,4 @@
-name: Build Image and Test
+name: Integration (Multichain)
 
 on:
   push:
@@ -6,9 +6,11 @@ on:
       - develop
   pull_request:
 
+env:
+  RUSTFLAGS: -D warnings
 jobs:
-  integrations:
-    name: Integration
+  test:
+    name: Test
     strategy:
       matrix:
         # FIXME: macos-latest-xl is disabled since colima is erroring out right now
@@ -36,16 +38,21 @@ jobs:
 
       - name: Pull Relayer & Sandbox Docker Images
         run: |
-          docker pull ghcr.io/near/os-relayer
+          docker pull ghcr.io/near/pagoda-relayer-rs-fastauth
           docker pull ghcr.io/near/sandbox
 
-      - name: Build OIDC Provider Dcoker Image
-        run: docker build -t near/test-oidc-provider ./test-oidc-provider
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
 
-      - name: Login to GCP Artifact Registry
-        run: echo "$GOOGLE_CREDENTIALS" | docker login -u _json_key --password-stdin https://us-east1-docker.pkg.dev
-        env:
-          GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
+      - name: Build Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: Dockerfile.multichain
+          tags: near/mpc-recovery-node
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Install stable toolchain
         uses: actions-rs/toolchain@v1
@@ -66,10 +73,10 @@ jobs:
 
       - name: Build MPC Recovery Binary Locally
         run: |
-          cargo build -p mpc-recovery --release
+          cargo build -p mpc-recovery-node --release
 
       - name: Test
-        run: cargo test -p mpc-recovery-integration-tests mpc --jobs 1 -- --test-threads 1
+        run: cargo test -p mpc-recovery-integration-tests multichain --jobs 1 -- --test-threads 1
         env:
           RUST_LOG: INFO
           RUST_BACKTRACE: 1

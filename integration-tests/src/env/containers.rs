@@ -35,8 +35,7 @@ use once_cell::sync::Lazy;
 use testcontainers::{
     clients::Cli,
     core::{ExecCommand, WaitFor},
-    images::generic::GenericImage,
-    Container, Image, RunnableImage,
+    Container, GenericImage, Image, RunnableImage,
 };
 use tokio::io::AsyncWriteExt;
 use tracing;

@@ -1,6 +1,8 @@
 mod mpc;
+mod multichain;
 
 use curv::elliptic::curves::{Ed25519, Point};
+use futures::future::BoxFuture;
 use hyper::StatusCode;
 use mpc_recovery::{
     gcp::GcpService,
@@ -53,6 +55,24 @@ where
     .await?;
 
     nodes.ctx().relayer_ctx.relayer.clean_tmp_files()?;
+
+    Ok(())
+}
+
+pub struct MultichainTestContext<'a> {
+    nodes: mpc_recovery_integration_tests::multichain::Nodes<'a>,
+    rpc_client: near_fetch::Client,
+}
+
+async fn with_multichain_nodes<F>(nodes: usize, f: F) -> anyhow::Result<()>
+where
+    F: for<'a> FnOnce(MultichainTestContext<'a>) -> BoxFuture<'a, anyhow::Result<()>>,
+{
+    let docker_client = DockerClient::default();
+    let nodes = mpc_recovery_integration_tests::multichain::run(nodes, &docker_client).await?;
+
+    let rpc_client = near_fetch::Client::new(&nodes.ctx().sandbox.local_address);
+    f(MultichainTestContext { nodes, rpc_client }).await?;
 
     Ok(())
 }
@@ -155,6 +175,37 @@ mod check {
         } else {
             Ok(())
         }
+    }
+}
+
+mod wait_for {
+    use crate::MultichainTestContext;
+    use backon::ExponentialBuilder;
+    use backon::Retryable;
+    use mpc_contract::ProtocolContractState;
+    use mpc_contract::RunningContractState;
+
+    pub async fn running_mpc<'a>(
+        ctx: &MultichainTestContext<'a>,
+        epoch: u64,
+    ) -> anyhow::Result<RunningContractState> {
+        let is_running = || async {
+            let state: ProtocolContractState = ctx
+                .rpc_client
+                .view(ctx.nodes.ctx().mpc_contract.id(), "state", ())
+                .await?;
+
+            match state {
+                ProtocolContractState::Running(running) if running.epoch >= epoch => Ok(running),
+                ProtocolContractState::Running(running) => {
+                    anyhow::bail!("running with an older epoch: {}", running.epoch)
+                }
+                _ => anyhow::bail!("not running"),
+            }
+        };
+        is_running
+            .retry(&ExponentialBuilder::default().with_max_times(6))
+            .await
     }
 }
 
