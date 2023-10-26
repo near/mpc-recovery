@@ -57,16 +57,11 @@ fn validate_jwt(
         ..
     } = &claims;
 
-    match oidc_providers {
-        Some(oidc_providers) => {
-            if !oidc_providers.contains(issuer, audience) {
-                anyhow::bail!("UnauthorizedTokenIssuerOrAudience: iss={issuer}, aud={audience}");
-            }
-        }
-        None => {
-            // If no OIDC providers are specified in the allowlist, we allow any issuer and audience.
-            // Should be used in signing nodes only.
-            tracing::warn!("No OIDC providers found in the allowlist");
+    // If no OIDC providers are specified in the allowlist, we allow any issuer and audience.
+    // Should be used in signing nodes only.
+    if let Some(oidc_providers) = oidc_providers {
+        if !oidc_providers.contains(issuer, audience) {
+            anyhow::bail!("UnauthorizedTokenIssuerOrAudience: iss={issuer}, aud={audience}");
         }
     }
 
