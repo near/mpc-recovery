@@ -4,6 +4,7 @@ use super::state::{
     WaitingForConsensusState,
 };
 use crate::protocol::state::{GeneratingState, ResharingState};
+use crate::protocol::triple::TripleManager;
 use crate::types::PrivateKeyShare;
 use crate::util::AffinePointExt;
 use crate::{http_client, rpc_client};
@@ -85,12 +86,20 @@ impl ConsensusProtocol for StartedState {
                                 tracing::info!(
                                     "contract state is running and we are already a participant"
                                 );
+                                let participants_vec =
+                                    contract_state.participants.keys().cloned().collect();
                                 Ok(NodeState::Running(RunningState {
                                     epoch,
                                     participants: contract_state.participants,
                                     threshold: contract_state.threshold,
                                     private_share,
                                     public_key,
+                                    triple_manager: TripleManager::new(
+                                        participants_vec,
+                                        ctx.me(),
+                                        contract_state.threshold,
+                                        epoch,
+                                    ),
                                 }))
                             } else {
                                 Ok(NodeState::Joining(JoiningState { public_key }))
@@ -252,12 +261,19 @@ impl ConsensusProtocol for WaitingForConsensusState {
                     if contract_state.public_key != self.public_key {
                         return Err(ConsensusError::MismatchedPublicKey);
                     }
+                    let participants_vec = self.participants.keys().cloned().collect();
                     Ok(NodeState::Running(RunningState {
                         epoch: self.epoch,
                         participants: self.participants,
                         threshold: self.threshold,
                         private_share: self.private_share,
                         public_key: self.public_key,
+                        triple_manager: TripleManager::new(
+                            participants_vec,
+                            ctx.me(),
+                            self.threshold,
+                            self.epoch,
+                        ),
                     }))
                 }
             },

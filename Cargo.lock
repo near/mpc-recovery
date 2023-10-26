@@ -3710,6 +3710,7 @@ dependencies = [
  "near-lake-primitives",
  "near-primitives 0.17.0",
  "near-sdk",
+ "rand 0.8.5",
  "reqwest",
  "serde",
  "serde_json",

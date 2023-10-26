@@ -1,4 +1,4 @@
-use super::state::{GeneratingState, NodeState, ResharingState};
+use super::state::{GeneratingState, NodeState, ResharingState, RunningState};
 use crate::http_client::{self, SendError};
 use crate::protocol::message::{GeneratingMessage, ResharingMessage};
 use crate::protocol::state::WaitingForConsensusState;
@@ -164,6 +164,23 @@ impl CryptographicProtocol for ResharingState {
 }
 
 #[async_trait]
+impl CryptographicProtocol for RunningState {
+    async fn progress<C: CryptographicCtx + Send + Sync>(
+        mut self,
+        ctx: C,
+    ) -> Result<NodeState, CryptographicError> {
+        if self.triple_manager.potential_len() < 2 {
+            self.triple_manager.generate();
+        }
+        for (p, msg) in self.triple_manager.poke() {
+            let url = self.participants.get(&p).unwrap();
+            http_client::message(ctx.http_client(), url.clone(), MpcMessage::Triple(msg)).await?;
+        }
+        Ok(NodeState::Running(self))
+    }
+}
+
+#[async_trait]
 impl CryptographicProtocol for NodeState {
     async fn progress<C: CryptographicCtx + Send + Sync>(
         self,
@@ -172,6 +189,7 @@ impl CryptographicProtocol for NodeState {
         match self {
             NodeState::Generating(state) => state.progress(ctx).await,
             NodeState::Resharing(state) => state.progress(ctx).await,
+            NodeState::Running(state) => state.progress(ctx).await,
             _ => Ok(self),
         }
     }

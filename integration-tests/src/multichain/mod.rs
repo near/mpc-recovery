@@ -30,6 +30,13 @@ impl Nodes<'_> {
         }
     }
 
+    pub fn url(&self, id: usize) -> &str {
+        match self {
+            Nodes::Local { nodes, .. } => &nodes[id].address,
+            Nodes::Docker { nodes, .. } => &nodes[id].address,
+        }
+    }
+
     pub async fn add_node(
         &mut self,
         node_id: u32,

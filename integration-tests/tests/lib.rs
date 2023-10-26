@@ -62,6 +62,7 @@ where
 pub struct MultichainTestContext<'a> {
     nodes: mpc_recovery_integration_tests::multichain::Nodes<'a>,
     rpc_client: near_fetch::Client,
+    http_client: reqwest::Client,
 }
 
 async fn with_multichain_nodes<F>(nodes: usize, f: F) -> anyhow::Result<()>
@@ -72,7 +73,12 @@ where
     let nodes = mpc_recovery_integration_tests::multichain::run(nodes, &docker_client).await?;
 
     let rpc_client = near_fetch::Client::new(&nodes.ctx().sandbox.local_address);
-    f(MultichainTestContext { nodes, rpc_client }).await?;
+    f(MultichainTestContext {
+        nodes,
+        rpc_client,
+        http_client: reqwest::Client::default(),
+    })
+    .await?;
 
     Ok(())
 }
@@ -184,6 +190,7 @@ mod wait_for {
     use backon::Retryable;
     use mpc_contract::ProtocolContractState;
     use mpc_contract::RunningContractState;
+    use mpc_recovery_node::web::StateView;
 
     pub async fn running_mpc<'a>(
         ctx: &MultichainTestContext<'a>,
@@ -204,6 +211,35 @@ mod wait_for {
             }
         };
         is_running
+            .retry(&ExponentialBuilder::default().with_max_times(6))
+            .await
+    }
+
+    pub async fn has_at_least_triples<'a>(
+        ctx: &MultichainTestContext<'a>,
+        id: usize,
+        expected_triple_count: usize,
+    ) -> anyhow::Result<StateView> {
+        let is_enough_triples = || async {
+            let state_view: StateView = ctx
+                .http_client
+                .get(format!("{}/state", ctx.nodes.url(id)))
+                .send()
+                .await?
+                .json()
+                .await?;
+
+            match state_view {
+                StateView::Running { triple_count, .. }
+                    if triple_count >= expected_triple_count =>
+                {
+                    Ok(state_view)
+                }
+                StateView::Running { .. } => anyhow::bail!("node does not have enough triples yet"),
+                StateView::NotRunning => anyhow::bail!("node is not running"),
+            }
+        };
+        is_enough_triples
             .retry(&ExponentialBuilder::default().with_max_times(6))
             .await
     }

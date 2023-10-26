@@ -28,3 +28,15 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
     })
     .await
 }
+
+#[test(tokio::test)]
+async fn test_triples() -> anyhow::Result<()> {
+    with_multichain_nodes(3, |ctx| {
+        Box::pin(async move {
+            wait_for::has_at_least_triples(&ctx, 0, 2).await?;
+
+            Ok(())
+        })
+    })
+    .await
+}

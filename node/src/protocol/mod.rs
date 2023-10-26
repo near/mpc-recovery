@@ -3,6 +3,7 @@ mod contract;
 mod cryptography;
 mod message;
 mod state;
+mod triple;
 
 pub use contract::ProtocolState;
 pub use message::MpcMessage;
@@ -10,6 +11,7 @@ pub use state::NodeState;
 
 use self::consensus::ConsensusCtx;
 use self::cryptography::CryptographicCtx;
+use self::message::MessageCtx;
 use crate::protocol::consensus::ConsensusProtocol;
 use crate::protocol::cryptography::CryptographicProtocol;
 use crate::protocol::message::{MessageHandler, MpcMessageQueue};
@@ -68,6 +70,12 @@ impl CryptographicCtx for &Ctx {
     }
 }
 
+impl MessageCtx for &Ctx {
+    fn me(&self) -> Participant {
+        self.me
+    }
+}
+
 pub struct MpcSignProtocol {
     ctx: Ctx,
     receiver: mpsc::Receiver<MpcMessage>,
@@ -101,7 +109,7 @@ impl MpcSignProtocol {
     }
 
     pub async fn run(mut self) -> anyhow::Result<()> {
-        tracing::info!("running mpc recovery protocol");
+        let _span = tracing::info_span!("running", me = u32::from(self.ctx.me));
         let mut queue = MpcMessageQueue::default();
         loop {
             tracing::debug!("trying to advance mpc recovery protocol");
@@ -140,7 +148,7 @@ impl MpcSignProtocol {
             let mut state = std::mem::take(&mut *state_guard);
             state = state.progress(&self.ctx).await?;
             state = state.advance(&self.ctx, contract_state).await?;
-            state.handle(&mut queue);
+            state.handle(&self.ctx, &mut queue);
             *state_guard = state;
             drop(state_guard);
             tokio::time::sleep(Duration::from_millis(1000)).await;

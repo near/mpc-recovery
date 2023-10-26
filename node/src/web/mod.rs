@@ -50,6 +50,7 @@ pub async fn run(
         )
         .route("/msg", post(msg))
         .route("/join", post(join))
+        .route("/state", get(state))
         .layer(Extension(Arc::new(axum_state)));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
@@ -121,6 +122,39 @@ async fn join(
         _ => {
             tracing::debug!(?participant, "not ready to accept join requests yet");
             StatusCode::BAD_REQUEST
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+pub enum StateView {
+    Running {
+        participants: Vec<Participant>,
+        triple_count: usize,
+    },
+    NotRunning,
+}
+
+#[tracing::instrument(level = "debug", skip_all)]
+async fn state(Extension(state): Extension<Arc<AxumState>>) -> (StatusCode, Json<StateView>) {
+    tracing::debug!("fetching state");
+    let protocol_state = state.protocol_state.read().await;
+    match &*protocol_state {
+        NodeState::Running(state) => {
+            tracing::debug!("not running, state unavailable");
+            (
+                StatusCode::OK,
+                Json(StateView::Running {
+                    participants: state.participants.keys().cloned().collect(),
+                    triple_count: state.triple_manager.len(),
+                }),
+            )
+        }
+        _ => {
+            tracing::debug!("not running, state unavailable");
+            (StatusCode::OK, Json(StateView::NotRunning))
         }
     }
 }

@@ -1,3 +1,4 @@
+use super::triple::TripleManager;
 use crate::types::{KeygenProtocol, PrivateKeyShare, PublicKey, ReshareProtocol};
 use cait_sith::protocol::Participant;
 use std::collections::HashMap;
@@ -31,6 +32,7 @@ pub struct RunningState {
     pub threshold: usize,
     pub private_share: PrivateKeyShare,
     pub public_key: PublicKey,
+    pub triple_manager: TripleManager,
 }
 
 pub struct ResharingState {

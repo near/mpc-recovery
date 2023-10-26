@@ -1,8 +1,12 @@
 use std::collections::{HashMap, VecDeque};
 
-use super::state::{GeneratingState, NodeState, ResharingState};
+use super::state::{GeneratingState, NodeState, ResharingState, RunningState};
 use cait_sith::protocol::{MessageData, Participant};
 use serde::{Deserialize, Serialize};
+
+pub trait MessageCtx {
+    fn me(&self) -> Participant;
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GeneratingMessage {
@@ -18,15 +22,25 @@ pub struct ResharingMessage {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct TripleMessage {
+    pub id: u64,
+    pub epoch: u64,
+    pub from: Participant,
+    pub data: MessageData,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub enum MpcMessage {
     Generating(GeneratingMessage),
     Resharing(ResharingMessage),
+    Triple(TripleMessage),
 }
 
 #[derive(Default)]
 pub struct MpcMessageQueue {
     generating: VecDeque<GeneratingMessage>,
     resharing_bins: HashMap<u64, VecDeque<ResharingMessage>>,
+    triple_bins: HashMap<u64, HashMap<u64, VecDeque<TripleMessage>>>,
 }
 
 impl MpcMessageQueue {
@@ -38,52 +52,58 @@ impl MpcMessageQueue {
                 .entry(message.epoch)
                 .or_default()
                 .push_back(message),
+            MpcMessage::Triple(message) => self
+                .triple_bins
+                .entry(message.epoch)
+                .or_default()
+                .entry(message.id)
+                .or_default()
+                .push_back(message),
         }
     }
 }
 
 pub trait MessageHandler {
-    fn handle(&mut self, queue: &mut MpcMessageQueue);
+    fn handle<C: MessageCtx + Send + Sync>(&mut self, ctx: C, queue: &mut MpcMessageQueue);
 }
 
 impl MessageHandler for GeneratingState {
-    fn handle(&mut self, queue: &mut MpcMessageQueue) {
-        match queue.generating.pop_front() {
-            Some(msg) => {
-                tracing::debug!("handling new generating message");
-                self.protocol.message(msg.from, msg.data);
-            }
-            None => {
-                tracing::debug!("no generating messages to handle")
-            }
-        };
+    fn handle<C: MessageCtx + Send + Sync>(&mut self, _ctx: C, queue: &mut MpcMessageQueue) {
+        while let Some(msg) = queue.generating.pop_front() {
+            tracing::debug!("handling new generating message");
+            self.protocol.message(msg.from, msg.data);
+        }
     }
 }
 
 impl MessageHandler for ResharingState {
-    fn handle(&mut self, queue: &mut MpcMessageQueue) {
-        match queue
-            .resharing_bins
-            .entry(self.old_epoch)
-            .or_default()
-            .pop_front()
-        {
-            Some(msg) => {
-                tracing::debug!("handling new resharing message");
-                self.protocol.message(msg.from, msg.data);
+    fn handle<C: MessageCtx + Send + Sync>(&mut self, _ctx: C, queue: &mut MpcMessageQueue) {
+        let q = queue.resharing_bins.entry(self.old_epoch).or_default();
+        while let Some(msg) = q.pop_front() {
+            tracing::debug!("handling new resharing message");
+            self.protocol.message(msg.from, msg.data);
+        }
+    }
+}
+
+impl MessageHandler for RunningState {
+    fn handle<C: MessageCtx + Send + Sync>(&mut self, _ctx: C, queue: &mut MpcMessageQueue) {
+        for (id, queue) in queue.triple_bins.entry(self.epoch).or_default() {
+            if let Some(protocol) = self.triple_manager.get_or_generate(*id) {
+                while let Some(message) = queue.pop_front() {
+                    protocol.message(message.from, message.data);
+                }
             }
-            None => {
-                tracing::debug!("no resharing messages to handle")
-            }
-        };
+        }
     }
 }
 
 impl MessageHandler for NodeState {
-    fn handle(&mut self, queue: &mut MpcMessageQueue) {
+    fn handle<C: MessageCtx + Send + Sync>(&mut self, ctx: C, queue: &mut MpcMessageQueue) {
         match self {
-            NodeState::Generating(state) => state.handle(queue),
-            NodeState::Resharing(state) => state.handle(queue),
+            NodeState::Generating(state) => state.handle(ctx, queue),
+            NodeState::Resharing(state) => state.handle(ctx, queue),
+            NodeState::Running(state) => state.handle(ctx, queue),
             _ => {
                 tracing::debug!("skipping message processing")
             }
