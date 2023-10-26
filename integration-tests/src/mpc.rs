@@ -37,7 +37,7 @@ fn target_dir() -> Option<PathBuf> {
     }
 }
 
-async fn build(release: bool) -> anyhow::Result<ExitStatus> {
+pub async fn build(release: bool) -> anyhow::Result<ExitStatus> {
     let mut cmd = Command::new("cargo");
     cmd.arg("build")
         .arg("--package")
@@ -66,10 +66,6 @@ pub async fn spawn(release: bool, node: &str, cli: Cli) -> anyhow::Result<NodePr
         });
 
         return Ok(NodeProcess::Threaded(handle));
-    }
-
-    if !build(release).await?.success() {
-        anyhow::bail!("failed to prebuild MPC service for {node} node");
     }
 
     let executable = executable(release, PACKAGE)
