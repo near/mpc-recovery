@@ -20,9 +20,8 @@
 
           # Everything in this list is added to your path
           buildInputs =
-            with pkgs; [
-              darwin.apple_sdk.frameworks.Security
-              darwin.apple_sdk.frameworks.SystemConfiguration
+            with pkgs;
+            [
               protobuf
               curl
               gmp
@@ -31,7 +30,14 @@
               # Development
               cargo-watch
               cargo-audit
-            ];
+            ] ++
+
+            pkgs.lib.optionals pkgs.stdenv.isDarwin
+              [
+              # Mac crypto libs
+              darwin.apple_sdk.frameworks.Security
+              darwin.apple_sdk.frameworks.SystemConfiguration
+              ];
         };
       });
 }
