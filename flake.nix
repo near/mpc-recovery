@@ -22,9 +22,11 @@
           buildInputs =
             with pkgs; [
               darwin.apple_sdk.frameworks.Security
+              darwin.apple_sdk.frameworks.SystemConfiguration
               protobuf
               curl
               gmp
+              openssl
 
               # Development
               cargo-watch
