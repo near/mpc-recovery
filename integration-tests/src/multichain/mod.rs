@@ -30,6 +30,10 @@ impl Nodes<'_> {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn ctx(&self) -> &Context {
         match self {
             Nodes::Local { ctx, .. } => ctx,

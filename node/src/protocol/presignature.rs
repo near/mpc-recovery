@@ -86,8 +86,8 @@ impl PresignatureManager {
                     triple0: (triple0.share, triple0.public),
                     triple1: (triple1.share, triple1.public),
                     keygen_out: KeygenOutput {
-                        private_share: private_share.clone(),
-                        public_key: public_key.clone(),
+                        private_share: *private_share,
+                        public_key: *public_key,
                     },
                     threshold: self.threshold,
                 },
@@ -147,8 +147,8 @@ impl PresignatureManager {
                                 triple0: (triple0.share, triple0.public),
                                 triple1: (triple1.share, triple1.public),
                                 keygen_out: KeygenOutput {
-                                    private_share: private_share.clone(),
-                                    public_key: public_key.clone(),
+                                    private_share: *private_share,
+                                    public_key: *public_key,
                                 },
                                 threshold: self.threshold,
                             },

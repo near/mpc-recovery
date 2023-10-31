@@ -51,6 +51,7 @@ pub struct JoiningState {
 }
 
 #[derive(Default)]
+#[allow(clippy::large_enum_variant)]
 pub enum NodeState {
     #[default]
     Starting,
