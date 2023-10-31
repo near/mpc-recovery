@@ -178,6 +178,9 @@ impl CryptographicProtocol for RunningState {
         }
 
         if self.presignature_manager.potential_len() < 2 {
+            // To ensure there is no contention between different nodes we are only using triples
+            // that we proposed. This way in a non-BFT environment we are guaranteed to never try
+            // to use the same triple as any other node.
             if let Some((triple0, triple1)) = self.triple_manager.take_mine_twice() {
                 self.presignature_manager.generate(
                     triple0,
@@ -186,7 +189,7 @@ impl CryptographicProtocol for RunningState {
                     &self.private_share,
                 );
             } else {
-                tracing::info!("we don't have enough triples to generate a presignature");
+                tracing::debug!("we don't have enough triples to generate a presignature");
             }
         }
         for (p, msg) in self.presignature_manager.poke() {
