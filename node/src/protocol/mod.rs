@@ -2,6 +2,7 @@ mod consensus;
 mod contract;
 mod cryptography;
 mod message;
+mod presignature;
 mod state;
 mod triple;
 

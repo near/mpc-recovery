@@ -1,3 +1,4 @@
+use super::presignature::PresignatureManager;
 use super::triple::TripleManager;
 use crate::types::{KeygenProtocol, PrivateKeyShare, PublicKey, ReshareProtocol};
 use cait_sith::protocol::Participant;
@@ -33,6 +34,7 @@ pub struct RunningState {
     pub private_share: PrivateKeyShare,
     pub public_key: PublicKey,
     pub triple_manager: TripleManager,
+    pub presignature_manager: PresignatureManager,
 }
 
 pub struct ResharingState {

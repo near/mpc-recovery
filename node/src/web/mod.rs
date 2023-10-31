@@ -133,6 +133,7 @@ pub enum StateView {
     Running {
         participants: Vec<Participant>,
         triple_count: usize,
+        presignature_count: usize,
     },
     NotRunning,
 }
@@ -149,6 +150,7 @@ async fn state(Extension(state): Extension<Arc<AxumState>>) -> (StatusCode, Json
                 Json(StateView::Running {
                     participants: state.participants.keys().cloned().collect(),
                     triple_count: state.triple_manager.len(),
+                    presignature_count: state.presignature_manager.len(),
                 }),
             )
         }

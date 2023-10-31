@@ -243,6 +243,35 @@ mod wait_for {
             .retry(&ExponentialBuilder::default().with_max_times(6))
             .await
     }
+
+    pub async fn has_at_least_presignatures<'a>(
+        ctx: &MultichainTestContext<'a>,
+        id: usize,
+        expected_presignature_count: usize,
+    ) -> anyhow::Result<StateView> {
+        let is_enough_presignatures = || async {
+            let state_view: StateView = ctx
+                .http_client
+                .get(format!("{}/state", ctx.nodes.url(id)))
+                .send()
+                .await?
+                .json()
+                .await?;
+
+            match state_view {
+                StateView::Running {
+                    presignature_count, ..
+                } if presignature_count >= expected_presignature_count => Ok(state_view),
+                StateView::Running { .. } => {
+                    anyhow::bail!("node does not have enough presignatures yet")
+                }
+                StateView::NotRunning => anyhow::bail!("node is not running"),
+            }
+        };
+        is_enough_presignatures
+            .retry(&ExponentialBuilder::default().with_max_times(6))
+            .await
+    }
 }
 
 trait MpcCheck {

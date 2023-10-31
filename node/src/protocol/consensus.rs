@@ -3,6 +3,7 @@ use super::state::{
     JoiningState, NodeState, PersistentNodeData, RunningState, StartedState,
     WaitingForConsensusState,
 };
+use crate::protocol::presignature::PresignatureManager;
 use crate::protocol::state::{GeneratingState, ResharingState};
 use crate::protocol::triple::TripleManager;
 use crate::types::PrivateKeyShare;
@@ -10,6 +11,7 @@ use crate::util::AffinePointExt;
 use crate::{http_client, rpc_client};
 use async_trait::async_trait;
 use cait_sith::protocol::{InitializationError, Participant};
+use cait_sith::KeygenOutput;
 use k256::Secp256k1;
 use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
@@ -86,7 +88,7 @@ impl ConsensusProtocol for StartedState {
                                 tracing::info!(
                                     "contract state is running and we are already a participant"
                                 );
-                                let participants_vec =
+                                let participants_vec: Vec<Participant> =
                                     contract_state.participants.keys().cloned().collect();
                                 Ok(NodeState::Running(RunningState {
                                     epoch,
@@ -95,10 +97,20 @@ impl ConsensusProtocol for StartedState {
                                     private_share,
                                     public_key,
                                     triple_manager: TripleManager::new(
+                                        participants_vec.clone(),
+                                        ctx.me(),
+                                        contract_state.threshold,
+                                        epoch,
+                                    ),
+                                    presignature_manager: PresignatureManager::new(
                                         participants_vec,
                                         ctx.me(),
                                         contract_state.threshold,
                                         epoch,
+                                        KeygenOutput {
+                                            private_share,
+                                            public_key,
+                                        },
                                     ),
                                 }))
                             } else {
@@ -261,7 +273,8 @@ impl ConsensusProtocol for WaitingForConsensusState {
                     if contract_state.public_key != self.public_key {
                         return Err(ConsensusError::MismatchedPublicKey);
                     }
-                    let participants_vec = self.participants.keys().cloned().collect();
+                    let participants_vec: Vec<Participant> =
+                        self.participants.keys().cloned().collect();
                     Ok(NodeState::Running(RunningState {
                         epoch: self.epoch,
                         participants: self.participants,
@@ -269,10 +282,20 @@ impl ConsensusProtocol for WaitingForConsensusState {
                         private_share: self.private_share,
                         public_key: self.public_key,
                         triple_manager: TripleManager::new(
+                            participants_vec.clone(),
+                            ctx.me(),
+                            self.threshold,
+                            self.epoch,
+                        ),
+                        presignature_manager: PresignatureManager::new(
                             participants_vec,
                             ctx.me(),
                             self.threshold,
                             self.epoch,
+                            KeygenOutput {
+                                private_share: self.private_share,
+                                public_key: self.public_key,
+                            },
                         ),
                     }))
                 }
