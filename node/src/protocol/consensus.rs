@@ -11,7 +11,6 @@ use crate::util::AffinePointExt;
 use crate::{http_client, rpc_client};
 use async_trait::async_trait;
 use cait_sith::protocol::{InitializationError, Participant};
-use cait_sith::KeygenOutput;
 use k256::Secp256k1;
 use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
@@ -107,10 +106,6 @@ impl ConsensusProtocol for StartedState {
                                         ctx.me(),
                                         contract_state.threshold,
                                         epoch,
-                                        KeygenOutput {
-                                            private_share,
-                                            public_key,
-                                        },
                                     ),
                                 }))
                             } else {
@@ -292,10 +287,6 @@ impl ConsensusProtocol for WaitingForConsensusState {
                             ctx.me(),
                             self.threshold,
                             self.epoch,
-                            KeygenOutput {
-                                private_share: self.private_share,
-                                public_key: self.public_key,
-                            },
                         ),
                     }))
                 }

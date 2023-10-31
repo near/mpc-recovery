@@ -121,6 +121,8 @@ impl MessageHandler for RunningState {
                     message.triple0,
                     message.triple1,
                     &mut self.triple_manager,
+                    &self.public_key,
+                    &self.private_share,
                 ) {
                     protocol.message(message.from, message.data);
                 }

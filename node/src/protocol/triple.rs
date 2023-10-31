@@ -4,22 +4,26 @@ use crate::util::AffinePointExt;
 use cait_sith::protocol::{Action, Participant};
 use cait_sith::triples::{TriplePub, TripleShare};
 use k256::Secp256k1;
-use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::hash_map::Entry;
+use std::collections::{HashMap, VecDeque};
 
 /// Unique number used to identify a specific ongoing triple generation protocol.
 /// Without `TripleId` it would be unclear where to route incoming cait-sith triple generation
 /// messages.
 pub type TripleId = u64;
 
+/// A completed triple.
 pub struct Triple {
     pub id: TripleId,
     pub share: TripleShare<Secp256k1>,
     pub public: TriplePub<Secp256k1>,
 }
 
+/// An ongoing triple generator.
 pub struct TripleGenerator {
+    /// Ongoing cait-sith triple generation protocol.
     pub protocol: TripleProtocol,
+    /// Whether this triple generation was initiated by the current node.
     pub mine: bool,
 }
 
@@ -27,9 +31,10 @@ pub struct TripleGenerator {
 /// complete some time in the future and a way to take an already generated triple.
 pub struct TripleManager {
     /// Completed unspent triples
-    triples: BTreeMap<TripleId, Triple>,
+    triples: HashMap<TripleId, Triple>,
     /// Ongoing triple generation protocols
-    generators: BTreeMap<TripleId, TripleGenerator>,
+    generators: HashMap<TripleId, TripleGenerator>,
+    /// List of triple ids generation of which was initiated by the current node.
     mine: VecDeque<TripleId>,
 
     participants: Vec<Participant>,
@@ -46,8 +51,8 @@ impl TripleManager {
         epoch: u64,
     ) -> Self {
         Self {
-            triples: BTreeMap::new(),
-            generators: BTreeMap::new(),
+            triples: HashMap::new(),
+            generators: HashMap::new(),
             mine: VecDeque::new(),
             participants,
             me,
