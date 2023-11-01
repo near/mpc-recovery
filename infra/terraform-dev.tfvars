@@ -20,5 +20,5 @@ signer_configs = [
   }
 ]
 jwt_signature_pk_url = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"
-otlp_endpoint        = "http://otel.dev.api.pagoda.co:443"
+otlp_endpoint        = "https://otel.dev.api.pagoda.co:443"
 opentelemetry_level  = "debug"
