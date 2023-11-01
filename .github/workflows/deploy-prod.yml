@@ -3,7 +3,14 @@ on:
   workflow_dispatch:
     inputs:
       network:
-        description: mainnet or testnet
+        type: choice
+        options:
+          - mainnet
+          - testnet
+        description: mainnet or testnet network
+        required: true
+      version:
+        description: What mainnet version number is this deployment? (e.g. v0.1.0)
         required: true
 
 
@@ -57,6 +64,7 @@ jobs:
           service: mpc-recovery-leader-testnet
           region: us-east1
           project_id: "${{ env.PROJECT_PROD }}"
+          tag: "${{ github.event.inputs.version }}"
 
       - name: Deploy signer to Cloud Run testnet
         id: deploy-signer-0-testnet
@@ -66,6 +74,7 @@ jobs:
           service: mpc-recovery-signer-0-testnet
           region: us-east1
           project_id: "${{ env.PROJECT_PROD }}"
+          tag: "${{ github.event.inputs.version }}"
 
       - name: Deploy signer to Cloud Run testnet
         id: deploy-signer-1-testnet
@@ -75,6 +84,7 @@ jobs:
           service: mpc-recovery-signer-1-testnet
           region: us-east1
           project_id: "${{ env.PROJECT_PROD }}"
+          tag: "${{ github.event.inputs.version }}"
         
       - name: Deploy signer to Cloud Run testnet
         id: deploy-signer-2-testnet
@@ -84,6 +94,7 @@ jobs:
           service: mpc-recovery-signer-2-testnet
           region: us-east1
           project_id: "${{ env.PROJECT_PROD }}"
+          tag: "${{ github.event.inputs.version }}"
 
   deploy-mpc-recovery-mainnet:
     runs-on: ubuntu-latest
@@ -108,6 +119,7 @@ jobs:
           service: mpc-recovery-leader-mainnet
           region: us-east1
           project_id: "${{ env.PROJECT_PROD }}"
+          tag: "${{ github.event.inputs.version }}"
 
       - name: Deploy signer to Cloud Run mainnet
         id: deploy-signer-0
@@ -117,6 +129,7 @@ jobs:
           service: mpc-recovery-signer-0-mainnet
           region: us-east1
           project_id: "${{ env.PROJECT_PROD }}"
+          tag: "${{ github.event.inputs.version }}"
 
       - name: Deploy signer to Cloud Run mainnet
         id: deploy-signer-1
@@ -126,6 +139,7 @@ jobs:
           service: mpc-recovery-signer-1-mainnet
           region: us-east1
           project_id: "${{ env.PROJECT_PROD }}"
+          tag: "${{ github.event.inputs.version }}"
         
       - name: Deploy signer to Cloud Run mainnet
         id: deploy-signer-2
@@ -135,3 +149,4 @@ jobs:
           service: mpc-recovery-signer-2-mainnet
           region: us-east1
           project_id: "${{ env.PROJECT_PROD }}"
+          tag: "${{ github.event.inputs.version }}"
