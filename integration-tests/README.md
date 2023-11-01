@@ -9,17 +9,17 @@ docker pull ghcr.io/near/os-relayer
 docker pull ghcr.io/near/sandbox
 ```
 
+For M1 you may want to pull the following image instead:
+
+```BASH
+docker pull ghcr.io/near/sandbox:latest-aarch64
+```
+
 In case of authorization issues make sure you have logged into docker using your [access token](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic).
 
 Build OIDC Provider test image
 ```bash
 docker build -t near/test-oidc-provider ./test-oidc-provider
-```
-
-Now, build mpc-recovery from the project's root:
-
-```BASH
-cargo build --release
 ```
 
 Then run the integration tests:
@@ -43,6 +43,22 @@ Finally, run the integration tests with the built docker image:
 ```BASH
 cargo test -p mpc-recovery-integration-tests --features docker-test
 ```
+
+## Profiling: Flamegraphs
+
+To profile code and get a flamegraph, run the following:
+
+```sh
+cargo flamegraph --root --profile flamegraph --test lib
+```
+
+Or for a singular test like `test_basic_action`:
+
+```sh
+cargo flamegraph --root --profile flamegraph --test lib -- test_basic_action
+```
+
+This will generate a `flamegraph.svg`. Open this on a browser and inspect each of the callstacks.
 
 ## FAQ
 

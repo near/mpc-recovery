@@ -4,12 +4,15 @@ use near_crypto::KeyFile;
 use near_units::parse_near;
 use near_workspaces::{
     network::{Sandbox, ValidatorKey},
+    types::SecretKey,
     Account, Worker,
 };
 
 use crate::env::containers;
 
 pub mod env;
+pub mod mpc;
+pub mod multichain;
 pub mod sandbox;
 pub mod util;
 
@@ -53,12 +56,39 @@ async fn fetch_validator_keys(
     }
 }
 
+pub struct SandboxCtx<'a> {
+    pub sandbox: containers::Sandbox<'a>,
+    pub worker: Worker<Sandbox>,
+}
+
+pub async fn initialize_sandbox<'a>(
+    docker_client: &'a containers::DockerClient,
+    network: &str,
+) -> anyhow::Result<SandboxCtx<'a>> {
+    tracing::info!("initializing sandbox");
+    let sandbox = containers::Sandbox::run(docker_client, network).await?;
+
+    let validator_key = fetch_validator_keys(docker_client, &sandbox).await?;
+
+    tracing::info!("initializing sandbox worker");
+    let worker = near_workspaces::sandbox()
+        .rpc_addr(&sandbox.local_address)
+        .validator_key(ValidatorKey::Known(
+            validator_key.account_id.to_string().parse()?,
+            validator_key.secret_key.to_string().parse()?,
+        ))
+        .await?;
+
+    Ok(SandboxCtx { sandbox, worker })
+}
+
 pub struct RelayerCtx<'a> {
     pub sandbox: containers::Sandbox<'a>,
     pub redis: containers::Redis<'a>,
     pub relayer: containers::Relayer<'a>,
     pub worker: Worker<Sandbox>,
     pub creator_account: Account,
+    pub creator_account_keys: Vec<SecretKey>,
 }
 
 pub async fn initialize_relayer<'a>(
@@ -66,31 +96,18 @@ pub async fn initialize_relayer<'a>(
     network: &str,
     relayer_id: &str,
 ) -> anyhow::Result<RelayerCtx<'a>> {
-    tracing::info!("Initializing relayer...");
-    let sandbox = containers::Sandbox::run(docker_client, network).await?;
+    let SandboxCtx { sandbox, worker } = initialize_sandbox(docker_client, network).await?;
 
-    let validator_key = fetch_validator_keys(docker_client, &sandbox).await?;
-
-    tracing::info!("Initializing sandbox worker...");
-    let worker = near_workspaces::sandbox()
-        .rpc_addr(&format!(
-            "http://127.0.0.1:{}",
-            sandbox
-                .container
-                .get_host_port_ipv4(crate::containers::Sandbox::CONTAINER_RPC_PORT)
-        ))
-        .validator_key(ValidatorKey::Known(
-            validator_key.account_id.to_string().parse()?,
-            validator_key.secret_key.to_string().parse()?,
-        ))
-        .await?;
-    tracing::info!("Sandbox worker initialized");
     let social_db = sandbox::initialize_social_db(&worker).await?;
     sandbox::initialize_linkdrop(&worker).await?;
     tracing::info!("Initializing relayer accounts...");
     let relayer_account =
         sandbox::create_account(&worker, "relayer", parse_near!("1000 N")).await?;
+    let relayer_account_keys = sandbox::gen_rotating_keys(&relayer_account, 5).await?;
+
     let creator_account = sandbox::create_account(&worker, "creator", parse_near!("200 N")).await?;
+    let creator_account_keys = sandbox::gen_rotating_keys(&creator_account, 5).await?;
+
     let social_account = sandbox::create_account(&worker, "social", parse_near!("1000 N")).await?;
     tracing::info!(
         "Relayer accounts initialized. Relayer account: {}, Creator account: {}, Social account: {}",
@@ -100,14 +117,13 @@ pub async fn initialize_relayer<'a>(
     );
 
     let redis = containers::Redis::run(docker_client, network).await?;
-
     let relayer = containers::Relayer::run(
         docker_client,
         network,
         &sandbox.address,
         &redis.full_address,
         relayer_account.id(),
-        relayer_account.secret_key(),
+        &relayer_account_keys,
         creator_account.id(),
         social_db.id(),
         social_account.id(),
@@ -122,5 +138,6 @@ pub async fn initialize_relayer<'a>(
         relayer,
         worker,
         creator_account,
+        creator_account_keys,
     })
 }

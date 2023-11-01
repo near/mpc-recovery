@@ -62,12 +62,6 @@ resource "google_secret_manager_secret_iam_member" "secret_share_secret_access" 
   member    = "serviceAccount:${google_service_account.service_account.email}"
 }
 
-resource "google_secret_manager_secret_iam_member" "oidc_providers_secret_access" {
-  secret_id = var.oidc_providers_secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.service_account.email}"
-}
-
 /*
  * Create a partner signer node
  */
@@ -84,9 +78,8 @@ module "signer" {
 
   node_id = var.node_id
 
-  cipher_key_secret_id     = var.cipher_key_secret_id
-  sk_share_secret_id       = var.sk_share_secret_id
-  oidc_providers_secret_id = var.oidc_providers_secret_id
+  cipher_key_secret_id = var.cipher_key_secret_id
+  sk_share_secret_id   = var.sk_share_secret_id
 
   # optional
   connector_id = "partner-vpc-connector-id"
@@ -96,6 +89,5 @@ module "signer" {
   depends_on = [
     google_secret_manager_secret_iam_member.cipher_key_secret_access,
     google_secret_manager_secret_iam_member.secret_share_secret_access,
-    google_secret_manager_secret_iam_member.oidc_providers_secret_access
   ]
 }

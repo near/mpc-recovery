@@ -1,7 +1,13 @@
 [workspace]
 members = [
     "mpc-recovery",
+    "contract",
+    "node",
     "integration-tests",
     "load-tests",
     "test-oidc-provider",
 ]
+
+[profile.flamegraph]
+inherits = "release"
+debug = true
