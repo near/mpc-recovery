@@ -10,6 +10,8 @@ crate-type = ["cdylib", "lib"]
 near-sdk = "4.1.1"
 serde = { version = "1", features = ["derive"] }
 schemars = "0.8"
+hpke = "0.11"
+rand = "0.8"
 
 [profile.release]
 codegen-units = 1

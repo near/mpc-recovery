@@ -9,6 +9,8 @@ use tokio::sync::mpsc;
 use tracing_subscriber::EnvFilter;
 use url::Url;
 
+use mpc_contract::keys::hpke;
+
 #[derive(Parser, Debug)]
 pub enum Cli {
     Start {
@@ -34,6 +36,10 @@ pub enum Cli {
         /// The web port for this server
         #[arg(long, env("MPC_RECOVERY_WEB_PORT"))]
         web_port: u16,
+        // TODO: need to add in CipherPK type for parsing.
+        /// The cipher public key used to encrypt messages between nodes.
+        #[arg(long, env("MPC_RECOVERY_WEB_PORT"))]
+        cipher_pk: String,
     },
 }
 
@@ -52,6 +58,7 @@ impl Cli {
                 account,
                 account_sk,
                 web_port,
+                cipher_pk,
             } => {
                 vec![
                     "start".to_string(),
@@ -67,6 +74,8 @@ impl Cli {
                     account_sk.to_string(),
                     "--web-port".to_string(),
                     web_port.to_string(),
+                    "--cipher-pk".to_string(),
+                    cipher_pk,
                 ]
             }
         }
@@ -94,6 +103,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
             mpc_contract_id,
             account,
             account_sk,
+            cipher_pk,
         } => {
             tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
@@ -115,6 +125,10 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                         rpc_client.clone(),
                         signer.clone(),
                         receiver,
+                        hpke::PublicKey::from_bytes(&hex::decode(cipher_pk)?)
+                            // todo: handle unwrap
+                            .unwrap(),
+                        signer.secret_key.clone(),
                     );
                     tracing::debug!("protocol initialized");
                     let protocol_handle = tokio::spawn(async move {

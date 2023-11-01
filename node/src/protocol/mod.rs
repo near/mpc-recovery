@@ -7,6 +7,7 @@ mod triple;
 
 pub use contract::ProtocolState;
 pub use message::MpcMessage;
+use mpc_contract::keys::hpke;
 pub use state::NodeState;
 
 use self::consensus::ConsensusCtx;
@@ -32,6 +33,8 @@ struct Ctx {
     signer: InMemorySigner,
     rpc_client: near_fetch::Client,
     http_client: reqwest::Client,
+    cipher_pk: hpke::PublicKey,
+    sign_sk: near_crypto::SecretKey,
 }
 
 impl ConsensusCtx for &Ctx {
@@ -57,6 +60,14 @@ impl ConsensusCtx for &Ctx {
 
     fn my_address(&self) -> &Url {
         &self.my_address
+    }
+
+    fn cipher_pk(&self) -> &hpke::PublicKey {
+        &self.cipher_pk
+    }
+
+    fn sign_pk(&self) -> near_crypto::PublicKey {
+        self.sign_sk.public_key()
     }
 }
 
@@ -90,6 +101,8 @@ impl MpcSignProtocol {
         rpc_client: near_fetch::Client,
         signer: InMemorySigner,
         receiver: mpsc::Receiver<MpcMessage>,
+        cipher_pk: hpke::PublicKey,
+        sign_sk: near_crypto::SecretKey,
     ) -> (Self, Arc<RwLock<NodeState>>) {
         let state = Arc::new(RwLock::new(NodeState::Starting));
         let ctx = Ctx {
@@ -99,6 +112,8 @@ impl MpcSignProtocol {
             signer,
             rpc_client,
             http_client: reqwest::Client::new(),
+            cipher_pk,
+            sign_sk,
         };
         let protocol = MpcSignProtocol {
             ctx,

@@ -44,14 +44,14 @@ impl CryptographicProtocol for GeneratingState {
                 }
                 Action::SendMany(m) => {
                     tracing::debug!("sending a message to many participants");
-                    for (p, url) in &self.participants {
+                    for (p, info) in &self.participants {
                         if p == &ctx.me() {
                             // Skip yourself, cait-sith never sends messages to oneself
                             continue;
                         }
                         http_client::message(
                             ctx.http_client(),
-                            url.clone(),
+                            info.url.clone(),
                             MpcMessage::Generating(GeneratingMessage {
                                 from: ctx.me(),
                                 data: m.clone(),
@@ -63,10 +63,10 @@ impl CryptographicProtocol for GeneratingState {
                 Action::SendPrivate(to, m) => {
                     tracing::debug!("sending a private message to {to:?}");
                     match self.participants.get(&to) {
-                        Some(url) => {
+                        Some(info) => {
                             http_client::message(
                                 ctx.http_client(),
-                                url.clone(),
+                                info.url.clone(),
                                 MpcMessage::Generating(GeneratingMessage {
                                     from: ctx.me(),
                                     data: m.clone(),
@@ -113,14 +113,14 @@ impl CryptographicProtocol for ResharingState {
                 }
                 Action::SendMany(m) => {
                     tracing::debug!("sending a message to all participants");
-                    for (p, url) in &self.new_participants {
+                    for (p, info) in &self.new_participants {
                         if p == &ctx.me() {
                             // Skip yourself, cait-sith never sends messages to oneself
                             continue;
                         }
                         http_client::message(
                             ctx.http_client(),
-                            url.clone(),
+                            info.url.clone(),
                             MpcMessage::Resharing(ResharingMessage {
                                 epoch: self.old_epoch,
                                 from: ctx.me(),
@@ -133,10 +133,10 @@ impl CryptographicProtocol for ResharingState {
                 Action::SendPrivate(to, m) => {
                     tracing::debug!("sending a private message to {to:?}");
                     match self.new_participants.get(&to) {
-                        Some(url) => {
+                        Some(info) => {
                             http_client::message(
                                 ctx.http_client(),
-                                url.clone(),
+                                info.url.clone(),
                                 MpcMessage::Resharing(ResharingMessage {
                                     epoch: self.old_epoch,
                                     from: ctx.me(),
@@ -173,8 +173,9 @@ impl CryptographicProtocol for RunningState {
             self.triple_manager.generate();
         }
         for (p, msg) in self.triple_manager.poke() {
-            let url = self.participants.get(&p).unwrap();
-            http_client::message(ctx.http_client(), url.clone(), MpcMessage::Triple(msg)).await?;
+            let info = self.participants.get(&p).unwrap();
+            http_client::message(ctx.http_client(), info.url.clone(), MpcMessage::Triple(msg))
+                .await?;
         }
         Ok(NodeState::Running(self))
     }

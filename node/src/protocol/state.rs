@@ -1,8 +1,8 @@
 use super::triple::TripleManager;
 use crate::types::{KeygenProtocol, PrivateKeyShare, PublicKey, ReshareProtocol};
 use cait_sith::protocol::Participant;
+use mpc_contract::ParticipantInfo;
 use std::collections::HashMap;
-use url::Url;
 
 pub struct PersistentNodeData {
     pub epoch: u64,
@@ -13,14 +13,14 @@ pub struct PersistentNodeData {
 pub struct StartedState(pub Option<PersistentNodeData>);
 
 pub struct GeneratingState {
-    pub participants: HashMap<Participant, Url>,
+    pub participants: HashMap<Participant, ParticipantInfo>,
     pub threshold: usize,
     pub protocol: KeygenProtocol,
 }
 
 pub struct WaitingForConsensusState {
     pub epoch: u64,
-    pub participants: HashMap<Participant, Url>,
+    pub participants: HashMap<Participant, ParticipantInfo>,
     pub threshold: usize,
     pub private_share: PrivateKeyShare,
     pub public_key: PublicKey,
@@ -28,7 +28,7 @@ pub struct WaitingForConsensusState {
 
 pub struct RunningState {
     pub epoch: u64,
-    pub participants: HashMap<Participant, Url>,
+    pub participants: HashMap<Participant, ParticipantInfo>,
     pub threshold: usize,
     pub private_share: PrivateKeyShare,
     pub public_key: PublicKey,
@@ -37,8 +37,8 @@ pub struct RunningState {
 
 pub struct ResharingState {
     pub old_epoch: u64,
-    pub old_participants: HashMap<Participant, Url>,
-    pub new_participants: HashMap<Participant, Url>,
+    pub old_participants: HashMap<Participant, ParticipantInfo>,
+    pub new_participants: HashMap<Participant, ParticipantInfo>,
     pub threshold: usize,
     pub public_key: PublicKey,
     pub protocol: ReshareProtocol,

@@ -5,11 +5,10 @@ use mpc_contract::{ParticipantInfo, ProtocolContractState};
 use near_sdk::AccountId;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use url::Url;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct InitializedContractState {
-    pub participants: HashMap<Participant, Url>,
+    pub participants: HashMap<Participant, ParticipantInfo>,
     pub threshold: usize,
     pub pk_votes: HashMap<near_crypto::PublicKey, HashSet<Participant>>,
 }
@@ -41,7 +40,7 @@ impl From<mpc_contract::InitializedContractState> for InitializedContractState {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RunningContractState {
     pub epoch: u64,
-    pub participants: HashMap<Participant, Url>,
+    pub participants: HashMap<Participant, ParticipantInfo>,
     pub threshold: usize,
     pub public_key: PublicKey,
     pub candidates: HashMap<Participant, ParticipantInfo>,
@@ -88,8 +87,8 @@ impl From<mpc_contract::RunningContractState> for RunningContractState {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ResharingContractState {
     pub old_epoch: u64,
-    pub old_participants: HashMap<Participant, Url>,
-    pub new_participants: HashMap<Participant, Url>,
+    pub old_participants: HashMap<Participant, ParticipantInfo>,
+    pub new_participants: HashMap<Participant, ParticipantInfo>,
     pub threshold: usize,
     pub public_key: PublicKey,
     pub finished_votes: HashSet<Participant>,
@@ -120,7 +119,7 @@ pub enum ProtocolState {
 }
 
 impl ProtocolState {
-    pub fn participants(&self) -> &HashMap<Participant, Url> {
+    pub fn participants(&self) -> &HashMap<Participant, ParticipantInfo> {
         match self {
             ProtocolState::Initialized(InitializedContractState { participants, .. }) => {
                 participants
@@ -166,14 +165,9 @@ impl TryFrom<ProtocolContractState> for ProtocolState {
 
 fn contract_participants_into_cait_participants(
     participants: HashMap<AccountId, ParticipantInfo>,
-) -> HashMap<Participant, Url> {
+) -> HashMap<Participant, ParticipantInfo> {
     participants
         .into_values()
-        .map(|p| {
-            (
-                Participant::from(p.id),
-                Url::try_from(p.url.as_str()).unwrap(),
-            )
-        })
+        .map(|p| (Participant::from(p.id), p))
         .collect()
 }

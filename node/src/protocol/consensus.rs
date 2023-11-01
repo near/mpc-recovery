@@ -11,6 +11,7 @@ use crate::{http_client, rpc_client};
 use async_trait::async_trait;
 use cait_sith::protocol::{InitializationError, Participant};
 use k256::Secp256k1;
+use mpc_contract::keys::hpke;
 use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
 use near_primitives::types::AccountId;
@@ -24,6 +25,8 @@ pub trait ConsensusCtx {
     fn signer(&self) -> &InMemorySigner;
     fn mpc_contract_id(&self) -> &AccountId;
     fn my_address(&self) -> &Url;
+    fn cipher_pk(&self) -> &hpke::PublicKey;
+    fn sign_pk(&self) -> near_crypto::PublicKey;
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -489,11 +492,11 @@ impl ConsensusProtocol for JoiningState {
                         votes_to_go = contract_state.threshold - voted.len(),
                         "trying to get participants to vote for us"
                     );
-                    for (p, url) in contract_state.participants {
+                    for (p, info) in contract_state.participants {
                         if voted.contains(&p) {
                             continue;
                         }
-                        http_client::join(ctx.http_client(), url, &ctx.me())
+                        http_client::join(ctx.http_client(), info.url, &ctx.me())
                             .await
                             .unwrap()
                     }
@@ -503,6 +506,8 @@ impl ConsensusProtocol for JoiningState {
                     let args = serde_json::json!({
                         "participant_id": ctx.me(),
                         "url": ctx.my_address(),
+                        "cipher_pk": ctx.cipher_pk().to_bytes(),
+                        "sign_pk": ctx.sign_pk(),
                     });
                     ctx.rpc_client()
                         .send_tx(
