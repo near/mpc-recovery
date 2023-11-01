@@ -10,7 +10,7 @@ resource "google_cloud_run_v2_service" "leader" {
 
     vpc_access {
       connector = var.connector_id
-      egress    = "ALL_TRAFFIC"
+      egress    = "PRIVATE_RANGES_ONLY"
     }
 
     scaling {

@@ -9,8 +9,8 @@ resource "google_cloud_run_v2_service" "signer" {
     annotations = var.metadata_annotations == null ? null : var.metadata_annotations
 
     vpc_access {
-      connector = var.connector_id
-      egress    = "ALL_TRAFFIC"
+      connector = var.connector_id == null ? null : var.connector_id
+      egress    = "PRIVATE_RANGES_ONLY"
     }
 
     scaling {

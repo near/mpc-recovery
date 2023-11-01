@@ -75,6 +75,7 @@ module "signer" {
   source = "../modules/signer"
 
   env                   = var.env
+  service_name          = "partner-service-name"
   project               = var.project
   region                = var.region
   zone                  = var.zone
@@ -86,6 +87,9 @@ module "signer" {
   cipher_key_secret_id     = var.cipher_key_secret_id
   sk_share_secret_id       = var.sk_share_secret_id
   oidc_providers_secret_id = var.oidc_providers_secret_id
+
+  # optional
+  connector_id = "partner-vpc-connector-id"
 
   jwt_signature_pk_url = var.jwt_signature_pk_url
 
