@@ -53,3 +53,13 @@ variable "signer_configs" {
 variable "jwt_signature_pk_url" {
   type = string
 }
+
+variable "otlp_endpoint" {
+  type    = string
+  default = "http://localhost:4317"
+}
+
+variable "opentelemetry_level" {
+  type    = string
+  default = "off"
+}

@@ -51,3 +51,11 @@ variable "fast_auth_partners_secret_id" {
 variable "jwt_signature_pk_url" {
   type = string
 }
+
+variable "otlp_endpoint" {
+  type = string
+}
+
+variable "opentelemetry_level" {
+  type = string
+}

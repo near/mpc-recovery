@@ -82,11 +82,20 @@ impl Display for ColorOutput {
 #[derive(Debug, Default, clap::Parser)]
 pub struct Options {
     /// Enables export of span data using opentelemetry exporters.
-    #[clap(long, value_enum, default_value = "off")]
-    opentelemetry: OpenTelemetryLevel,
+    #[clap(
+        long,
+        env("MPC_RECOVERY_OPENTELEMETRY_LEVEL"),
+        value_enum,
+        default_value = "off"
+    )]
+    opentelemetry_level: OpenTelemetryLevel,
 
     /// Opentelemetry gRPC collector endpoint.
-    #[clap(long, default_value = "http://localhost:4317")]
+    #[clap(
+        long,
+        env("MPC_RECOVERY_OTLP_ENDPOINT"),
+        default_value = "http://localhost:4317"
+    )]
     otlp_endpoint: String,
 
     /// Whether the log needs to be colored.
@@ -103,7 +112,7 @@ impl Options {
     pub fn into_str_args(self) -> Vec<String> {
         let mut buf = vec![
             "--opentelemetry".to_string(),
-            self.opentelemetry.to_string(),
+            self.opentelemetry_level.to_string(),
             "--otlp-endpoint".to_string(),
             self.otlp_endpoint,
             "--color".to_string(),
@@ -193,7 +202,7 @@ where
         .tracing()
         .with_exporter(
             opentelemetry_otlp::new_exporter()
-                .tonic()
+                .http()
                 .with_endpoint(otlp_endpoint),
         )
         .with_trace_config(
@@ -213,7 +222,7 @@ where
 fn set_default_otlp_level(options: &Options) {
     // Record the initial tracing level specified as a command-line flag. Use this recorded value to
     // reset opentelemetry filter when the LogConfig file gets deleted.
-    DEFAULT_OTLP_LEVEL.set(options.opentelemetry).unwrap();
+    DEFAULT_OTLP_LEVEL.set(options.opentelemetry_level).unwrap();
 }
 
 /// The resource representing a registered subscriber.
@@ -287,7 +296,7 @@ pub async fn default_subscriber_with_opentelemetry(
         .unwrap_or_else(|_| panic!("Failed to set Log Layer Filter"));
 
     let (subscriber, handle) = add_opentelemetry_layer(
-        options.opentelemetry,
+        options.opentelemetry_level,
         &options.otlp_endpoint,
         env,
         node_id,
