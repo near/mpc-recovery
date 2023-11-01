@@ -79,7 +79,7 @@ impl Display for ColorOutput {
 }
 
 /// Configures exporter of span and trace data.
-#[derive(Debug, Default, clap::Parser)]
+#[derive(Debug, clap::Parser)]
 pub struct Options {
     /// Enables export of span data using opentelemetry exporters.
     #[clap(
@@ -108,10 +108,21 @@ pub struct Options {
     log_span_events: bool,
 }
 
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            opentelemetry_level: OpenTelemetryLevel::OFF,
+            otlp_endpoint: "http://localhost:4317".to_string(),
+            color: ColorOutput::Auto,
+            log_span_events: false,
+        }
+    }
+}
+
 impl Options {
     pub fn into_str_args(self) -> Vec<String> {
         let mut buf = vec![
-            "--opentelemetry".to_string(),
+            "--opentelemetry-level".to_string(),
             self.opentelemetry_level.to_string(),
             "--otlp-endpoint".to_string(),
             self.otlp_endpoint,
