@@ -39,10 +39,6 @@ variable "sk_share_secret_id" {
   type = string
 }
 
-variable "oidc_providers_secret_id" {
-  type = string
-}
-
 variable "service_name" {
   type = string
 }
