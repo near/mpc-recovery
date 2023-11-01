@@ -1,14 +1,16 @@
 name: Deploy to Prod environments.
 on:
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      network:
+        description: mainnet or testnet
+        required: true
+
 
 env:
-  PROJECT_DEV: "pagoda-discovery-platform-prod"
+  PROJECT_PROD: "pagoda-discovery-platform-prod"
   REGION: "us-east1"
   IMAGE: us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery:${{ github.sha }}
-  PR_NUMBER: ${{ github.event.number }}
 
 jobs:
   build-mpc-recovery:
@@ -34,6 +36,7 @@ jobs:
 
   deploy-mpc-recovery-testnet:
     runs-on: ubuntu-latest
+    if: github.event.inputs.network == 'testnet'
     needs: build-mpc-recovery
     env:
       name: PROD
@@ -53,41 +56,38 @@ jobs:
           image: "${{ env.IMAGE }}:${{ github.sha }}"
           service: mpc-recovery-leader-testnet
           region: us-east1
-          project_id: "${{ env.PROJECT_DEV }}"
-          tag: "pr-${{ github.event.number }}"
+          project_id: "${{ env.PROJECT_PROD }}"
 
       - name: Deploy signer to Cloud Run testnet
         id: deploy-signer-0-testnet
         uses: google-github-actions/deploy-cloudrun@v1
         with:
           image: "${{ env.IMAGE }}:${{ github.sha }}"
-          service: mpc-recovery-signer-0-dev
+          service: mpc-recovery-signer-0-testnet
           region: us-east1
-          project_id: "${{ env.PROJECT_DEV }}"
-          tag: "pr-${{ github.event.number }}"
+          project_id: "${{ env.PROJECT_PROD }}"
 
       - name: Deploy signer to Cloud Run testnet
         id: deploy-signer-1-testnet
         uses: google-github-actions/deploy-cloudrun@v1
         with:
           image: "${{ env.IMAGE }}:${{ github.sha }}"
-          service: mpc-recovery-signer-1-dev
+          service: mpc-recovery-signer-1-testnet
           region: us-east1
-          project_id: "${{ env.PROJECT_DEV }}"
-          tag: "pr-${{ github.event.number }}"
+          project_id: "${{ env.PROJECT_PROD }}"
         
       - name: Deploy signer to Cloud Run testnet
         id: deploy-signer-2-testnet
         uses: google-github-actions/deploy-cloudrun@v1
         with:
           image: "${{ env.IMAGE }}:${{ github.sha }}"
-          service: mpc-recovery-signer-2-dev
+          service: mpc-recovery-signer-2-testnet
           region: us-east1
-          project_id: "${{ env.PROJECT_DEV }}"
-          tag: "pr-${{ github.event.number }}"
+          project_id: "${{ env.PROJECT_PROD }}"
 
   deploy-mpc-recovery-mainnet:
     runs-on: ubuntu-latest
+    if: github.event.inputs.network == 'mainnet'
     needs: build-mpc-recovery
     env:
       name: PROD
@@ -107,8 +107,7 @@ jobs:
           image: "${{ env.IMAGE }}:${{ github.sha }}"
           service: mpc-recovery-leader-mainnet
           region: us-east1
-          project_id: "${{ env.PROJECT_DEV }}"
-          tag: "pr-${{ github.event.number }}"
+          project_id: "${{ env.PROJECT_PROD }}"
 
       - name: Deploy signer to Cloud Run mainnet
         id: deploy-signer-0
@@ -117,8 +116,7 @@ jobs:
           image: "${{ env.IMAGE }}:${{ github.sha }}"
           service: mpc-recovery-signer-0-mainnet
           region: us-east1
-          project_id: "${{ env.PROJECT_DEV }}"
-          tag: "pr-${{ github.event.number }}"
+          project_id: "${{ env.PROJECT_PROD }}"
 
       - name: Deploy signer to Cloud Run mainnet
         id: deploy-signer-1
@@ -127,8 +125,7 @@ jobs:
           image: "${{ env.IMAGE }}:${{ github.sha }}"
           service: mpc-recovery-signer-1-mainnet
           region: us-east1
-          project_id: "${{ env.PROJECT_DEV }}"
-          tag: "pr-${{ github.event.number }}"
+          project_id: "${{ env.PROJECT_PROD }}"
         
       - name: Deploy signer to Cloud Run mainnet
         id: deploy-signer-2
@@ -137,5 +134,4 @@ jobs:
           image: "${{ env.IMAGE }}:${{ github.sha }}"
           service: mpc-recovery-signer-2-mainnet
           region: us-east1
-          project_id: "${{ env.PROJECT_DEV }}"
-          tag: "pr-${{ github.event.number }}"
+          project_id: "${{ env.PROJECT_PROD }}"
