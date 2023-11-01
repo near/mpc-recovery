@@ -83,3 +83,7 @@ data "google_compute_network" "prod_network" {
   name    = "prod"
   project = "pagoda-shared-infrastructure"
 }
+
+variable "jwt_signature_pk_url" {
+  type = string
+}

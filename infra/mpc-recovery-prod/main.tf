@@ -165,6 +165,7 @@ module "signer-mainnet" {
   service_account_email = google_service_account.service_account.email
   docker_image          = var.docker_image
   connector_id          = var.prod-connector
+  jwt_signature_pk_url  = var.jwt_signature_pk_url
 
   node_id = count.index
 
@@ -191,6 +192,7 @@ module "signer-testnet" {
   service_account_email = google_service_account.service_account.email
   docker_image          = var.docker_image
   connector_id          = var.prod-connector
+  jwt_signature_pk_url  = var.jwt_signature_pk_url
 
   node_id = count.index
 
@@ -219,6 +221,7 @@ module "leader-mainnet" {
   service_account_email = google_service_account.service_account.email
   docker_image          = var.docker_image
   connector_id          = var.prod-connector
+  jwt_signature_pk_url  = var.jwt_signature_pk_url
 
   signer_node_urls   = concat(module.signer.*.node.uri, var.external_signer_node_urls)
   near_rpc           = local.workspace.near_rpc
@@ -246,11 +249,13 @@ module "leader-testnet" {
   service_account_email = google_service_account.service_account.email
   docker_image          = var.docker_image
   connector_id          = var.prod-connector
+  jwt_signature_pk_url  = var.jwt_signature_pk_url
 
   signer_node_urls   = concat(module.signer.*.node.uri, var.external_signer_node_urls)
   near_rpc           = local.workspace.near_rpc
   near_root_account  = local.workspace.near_root_account
   account_creator_id = var.account_creator_id
+
 
   account_creator_sk_secret_id = var.account_creator_sk_secret_id
   fast_auth_partners_secret_id = var.fast_auth_partners_secret_id
