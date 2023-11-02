@@ -204,7 +204,7 @@ where
     let (filter, handle) = reload::Layer::<LevelFilter, S>::new(filter);
 
     let resource = vec![
-        KeyValue::new(SERVICE_NAME, format!("mpc:{}", node_id)),
+        KeyValue::new(SERVICE_NAME, format!("mpc:{}:{}", env, node_id)),
         KeyValue::new("env", env),
         KeyValue::new("node_id", node_id),
     ];
