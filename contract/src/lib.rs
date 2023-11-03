@@ -5,7 +5,9 @@ use std::collections::{HashMap, HashSet};
 
 type ParticipantId = u32;
 
-pub type HpkePublicKey = [u8; 32];
+pub mod hpke {
+    pub type PublicKey = [u8; 32];
+}
 
 #[derive(
     Serialize,
@@ -25,7 +27,7 @@ pub struct ParticipantInfo {
     pub account_id: AccountId,
     pub url: String,
     /// The public key used for encrypting messages.
-    pub cipher_pk: HpkePublicKey,
+    pub cipher_pk: hpke::PublicKey,
     /// The public key used for verifying messages.
     pub sign_pk: PublicKey,
 }
@@ -103,7 +105,7 @@ impl MpcContract {
         &mut self,
         participant_id: ParticipantId,
         url: String,
-        cipher_pk: HpkePublicKey,
+        cipher_pk: hpke::PublicKey,
         sign_pk: PublicKey,
     ) {
         match &mut self.protocol_state {

@@ -66,15 +66,16 @@ pub async fn message_encrypted<U: IntoUrl>(
     message: MpcMessage,
 ) -> Result<(), SendError> {
     let message = serde_json::to_vec(&message).map_err(SendError::DataConversionError)?;
-    let message = cipher_pk.encrypt(&message, b"");
+    let cipher = cipher_pk.encrypt(&message, b"");
+    tracing::debug!(ciphertext = ?cipher.text, "sending encrypted");
 
     let mut url = url.into_url().unwrap();
-    url.set_path("msg-encrypted");
+    url.set_path("msg-private");
     let action = || async {
         let response = client
             .post(url.clone())
             .header("content-type", "application/json")
-            .json(&message)
+            .json(&cipher)
             .send()
             .await
             .map_err(SendError::ReqwestClientError)?;
@@ -134,4 +135,29 @@ pub async fn join<U: IntoUrl>(
 
     let retry_strategy = ExponentialBackoff::from_millis(10).map(jitter).take(3);
     Retry::spawn(retry_strategy, action).await
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::protocol::message::GeneratingMessage;
+    use crate::protocol::MpcMessage;
+
+    #[test]
+    fn test_sending_encrypted_message() {
+        let (sk, pk) = mpc_keys::hpke::generate();
+        let starting_message = MpcMessage::Generating(GeneratingMessage {
+            from: cait_sith::protocol::Participant::from(0),
+            data: vec![],
+        });
+
+        let message = serde_json::to_vec(&starting_message).unwrap();
+        let message = pk.encrypt(&message, b"");
+
+        let message = serde_json::to_vec(&message).unwrap();
+        let cipher = serde_json::from_slice(&message).unwrap();
+        let message = sk.decrypt(&cipher, b"");
+        let message: MpcMessage = serde_json::from_slice(&message).unwrap();
+
+        assert_eq!(starting_message, message);
+    }
 }

@@ -8,20 +8,20 @@ pub trait MessageCtx {
     fn me(&self) -> Participant;
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct GeneratingMessage {
     pub from: Participant,
     pub data: MessageData,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct ResharingMessage {
     pub epoch: u64,
     pub from: Participant,
     pub data: MessageData,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct TripleMessage {
     pub id: u64,
     pub epoch: u64,
@@ -29,7 +29,7 @@ pub struct TripleMessage {
     pub data: MessageData,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum MpcMessage {
     Generating(GeneratingMessage),
     Resharing(ResharingMessage),

@@ -6,6 +6,7 @@ use crate::protocol::MpcMessage;
 use async_trait::async_trait;
 use cait_sith::protocol::{Action, Participant};
 use k256::elliptic_curve::group::GroupEncoding;
+use mpc_keys::hpke;
 
 pub trait CryptographicCtx {
     fn me(&self) -> Participant;
@@ -64,7 +65,8 @@ impl CryptographicProtocol for GeneratingState {
                     tracing::debug!("sending a private message to {to:?}");
                     match self.participants.get(&to) {
                         Some(info) => {
-                            http_client::message(
+                            http_client::message_encrypted(
+                                &hpke::PublicKey::from_bytes(&info.cipher_pk),
                                 ctx.http_client(),
                                 info.url.clone(),
                                 MpcMessage::Generating(GeneratingMessage {
@@ -134,7 +136,8 @@ impl CryptographicProtocol for ResharingState {
                     tracing::debug!("sending a private message to {to:?}");
                     match self.new_participants.get(&to) {
                         Some(info) => {
-                            http_client::message(
+                            http_client::message_encrypted(
+                                &hpke::PublicKey::from_bytes(&info.cipher_pk),
                                 ctx.http_client(),
                                 info.url.clone(),
                                 MpcMessage::Resharing(ResharingMessage {
@@ -172,10 +175,21 @@ impl CryptographicProtocol for RunningState {
         if self.triple_manager.potential_len() < 2 {
             self.triple_manager.generate();
         }
-        for (p, msg) in self.triple_manager.poke() {
+        for (is_public, p, msg) in self.triple_manager.poke() {
             let info = self.participants.get(&p).unwrap();
-            http_client::message(ctx.http_client(), info.url.clone(), MpcMessage::Triple(msg))
-                .await?;
+            if is_public {
+                http_client::message(ctx.http_client(), info.url.clone(), MpcMessage::Triple(msg))
+                    .await?;
+                continue;
+            }
+
+            http_client::message_encrypted(
+                &hpke::PublicKey::from_bytes(&info.cipher_pk),
+                ctx.http_client(),
+                info.url.clone(),
+                MpcMessage::Triple(msg),
+            )
+            .await?;
         }
         Ok(NodeState::Running(self))
     }

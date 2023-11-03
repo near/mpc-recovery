@@ -4,7 +4,6 @@ use crate::util::AffinePointExt;
 use cait_sith::protocol::{Action, Participant};
 use cait_sith::triples::TripleGenerationOutput;
 use k256::Secp256k1;
-use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 
 /// Unique number used to identify a specific ongoing triple generation protocol.
@@ -71,10 +70,7 @@ impl TripleManager {
     /// It is very important to NOT reuse the same triple twice for two different
     /// protocols.
     pub fn take(&mut self, id: TripleId) -> Option<TripleGenerationOutput<Secp256k1>> {
-        match self.triples.entry(id) {
-            Entry::Vacant(_) => None,
-            Entry::Occupied(entry) => Some(entry.remove()),
-        }
+        self.triples.remove(&id)
     }
 
     /// Ensures that the triple with the given id is either:
@@ -104,7 +100,7 @@ impl TripleManager {
     /// messages to be sent to the respective participant.
     ///
     /// An empty vector means we cannot progress until we receive a new message.
-    pub fn poke(&mut self) -> Vec<(Participant, TripleMessage)> {
+    pub fn poke(&mut self) -> Vec<(bool, Participant, TripleMessage)> {
         let mut messages = Vec::new();
         self.generators.retain(|id, protocol| loop {
             let action = protocol.poke().unwrap();
@@ -112,11 +108,12 @@ impl TripleManager {
                 Action::Wait => {
                     tracing::debug!("waiting");
                     // Retain protocol until we are finished
-                    return true;
+                    break true;
                 }
                 Action::SendMany(data) => {
                     for p in &self.participants {
                         messages.push((
+                            true,
                             *p,
                             TripleMessage {
                                 id: *id,
@@ -128,6 +125,7 @@ impl TripleManager {
                     }
                 }
                 Action::SendPrivate(p, data) => messages.push((
+                    false,
                     p,
                     TripleMessage {
                         id: *id,
@@ -146,7 +144,7 @@ impl TripleManager {
                     );
                     self.triples.insert(*id, output);
                     // Do not retain the protocol
-                    return false;
+                    break false;
                 }
             }
         });

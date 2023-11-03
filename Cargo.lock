@@ -3687,6 +3687,7 @@ dependencies = [
 name = "mpc-keys"
 version = "0.1.0"
 dependencies = [
+ "borsh 0.9.3",
  "hex 0.3.2",
  "hpke",
  "rand 0.8.5",

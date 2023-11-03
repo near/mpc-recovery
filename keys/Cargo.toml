@@ -7,13 +7,10 @@ edition = "2021"
 crate-type = ["cdylib", "lib"]
 
 [dependencies]
-hpke = { version = "0.11", optional = true }
-serde = { version = "1", features = ["derive"], optional = true }
-rand = { version = "0.8", optional = true }
+borsh = { version = "0.9.3" }
+hpke = { version = "0.11" }
+serde = { version = "1", features = ["derive"] }
+rand = { version = "0.8" }
 
 [dev-dependencies]
 hex = "*"
-
-[features]
-default = ["hpke", "rand", "serde"]
-wasm = []

@@ -132,7 +132,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                         rpc_client.clone(),
                         signer.clone(),
                         receiver,
-                        hpke::PublicKey::from_bytes(&hex::decode(cipher_pk)?)
+                        hpke::PublicKey::try_from_bytes(&hex::decode(cipher_pk)?)
                             // todo: handle unwrap
                             .unwrap(),
                         signer.secret_key.clone(),

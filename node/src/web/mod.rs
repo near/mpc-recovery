@@ -53,7 +53,7 @@ pub async fn run(
             }),
         )
         .route("/msg", post(msg))
-        .route("/msg-encrypted", post(msg_encrypted))
+        .route("/msg-private", post(msg_private))
         .route("/join", post(join))
         .route("/state", get(state))
         .layer(Extension(Arc::new(axum_state)));
@@ -90,16 +90,16 @@ async fn msg(
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
-async fn msg_encrypted(
+async fn msg_private(
     Extension(state): Extension<Arc<AxumState>>,
     WithRejection(Json(cipher), _): WithRejection<Json<Cipher>, MpcSignError>,
 ) -> StatusCode {
+    tracing::debug!(ciphertext = ?cipher.text, "received encrypted");
     let message = state.cipher_sk.decrypt(&cipher, b"");
     let Ok(message) = serde_json::from_slice(&message) else {
         tracing::error!("failed to decrypt protocol message");
         return StatusCode::BAD_REQUEST;
     };
-    tracing::debug!(?message, "received");
 
     match state.sender.send(message).await {
         Ok(()) => StatusCode::OK,
