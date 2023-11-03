@@ -7,6 +7,7 @@ use axum::routing::{get, post};
 use axum::{Extension, Json, Router};
 use axum_extra::extract::WithRejection;
 use cait_sith::protocol::Participant;
+use mpc_keys::hpke::{self, Cipher};
 use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
 use near_primitives::types::AccountId;
@@ -20,6 +21,7 @@ struct AxumState {
     signer: InMemorySigner,
     sender: Sender<MpcMessage>,
     protocol_state: Arc<RwLock<NodeState>>,
+    cipher_sk: hpke::SecretKey,
 }
 
 pub async fn run(
@@ -28,6 +30,7 @@ pub async fn run(
     rpc_client: near_fetch::Client,
     signer: InMemorySigner,
     sender: Sender<MpcMessage>,
+    cipher_sk: hpke::SecretKey,
     protocol_state: Arc<RwLock<NodeState>>,
 ) -> anyhow::Result<()> {
     tracing::debug!("running a node");
@@ -37,6 +40,7 @@ pub async fn run(
         signer,
         sender,
         protocol_state,
+        cipher_sk,
     };
 
     let app = Router::new()
@@ -49,6 +53,7 @@ pub async fn run(
             }),
         )
         .route("/msg", post(msg))
+        .route("/msg-encrypted", post(msg_encrypted))
         .route("/join", post(join))
         .route("/state", get(state))
         .layer(Extension(Arc::new(axum_state)));
@@ -79,6 +84,27 @@ async fn msg(
         Ok(()) => StatusCode::OK,
         Err(e) => {
             tracing::error!("failed to send a protocol message: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
+}
+
+#[tracing::instrument(level = "debug", skip_all)]
+async fn msg_encrypted(
+    Extension(state): Extension<Arc<AxumState>>,
+    WithRejection(Json(cipher), _): WithRejection<Json<Cipher>, MpcSignError>,
+) -> StatusCode {
+    let message = state.cipher_sk.decrypt(&cipher, b"");
+    let Ok(message) = serde_json::from_slice(&message) else {
+        tracing::error!("failed to decrypt protocol message");
+        return StatusCode::BAD_REQUEST;
+    };
+    tracing::debug!(?message, "received");
+
+    match state.sender.send(message).await {
+        Ok(()) => StatusCode::OK,
+        Err(e) => {
+            tracing::error!("failed to send an encrypted protocol message: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         }
     }

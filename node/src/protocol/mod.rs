@@ -7,7 +7,6 @@ mod triple;
 
 pub use contract::ProtocolState;
 pub use message::MpcMessage;
-use mpc_contract::keys::hpke;
 pub use state::NodeState;
 
 use self::consensus::ConsensusCtx;
@@ -25,6 +24,8 @@ use std::{sync::Arc, time::Duration};
 use tokio::sync::mpsc::{self, error::TryRecvError};
 use tokio::sync::RwLock;
 use url::Url;
+
+use mpc_keys::hpke;
 
 struct Ctx {
     me: Participant,

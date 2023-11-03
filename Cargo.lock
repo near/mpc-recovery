@@ -3678,10 +3678,18 @@ dependencies = [
 name = "mpc-contract"
 version = "0.1.0"
 dependencies = [
- "hpke",
  "near-sdk",
- "rand 0.8.5",
  "schemars",
+ "serde",
+]
+
+[[package]]
+name = "mpc-keys"
+version = "0.1.0"
+dependencies = [
+ "hex 0.3.2",
+ "hpke",
+ "rand 0.8.5",
  "serde",
 ]
 
@@ -3756,6 +3764,7 @@ dependencies = [
  "hex 0.4.3",
  "hyper",
  "mpc-contract",
+ "mpc-keys",
  "mpc-recovery",
  "mpc-recovery-node",
  "multi-party-eddsa",
@@ -3792,10 +3801,10 @@ dependencies = [
  "cait-sith",
  "clap 4.4.6",
  "hex 0.4.3",
- "hpke",
  "k256",
  "local-ip-address",
  "mpc-contract",
+ "mpc-keys",
  "near-crypto 0.17.0",
  "near-fetch",
  "near-lake-framework",

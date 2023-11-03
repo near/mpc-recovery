@@ -1,5 +1,6 @@
 use crate::util;
 use async_process::Child;
+use mpc_keys::hpke;
 use near_workspaces::AccountId;
 
 #[allow(dead_code)]
@@ -7,7 +8,9 @@ pub struct Node {
     pub address: String,
     node_id: usize,
     account: AccountId,
-    account_sk: near_workspaces::types::SecretKey,
+    pub account_sk: near_workspaces::types::SecretKey,
+    pub cipher_pk: hpke::PublicKey,
+    cipher_sk: hpke::SecretKey,
 
     // process held so it's not dropped. Once dropped, process will be killed.
     #[allow(unused)]
@@ -22,6 +25,7 @@ impl Node {
         account_sk: &near_workspaces::types::SecretKey,
     ) -> anyhow::Result<Self> {
         let web_port = util::pick_unused_port().await?;
+        let (cipher_sk, cipher_pk) = hpke::generate();
         let args = mpc_recovery_node::cli::Cli::Start {
             node_id: node_id.into(),
             near_rpc: ctx.sandbox.local_address.clone(),
@@ -29,6 +33,8 @@ impl Node {
             account: account.clone(),
             account_sk: account_sk.to_string().parse()?,
             web_port,
+            cipher_pk: hex::encode(cipher_pk.to_bytes()),
+            cipher_sk: hex::encode(cipher_sk.to_bytes()),
         }
         .into_str_args();
 
@@ -44,6 +50,8 @@ impl Node {
             node_id: node_id as usize,
             account: account.clone(),
             account_sk: account_sk.clone(),
+            cipher_pk,
+            cipher_sk,
             process,
         })
     }

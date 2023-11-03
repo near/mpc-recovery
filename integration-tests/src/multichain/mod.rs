@@ -118,6 +118,8 @@ pub async fn docker(nodes: usize, docker_client: &DockerClient) -> anyhow::Resul
                     id: i as u32,
                     account_id: account.id().to_string().parse().unwrap(),
                     url: node.address.clone(),
+                    cipher_pk: node.cipher_pk.to_bytes(),
+                    sign_pk: node.sign_pk.to_string().parse().unwrap(),
                 },
             )
         })
@@ -167,6 +169,8 @@ pub async fn host(nodes: usize, docker_client: &DockerClient) -> anyhow::Result<
                     id: i as u32,
                     account_id: account.id().to_string().parse().unwrap(),
                     url: node.address.clone(),
+                    cipher_pk: node.cipher_pk.to_bytes(),
+                    sign_pk: node.account_sk.public_key().to_string().parse().unwrap(),
                 },
             )
         })

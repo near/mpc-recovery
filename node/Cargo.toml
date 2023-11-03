@@ -38,3 +38,4 @@ near-primitives = "0.17"
 near-sdk = "4.1.1"
 
 mpc-contract = { path = "../contract" }
+mpc-keys = { path = "../keys" }

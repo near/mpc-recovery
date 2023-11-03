@@ -1,4 +1,5 @@
 use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::GenericArray};
+use mpc_keys::hpke;
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_workspaces::AccountId;
 use testcontainers::{
@@ -11,6 +12,9 @@ pub struct Node<'a> {
     pub container: Container<'a, GenericImage>,
     pub address: String,
     pub local_address: String,
+    pub cipher_pk: hpke::PublicKey,
+    pub cipher_sk: hpke::SecretKey,
+    pub sign_pk: near_workspaces::types::PublicKey,
 }
 
 pub struct NodeApi {
@@ -33,6 +37,7 @@ impl<'a> Node<'a> {
         account_sk: &near_workspaces::types::SecretKey,
     ) -> anyhow::Result<Node<'a>> {
         tracing::info!(node_id, "running node container");
+        let (cipher_sk, cipher_pk) = hpke::generate();
         let args = mpc_recovery_node::cli::Cli::Start {
             node_id: node_id.into(),
             near_rpc: ctx.sandbox.local_address.clone(),
@@ -40,6 +45,8 @@ impl<'a> Node<'a> {
             account: account.clone(),
             account_sk: account_sk.to_string().parse()?,
             web_port: Self::CONTAINER_PORT,
+            cipher_pk: hex::encode(cipher_pk.to_bytes()),
+            cipher_sk: hex::encode(cipher_sk.to_bytes()),
         }
         .into_str_args();
         let image: GenericImage = GenericImage::new("near/mpc-recovery-node", "latest")
@@ -67,6 +74,9 @@ impl<'a> Node<'a> {
             container,
             address: full_address,
             local_address: format!("http://localhost:{host_port}"),
+            cipher_pk,
+            cipher_sk,
+            sign_pk: account_sk.public_key(),
         })
     }
 }

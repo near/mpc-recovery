@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use tracing_subscriber::EnvFilter;
 use url::Url;
 
-use mpc_contract::keys::hpke;
+use mpc_keys::hpke;
 
 #[derive(Parser, Debug)]
 pub enum Cli {
@@ -38,8 +38,11 @@ pub enum Cli {
         web_port: u16,
         // TODO: need to add in CipherPK type for parsing.
         /// The cipher public key used to encrypt messages between nodes.
-        #[arg(long, env("MPC_RECOVERY_WEB_PORT"))]
+        #[arg(long, env("MPC_RECOVERY_CIPHER_PK"))]
         cipher_pk: String,
+        /// The cipher secret key used to decrypt messages between nodes.
+        #[arg(long, env("MPC_RECOVERY_CIPHER_SK"))]
+        cipher_sk: String,
     },
 }
 
@@ -59,6 +62,7 @@ impl Cli {
                 account_sk,
                 web_port,
                 cipher_pk,
+                cipher_sk,
             } => {
                 vec![
                     "start".to_string(),
@@ -76,6 +80,8 @@ impl Cli {
                     web_port.to_string(),
                     "--cipher-pk".to_string(),
                     cipher_pk,
+                    "--cipher-sk".to_string(),
+                    cipher_sk,
                 ]
             }
         }
@@ -104,6 +110,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
             account,
             account_sk,
             cipher_pk,
+            cipher_sk,
         } => {
             tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
@@ -136,6 +143,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                     });
                     tracing::debug!("protocol thread spawned");
                     let mpc_contract_id_cloned = mpc_contract_id.clone();
+                    let cipher_sk = hpke::SecretKey::from_bytes(&hex::decode(cipher_sk)?).unwrap();
                     let web_handle = tokio::spawn(async move {
                         web::run(
                             web_port,
@@ -143,6 +151,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                             rpc_client,
                             signer,
                             sender,
+                            cipher_sk,
                             protocol_state,
                         )
                         .await

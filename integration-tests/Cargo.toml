@@ -16,6 +16,7 @@ futures = "0.3"
 hex = "0.4.3"
 hyper = { version = "0.14", features = ["full"] }
 mpc-contract = { path = "../contract" }
+mpc-keys = { path = "../keys" }
 mpc-recovery = { path = "../mpc-recovery" }
 mpc-recovery-node = { path = "../node" }
 multi-party-eddsa = { git = "https://github.com/DavidM-D/multi-party-eddsa.git", rev = "25ae4fdc5ff7819ae70e73ab4afacf1c24fc4da1" }
@@ -44,8 +45,6 @@ env_logger = "0.10.0"
 tracing-log = "0.1.3"
 tokio-util = { version = "0.7", features = ["full"] }
 reqwest = "0.11.16"
-
-mpc-contract = { path = "../contract" }
 
 [features]
 default = []

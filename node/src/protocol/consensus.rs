@@ -11,7 +11,7 @@ use crate::{http_client, rpc_client};
 use async_trait::async_trait;
 use cait_sith::protocol::{InitializationError, Participant};
 use k256::Secp256k1;
-use mpc_contract::keys::hpke;
+use mpc_keys::hpke;
 use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
 use near_primitives::types::AccountId;
