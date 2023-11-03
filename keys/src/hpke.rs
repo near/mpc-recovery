@@ -8,7 +8,9 @@ use hpke::{
     OpModeR,
 };
 
-const INFO_STR: &[u8] = b"example session";
+/// This can be used to customize the generated key. This will be used as a sort of
+/// versioning mechanism for the key.
+const INFO_ENTROPY: &[u8] = b"session-key-v1";
 
 // Interchangeable type parameters for the HPKE context.
 pub type Kem = X25519HkdfSha256;
@@ -16,7 +18,7 @@ pub type Aead = ChaCha20Poly1305;
 pub type Kdf = HkdfSha384;
 
 #[derive(serde::Serialize, serde::Deserialize)]
-pub struct Cipher {
+pub struct Ciphered {
     pub encapped_key: EncappedKey,
     pub text: CipherText,
     pub tag: Tag,
@@ -49,7 +51,7 @@ impl PublicKey {
         Self::try_from_bytes(bytes).expect("invalid bytes")
     }
 
-    pub fn encrypt(&self, msg: &[u8], associated_data: &[u8]) -> Cipher {
+    pub fn encrypt(&self, msg: &[u8], associated_data: &[u8]) -> Ciphered {
         let mut csprng = <rand::rngs::StdRng as rand::SeedableRng>::from_entropy();
 
         // Encapsulate a key and use the resulting shared secret to encrypt a message. The AEAD context
@@ -57,7 +59,7 @@ impl PublicKey {
         let (encapped_key, mut sender_ctx) = hpke::setup_sender::<Aead, Kdf, Kem, _>(
             &hpke::OpModeS::Base,
             &self.0,
-            INFO_STR,
+            INFO_ENTROPY,
             &mut csprng,
         )
         .expect("invalid server pubkey!");
@@ -68,7 +70,7 @@ impl PublicKey {
             .seal_in_place_detached(&mut ciphertext, associated_data)
             .expect("encryption failed!");
 
-        Cipher {
+        Ciphered {
             encapped_key: EncappedKey(encapped_key),
             text: ciphertext,
             tag: Tag(tag),
@@ -118,13 +120,13 @@ impl SecretKey {
         Ok(Self(Arc::new(hpke::Deserializable::from_bytes(bytes)?)))
     }
 
-    pub fn decrypt(&self, cipher: &Cipher, associated_data: &[u8]) -> Vec<u8> {
+    pub fn decrypt(&self, cipher: &Ciphered, associated_data: &[u8]) -> Vec<u8> {
         // Decapsulate and derive the shared secret. This creates a shared AEAD context.
         let mut receiver_ctx = hpke::setup_receiver::<Aead, Kdf, Kem>(
             &OpModeR::Base,
             &self.0,
             &cipher.encapped_key.0,
-            INFO_STR,
+            INFO_ENTROPY,
         )
         .expect("failed to set up receiver!");
 

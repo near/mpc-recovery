@@ -7,7 +7,7 @@ use axum::routing::{get, post};
 use axum::{Extension, Json, Router};
 use axum_extra::extract::WithRejection;
 use cait_sith::protocol::Participant;
-use mpc_keys::hpke::{self, Cipher};
+use mpc_keys::hpke::{self, Ciphered};
 use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
 use near_primitives::types::AccountId;
@@ -92,7 +92,7 @@ async fn msg(
 #[tracing::instrument(level = "debug", skip_all)]
 async fn msg_private(
     Extension(state): Extension<Arc<AxumState>>,
-    WithRejection(Json(cipher), _): WithRejection<Json<Cipher>, MpcSignError>,
+    WithRejection(Json(cipher), _): WithRejection<Json<Ciphered>, MpcSignError>,
 ) -> StatusCode {
     tracing::debug!(ciphertext = ?cipher.text, "received encrypted");
     let message = state.cipher_sk.decrypt(&cipher, b"");

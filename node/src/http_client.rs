@@ -144,6 +144,7 @@ mod tests {
 
     #[test]
     fn test_sending_encrypted_message() {
+        let associated_data = b"";
         let (sk, pk) = mpc_keys::hpke::generate();
         let starting_message = MpcMessage::Generating(GeneratingMessage {
             from: cait_sith::protocol::Participant::from(0),
@@ -151,11 +152,11 @@ mod tests {
         });
 
         let message = serde_json::to_vec(&starting_message).unwrap();
-        let message = pk.encrypt(&message, b"");
+        let message = pk.encrypt(&message, associated_data);
 
         let message = serde_json::to_vec(&message).unwrap();
         let cipher = serde_json::from_slice(&message).unwrap();
-        let message = sk.decrypt(&cipher, b"");
+        let message = sk.decrypt(&cipher, associated_data);
         let message: MpcMessage = serde_json::from_slice(&message).unwrap();
 
         assert_eq!(starting_message, message);
