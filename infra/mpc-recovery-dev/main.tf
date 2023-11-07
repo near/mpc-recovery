@@ -50,8 +50,8 @@ provider "google" {
  * Create brand new service account with basic IAM
  */
 resource "google_service_account" "service_account" {
-  account_id   = "mpc-recovery-dev"
-  display_name = "MPC Recovery dev Account"
+  account_id   = "mpc-recovery-${var.env}"
+  display_name = "MPC Recovery ${var.env} Account"
 }
 
 resource "google_service_account_iam_binding" "serivce-account-iam" {
