@@ -169,9 +169,8 @@ module "signer-mainnet" {
 
   node_id = count.index
 
-  oidc_providers_secret_id = var.oidc_providers_secret_id
-  cipher_key_secret_id     = var.signer_configs[count.index].cipher_key_secret_id
-  sk_share_secret_id       = var.signer_configs[count.index].sk_share_secret_id
+  cipher_key_secret_id = var.signer_configs[count.index].cipher_key_secret_id
+  sk_share_secret_id   = var.signer_configs[count.index].sk_share_secret_id
 
   depends_on = [
     google_secret_manager_secret_iam_member.cipher_key_secret_access,
@@ -196,9 +195,8 @@ module "signer-testnet" {
 
   node_id = count.index
 
-  oidc_providers_secret_id = var.oidc_providers_secret_id
-  cipher_key_secret_id     = var.signer_configs[count.index].cipher_key_secret_id
-  sk_share_secret_id       = var.signer_configs[count.index].sk_share_secret_id
+  cipher_key_secret_id = var.signer_configs[count.index].cipher_key_secret_id
+  sk_share_secret_id   = var.signer_configs[count.index].sk_share_secret_id
 
   depends_on = [
     google_secret_manager_secret_iam_member.cipher_key_secret_access,
