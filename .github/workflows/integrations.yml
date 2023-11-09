@@ -36,7 +36,7 @@ jobs:
 
       - name: Pull Relayer & Sandbox Docker Images
         run: |
-          docker pull ghcr.io/near/os-relayer
+          docker pull ghcr.io/near/os-relayer:12ba6e35690df3979fce0b36a41d0ca0db9c0ab4
           docker pull ghcr.io/near/sandbox
 
       - name: Build OIDC Provider Dcoker Image
