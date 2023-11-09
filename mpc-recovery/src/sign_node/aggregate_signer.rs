@@ -10,8 +10,8 @@ use curv::BigInt;
 use ed25519_dalek::{Sha512, Signature, Verifier};
 use multi_party_eddsa::protocols;
 use multi_party_eddsa::protocols::aggsig::{self, KeyAgg, SignSecondMsg};
-use rand8::rngs::OsRng;
-use rand8::Rng;
+use rand::rngs::OsRng;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 

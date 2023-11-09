@@ -113,7 +113,7 @@ mod tests {
     use super::*;
     use chrono::{Duration, Utc};
     use jsonwebtoken::{encode, EncodingKey, Header};
-    use rand8::rngs::OsRng;
+    use rand::rngs::OsRng;
     use rsa::{
         pkcs1::{EncodeRsaPrivateKey, EncodeRsaPublicKey},
         RsaPrivateKey, RsaPublicKey,

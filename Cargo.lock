@@ -3629,7 +3629,6 @@ dependencies = [
  "opentelemetry-otlp 0.13.0",
  "opentelemetry-semantic-conventions 0.12.0",
  "prometheus",
- "rand 0.7.3",
  "rand 0.8.5",
  "reqwest",
  "rsa",

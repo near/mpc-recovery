@@ -34,8 +34,7 @@ opentelemetry-otlp = { version = "0.13.0", features = [
 ] }
 opentelemetry-semantic-conventions = "0.12.0"
 prometheus = { version = "0.13.3", features = ["process"] }
-rand = "0.7"
-rand8 = { package = "rand", version = "0.8" }
+rand = "0.8"
 reqwest = { version = "0.11.16", features = ["blocking"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
