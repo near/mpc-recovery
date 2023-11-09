@@ -15,7 +15,7 @@ pub type PresignatureId = u64;
 
 /// A completed presignature.
 pub struct Presignature {
-    pub id: u64,
+    pub id: PresignatureId,
     pub output: PresignOutput<Secp256k1>,
 }
 
