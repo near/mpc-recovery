@@ -64,7 +64,8 @@ jobs:
         id: plan
         run: |
           terraform plan -input=false -no-color -lock-timeout=1h -var-file terraform-dev.tfvars \
-            -var "credentials=$GOOGLE_CREDENTIALS"
+            -var "credentials=$GOOGLE_CREDENTIALS" \
+            -var docker_image=us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev:${{ github.sha }}
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
 
@@ -140,6 +141,7 @@ jobs:
         if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
         run: |
           terraform apply -auto-approve -input=false -lock-timeout=1h -var-file terraform-dev.tfvars \
-            -var "credentials=$GOOGLE_CREDENTIALS"
+            -var "credentials=$GOOGLE_CREDENTIALS" \
+            -var docker_image=us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev:${{ github.sha }}
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
