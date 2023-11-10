@@ -351,20 +351,23 @@ impl<'a> Relayer<'a> {
             format!("{relayer_configs_path}/{config_file_name}"),
         )?;
 
-        let image = GenericImage::new("ghcr.io/near/os-relayer", "latest")
-            .with_wait_for(WaitFor::message_on_stdout("listening on"))
-            .with_exposed_port(Self::CONTAINER_PORT)
-            .with_volume(
-                config_absolute_path,
-                format!("/relayer-app/{}", config_file_name),
-            )
-            .with_volume(
-                keys_absolute_path
-                    .to_str()
-                    .expect("Failed to convert keys path to string"),
-                "/relayer-app/account_keys",
-            )
-            .with_env_var("RUST_LOG", "DEBUG");
+        let image = GenericImage::new(
+            "ghcr.io/near/os-relayer",
+            "12ba6e35690df3979fce0b36a41d0ca0db9c0ab4",
+        )
+        .with_wait_for(WaitFor::message_on_stdout("listening on"))
+        .with_exposed_port(Self::CONTAINER_PORT)
+        .with_volume(
+            config_absolute_path,
+            format!("/relayer-app/{}", config_file_name),
+        )
+        .with_volume(
+            keys_absolute_path
+                .to_str()
+                .expect("Failed to convert keys path to string"),
+            "/relayer-app/account_keys",
+        )
+        .with_env_var("RUST_LOG", "DEBUG");
 
         let image: RunnableImage<GenericImage> = image.into();
         let image = image.with_network(network);
