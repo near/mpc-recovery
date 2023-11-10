@@ -20,6 +20,10 @@ variable "docker_image" {
 variable "node_id" {
 }
 
+variable "connector_id" {
+  default = null
+}
+
 # Secrets
 variable "cipher_key_secret_id" {
   type = string
@@ -29,6 +33,10 @@ variable "sk_share_secret_id" {
   type = string
 }
 
-variable "jwt_signature_pk_url" {
+variable "oidc_providers_secret_id" {
   type = string
+}
+
+variable "jwt_signature_pk_url" {
+
 }

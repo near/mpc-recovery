@@ -55,7 +55,7 @@ resource "google_cloud_run_v2_service" "leader" {
         value_source {
           secret_key_ref {
             secret  = var.account_creator_sk_secret_id
-            version = "1"
+            version = "latest"
           }
         }
       }

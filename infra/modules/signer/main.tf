@@ -57,10 +57,6 @@ resource "google_cloud_run_v2_service" "signer" {
         }
       }
       env {
-        name  = "MPC_RECOVERY_JWT_SIGNATURE_PK_URL"
-        value = var.jwt_signature_pk_url
-      }
-      env {
         name  = "RUST_LOG"
         value = "mpc_recovery=debug"
       }
