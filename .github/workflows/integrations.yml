@@ -52,6 +52,7 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
+          target: wasm32-unknown-unknown
 
       - uses: Swatinem/rust-cache@v1
 
@@ -60,12 +61,11 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build MPC Recovery Binary Locally
-        run: |
-          cargo build -p mpc-recovery --release
+      - name: Compile Contract
+        run: cargo build -p mpc-contract --target wasm32-unknown-unknown --release
 
       - name: Test
-        run: cargo test -p mpc-recovery-integration-tests --jobs 1 -- --test-threads 1
+        run: cargo test -p mpc-recovery-integration-tests mpc --jobs 1 -- --test-threads 1
         env:
           RUST_LOG: INFO
           RUST_BACKTRACE: 1

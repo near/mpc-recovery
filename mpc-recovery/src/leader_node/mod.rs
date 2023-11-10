@@ -7,11 +7,11 @@ use crate::msg::{
     SignRequest, SignResponse, UserCredentialsRequest, UserCredentialsResponse,
 };
 use crate::oauth::verify_oidc_token;
-use crate::relayer::msg::{CreateAccountAtomicRequest, RegisterAccountRequest};
+use crate::relayer::msg::CreateAccountAtomicRequest;
 use crate::relayer::NearRpcAndRelayerClient;
 use crate::transaction::{
-    get_create_account_delegate_action, get_local_signed_delegated_action, get_mpc_signature,
-    sign_payload_with_mpc, to_dalek_combined_public_key,
+    get_mpc_signature, new_create_account_delegate_action, sign_payload_with_mpc,
+    to_dalek_combined_public_key,
 };
 use crate::utils::{check_digest_signature, user_credentials_request_digest};
 use crate::{metrics, nar};
@@ -30,7 +30,7 @@ use axum_tracing_opentelemetry;
 use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 use borsh::BorshDeserialize;
 use curv::elliptic::curves::{Ed25519, Point};
-use near_crypto::SecretKey;
+use near_fetch::signer::KeyRotatingSigner;
 use near_primitives::delegate_action::{DelegateAction, NonDelegateAction};
 use near_primitives::transaction::{Action, DeleteKeyAction};
 use near_primitives::types::AccountId;
@@ -49,9 +49,8 @@ pub struct Config {
     pub sign_nodes: Vec<String>,
     pub near_rpc: String,
     pub near_root_account: String,
-    pub account_creator_id: AccountId,
     // TODO: temporary solution
-    pub account_creator_sk: SecretKey,
+    pub account_creator_signer: KeyRotatingSigner,
     pub partners: PartnerList,
     pub jwt_signature_pk_url: String,
 }
@@ -63,8 +62,7 @@ pub async fn run(config: Config) {
         sign_nodes,
         near_rpc,
         near_root_account,
-        account_creator_id,
-        account_creator_sk,
+        account_creator_signer,
         partners,
         jwt_signature_pk_url,
     } = config;
@@ -72,28 +70,6 @@ pub async fn run(config: Config) {
     tracing::debug!(?sign_nodes, "running a leader node");
 
     let client = NearRpcAndRelayerClient::connect(&near_rpc);
-    // FIXME: Internal account id is retrieved from the ID token. We don't have a token for ourselves,
-    // but are still forced to allocate allowance.
-    // Using randomly generated internal account id ensures the uniqueness of user idenrifier on the relayer side so
-    // we can update the allowance on each server run.
-    for partner in partners.entries.iter() {
-        let fake_internal_account_id: String = rand::thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(16)
-            .map(char::from)
-            .collect();
-        client
-            .register_account_and_allowance(
-                RegisterAccountRequest {
-                    account_id: account_creator_id.clone(),
-                    allowance: 18_000_000_000_000_000_000, // should be enough to create 700_000+ accs
-                    oauth_token: fake_internal_account_id,
-                },
-                partner.relayer.clone(),
-            )
-            .await
-            .unwrap();
-    }
 
     let state = Arc::new(LeaderState {
         env,
@@ -101,8 +77,7 @@ pub async fn run(config: Config) {
         client,
         reqwest_client: reqwest::Client::new(),
         near_root_account: near_root_account.parse().unwrap(),
-        account_creator_id,
-        account_creator_sk,
+        account_creator_signer,
         partners,
         jwt_signature_pk_url,
     });
@@ -225,9 +200,8 @@ struct LeaderState {
     client: NearRpcAndRelayerClient,
     reqwest_client: reqwest::Client,
     near_root_account: AccountId,
-    account_creator_id: AccountId,
     // TODO: temporary solution
-    account_creator_sk: SecretKey,
+    account_creator_signer: KeyRotatingSigner,
     partners: PartnerList,
     jwt_signature_pk_url: String,
 }
@@ -341,7 +315,7 @@ async fn process_user_credentials(
 ) -> Result<UserCredentialsResponse, LeaderNodeError> {
     verify_oidc_token(
         &request.oidc_token,
-        &state.partners.oidc_providers(),
+        Some(&state.partners.oidc_providers()),
         &state.reqwest_client,
         &state.jwt_signature_pk_url,
     )
@@ -373,7 +347,7 @@ async fn process_new_account(
     let new_user_account_id = request.near_account_id;
     let oidc_token_claims = verify_oidc_token(
         &request.oidc_token,
-        &state.partners.oidc_providers(),
+        Some(&state.partners.oidc_providers()),
         &state.reqwest_client,
         &state.jwt_signature_pk_url,
     )
@@ -409,13 +383,12 @@ async fn process_new_account(
     .await?;
 
     nar::retry(|| async {
+        let account_creator = state.account_creator_signer.fetch_and_rotate_signer();
+
         // Get nonce and recent block hash
         let (_hash, block_height, nonce) = state
             .client
-            .access_key(
-                state.account_creator_id.clone(),
-                state.account_creator_sk.public_key(),
-            )
+            .access_key(&account_creator.account_id, &account_creator.public_key)
             .await
             .map_err(LeaderNodeError::RelayerError)?;
 
@@ -426,22 +399,16 @@ async fn process_new_account(
             None => new_account_options.full_access_keys = Some(vec![mpc_user_recovery_pk.clone()]),
         }
 
-        let delegate_action = get_create_account_delegate_action(
-            &state.account_creator_id,
-            &state.account_creator_sk.public_key(),
+        // We create accounts using the local key
+        let signed_delegate_action = new_create_account_delegate_action(
+            account_creator,
             &new_user_account_id,
-            new_account_options.clone(),
+            &new_account_options,
             &state.near_root_account,
             nonce,
             block_height + 100,
         )
         .map_err(LeaderNodeError::Other)?;
-        // We create accounts using the local key
-        let signed_delegate_action = get_local_signed_delegated_action(
-            delegate_action,
-            state.account_creator_id.clone(),
-            state.account_creator_sk.clone(),
-        );
 
         // Send delegate action to relayer
         let request = CreateAccountAtomicRequest {
@@ -475,8 +442,8 @@ async fn process_new_account(
                     .client
                     .invalidate_cache_if_acc_creation_failed(
                         &(
-                            state.account_creator_id.clone(),
-                            state.account_creator_sk.public_key(),
+                            account_creator.account_id.clone(),
+                            account_creator.public_key.clone(),
                         ),
                         &err_str,
                     )
@@ -523,7 +490,7 @@ async fn process_sign(
     // Check OIDC token
     verify_oidc_token(
         &request.oidc_token,
-        &state.partners.oidc_providers(),
+        Some(&state.partners.oidc_providers()),
         &state.reqwest_client,
         &state.jwt_signature_pk_url,
     )

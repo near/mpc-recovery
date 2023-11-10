@@ -63,20 +63,6 @@ You also need to grab the AES cipher key that was printed after `Cipher 0:`; it 
 
 Save it to GCP Secret Manager under the name of your choosing (e.g. `mpc-recovery-cipher-prod`). This name will be referred to as `GCP_CIPHER_SECRET_ID`.
 
-### OIDC Providers
-Create one more secret secret under the name of your choosing (e.g. `mpc-recovery-oidc-providers-prod`). This name will be referred to as `GCP_OIDC_PROVIDERS_SECRET_ID`.
-
-Populate it with whatever your Pagoda point of contact told you to use, it should look similar to below:
-
-```
-[
-  {
-    issuer   = "https://securetoken.google.com/near-fastauth-prod",
-    audience = "near-fastauth-prod"
-  }
-]
-```
-
 ## Building Docker Image
 
 Build the mpc-recovery docker image from this folder and make sure to tag it for convenience:
@@ -92,7 +78,6 @@ Go to `infra/partner` and copy `template.tfvars` as `prod.tfvars`. Edit `prod.tf
 * Set `env` to `prod`
 * Set `project` to `<GCP_PROJECT_ID>`
 * Set `node_id` to whatever your point of contact with Pagoda has given you (ask them if they did not). It is very important you use this specific ID for your node's configuration
-* Set `oidc_providers_secret_id` to `<GCP_OIDC_PROVIDERS_SECRET_ID>`
 * Set `cipher_key_secret_id` to `<GCP_CIPHER_SECRET_ID>`
 * Set `sk_share_secret_id` to `<GCP_SK_SHARE_SECRET_ID>`
 

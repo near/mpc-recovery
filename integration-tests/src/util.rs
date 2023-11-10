@@ -1,19 +1,14 @@
 use std::{
     fs::{self, File},
     io::Write,
-    path::{Path, PathBuf},
 };
 
+use crate::containers::RelayerConfig;
 use anyhow::Context;
-use async_process::{Child, Command, Stdio};
 use hyper::{Body, Client, Method, Request, StatusCode, Uri};
 use near_workspaces::{types::SecretKey, AccountId};
 use serde::{Deserialize, Serialize};
 use toml::Value;
-
-use crate::containers::RelayerConfig;
-
-const EXECUTABLE: &str = "mpc-recovery";
 
 pub async fn post<U, Req: Serialize, Resp>(
     uri: U,
@@ -79,7 +74,19 @@ struct KeyFile {
 pub fn create_key_file(
     account_id: &AccountId,
     account_sk: &SecretKey,
-    key_path: &str,
+    key_dir: &str,
+) -> anyhow::Result<(), anyhow::Error> {
+    create_key_file_with_filepath(
+        account_id,
+        account_sk,
+        &format!("{key_dir}/{account_id}.json"),
+    )
+}
+
+pub fn create_key_file_with_filepath(
+    account_id: &AccountId,
+    account_sk: &SecretKey,
+    filepath: &str,
 ) -> anyhow::Result<(), anyhow::Error> {
     let key_file = KeyFile {
         account_id: account_id.to_string(),
@@ -87,9 +94,7 @@ pub fn create_key_file(
         private_key: account_sk.to_string(),
     };
     let key_json_str = serde_json::to_string(&key_file).expect("Failed to serialize to JSON");
-    let key_json_file_path = format!("{key_path}/{account_id}.json");
-    let mut json_key_file =
-        File::create(key_json_file_path).expect("Failed to create JSON key file");
+    let mut json_key_file = File::create(filepath).expect("Failed to create JSON key file");
     json_key_file
         .write_all(key_json_str.as_bytes())
         .expect("Failed to write to JSON key file");
@@ -221,40 +226,4 @@ pub async fn ping_until_ok(addr: &str, timeout: u64) -> anyhow::Result<()> {
     })
     .await?;
     Ok(())
-}
-
-pub fn target_dir() -> Option<PathBuf> {
-    let mut out_dir = Path::new(std::env!("OUT_DIR"));
-    loop {
-        if out_dir.ends_with("target") {
-            break Some(out_dir.to_path_buf());
-        }
-
-        match out_dir.parent() {
-            Some(parent) => out_dir = parent,
-            None => break None, // We've reached the root directory and didn't find "target"
-        }
-    }
-}
-
-pub fn executable(release: bool) -> Option<PathBuf> {
-    let executable = target_dir()?
-        .join(if release { "release" } else { "debug" })
-        .join(EXECUTABLE);
-    Some(executable)
-}
-
-pub fn spawn_mpc(release: bool, node: &str, args: &[String]) -> anyhow::Result<Child> {
-    let executable = executable(release)
-        .with_context(|| format!("could not find target dir while starting {node} node"))?;
-
-    Command::new(&executable)
-        .args(args)
-        .env("RUST_LOG", "mpc_recovery=INFO")
-        .envs(std::env::vars())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .kill_on_drop(true)
-        .spawn()
-        .with_context(|| format!("failed to run {node} node: {}", executable.display()))
 }

@@ -14,9 +14,11 @@ use multi_party_eddsa::protocols::ExpandedKeyPair;
 use serde::de::DeserializeOwned;
 use tracing_subscriber::EnvFilter;
 
+use near_crypto::{InMemorySigner, SecretKey};
+use near_fetch::signer::KeyRotatingSigner;
 use near_primitives::types::AccountId;
 
-use crate::firewall::allowed::{OidcProviderList, PartnerList};
+use crate::firewall::allowed::PartnerList;
 use crate::gcp::GcpService;
 use crate::sign_node::migration;
 
@@ -91,9 +93,14 @@ pub enum Cli {
         /// Account creator ID
         #[arg(long, env("MPC_RECOVERY_ACCOUNT_CREATOR_ID"))]
         account_creator_id: AccountId,
-        /// TEMPORARY - Account creator ed25519 secret key
-        #[arg(long, env("MPC_RECOVERY_ACCOUNT_CREATOR_SK"))]
-        account_creator_sk: Option<String>,
+        /// Account creator's secret key(s)
+        #[arg(
+            long,
+            value_parser = parse_json_str::<Vec<SecretKey>>,
+            env("MPC_RECOVERY_ACCOUNT_CREATOR_SK"),
+            default_value("[]")
+        )]
+        account_creator_sk: ::std::vec::Vec<SecretKey>,
         /// JSON list of related items to be used to verify OIDC tokens.
         #[arg(long, env("FAST_AUTH_PARTNERS"))]
         fast_auth_partners: Option<String>,
@@ -129,12 +136,6 @@ pub enum Cli {
         /// The web port for this server
         #[arg(long, env("MPC_RECOVERY_WEB_PORT"))]
         web_port: u16,
-        /// JSON list of related items to be used to verify OIDC tokens.
-        #[arg(long, env("OIDC_PROVIDERS"))]
-        oidc_providers: Option<String>,
-        /// Filepath to a JSON list of related items to be used to verify OIDC tokens.
-        #[arg(long, value_parser, env("OIDC_PROVIDERS_FILEPATH"))]
-        oidc_providers_filepath: Option<PathBuf>,
         /// GCP project ID
         #[arg(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
         gcp_project_id: String,
@@ -205,24 +206,22 @@ pub async fn run(cmd: Cli) -> anyhow::Result<()> {
             jwt_signature_pk_url,
             logging_options,
         } => {
-            let _subscriber_guard = logging::default_subscriber_with_opentelemetry(
+            let _subscriber_guard = logging::subscribe_global(
                 EnvFilter::from_default_env(),
                 &logging_options,
                 env.clone(),
                 "leader".to_string(),
             )
-            .await
-            .global();
+            .await;
             let gcp_service =
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
-            let account_creator_sk =
-                load_account_creator_sk(&gcp_service, &env, account_creator_sk).await?;
+            let account_creator_signer =
+                load_account_creator(&gcp_service, &env, &account_creator_id, account_creator_sk)
+                    .await?;
             let partners = PartnerList {
                 entries: load_entries(&gcp_service, &env, "leader", partners, partners_filepath)
                     .await?,
             };
-
-            let account_creator_sk = account_creator_sk.parse()?;
 
             let config = LeaderConfig {
                 env,
@@ -230,9 +229,7 @@ pub async fn run(cmd: Cli) -> anyhow::Result<()> {
                 sign_nodes,
                 near_rpc,
                 near_root_account,
-                // TODO: Create such an account for testnet and mainnet in a secure way
-                account_creator_id,
-                account_creator_sk,
+                account_creator_signer,
                 partners,
                 jwt_signature_pk_url,
             };
@@ -245,33 +242,20 @@ pub async fn run(cmd: Cli) -> anyhow::Result<()> {
             sk_share,
             cipher_key,
             web_port,
-            oidc_providers,
-            oidc_providers_filepath,
             gcp_project_id,
             gcp_datastore_url,
             jwt_signature_pk_url,
             logging_options,
         } => {
-            let _subscriber_guard = logging::default_subscriber_with_opentelemetry(
+            let _subscriber_guard = logging::subscribe_global(
                 EnvFilter::from_default_env(),
                 &logging_options,
                 env.clone(),
                 node_id.to_string(),
             )
-            .await
-            .global();
+            .await;
             let gcp_service =
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
-            let oidc_providers = OidcProviderList {
-                entries: load_entries(
-                    &gcp_service,
-                    &env,
-                    node_id.to_string().as_str(),
-                    oidc_providers,
-                    oidc_providers_filepath,
-                )
-                .await?,
-            };
             let cipher_key = load_cipher_key(&gcp_service, &env, node_id, cipher_key).await?;
             let cipher_key = hex::decode(cipher_key)?;
             let cipher_key = GenericArray::<u8, U32>::clone_from_slice(&cipher_key);
@@ -288,7 +272,6 @@ pub async fn run(cmd: Cli) -> anyhow::Result<()> {
                 node_key: sk_share,
                 cipher,
                 port: web_port,
-                oidc_providers,
                 jwt_signature_pk_url,
             };
             run_sign_node(config).await;
@@ -303,14 +286,13 @@ pub async fn run(cmd: Cli) -> anyhow::Result<()> {
             gcp_datastore_url,
             logging_options,
         } => {
-            let _subscriber_guard = logging::default_subscriber_with_opentelemetry(
+            let _subscriber_guard = logging::subscribe_global(
                 EnvFilter::from_default_env(),
                 &logging_options,
                 env.clone(),
                 node_id.to_string(),
             )
-            .await
-            .global();
+            .await;
             let gcp_service = GcpService::new(
                 env.clone(),
                 gcp_project_id.clone(),
@@ -380,18 +362,23 @@ async fn load_cipher_key(
     }
 }
 
-async fn load_account_creator_sk(
+async fn load_account_creator(
     gcp_service: &GcpService,
     env: &str,
-    account_creator_sk_arg: Option<String>,
-) -> anyhow::Result<String> {
-    match account_creator_sk_arg {
-        Some(account_creator_sk) => Ok(account_creator_sk),
-        None => {
-            let name = format!("mpc-recovery-account-creator-sk-{env}/versions/latest");
-            Ok(std::str::from_utf8(&gcp_service.load_secret(name).await?)?.to_string())
-        }
-    }
+    account_creator_id: &AccountId,
+    account_creator_sk: Vec<SecretKey>,
+) -> anyhow::Result<KeyRotatingSigner> {
+    let sks = if account_creator_sk.is_empty() {
+        let name = format!("mpc-recovery-account-creator-sk-{env}/versions/latest");
+        let data = gcp_service.load_secret(name).await?;
+        serde_json::from_str(std::str::from_utf8(&data)?)?
+    } else {
+        account_creator_sk
+    };
+
+    Ok(KeyRotatingSigner::from_signers(sks.into_iter().map(|sk| {
+        InMemorySigner::from_secret_key(account_creator_id.clone(), sk)
+    })))
 }
 
 async fn load_entries<T>(
@@ -462,10 +449,6 @@ impl Cli {
                     jwt_signature_pk_url,
                 ];
 
-                if let Some(key) = account_creator_sk {
-                    buf.push("--account-creator-sk".to_string());
-                    buf.push(key);
-                }
                 if let Some(partners) = fast_auth_partners {
                     buf.push("--fast-auth-partners".to_string());
                     buf.push(partners);
@@ -482,6 +465,9 @@ impl Cli {
                     buf.push("--sign-nodes".to_string());
                     buf.push(sign_node);
                 }
+                let account_creator_sk = serde_json::to_string(&account_creator_sk).unwrap();
+                buf.push("--account-creator-sk".to_string());
+                buf.push(account_creator_sk);
                 buf.extend(logging_options.into_str_args());
 
                 buf
@@ -492,8 +478,6 @@ impl Cli {
                 web_port,
                 cipher_key,
                 sk_share,
-                oidc_providers,
-                oidc_providers_filepath,
                 gcp_project_id,
                 gcp_datastore_url,
                 jwt_signature_pk_url,
@@ -519,14 +503,6 @@ impl Cli {
                 if let Some(share) = sk_share {
                     buf.push("--sk-share".to_string());
                     buf.push(share);
-                }
-                if let Some(providers) = oidc_providers {
-                    buf.push("--oidc-providers".to_string());
-                    buf.push(providers);
-                }
-                if let Some(providers_filepath) = oidc_providers_filepath {
-                    buf.push("--oidc-providers-filepath".to_string());
-                    buf.push(providers_filepath.to_str().unwrap().to_string());
                 }
                 if let Some(gcp_datastore_url) = gcp_datastore_url {
                     buf.push("--gcp-datastore-url".to_string());
@@ -577,4 +553,11 @@ impl Cli {
             }
         }
     }
+}
+
+fn parse_json_str<T>(val: &str) -> Result<T, String>
+where
+    for<'a> T: serde::Deserialize<'a>,
+{
+    serde_json::from_str(val).map_err(|e| e.to_string())
 }
