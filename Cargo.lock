@@ -3733,7 +3733,6 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-opentelemetry 0.21.0",
- "tracing-opentelemetry-instrumentation-sdk",
  "tracing-subscriber",
  "yup-oauth2",
 ]

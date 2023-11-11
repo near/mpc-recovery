@@ -1,14 +1,12 @@
+use crate::env::{LeaderNodeApi, SignerNodeApi};
+use crate::mpc::{self, NodeProcess};
+use crate::util;
 use aes_gcm::aead::consts::U32;
 use aes_gcm::aead::generic_array::GenericArray;
 use mpc_recovery::firewall::allowed::DelegateActionRelayer;
 use mpc_recovery::logging;
 use mpc_recovery::relayer::NearRpcAndRelayerClient;
 use multi_party_eddsa::protocols::ExpandedKeyPair;
-
-use crate::env::{LeaderNodeApi, SignerNodeApi};
-use crate::mpc::{self, NodeProcess};
-use crate::util;
-use mpc_recovery::logging::OpenTelemetryLevel;
 
 pub struct SignerNode {
     pub address: String,
@@ -40,11 +38,7 @@ impl SignerNode {
             gcp_project_id: ctx.gcp_project_id.clone(),
             gcp_datastore_url: Some(ctx.datastore.local_address.clone()),
             jwt_signature_pk_url: ctx.oidc_provider.jwt_pk_local_url.clone(),
-            logging_options: logging::Options {
-                opentelemetry_level: OpenTelemetryLevel::INFO,
-                otlp_endpoint: "http://172.18.0.2:4318/v1/traces".to_string(),
-                ..Default::default()
-            },
+            logging_options: logging::Options::default(),
         };
 
         let sign_node_id = format!("sign-{node_id}");
@@ -125,11 +119,7 @@ impl LeaderNode {
             gcp_project_id: ctx.gcp_project_id.clone(),
             gcp_datastore_url: Some(ctx.datastore.local_address.clone()),
             jwt_signature_pk_url: ctx.oidc_provider.jwt_pk_local_url.clone(),
-            logging_options: logging::Options {
-                opentelemetry_level: OpenTelemetryLevel::INFO,
-                otlp_endpoint: "http://172.18.0.2:4318/v1/traces".to_string(),
-                ..Default::default()
-            },
+            logging_options: logging::Options::default(),
         };
 
         let process = mpc::spawn(ctx.release, "leader", cli).await?;

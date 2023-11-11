@@ -1,6 +1,4 @@
-use opentelemetry::sdk::propagation::{
-    BaggagePropagator, TextMapCompositePropagator, TraceContextPropagator,
-};
+use opentelemetry::sdk::propagation::TraceContextPropagator;
 use opentelemetry::sdk::trace::{self, RandomIdGenerator, Sampler, Tracer};
 use opentelemetry::sdk::Resource;
 use opentelemetry::KeyValue;
@@ -11,7 +9,7 @@ use std::sync::OnceLock;
 use tracing::subscriber::DefaultGuard;
 use tracing_appender::non_blocking::NonBlocking;
 use tracing_opentelemetry::OpenTelemetryLayer;
-use tracing_subscriber::filter::{Filtered, LevelFilter};
+use tracing_subscriber::filter::Filtered;
 use tracing_subscriber::layer::{Layered, SubscriberExt};
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::{fmt, reload, EnvFilter, Layer, Registry};

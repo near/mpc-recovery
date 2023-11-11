@@ -48,7 +48,6 @@ tracing = "0.1"
 tracing-appender = "0.2.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-opentelemetry = "0.21.0"
-tracing-opentelemetry-instrumentation-sdk = "0.14.1"
 near-fetch = "0.0.12"
 near-jsonrpc-client = "0.6"
 near-jsonrpc-primitives = "0.17"
