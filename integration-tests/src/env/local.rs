@@ -8,7 +8,7 @@ use multi_party_eddsa::protocols::ExpandedKeyPair;
 use crate::env::{LeaderNodeApi, SignerNodeApi};
 use crate::mpc::{self, NodeProcess};
 use crate::util;
-use mpc_recovery::logging::{self, OpenTelemetryLevel};
+use mpc_recovery::logging::OpenTelemetryLevel;
 
 pub struct SignerNode {
     pub address: String,
@@ -31,7 +31,7 @@ impl SignerNode {
         cipher_key: &GenericArray<u8, U32>,
     ) -> anyhow::Result<Self> {
         let web_port = util::pick_unused_port().await?;
-        let args = mpc_recovery::Cli::StartSign {
+        let cli = mpc_recovery::Cli::StartSign {
             env: ctx.env.clone(),
             node_id,
             web_port,
@@ -41,15 +41,14 @@ impl SignerNode {
             gcp_datastore_url: Some(ctx.datastore.local_address.clone()),
             jwt_signature_pk_url: ctx.oidc_provider.jwt_pk_local_url.clone(),
             logging_options: logging::Options {
-                opentelemetry: OpenTelemetryLevel::INFO,
-                otlp_endpoint: "http://172.18.0.2:4317".to_string(),
+                opentelemetry_level: OpenTelemetryLevel::INFO,
+                otlp_endpoint: "http://172.18.0.2:4318/v1/traces".to_string(),
                 ..Default::default()
             },
-        }
-        .into_str_args();
+        };
 
         let sign_node_id = format!("sign-{node_id}");
-        let process = mpc::spawn(ctx.release, &sign_node_id, args).await?;
+        let process = mpc::spawn(ctx.release, &sign_node_id, cli).await?;
         let address = format!("http://127.0.0.1:{web_port}");
         tracing::info!("Signer node is starting at {}", address);
         util::ping_until_ok(&address, 60).await?;
@@ -94,7 +93,7 @@ impl LeaderNode {
         tracing::info!("Running leader node...");
         let account_creator = &ctx.relayer_ctx.creator_account;
         let web_port = util::pick_unused_port().await?;
-        let args = mpc_recovery::Cli::StartLeader {
+        let cli = mpc_recovery::Cli::StartLeader {
             env: ctx.env.clone(),
             web_port,
             sign_nodes,
@@ -127,14 +126,13 @@ impl LeaderNode {
             gcp_datastore_url: Some(ctx.datastore.local_address.clone()),
             jwt_signature_pk_url: ctx.oidc_provider.jwt_pk_local_url.clone(),
             logging_options: logging::Options {
-                opentelemetry: OpenTelemetryLevel::INFO,
-                otlp_endpoint: "http://172.18.0.2:4317".to_string(),
+                opentelemetry_level: OpenTelemetryLevel::INFO,
+                otlp_endpoint: "http://172.18.0.2:4318/v1/traces".to_string(),
                 ..Default::default()
             },
-        }
-        .into_str_args();
+        };
 
-        let process = mpc::spawn(ctx.release, "leader", args).await?;
+        let process = mpc::spawn(ctx.release, "leader", cli).await?;
         let address = format!("http://127.0.0.1:{web_port}");
         tracing::info!("Leader node container is starting at {}", address);
         util::ping_until_ok(&address, 60).await?;
