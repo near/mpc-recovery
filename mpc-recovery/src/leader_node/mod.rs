@@ -117,7 +117,7 @@ pub async fn run(config: Config) {
         .layer(Extension(state))
         .layer(cors_layer)
         // Include trace context as header into the response
-        .layer(OtelInResponseLayer::default())
+        .layer(OtelInResponseLayer)
         // Start OpenTelemetry trace on incoming request
         .layer(OtelAxumLayer::default());
 
