@@ -108,18 +108,17 @@ impl MpcSignProtocol {
         signer: InMemorySigner,
         receiver: mpsc::Receiver<MpcMessage>,
         cipher_pk: hpke::PublicKey,
-        sign_sk: near_crypto::SecretKey,
     ) -> (Self, Arc<RwLock<NodeState>>) {
         let state = Arc::new(RwLock::new(NodeState::Starting));
         let ctx = Ctx {
             me,
             my_address: my_address.into_url().unwrap(),
             mpc_contract_id,
-            signer,
             rpc_client,
             http_client: reqwest::Client::new(),
             cipher_pk,
-            sign_sk,
+            sign_sk: signer.secret_key.clone(),
+            signer,
         };
         let protocol = MpcSignProtocol {
             ctx,
@@ -168,8 +167,7 @@ impl MpcSignProtocol {
 
             let mut state = {
                 let guard = self.state.write().await;
-                let state = guard.clone();
-                state
+                guard.clone()
             };
             state = state.progress(&self.ctx).await?;
             state = state.advance(&self.ctx, contract_state).await?;

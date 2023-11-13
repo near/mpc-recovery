@@ -26,7 +26,7 @@ struct AxumState {
 }
 
 impl AxumState {
-    async fn fetch_participant<'a>(&'a self, p: Participant) -> Option<ParticipantInfo> {
+    async fn fetch_participant(&self, p: Participant) -> Option<ParticipantInfo> {
         let protocol_state = self.protocol_state.read().await;
         let participants = match &*protocol_state {
             NodeState::Running(state) => &state.participants,

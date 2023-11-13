@@ -135,7 +135,6 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                         hpke::PublicKey::try_from_bytes(&hex::decode(cipher_pk)?)
                             // todo: handle unwrap
                             .unwrap(),
-                        signer.secret_key.clone(),
                     );
                     tracing::debug!("protocol initialized");
                     let protocol_handle = tokio::spawn(async move {
