@@ -132,9 +132,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                         rpc_client.clone(),
                         signer.clone(),
                         receiver,
-                        hpke::PublicKey::try_from_bytes(&hex::decode(cipher_pk)?)
-                            // todo: handle unwrap
-                            .unwrap(),
+                        hpke::PublicKey::try_from_bytes(&hex::decode(cipher_pk)?).unwrap(),
                     );
                     tracing::debug!("protocol initialized");
                     let protocol_handle = tokio::spawn(async move {
@@ -142,7 +140,8 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                     });
                     tracing::debug!("protocol thread spawned");
                     let mpc_contract_id_cloned = mpc_contract_id.clone();
-                    let cipher_sk = hpke::SecretKey::from_bytes(&hex::decode(cipher_sk)?).unwrap();
+                    let cipher_sk =
+                        hpke::SecretKey::try_from_bytes(&hex::decode(cipher_sk)?).unwrap();
                     let web_handle = tokio::spawn(async move {
                         web::run(
                             web_port,

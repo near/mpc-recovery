@@ -99,7 +99,7 @@ impl SecretKey {
         hpke::Serializable::to_bytes(&self.0).into()
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, hpke::HpkeError> {
+    pub fn try_from_bytes(bytes: &[u8]) -> Result<Self, hpke::HpkeError> {
         Ok(Self(hpke::Deserializable::from_bytes(bytes)?))
     }
 
@@ -121,10 +121,40 @@ impl SecretKey {
 
         plaintext
     }
+
+    /// Get the public key associated with this secret key.
+    pub fn public_key(&self) -> PublicKey {
+        PublicKey(<Kem as hpke::Kem>::sk_to_pk(&self.0))
+    }
 }
 
 pub fn generate() -> (SecretKey, PublicKey) {
     let mut csprng = <rand::rngs::StdRng as rand::SeedableRng>::from_entropy();
     let (sk, pk) = <Kem as hpke::Kem>::gen_keypair(&mut csprng);
     (SecretKey(sk), PublicKey(pk))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_encrypt_decrypt() {
+        let (sk, pk) = super::generate();
+        let msg = b"hello world";
+        let associated_data = b"associated data";
+
+        let cipher = pk.encrypt(msg, associated_data);
+        let decrypted = sk.decrypt(&cipher, associated_data);
+
+        assert_eq!(msg, &decrypted[..]);
+    }
+
+    #[test]
+    fn test_serialization_format() {
+        let sk_hex = "cf3df427dc1377914349b592cfff8deb4b9f8ab1cc4baa8e8e004b6502ac1ca0";
+        let pk_hex = "0e6d143bff1d67f297ac68cb9be3667e38f1dc2b244be48bf1d6c6bd7d367c3c";
+
+        let sk = super::SecretKey::try_from_bytes(&hex::decode(sk_hex).unwrap()).unwrap();
+        let pk = super::PublicKey::try_from_bytes(&hex::decode(pk_hex).unwrap()).unwrap();
+        assert_eq!(sk.public_key(), pk);
+    }
 }
