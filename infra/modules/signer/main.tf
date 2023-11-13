@@ -50,15 +50,6 @@ resource "google_cloud_run_v2_service" "signer" {
         }
       }
       env {
-        name = "OIDC_PROVIDERS"
-        value_source {
-          secret_key_ref {
-            secret  = var.oidc_providers_secret_id
-            version = "latest"
-          }
-        }
-      }
-      env {
         name  = "MPC_RECOVERY_JWT_SIGNATURE_PK_URL"
         value = var.jwt_signature_pk_url
       }

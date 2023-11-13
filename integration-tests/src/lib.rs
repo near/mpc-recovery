@@ -11,6 +11,7 @@ use near_workspaces::{
 use crate::env::containers;
 
 pub mod env;
+pub mod mpc;
 pub mod multichain;
 pub mod sandbox;
 pub mod util;

@@ -1,4 +1,4 @@
-use crate::util;
+use crate::{mpc, util};
 use async_process::Child;
 use mpc_keys::hpke;
 use near_workspaces::AccountId;
@@ -26,7 +26,7 @@ impl Node {
     ) -> anyhow::Result<Self> {
         let web_port = util::pick_unused_port().await?;
         let (cipher_sk, cipher_pk) = hpke::generate();
-        let args = mpc_recovery_node::cli::Cli::Start {
+        let cli = mpc_recovery_node::cli::Cli::Start {
             node_id: node_id.into(),
             near_rpc: ctx.sandbox.local_address.clone(),
             mpc_contract_id: ctx.mpc_contract.id().clone(),
@@ -35,11 +35,10 @@ impl Node {
             web_port,
             cipher_pk: hex::encode(cipher_pk.to_bytes()),
             cipher_sk: hex::encode(cipher_sk.to_bytes()),
-        }
-        .into_str_args();
+        };
 
         let mpc_node_id = format!("multichain/{node_id}");
-        let process = util::spawn_mpc_multichain(ctx.release, &mpc_node_id, &args)?;
+        let process = mpc::spawn_multichain(ctx.release, &mpc_node_id, cli)?;
         let address = format!("http://127.0.0.1:{web_port}");
         tracing::info!("node is starting at {}", address);
         util::ping_until_ok(&address, 60).await?;

@@ -1,4 +1,6 @@
 /target
 .direnv
 .DS_Store
+
+flamegraph*.svg
 tmp

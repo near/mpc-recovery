@@ -4,7 +4,6 @@ docker_image = "us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recove
 
 account_creator_id           = "mpc-recovery-dev-creator.testnet"
 account_creator_sk_secret_id = "mpc-recovery-account-creator-sk-dev"
-oidc_providers_secret_id     = "mpc-allowed-oidc-providers-dev"
 fast_auth_partners_secret_id = "mpc-fast-auth-partners-dev"
 signer_configs = [
   {
@@ -21,3 +20,5 @@ signer_configs = [
   }
 ]
 jwt_signature_pk_url = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"
+otlp_endpoint        = "https://otel.dev.api.pagoda.co:443/v1/traces"
+opentelemetry_level  = "debug"

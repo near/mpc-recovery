@@ -61,10 +61,17 @@ resource "google_cloud_run_v2_service" "leader" {
           }
         }
       }
-
       env {
         name  = "MPC_RECOVERY_JWT_SIGNATURE_PK_URL"
         value = var.jwt_signature_pk_url
+      }
+      env {
+        name  = "MPC_RECOVERY_OTLP_ENDPOINT"
+        value = var.otlp_endpoint
+      }
+      env {
+        name  = "MPC_RECOVERY_OPENTELEMETRY_LEVEL"
+        value = var.opentelemetry_level
       }
 
       env {

@@ -171,7 +171,7 @@ impl MpcSignProtocol {
             };
             state = state.progress(&self.ctx).await?;
             state = state.advance(&self.ctx, contract_state).await?;
-            state.handle(&self.ctx, &mut queue).await;
+            state.handle(&self.ctx, &mut queue).await?;
 
             let mut guard = self.state.write().await;
             *guard = state;

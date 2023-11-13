@@ -7,7 +7,7 @@ use crate::msg::{
     SignRequest, SignResponse, UserCredentialsRequest, UserCredentialsResponse,
 };
 use crate::oauth::verify_oidc_token;
-use crate::relayer::msg::{CreateAccountAtomicRequest, RegisterAccountRequest};
+use crate::relayer::msg::CreateAccountAtomicRequest;
 use crate::relayer::NearRpcAndRelayerClient;
 use crate::transaction::{
     get_mpc_signature, new_create_account_delegate_action, sign_payload_with_mpc,
@@ -29,7 +29,6 @@ use axum_extra::extract::WithRejection;
 use borsh::BorshDeserialize;
 use curv::elliptic::curves::{Ed25519, Point};
 use prometheus::{Encoder, TextEncoder};
-use rand::{distributions::Alphanumeric, Rng};
 
 use near_fetch::signer::KeyRotatingSigner;
 use near_primitives::delegate_action::{DelegateAction, NonDelegateAction};
@@ -46,7 +45,6 @@ pub struct Config {
     pub sign_nodes: Vec<String>,
     pub near_rpc: String,
     pub near_root_account: String,
-    pub account_creator_id: AccountId,
     // TODO: temporary solution
     pub account_creator_signer: KeyRotatingSigner,
     pub partners: PartnerList,
@@ -60,7 +58,6 @@ pub async fn run(config: Config) {
         sign_nodes,
         near_rpc,
         near_root_account,
-        account_creator_id,
         account_creator_signer,
         partners,
         jwt_signature_pk_url,
@@ -69,28 +66,6 @@ pub async fn run(config: Config) {
     tracing::debug!(?sign_nodes, "running a leader node");
 
     let client = NearRpcAndRelayerClient::connect(&near_rpc);
-    // FIXME: Internal account id is retrieved from the ID token. We don't have a token for ourselves,
-    // but are still forced to allocate allowance.
-    // Using randomly generated internal account id ensures the uniqueness of user idenrifier on the relayer side so
-    // we can update the allowance on each server run.
-    for partner in partners.entries.iter() {
-        let fake_internal_account_id: String = rand::thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(16)
-            .map(char::from)
-            .collect();
-        client
-            .register_account_and_allowance(
-                RegisterAccountRequest {
-                    account_id: account_creator_id.clone(),
-                    allowance: 18_000_000_000_000_000_000, // should be enough to create 700_000+ accs
-                    oauth_token: fake_internal_account_id,
-                },
-                partner.relayer.clone(),
-            )
-            .await
-            .unwrap();
-    }
 
     let state = Arc::new(LeaderState {
         env,
@@ -322,7 +297,7 @@ async fn process_user_credentials(
 ) -> Result<UserCredentialsResponse, LeaderNodeError> {
     verify_oidc_token(
         &request.oidc_token,
-        &state.partners.oidc_providers(),
+        Some(&state.partners.oidc_providers()),
         &state.reqwest_client,
         &state.jwt_signature_pk_url,
     )
@@ -354,7 +329,7 @@ async fn process_new_account(
     let new_user_account_id = request.near_account_id;
     let oidc_token_claims = verify_oidc_token(
         &request.oidc_token,
-        &state.partners.oidc_providers(),
+        Some(&state.partners.oidc_providers()),
         &state.reqwest_client,
         &state.jwt_signature_pk_url,
     )
@@ -497,7 +472,7 @@ async fn process_sign(
     // Check OIDC token
     verify_oidc_token(
         &request.oidc_token,
-        &state.partners.oidc_providers(),
+        Some(&state.partners.oidc_providers()),
         &state.reqwest_client,
         &state.jwt_signature_pk_url,
     )

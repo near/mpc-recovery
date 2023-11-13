@@ -2,7 +2,7 @@ use std::collections::{HashMap, VecDeque};
 
 use super::state::{GeneratingState, NodeState, ResharingState, RunningState};
 use async_trait::async_trait;
-use cait_sith::protocol::{MessageData, Participant};
+use cait_sith::protocol::{InitializationError, MessageData, Participant, ProtocolError};
 use mpc_keys::hpke::Ciphered;
 use near_crypto::Signature;
 use serde::{Deserialize, Serialize};
@@ -66,55 +66,87 @@ impl MpcMessageQueue {
     }
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum MessageHandleError {
+    #[error("cait-sith initialization error: {0}")]
+    CaitSithInitializationError(#[from] InitializationError),
+    #[error("cait-sith protocol error: {0}")]
+    CaitSithProtocolError(#[from] ProtocolError),
+}
+
 #[async_trait]
 pub trait MessageHandler {
-    async fn handle<C: MessageCtx + Send + Sync>(&mut self, ctx: C, queue: &mut MpcMessageQueue);
+    async fn handle<C: MessageCtx + Send + Sync>(
+        &mut self,
+        ctx: C,
+        queue: &mut MpcMessageQueue,
+    ) -> Result<(), MessageHandleError>;
 }
 
 #[async_trait]
 impl MessageHandler for GeneratingState {
-    async fn handle<C: MessageCtx + Send + Sync>(&mut self, _ctx: C, queue: &mut MpcMessageQueue) {
+    async fn handle<C: MessageCtx + Send + Sync>(
+        &mut self,
+        _ctx: C,
+        queue: &mut MpcMessageQueue,
+    ) -> Result<(), MessageHandleError> {
         while let Some(msg) = queue.generating.pop_front() {
             tracing::debug!("handling new generating message");
             self.protocol.write().await.message(msg.from, msg.data);
         }
+        Ok(())
     }
 }
 
 #[async_trait]
 impl MessageHandler for ResharingState {
-    async fn handle<C: MessageCtx + Send + Sync>(&mut self, _ctx: C, queue: &mut MpcMessageQueue) {
+    async fn handle<C: MessageCtx + Send + Sync>(
+        &mut self,
+        _ctx: C,
+        queue: &mut MpcMessageQueue,
+    ) -> Result<(), MessageHandleError> {
         let q = queue.resharing_bins.entry(self.old_epoch).or_default();
         while let Some(msg) = q.pop_front() {
             tracing::debug!("handling new resharing message");
             self.protocol.write().await.message(msg.from, msg.data);
         }
+        Ok(())
     }
 }
 
 #[async_trait]
 impl MessageHandler for RunningState {
-    async fn handle<C: MessageCtx + Send + Sync>(&mut self, _ctx: C, queue: &mut MpcMessageQueue) {
+    async fn handle<C: MessageCtx + Send + Sync>(
+        &mut self,
+        _ctx: C,
+        queue: &mut MpcMessageQueue,
+    ) -> Result<(), MessageHandleError> {
         for (id, queue) in queue.triple_bins.entry(self.epoch).or_default() {
-            if let Some(protocol) = self.triple_manager.get_or_generate(*id) {
+            if let Some(protocol) = self.triple_manager.get_or_generate(*id)? {
                 let mut protocol = protocol.write().unwrap();
                 while let Some(message) = queue.pop_front() {
                     protocol.message(message.from, message.data);
                 }
             }
         }
+        Ok(())
     }
 }
 
 #[async_trait]
 impl MessageHandler for NodeState {
-    async fn handle<C: MessageCtx + Send + Sync>(&mut self, ctx: C, queue: &mut MpcMessageQueue) {
+    async fn handle<C: MessageCtx + Send + Sync>(
+        &mut self,
+        ctx: C,
+        queue: &mut MpcMessageQueue,
+    ) -> Result<(), MessageHandleError> {
         match self {
             NodeState::Generating(state) => state.handle(ctx, queue).await,
             NodeState::Resharing(state) => state.handle(ctx, queue).await,
             NodeState::Running(state) => state.handle(ctx, queue).await,
             _ => {
-                tracing::debug!("skipping message processing")
+                tracing::debug!("skipping message processing");
+                Ok(())
             }
         }
     }

@@ -71,7 +71,7 @@ impl ConsensusProtocol for StartedState {
                 private_share,
                 public_key,
             }) => match contract_state {
-                ProtocolState::Initialized(_) => Err(ConsensusError::ContractStateRollback),
+                ProtocolState::Initializing(_) => Err(ConsensusError::ContractStateRollback),
                 ProtocolState::Running(contract_state) => {
                     if contract_state.public_key != public_key {
                         return Err(ConsensusError::MismatchedPublicKey);
@@ -136,7 +136,7 @@ impl ConsensusProtocol for StartedState {
                 }
             },
             None => match contract_state {
-                ProtocolState::Initialized(contract_state) => {
+                ProtocolState::Initializing(contract_state) => {
                     if contract_state.participants.contains_key(&ctx.me()) {
                         tracing::info!("starting key generation as a part of the participant set");
                         let participants = contract_state.participants;
@@ -174,7 +174,7 @@ impl ConsensusProtocol for GeneratingState {
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
         match contract_state {
-            ProtocolState::Initialized(_) => {
+            ProtocolState::Initializing(_) => {
                 tracing::debug!("continuing generation, contract state has not been finalized yet");
                 Ok(NodeState::Generating(self))
             }
@@ -222,7 +222,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
         match contract_state {
-            ProtocolState::Initialized(contract_state) => {
+            ProtocolState::Initializing(contract_state) => {
                 tracing::debug!("waiting for consensus, contract state has not been finalized yet");
                 let public_key = self.public_key.into_near_public_key();
                 let has_voted = contract_state
@@ -343,7 +343,7 @@ impl ConsensusProtocol for RunningState {
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
         match contract_state {
-            ProtocolState::Initialized(_) => Err(ConsensusError::ContractStateRollback),
+            ProtocolState::Initializing(_) => Err(ConsensusError::ContractStateRollback),
             ProtocolState::Running(contract_state) => match contract_state.epoch.cmp(&self.epoch) {
                 Ordering::Greater => {
                     tracing::warn!(
@@ -409,7 +409,7 @@ impl ConsensusProtocol for ResharingState {
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
         match contract_state {
-            ProtocolState::Initialized(_) => Err(ConsensusError::ContractStateRollback),
+            ProtocolState::Initializing(_) => Err(ConsensusError::ContractStateRollback),
             ProtocolState::Running(contract_state) => {
                 match contract_state.epoch.cmp(&(self.old_epoch + 1)) {
                     Ordering::Greater => {
@@ -481,7 +481,7 @@ impl ConsensusProtocol for JoiningState {
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
         match contract_state {
-            ProtocolState::Initialized(_) => Err(ConsensusError::ContractStateRollback),
+            ProtocolState::Initializing(_) => Err(ConsensusError::ContractStateRollback),
             ProtocolState::Running(contract_state) => {
                 if contract_state.candidates.contains_key(&ctx.me()) {
                     let voted = contract_state

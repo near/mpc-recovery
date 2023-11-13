@@ -39,10 +39,6 @@ variable "account_creator_sk_secret_id" {
   type = string
 }
 
-variable "oidc_providers_secret_id" {
-  type = string
-}
-
 variable "fast_auth_partners_secret_id" {
   type = string
 }
@@ -56,4 +52,14 @@ variable "signer_configs" {
 
 variable "jwt_signature_pk_url" {
   type = string
+}
+
+variable "otlp_endpoint" {
+  type    = string
+  default = "http://localhost:4317"
+}
+
+variable "opentelemetry_level" {
+  type    = string
+  default = "off"
 }

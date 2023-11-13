@@ -8,3 +8,7 @@ members = [
     "keys",
     "test-oidc-provider",
 ]
+
+[profile.flamegraph]
+inherits = "release"
+debug = true

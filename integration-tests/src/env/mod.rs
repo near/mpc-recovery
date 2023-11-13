@@ -101,6 +101,12 @@ pub struct Context<'a> {
 }
 
 pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> {
+    let release = true;
+    #[cfg(not(feature = "flamegraph"))]
+    if !crate::mpc::build(release).await?.success() {
+        anyhow::bail!("failed to prebuild MPC service");
+    }
+
     let gcp_project_id = GCP_PROJECT_ID;
     let docker_network = NETWORK;
     docker_client.create_network(docker_network).await?;
@@ -124,7 +130,7 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
         gcp_project_id: gcp_project_id.to_string(),
         audience_id: FIREBASE_AUDIENCE_ID.to_string(),
         issuer: ISSUER.to_string(),
-        release: true,
+        release,
         relayer_ctx,
         datastore,
         oidc_provider,

@@ -18,7 +18,7 @@ use near_crypto::{InMemorySigner, SecretKey};
 use near_fetch::signer::KeyRotatingSigner;
 use near_primitives::types::AccountId;
 
-use crate::firewall::allowed::{OidcProviderList, PartnerList};
+use crate::firewall::allowed::PartnerList;
 use crate::gcp::GcpService;
 use crate::sign_node::migration;
 
@@ -136,12 +136,6 @@ pub enum Cli {
         /// The web port for this server
         #[arg(long, env("MPC_RECOVERY_WEB_PORT"))]
         web_port: u16,
-        /// JSON list of related items to be used to verify OIDC tokens.
-        #[arg(long, env("OIDC_PROVIDERS"))]
-        oidc_providers: Option<String>,
-        /// Filepath to a JSON list of related items to be used to verify OIDC tokens.
-        #[arg(long, value_parser, env("OIDC_PROVIDERS_FILEPATH"))]
-        oidc_providers_filepath: Option<PathBuf>,
         /// GCP project ID
         #[arg(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
         gcp_project_id: String,
@@ -212,14 +206,13 @@ pub async fn run(cmd: Cli) -> anyhow::Result<()> {
             jwt_signature_pk_url,
             logging_options,
         } => {
-            let _subscriber_guard = logging::default_subscriber_with_opentelemetry(
+            let _subscriber_guard = logging::subscribe_global(
                 EnvFilter::from_default_env(),
                 &logging_options,
                 env.clone(),
                 "leader".to_string(),
             )
-            .await
-            .global();
+            .await;
             let gcp_service =
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
             let account_creator_signer =
@@ -236,8 +229,6 @@ pub async fn run(cmd: Cli) -> anyhow::Result<()> {
                 sign_nodes,
                 near_rpc,
                 near_root_account,
-                // TODO: Create such an account for testnet and mainnet in a secure way
-                account_creator_id,
                 account_creator_signer,
                 partners,
                 jwt_signature_pk_url,
@@ -251,33 +242,20 @@ pub async fn run(cmd: Cli) -> anyhow::Result<()> {
             sk_share,
             cipher_key,
             web_port,
-            oidc_providers,
-            oidc_providers_filepath,
             gcp_project_id,
             gcp_datastore_url,
             jwt_signature_pk_url,
             logging_options,
         } => {
-            let _subscriber_guard = logging::default_subscriber_with_opentelemetry(
+            let _subscriber_guard = logging::subscribe_global(
                 EnvFilter::from_default_env(),
                 &logging_options,
                 env.clone(),
                 node_id.to_string(),
             )
-            .await
-            .global();
+            .await;
             let gcp_service =
                 GcpService::new(env.clone(), gcp_project_id, gcp_datastore_url).await?;
-            let oidc_providers = OidcProviderList {
-                entries: load_entries(
-                    &gcp_service,
-                    &env,
-                    node_id.to_string().as_str(),
-                    oidc_providers,
-                    oidc_providers_filepath,
-                )
-                .await?,
-            };
             let cipher_key = load_cipher_key(&gcp_service, &env, node_id, cipher_key).await?;
             let cipher_key = hex::decode(cipher_key)?;
             let cipher_key = GenericArray::<u8, U32>::clone_from_slice(&cipher_key);
@@ -294,7 +272,6 @@ pub async fn run(cmd: Cli) -> anyhow::Result<()> {
                 node_key: sk_share,
                 cipher,
                 port: web_port,
-                oidc_providers,
                 jwt_signature_pk_url,
             };
             run_sign_node(config).await;
@@ -309,14 +286,13 @@ pub async fn run(cmd: Cli) -> anyhow::Result<()> {
             gcp_datastore_url,
             logging_options,
         } => {
-            let _subscriber_guard = logging::default_subscriber_with_opentelemetry(
+            let _subscriber_guard = logging::subscribe_global(
                 EnvFilter::from_default_env(),
                 &logging_options,
                 env.clone(),
                 node_id.to_string(),
             )
-            .await
-            .global();
+            .await;
             let gcp_service = GcpService::new(
                 env.clone(),
                 gcp_project_id.clone(),
@@ -502,8 +478,6 @@ impl Cli {
                 web_port,
                 cipher_key,
                 sk_share,
-                oidc_providers,
-                oidc_providers_filepath,
                 gcp_project_id,
                 gcp_datastore_url,
                 jwt_signature_pk_url,
@@ -529,14 +503,6 @@ impl Cli {
                 if let Some(share) = sk_share {
                     buf.push("--sk-share".to_string());
                     buf.push(share);
-                }
-                if let Some(providers) = oidc_providers {
-                    buf.push("--oidc-providers".to_string());
-                    buf.push(providers);
-                }
-                if let Some(providers_filepath) = oidc_providers_filepath {
-                    buf.push("--oidc-providers-filepath".to_string());
-                    buf.push(providers_filepath.to_str().unwrap().to_string());
                 }
                 if let Some(gcp_datastore_url) = gcp_datastore_url {
                     buf.push("--gcp-datastore-url".to_string());

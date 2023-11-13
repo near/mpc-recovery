@@ -1,12 +1,12 @@
 use aes_gcm::aead::consts::U32;
 use aes_gcm::aead::generic_array::GenericArray;
-use async_process::Child;
 use mpc_recovery::firewall::allowed::DelegateActionRelayer;
 use mpc_recovery::logging;
 use mpc_recovery::relayer::NearRpcAndRelayerClient;
 use multi_party_eddsa::protocols::ExpandedKeyPair;
 
 use crate::env::{LeaderNodeApi, SignerNodeApi};
+use crate::mpc::{self, NodeProcess};
 use crate::util;
 
 pub struct SignerNode {
@@ -19,8 +19,7 @@ pub struct SignerNode {
     gcp_datastore_url: String,
 
     // process held so it's not dropped. Once dropped, process will be killed.
-    #[allow(unused)]
-    process: Child,
+    _process: NodeProcess,
 }
 
 impl SignerNode {
@@ -37,25 +36,14 @@ impl SignerNode {
             web_port,
             sk_share: Some(serde_json::to_string(&sk_share)?),
             cipher_key: Some(hex::encode(cipher_key)),
-            oidc_providers_filepath: None,
-            oidc_providers: Some(
-                serde_json::json!([
-                    {
-                        "issuer": ctx.issuer,
-                        "audience": ctx.audience_id,
-                    },
-                ])
-                .to_string(),
-            ),
             gcp_project_id: ctx.gcp_project_id.clone(),
             gcp_datastore_url: Some(ctx.datastore.local_address.clone()),
             jwt_signature_pk_url: ctx.oidc_provider.jwt_pk_local_url.clone(),
             logging_options: logging::Options::default(),
-        }
-        .into_str_args();
+        };
 
-        let sign_node_id = format!("sign/{node_id}");
-        let process = util::spawn_mpc(ctx.release, &sign_node_id, &args)?;
+        let sign_node_id = format!("sign-{node_id}");
+        let process = mpc::spawn(ctx.release, &sign_node_id, args).await?;
         let address = format!("http://127.0.0.1:{web_port}");
         tracing::info!("Signer node is starting at {}", address);
         util::ping_until_ok(&address, 60).await?;
@@ -69,7 +57,7 @@ impl SignerNode {
             cipher_key: *cipher_key,
             gcp_project_id: ctx.gcp_project_id.clone(),
             gcp_datastore_url: ctx.datastore.local_address.clone(),
-            process,
+            _process: process,
         })
     }
 
@@ -92,8 +80,7 @@ pub struct LeaderNode {
     relayer_url: String,
 
     // process held so it's not dropped. Once dropped, process will be killed.
-    #[allow(unused)]
-    process: Child,
+    _process: NodeProcess,
 }
 
 impl LeaderNode {
@@ -134,10 +121,9 @@ impl LeaderNode {
             gcp_datastore_url: Some(ctx.datastore.local_address.clone()),
             jwt_signature_pk_url: ctx.oidc_provider.jwt_pk_local_url.clone(),
             logging_options: logging::Options::default(),
-        }
-        .into_str_args();
+        };
 
-        let process = util::spawn_mpc(ctx.release, "leader", &args)?;
+        let process = mpc::spawn(ctx.release, "leader", args).await?;
         let address = format!("http://127.0.0.1:{web_port}");
         tracing::info!("Leader node container is starting at {}", address);
         util::ping_until_ok(&address, 60).await?;
@@ -147,7 +133,7 @@ impl LeaderNode {
             address,
             near_rpc: ctx.relayer_ctx.sandbox.local_address.clone(),
             relayer_url: ctx.relayer_ctx.relayer.local_address.clone(),
-            process,
+            _process: process,
         })
     }
 
