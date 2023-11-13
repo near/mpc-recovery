@@ -1,5 +1,8 @@
 use std::collections::{HashMap, VecDeque};
 
+use crate::http_client::SendError;
+
+use super::cryptography::CryptographicError;
 use super::state::{GeneratingState, NodeState, ResharingState, RunningState};
 use async_trait::async_trait;
 use cait_sith::protocol::{InitializationError, MessageData, Participant, ProtocolError};
@@ -72,8 +75,26 @@ pub enum MessageHandleError {
     CaitSithInitializationError(#[from] InitializationError),
     #[error("cait-sith protocol error: {0}")]
     CaitSithProtocolError(#[from] ProtocolError),
-    #[error("lock sync error: {0}")]
+    #[error("sync failed: {0}")]
     SyncError(String),
+    #[error("failed to send a message: {0}")]
+    SendError(SendError),
+    #[error("unknown participant: {0:?}")]
+    UnknownParticipant(Participant),
+}
+
+impl From<CryptographicError> for MessageHandleError {
+    fn from(value: CryptographicError) -> Self {
+        match value {
+            CryptographicError::CaitSithInitializationError(e) => {
+                Self::CaitSithInitializationError(e)
+            }
+            CryptographicError::CaitSithProtocolError(e) => Self::CaitSithProtocolError(e),
+            CryptographicError::SyncError(e) => Self::SyncError(e),
+            CryptographicError::SendError(e) => Self::SendError(e),
+            CryptographicError::UnknownParticipant(e) => Self::UnknownParticipant(e),
+        }
+    }
 }
 
 #[async_trait]

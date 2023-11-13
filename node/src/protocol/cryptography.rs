@@ -1,3 +1,5 @@
+use std::sync::PoisonError;
+
 use super::state::{GeneratingState, NodeState, ResharingState, RunningState};
 use crate::http_client::{self, SendError};
 use crate::protocol::message::{GeneratingMessage, ResharingMessage};
@@ -23,6 +25,15 @@ pub enum CryptographicError {
     CaitSithInitializationError(#[from] InitializationError),
     #[error("cait-sith protocol error: {0}")]
     CaitSithProtocolError(#[from] ProtocolError),
+    #[error("sync failed: {0}")]
+    SyncError(String),
+}
+
+impl<T> From<PoisonError<T>> for CryptographicError {
+    fn from(_: PoisonError<T>) -> Self {
+        let typename = std::any::type_name::<T>();
+        Self::SyncError(format!("PoisonError: {typename}"))
+    }
 }
 
 #[async_trait]
@@ -184,7 +195,7 @@ impl CryptographicProtocol for RunningState {
         mut self,
         ctx: C,
     ) -> Result<NodeState, CryptographicError> {
-        if self.triple_manager.potential_len() < 2 {
+        if self.triple_manager.potential_len()? < 2 {
             self.triple_manager.generate()?;
         }
         for (is_public, p, msg) in self.triple_manager.poke()? {

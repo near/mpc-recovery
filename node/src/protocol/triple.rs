@@ -1,3 +1,4 @@
+use super::cryptography::CryptographicError;
 use super::message::TripleMessage;
 use crate::types::TripleProtocol;
 use crate::util::AffinePointExt;
@@ -6,7 +7,7 @@ use cait_sith::triples::TripleGenerationOutput;
 use k256::Secp256k1;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, RwLockReadGuard};
 
 /// Unique number used to identify a specific ongoing triple generation protocol.
 /// Without `TripleId` it would be unclear where to route incoming cait-sith triple generation
@@ -20,7 +21,7 @@ pub struct TripleManager {
     /// Completed unspent triples
     // TODO: I put these into `BTreeMap` so we can potentially use the ordering for choosing which
     // triple to use for consensus, but it might not be necessary.
-    triples: BTreeMap<TripleId, TripleGenerationOutput<Secp256k1>>,
+    triples: Arc<RwLock<BTreeMap<TripleId, TripleGenerationOutput<Secp256k1>>>>,
     /// Ongoing triple generation protocols
     generators: BTreeMap<TripleId, TripleProtocol>,
 
@@ -38,7 +39,7 @@ impl TripleManager {
         epoch: u64,
     ) -> Self {
         Self {
-            triples: BTreeMap::new(),
+            triples: Arc::new(RwLock::new(BTreeMap::new())),
             generators: BTreeMap::new(),
             participants,
             me,
@@ -47,15 +48,24 @@ impl TripleManager {
         }
     }
 
+    fn triples(
+        &self,
+    ) -> Result<
+        RwLockReadGuard<BTreeMap<TripleId, TripleGenerationOutput<Secp256k1>>>,
+        CryptographicError,
+    > {
+        self.triples.read().map_err(CryptographicError::from)
+    }
+
     /// Returns the number of unspent triples available in the manager.
-    pub fn len(&self) -> usize {
-        self.triples.len()
+    pub fn len(&self) -> Result<usize, CryptographicError> {
+        Ok(self.triples()?.len())
     }
 
     /// Returns the number of unspent triples we will have in the manager once
     /// all ongoing generation protocols complete.
-    pub fn potential_len(&self) -> usize {
-        self.triples.len() + self.generators.len()
+    pub fn potential_len(&self) -> Result<usize, CryptographicError> {
+        Ok(self.len()? + self.generators.len())
     }
 
     /// Starts a new Beaver triple generation protocol.
@@ -75,7 +85,13 @@ impl TripleManager {
     /// It is very important to NOT reuse the same triple twice for two different
     /// protocols.
     pub fn take(&mut self, id: TripleId) -> Option<TripleGenerationOutput<Secp256k1>> {
-        self.triples.remove(&id)
+        match self.triples.write() {
+            Ok(mut triples) => triples.remove(&id),
+            Err(err) => {
+                tracing::error!(?err, "failed to acquire lock on triple map");
+                None
+            }
+        }
     }
 
     /// Ensures that the triple with the given id is either:
@@ -86,8 +102,8 @@ impl TripleManager {
     pub fn get_or_generate(
         &mut self,
         id: TripleId,
-    ) -> Result<Option<&mut TripleProtocol>, InitializationError> {
-        if self.triples.contains_key(&id) {
+    ) -> Result<Option<&mut TripleProtocol>, CryptographicError> {
+        if self.triples()?.contains_key(&id) {
             Ok(None)
         } else {
             match self.generators.entry(id) {
@@ -165,7 +181,14 @@ impl TripleManager {
                         big_c = ?output.1.big_c.to_base58(),
                         "completed triple generation"
                     );
-                    self.triples.insert(*id, output);
+                    match self.triples.write() {
+                        Ok(mut triples) => {
+                            triples.insert(*id, output);
+                        }
+                        Err(err) => {
+                            tracing::error!(?err, "failed to acquire lock on triple map");
+                        }
+                    }
                     // Do not retain the protocol
                     break false;
                 }
