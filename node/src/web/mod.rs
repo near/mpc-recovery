@@ -120,6 +120,16 @@ async fn msg_private(
 ) -> StatusCode {
     let EncryptedMessage { cipher, sig, from } = encrypted;
     tracing::debug!(ciphertext = ?cipher.text, "received encrypted");
+
+    let Some(sender) = state.fetch_participant(from).await else {
+        tracing::error!(?from, cipher = ?cipher.text, ?sig, "unknown participant sent encrypted");
+        return StatusCode::BAD_REQUEST;
+    };
+    if !sig.verify(&cipher.text, &sender.sign_pk) {
+        tracing::error!(?sig, ?from, cipher = ?cipher.text, "invalid encrypted message signature");
+        return StatusCode::BAD_REQUEST;
+    }
+
     let message = match state.cipher_sk.decrypt(&cipher, b"") {
         Ok(msg) => msg,
         Err(err) => {
@@ -127,19 +137,12 @@ async fn msg_private(
             return StatusCode::BAD_REQUEST;
         }
     };
-    let sender = state.fetch_participant(from).await;
-    let Some(sender) = sender else {
-        tracing::error!(?from, ?message, ?sig, "unknown participant sent encrypted");
-        return StatusCode::BAD_REQUEST;
-    };
-    if !sig.verify(&message, &sender.sign_pk) {
-        tracing::error!(?sig, ?from, ?message, "invalid encrypted message signature");
-        return StatusCode::BAD_REQUEST;
-    }
-
-    let Ok(message) = serde_json::from_slice(&message) else {
-        tracing::error!("failed to deserialize protocol message");
-        return StatusCode::BAD_REQUEST;
+    let message = match serde_json::from_slice(&message) {
+        Ok(msg) => msg,
+        Err(err) => {
+            tracing::error!(?err, "failed to deserialize encrypted message");
+            return StatusCode::BAD_REQUEST;
+        }
     };
 
     match state.sender.send(message).await {

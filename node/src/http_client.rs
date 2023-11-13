@@ -71,10 +71,10 @@ pub async fn message_encrypted<U: IntoUrl>(
     message: MpcMessage,
 ) -> Result<(), SendError> {
     let message = serde_json::to_vec(&message).map_err(SendError::DataConversionError)?;
-    let sig = sign_sk.sign(&message);
     let cipher = cipher_pk
         .encrypt(&message, b"")
         .map_err(|err| SendError::EncryptionError(err.to_string()))?;
+    let sig = sign_sk.sign(&cipher.text);
     tracing::debug!(?participant, ciphertext = ?cipher.text, "sending encrypted");
     let message = EncryptedMessage {
         cipher,
