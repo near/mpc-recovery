@@ -1,3 +1,4 @@
+use opentelemetry::sdk::propagation::TraceContextPropagator;
 use opentelemetry::sdk::trace::{self, RandomIdGenerator, Sampler, Tracer};
 use opentelemetry::sdk::Resource;
 use opentelemetry::KeyValue;
@@ -8,13 +9,13 @@ use std::sync::OnceLock;
 use tracing::subscriber::DefaultGuard;
 use tracing_appender::non_blocking::NonBlocking;
 use tracing_opentelemetry::OpenTelemetryLayer;
-use tracing_subscriber::filter::{Filtered, LevelFilter};
+use tracing_subscriber::filter::Filtered;
 use tracing_subscriber::layer::{Layered, SubscriberExt};
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::{fmt, reload, EnvFilter, Layer, Registry};
 
 static LOG_LAYER_RELOAD_HANDLE: OnceLock<reload::Handle<EnvFilter, Registry>> = OnceLock::new();
-static OTLP_LAYER_RELOAD_HANDLE: OnceLock<reload::Handle<LevelFilter, LogLayer<Registry>>> =
+static OTLP_LAYER_RELOAD_HANDLE: OnceLock<reload::Handle<EnvFilter, LogLayer<Registry>>> =
     OnceLock::new();
 
 type LogLayer<Inner> = Layered<
@@ -27,7 +28,7 @@ type LogLayer<Inner> = Layered<
 >;
 
 type TracingLayer<Inner> = Layered<
-    Filtered<OpenTelemetryLayer<Inner, Tracer>, reload::Layer<LevelFilter, Inner>, Inner>,
+    Filtered<OpenTelemetryLayer<Inner, Tracer>, reload::Layer<EnvFilter, Inner>, Inner>,
     Inner,
 >;
 
@@ -88,7 +89,7 @@ pub struct Options {
         value_enum,
         default_value = "off"
     )]
-    opentelemetry_level: OpenTelemetryLevel,
+    pub opentelemetry_level: OpenTelemetryLevel,
 
     /// Opentelemetry gRPC collector endpoint.
     #[clap(
@@ -96,16 +97,16 @@ pub struct Options {
         env("MPC_RECOVERY_OTLP_ENDPOINT"),
         default_value = "http://localhost:4317"
     )]
-    otlp_endpoint: String,
+    pub otlp_endpoint: String,
 
     /// Whether the log needs to be colored.
     #[clap(long, value_enum, default_value = "auto")]
-    color: ColorOutput,
+    pub color: ColorOutput,
 
     /// Enable logging of spans. For instance, this prints timestamps of entering and exiting a span,
     /// together with the span duration and used/idle CPU time.
     #[clap(long)]
-    log_span_events: bool,
+    pub log_span_events: bool,
 }
 
 impl Default for Options {
@@ -191,17 +192,22 @@ async fn add_opentelemetry_layer<S>(
     env: String,
     node_id: String,
     subscriber: S,
-) -> (TracingLayer<S>, reload::Handle<LevelFilter, S>)
+) -> (TracingLayer<S>, reload::Handle<EnvFilter, S>)
 where
     S: tracing::Subscriber + for<'span> LookupSpan<'span> + Send + Sync,
 {
     let filter = match opentelemetry_level {
-        OpenTelemetryLevel::OFF => LevelFilter::OFF,
-        OpenTelemetryLevel::INFO => LevelFilter::INFO,
-        OpenTelemetryLevel::DEBUG => LevelFilter::DEBUG,
-        OpenTelemetryLevel::TRACE => LevelFilter::TRACE,
+        OpenTelemetryLevel::OFF => EnvFilter::new("off"),
+        OpenTelemetryLevel::INFO => EnvFilter::new("info"),
+        OpenTelemetryLevel::DEBUG => EnvFilter::new("debug"),
+        OpenTelemetryLevel::TRACE => EnvFilter::new("trace"),
     };
-    let (filter, handle) = reload::Layer::<LevelFilter, S>::new(filter);
+    // `otel::tracing` should be a level info to emit opentelemetry trace & span
+    // `otel::setup` set to debug to log detected resources, configuration read and infered
+    let filter = filter
+        .add_directive("otel::tracing=trace".parse().unwrap())
+        .add_directive("otel=debug".parse().unwrap());
+    let (filter, handle) = reload::Layer::<EnvFilter, S>::new(filter);
 
     let resource = vec![
         KeyValue::new(SERVICE_NAME, format!("mpc:{}:{}", env, node_id)),
@@ -224,10 +230,16 @@ where
         )
         .install_batch(opentelemetry::runtime::Tokio)
         .unwrap();
+
+    init_propagator();
     let layer = tracing_opentelemetry::layer()
         .with_tracer(tracer)
         .with_filter(filter);
     (subscriber.with(layer), handle)
+}
+
+pub fn init_propagator() {
+    opentelemetry::global::set_text_map_propagator(TraceContextPropagator::new());
 }
 
 fn set_default_otlp_level(options: &Options) {

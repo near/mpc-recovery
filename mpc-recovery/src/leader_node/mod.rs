@@ -26,15 +26,14 @@ use axum::{
     Extension, Json, Router,
 };
 use axum_extra::extract::WithRejection;
+use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 use borsh::BorshDeserialize;
 use curv::elliptic::curves::{Ed25519, Point};
-use prometheus::{Encoder, TextEncoder};
-
 use near_fetch::signer::KeyRotatingSigner;
 use near_primitives::delegate_action::{DelegateAction, NonDelegateAction};
 use near_primitives::transaction::{Action, DeleteKeyAction};
 use near_primitives::types::AccountId;
-
+use prometheus::{Encoder, TextEncoder};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Instant;
@@ -116,7 +115,11 @@ pub async fn run(config: Config) {
         .route("/metrics", get(metrics))
         .route_layer(middleware::from_fn(track_metrics))
         .layer(Extension(state))
-        .layer(cors_layer);
+        .layer(cors_layer)
+        // Include trace context as header into the response
+        .layer(OtelInResponseLayer)
+        // Start OpenTelemetry trace on incoming request
+        .layer(OtelAxumLayer::default());
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::debug!(?addr, "starting http server");

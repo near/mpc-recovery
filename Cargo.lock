@@ -880,6 +880,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "axum-tracing-opentelemetry"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06985105829f176e9a3f113b1c71cc24e08f600ef0df4e70cd90d144f889e19f"
+dependencies = [
+ "axum",
+ "futures-core",
+ "futures-util",
+ "http",
+ "opentelemetry 0.20.0",
+ "pin-project-lite",
+ "tower",
+ "tracing",
+ "tracing-opentelemetry 0.21.0",
+ "tracing-opentelemetry-instrumentation-sdk",
+]
+
+[[package]]
 name = "backon"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3690,7 +3708,7 @@ name = "mpc-keys"
 version = "0.1.0"
 dependencies = [
  "borsh 0.9.3",
- "hex 0.3.2",
+ "hex 0.4.3",
  "hpke",
  "rand 0.8.5",
  "serde",
@@ -3707,6 +3725,7 @@ dependencies = [
  "atty",
  "axum",
  "axum-extra",
+ "axum-tracing-opentelemetry",
  "base64 0.21.5",
  "borsh 0.10.3",
  "chrono",
@@ -7430,6 +7449,19 @@ dependencies = [
  "tracing-core",
  "tracing-log",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "tracing-opentelemetry-instrumentation-sdk"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "752ddd669b14a08036a89045e4ac4497ff7ce254e11386647751f36d7c7849ea"
+dependencies = [
+ "http",
+ "opentelemetry-http",
+ "opentelemetry_api",
+ "tracing",
+ "tracing-opentelemetry 0.21.0",
 ]
 
 [[package]]
