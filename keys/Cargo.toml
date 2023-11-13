@@ -8,7 +8,7 @@ crate-type = ["cdylib", "lib"]
 
 [dependencies]
 borsh = { version = "0.9.3" }
-hpke = { version = "0.11" }
+hpke = { version = "0.11", features = ["serde_impls"] }
 serde = { version = "1", features = ["derive"] }
 rand = { version = "0.8" }
 

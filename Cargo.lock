@@ -2680,6 +2680,7 @@ version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
 dependencies = [
+ "serde",
  "typenum",
  "version_check",
  "zeroize",
@@ -3045,6 +3046,7 @@ dependencies = [
  "hmac 0.12.1",
  "p256 0.13.2",
  "rand_core 0.6.4",
+ "serde",
  "sha2 0.10.8",
  "subtle",
  "x25519-dalek",
