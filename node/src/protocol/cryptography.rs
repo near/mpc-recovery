@@ -116,7 +116,7 @@ impl CryptographicProtocol for ResharingState {
         tracing::info!("progressing key reshare");
         let mut protocol = self.protocol.write().await;
         loop {
-            let action = protocol.poke().unwrap();
+            let action = protocol.poke()?;
             match action {
                 Action::Wait => {
                     drop(protocol);

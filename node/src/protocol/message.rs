@@ -72,6 +72,8 @@ pub enum MessageHandleError {
     CaitSithInitializationError(#[from] InitializationError),
     #[error("cait-sith protocol error: {0}")]
     CaitSithProtocolError(#[from] ProtocolError),
+    #[error("lock sync error: {0}")]
+    SyncError(String),
 }
 
 #[async_trait]
@@ -90,9 +92,10 @@ impl MessageHandler for GeneratingState {
         _ctx: C,
         queue: &mut MpcMessageQueue,
     ) -> Result<(), MessageHandleError> {
+        let mut protocol = self.protocol.write().await;
         while let Some(msg) = queue.generating.pop_front() {
             tracing::debug!("handling new generating message");
-            self.protocol.write().await.message(msg.from, msg.data);
+            protocol.message(msg.from, msg.data);
         }
         Ok(())
     }
@@ -106,9 +109,10 @@ impl MessageHandler for ResharingState {
         queue: &mut MpcMessageQueue,
     ) -> Result<(), MessageHandleError> {
         let q = queue.resharing_bins.entry(self.old_epoch).or_default();
+        let mut protocol = self.protocol.write().await;
         while let Some(msg) = q.pop_front() {
             tracing::debug!("handling new resharing message");
-            self.protocol.write().await.message(msg.from, msg.data);
+            protocol.message(msg.from, msg.data);
         }
         Ok(())
     }
@@ -123,7 +127,9 @@ impl MessageHandler for RunningState {
     ) -> Result<(), MessageHandleError> {
         for (id, queue) in queue.triple_bins.entry(self.epoch).or_default() {
             if let Some(protocol) = self.triple_manager.get_or_generate(*id)? {
-                let mut protocol = protocol.write().unwrap();
+                let mut protocol = protocol
+                    .write()
+                    .map_err(|err| MessageHandleError::SyncError(err.to_string()))?;
                 while let Some(message) = queue.pop_front() {
                     protocol.message(message.from, message.data);
                 }

@@ -113,7 +113,13 @@ impl TripleManager {
         let mut messages = Vec::new();
         let mut result = Ok(());
         self.generators.retain(|id, protocol| loop {
-            let mut protocol = protocol.write().unwrap();
+            let mut protocol = match protocol.write() {
+                Ok(protocol) => protocol,
+                Err(err) => {
+                    tracing::error!(?err, "failed to acquire lock on triple generation protocol");
+                    break false;
+                }
+            };
             let action = match protocol.poke() {
                 Ok(action) => action,
                 Err(e) => {
