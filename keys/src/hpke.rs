@@ -16,7 +16,7 @@ pub type Kem = X25519HkdfSha256;
 pub type Aead = ChaCha20Poly1305;
 pub type Kdf = HkdfSha384;
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Ciphered {
     pub encapped_key: EncappedKey,
     pub text: CipherText,
@@ -53,7 +53,7 @@ impl PublicKey {
         Self::try_from_bytes(bytes).expect("invalid bytes")
     }
 
-    pub fn encrypt(&self, msg: &[u8], associated_data: &[u8]) -> Ciphered {
+    pub fn encrypt(&self, msg: &[u8], associated_data: &[u8]) -> Result<Ciphered, hpke::HpkeError> {
         let mut csprng = <rand::rngs::StdRng as rand::SeedableRng>::from_entropy();
 
         // Encapsulate a key and use the resulting shared secret to encrypt a message. The AEAD context
@@ -63,20 +63,16 @@ impl PublicKey {
             &self.0,
             INFO_ENTROPY,
             &mut csprng,
-        )
-        .expect("invalid server pubkey!");
+        )?;
 
         // On success, seal_in_place_detached() will encrypt the plaintext in place
         let mut ciphertext = msg.to_vec();
-        let tag = sender_ctx
-            .seal_in_place_detached(&mut ciphertext, associated_data)
-            .expect("encryption failed!");
-
-        Ciphered {
+        let tag = sender_ctx.seal_in_place_detached(&mut ciphertext, associated_data)?;
+        Ok(Ciphered {
             encapped_key: EncappedKey(encapped_key),
             text: ciphertext,
             tag: Tag(tag),
-        }
+        })
     }
 }
 
@@ -103,23 +99,23 @@ impl SecretKey {
         Ok(Self(hpke::Deserializable::from_bytes(bytes)?))
     }
 
-    pub fn decrypt(&self, cipher: &Ciphered, associated_data: &[u8]) -> Vec<u8> {
+    pub fn decrypt(
+        &self,
+        cipher: &Ciphered,
+        associated_data: &[u8],
+    ) -> Result<Vec<u8>, hpke::HpkeError> {
         // Decapsulate and derive the shared secret. This creates a shared AEAD context.
         let mut receiver_ctx = hpke::setup_receiver::<Aead, Kdf, Kem>(
             &OpModeR::Base,
             &self.0,
             &cipher.encapped_key.0,
             INFO_ENTROPY,
-        )
-        .expect("failed to set up receiver!");
+        )?;
 
         // On success, open_in_place_detached() will decrypt the ciphertext in place
         let mut plaintext = cipher.text.to_vec();
-        receiver_ctx
-            .open_in_place_detached(&mut plaintext, associated_data, &cipher.tag.0)
-            .expect("invalid ciphertext!");
-
-        plaintext
+        receiver_ctx.open_in_place_detached(&mut plaintext, associated_data, &cipher.tag.0)?;
+        Ok(plaintext)
     }
 
     /// Get the public key associated with this secret key.
@@ -142,8 +138,8 @@ mod tests {
         let msg = b"hello world";
         let associated_data = b"associated data";
 
-        let cipher = pk.encrypt(msg, associated_data);
-        let decrypted = sk.decrypt(&cipher, associated_data);
+        let cipher = pk.encrypt(msg, associated_data).unwrap();
+        let decrypted = sk.decrypt(&cipher, associated_data).unwrap();
 
         assert_eq!(msg, &decrypted[..]);
     }

@@ -19,6 +19,8 @@ pub enum SendError {
     ReqwestBodyError(reqwest::Error),
     #[error("http response body is not valid utf-8: {0}")]
     MalformedResponse(Utf8Error),
+    #[error("encryption error: {0}")]
+    EncryptionError(String),
 }
 
 pub async fn message<U: IntoUrl>(
@@ -70,7 +72,9 @@ pub async fn message_encrypted<U: IntoUrl>(
 ) -> Result<(), SendError> {
     let message = serde_json::to_vec(&message).map_err(SendError::DataConversionError)?;
     let sig = sign_sk.sign(&message);
-    let cipher = cipher_pk.encrypt(&message, b"");
+    let cipher = cipher_pk
+        .encrypt(&message, b"")
+        .map_err(|err| SendError::EncryptionError(err.to_string()))?;
     tracing::debug!(?participant, ciphertext = ?cipher.text, "sending encrypted");
     let message = EncryptedMessage {
         cipher,
@@ -161,11 +165,11 @@ mod tests {
         });
 
         let message = serde_json::to_vec(&starting_message).unwrap();
-        let message = pk.encrypt(&message, associated_data);
+        let message = pk.encrypt(&message, associated_data).unwrap();
 
         let message = serde_json::to_vec(&message).unwrap();
         let cipher = serde_json::from_slice(&message).unwrap();
-        let message = sk.decrypt(&cipher, associated_data);
+        let message = sk.decrypt(&cipher, associated_data).unwrap();
         let message: MpcMessage = serde_json::from_slice(&message).unwrap();
 
         assert_eq!(starting_message, message);

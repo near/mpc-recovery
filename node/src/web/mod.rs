@@ -120,13 +120,18 @@ async fn msg_private(
 ) -> StatusCode {
     let EncryptedMessage { cipher, sig, from } = encrypted;
     tracing::debug!(ciphertext = ?cipher.text, "received encrypted");
-    let message = state.cipher_sk.decrypt(&cipher, b"");
+    let message = match state.cipher_sk.decrypt(&cipher, b"") {
+        Ok(msg) => msg,
+        Err(err) => {
+            tracing::error!(?err, "failed to decrypt an encrypted message");
+            return StatusCode::BAD_REQUEST;
+        }
+    };
     let sender = state.fetch_participant(from).await;
     let Some(sender) = sender else {
         tracing::error!(?from, ?message, ?sig, "unknown participant sent encrypted");
         return StatusCode::BAD_REQUEST;
     };
-    tracing::info!("veryfying: ...");
     if !sig.verify(&message, &sender.sign_pk) {
         tracing::error!(?sig, ?from, ?message, "invalid encrypted message signature");
         return StatusCode::BAD_REQUEST;
