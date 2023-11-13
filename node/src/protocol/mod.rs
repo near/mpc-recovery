@@ -6,7 +6,7 @@ mod triple;
 
 pub mod message;
 
-pub use contract::ProtocolState;
+pub use contract::{ParticipantInfo, ProtocolState};
 pub use message::MpcMessage;
 pub use state::NodeState;
 
@@ -80,6 +80,10 @@ impl CryptographicCtx for &Ctx {
 
     fn http_client(&self) -> &reqwest::Client {
         &self.http_client
+    }
+
+    fn sign_sk(&self) -> &near_crypto::SecretKey {
+        &self.sign_sk
     }
 }
 
@@ -161,13 +165,20 @@ impl MpcSignProtocol {
                     }
                 }
             }
-            let mut state_guard = self.state.write().await;
-            let mut state = std::mem::take(&mut *state_guard);
+
+            let mut state = {
+                let guard = self.state.write().await;
+                let state = guard.clone();
+                state
+            };
             state = state.progress(&self.ctx).await?;
             state = state.advance(&self.ctx, contract_state).await?;
-            state.handle(&self.ctx, &mut queue);
-            *state_guard = state;
-            drop(state_guard);
+            state.handle(&self.ctx, &mut queue).await;
+
+            let mut guard = self.state.write().await;
+            *guard = state;
+            drop(guard);
+
             tokio::time::sleep(Duration::from_millis(1000)).await;
         }
     }

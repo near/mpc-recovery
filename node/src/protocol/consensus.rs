@@ -16,6 +16,8 @@ use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
 use near_primitives::types::AccountId;
 use std::cmp::Ordering;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use url::Url;
 
 pub trait ConsensusCtx {
@@ -146,7 +148,7 @@ impl ConsensusProtocol for StartedState {
                         Ok(NodeState::Generating(GeneratingState {
                             participants,
                             threshold: contract_state.threshold,
-                            protocol: Box::new(protocol),
+                            protocol: Arc::new(RwLock::new(protocol)),
                         }))
                     } else {
                         tracing::info!("we are not a part of the initial participant set, waiting for key generation to complete");
@@ -588,6 +590,6 @@ fn start_resharing<C: ConsensusCtx>(
         new_participants: contract_state.new_participants,
         threshold: contract_state.threshold,
         public_key: contract_state.public_key,
-        protocol: Box::new(protocol),
+        protocol: Arc::new(RwLock::new(protocol)),
     }))
 }

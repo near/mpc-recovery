@@ -1,23 +1,27 @@
 use super::triple::TripleManager;
+use crate::protocol::ParticipantInfo;
 use crate::types::{KeygenProtocol, PrivateKeyShare, PublicKey, ReshareProtocol};
 use cait_sith::protocol::Participant;
-use mpc_contract::ParticipantInfo;
 use std::collections::HashMap;
 
+#[derive(Clone)]
 pub struct PersistentNodeData {
     pub epoch: u64,
     pub private_share: PrivateKeyShare,
     pub public_key: PublicKey,
 }
 
+#[derive(Clone)]
 pub struct StartedState(pub Option<PersistentNodeData>);
 
+#[derive(Clone)]
 pub struct GeneratingState {
     pub participants: HashMap<Participant, ParticipantInfo>,
     pub threshold: usize,
     pub protocol: KeygenProtocol,
 }
 
+#[derive(Clone)]
 pub struct WaitingForConsensusState {
     pub epoch: u64,
     pub participants: HashMap<Participant, ParticipantInfo>,
@@ -26,6 +30,7 @@ pub struct WaitingForConsensusState {
     pub public_key: PublicKey,
 }
 
+#[derive(Clone)]
 pub struct RunningState {
     pub epoch: u64,
     pub participants: HashMap<Participant, ParticipantInfo>,
@@ -35,6 +40,7 @@ pub struct RunningState {
     pub triple_manager: TripleManager,
 }
 
+#[derive(Clone)]
 pub struct ResharingState {
     pub old_epoch: u64,
     pub old_participants: HashMap<Participant, ParticipantInfo>,
@@ -44,11 +50,12 @@ pub struct ResharingState {
     pub protocol: ReshareProtocol,
 }
 
+#[derive(Clone)]
 pub struct JoiningState {
     pub public_key: PublicKey,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub enum NodeState {
     #[default]
     Starting,

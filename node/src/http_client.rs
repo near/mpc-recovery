@@ -1,3 +1,4 @@
+use crate::protocol::message::EncryptedMessage;
 use crate::protocol::MpcMessage;
 use cait_sith::protocol::Participant;
 use mpc_keys::hpke;
@@ -60,14 +61,22 @@ pub async fn message<U: IntoUrl>(
 }
 
 pub async fn message_encrypted<U: IntoUrl>(
+    participant: Participant,
     cipher_pk: &hpke::PublicKey,
+    sign_sk: &near_crypto::SecretKey,
     client: &Client,
     url: U,
     message: MpcMessage,
 ) -> Result<(), SendError> {
     let message = serde_json::to_vec(&message).map_err(SendError::DataConversionError)?;
+    let sig = sign_sk.sign(&message);
     let cipher = cipher_pk.encrypt(&message, b"");
-    tracing::debug!(ciphertext = ?cipher.text, "sending encrypted");
+    tracing::debug!(?participant, ciphertext = ?cipher.text, "sending encrypted");
+    let message = EncryptedMessage {
+        cipher,
+        sig,
+        from: participant,
+    };
 
     let mut url = url.into_url().unwrap();
     url.set_path("msg-private");
@@ -75,7 +84,7 @@ pub async fn message_encrypted<U: IntoUrl>(
         let response = client
             .post(url.clone())
             .header("content-type", "application/json")
-            .json(&cipher)
+            .json(&message)
             .send()
             .await
             .map_err(SendError::ReqwestClientError)?;

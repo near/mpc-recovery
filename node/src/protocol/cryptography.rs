@@ -6,11 +6,11 @@ use crate::protocol::MpcMessage;
 use async_trait::async_trait;
 use cait_sith::protocol::{Action, Participant};
 use k256::elliptic_curve::group::GroupEncoding;
-use mpc_keys::hpke;
 
 pub trait CryptographicCtx {
     fn me(&self) -> Participant;
     fn http_client(&self) -> &reqwest::Client;
+    fn sign_sk(&self) -> &near_crypto::SecretKey;
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -36,10 +36,12 @@ impl CryptographicProtocol for GeneratingState {
         ctx: C,
     ) -> Result<NodeState, CryptographicError> {
         tracing::info!("progressing key generation");
+        let mut protocol = self.protocol.write().await;
         loop {
-            let action = self.protocol.poke().unwrap();
+            let action = protocol.poke().unwrap();
             match action {
                 Action::Wait => {
+                    drop(protocol);
                     tracing::debug!("waiting");
                     return Ok(NodeState::Generating(self));
                 }
@@ -66,7 +68,9 @@ impl CryptographicProtocol for GeneratingState {
                     match self.participants.get(&to) {
                         Some(info) => {
                             http_client::message_encrypted(
-                                &hpke::PublicKey::from_bytes(&info.cipher_pk),
+                                ctx.me(),
+                                &info.cipher_pk,
+                                ctx.sign_sk(),
                                 ctx.http_client(),
                                 info.url.clone(),
                                 MpcMessage::Generating(GeneratingMessage {
@@ -106,10 +110,12 @@ impl CryptographicProtocol for ResharingState {
         ctx: C,
     ) -> Result<NodeState, CryptographicError> {
         tracing::info!("progressing key reshare");
+        let mut protocol = self.protocol.write().await;
         loop {
-            let action = self.protocol.poke().unwrap();
+            let action = protocol.poke().unwrap();
             match action {
                 Action::Wait => {
+                    drop(protocol);
                     tracing::debug!("waiting");
                     return Ok(NodeState::Resharing(self));
                 }
@@ -137,7 +143,9 @@ impl CryptographicProtocol for ResharingState {
                     match self.new_participants.get(&to) {
                         Some(info) => {
                             http_client::message_encrypted(
-                                &hpke::PublicKey::from_bytes(&info.cipher_pk),
+                                ctx.me(),
+                                &info.cipher_pk,
+                                ctx.sign_sk(),
                                 ctx.http_client(),
                                 info.url.clone(),
                                 MpcMessage::Resharing(ResharingMessage {
@@ -184,7 +192,9 @@ impl CryptographicProtocol for RunningState {
             }
 
             http_client::message_encrypted(
-                &hpke::PublicKey::from_bytes(&info.cipher_pk),
+                ctx.me(),
+                &info.cipher_pk,
+                ctx.sign_sk(),
                 ctx.http_client(),
                 info.url.clone(),
                 MpcMessage::Triple(msg),

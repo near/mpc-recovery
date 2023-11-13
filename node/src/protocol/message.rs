@@ -1,7 +1,10 @@
 use std::collections::{HashMap, VecDeque};
 
 use super::state::{GeneratingState, NodeState, ResharingState, RunningState};
+use async_trait::async_trait;
 use cait_sith::protocol::{MessageData, Participant};
+use mpc_keys::hpke::Ciphered;
+use near_crypto::Signature;
 use serde::{Deserialize, Serialize};
 
 pub trait MessageCtx {
@@ -63,33 +66,38 @@ impl MpcMessageQueue {
     }
 }
 
+#[async_trait]
 pub trait MessageHandler {
-    fn handle<C: MessageCtx + Send + Sync>(&mut self, ctx: C, queue: &mut MpcMessageQueue);
+    async fn handle<C: MessageCtx + Send + Sync>(&mut self, ctx: C, queue: &mut MpcMessageQueue);
 }
 
+#[async_trait]
 impl MessageHandler for GeneratingState {
-    fn handle<C: MessageCtx + Send + Sync>(&mut self, _ctx: C, queue: &mut MpcMessageQueue) {
+    async fn handle<C: MessageCtx + Send + Sync>(&mut self, _ctx: C, queue: &mut MpcMessageQueue) {
         while let Some(msg) = queue.generating.pop_front() {
             tracing::debug!("handling new generating message");
-            self.protocol.message(msg.from, msg.data);
+            self.protocol.write().await.message(msg.from, msg.data);
         }
     }
 }
 
+#[async_trait]
 impl MessageHandler for ResharingState {
-    fn handle<C: MessageCtx + Send + Sync>(&mut self, _ctx: C, queue: &mut MpcMessageQueue) {
+    async fn handle<C: MessageCtx + Send + Sync>(&mut self, _ctx: C, queue: &mut MpcMessageQueue) {
         let q = queue.resharing_bins.entry(self.old_epoch).or_default();
         while let Some(msg) = q.pop_front() {
             tracing::debug!("handling new resharing message");
-            self.protocol.message(msg.from, msg.data);
+            self.protocol.write().await.message(msg.from, msg.data);
         }
     }
 }
 
+#[async_trait]
 impl MessageHandler for RunningState {
-    fn handle<C: MessageCtx + Send + Sync>(&mut self, _ctx: C, queue: &mut MpcMessageQueue) {
+    async fn handle<C: MessageCtx + Send + Sync>(&mut self, _ctx: C, queue: &mut MpcMessageQueue) {
         for (id, queue) in queue.triple_bins.entry(self.epoch).or_default() {
             if let Some(protocol) = self.triple_manager.get_or_generate(*id) {
+                let mut protocol = protocol.write().unwrap();
                 while let Some(message) = queue.pop_front() {
                     protocol.message(message.from, message.data);
                 }
@@ -98,15 +106,26 @@ impl MessageHandler for RunningState {
     }
 }
 
+#[async_trait]
 impl MessageHandler for NodeState {
-    fn handle<C: MessageCtx + Send + Sync>(&mut self, ctx: C, queue: &mut MpcMessageQueue) {
+    async fn handle<C: MessageCtx + Send + Sync>(&mut self, ctx: C, queue: &mut MpcMessageQueue) {
         match self {
-            NodeState::Generating(state) => state.handle(ctx, queue),
-            NodeState::Resharing(state) => state.handle(ctx, queue),
-            NodeState::Running(state) => state.handle(ctx, queue),
+            NodeState::Generating(state) => state.handle(ctx, queue).await,
+            NodeState::Resharing(state) => state.handle(ctx, queue).await,
+            NodeState::Running(state) => state.handle(ctx, queue).await,
             _ => {
                 tracing::debug!("skipping message processing")
             }
         }
     }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct EncryptedMessage {
+    /// The encrypted message with all it's related info.
+    pub cipher: Ciphered,
+    /// The signature used to verify the authenticity of the encrypted message.
+    pub sig: Signature,
+    /// From which particpant the message was sent.
+    pub from: Participant,
 }
