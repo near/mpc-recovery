@@ -220,6 +220,8 @@ module "leader-mainnet" {
   docker_image          = var.docker_image
   connector_id          = var.prod-connector
   jwt_signature_pk_url  = var.jwt_signature_pk_url
+  opentelemetry_level   = var.opentelemetry_level
+  otlp_endpoint         = var.otlp_endpoint
 
   signer_node_urls   = concat(module.signer.*.node.uri, var.external_signer_node_urls)
   near_rpc           = local.workspace.near_rpc
@@ -248,6 +250,8 @@ module "leader-testnet" {
   docker_image          = var.docker_image
   connector_id          = var.prod-connector
   jwt_signature_pk_url  = var.jwt_signature_pk_url
+  opentelemetry_level   = var.opentelemetry_level
+  otlp_endpoint         = var.otlp_endpoint
 
   signer_node_urls   = concat(module.signer.*.node.uri, var.external_signer_node_urls)
   near_rpc           = local.workspace.near_rpc
