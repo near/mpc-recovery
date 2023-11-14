@@ -68,22 +68,31 @@ pub struct Context<'a> {
 }
 
 pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> {
+    if !crate::mpc::build_multichain_contract().await?.success() {
+        anyhow::bail!("failed to prebuild multichain contract");
+    }
+
+    let release = true;
+    if !crate::mpc::build_multichain(release).await?.success() {
+        anyhow::bail!("failed to prebuild multichain node service");
+    }
+
     let docker_network = NETWORK;
     docker_client.create_network(docker_network).await?;
 
     let SandboxCtx { sandbox, worker } = initialize_sandbox(docker_client, NETWORK).await?;
 
     let mpc_contract = worker
-        .dev_deploy(include_bytes!(
-            "../../../target/wasm32-unknown-unknown/release/mpc_contract.wasm"
-        ))
+        .dev_deploy(&std::fs::read(
+            "../target/wasm32-unknown-unknown/release/mpc_contract.wasm",
+        )?)
         .await?;
     tracing::info!(contract_id = %mpc_contract.id(), "deployed mpc contract");
 
     Ok(Context {
         docker_client,
         docker_network: docker_network.to_string(),
-        release: true,
+        release,
         sandbox,
         worker,
         mpc_contract,
