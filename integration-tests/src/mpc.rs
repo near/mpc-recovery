@@ -8,6 +8,8 @@ use mpc_recovery::Cli;
 
 const PACKAGE: &str = "mpc-recovery";
 const PACKAGE_MULTICHAIN: &str = "mpc-recovery-node";
+const PACKAGE_CONTRACT: &str = "mpc-contract";
+const TARGET_CONTRACT: &str = "wasm32-unknown-unknown";
 
 /// NodeProcess holds onto the respective handles such that on drop, it will clean
 /// the running process, task, or thread.
@@ -37,11 +39,15 @@ fn target_dir() -> Option<PathBuf> {
     }
 }
 
-pub async fn build(release: bool) -> anyhow::Result<ExitStatus> {
+async fn build_package(
+    release: bool,
+    package: &str,
+    target: Option<&str>,
+) -> anyhow::Result<ExitStatus> {
     let mut cmd = Command::new("cargo");
     cmd.arg("build")
         .arg("--package")
-        .arg(PACKAGE)
+        .arg(package)
         .envs(std::env::vars())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
@@ -50,7 +56,23 @@ pub async fn build(release: bool) -> anyhow::Result<ExitStatus> {
         cmd.arg("--release");
     }
 
+    if let Some(target) = target {
+        cmd.arg("--target").arg(target);
+    }
+
     Ok(cmd.spawn()?.status().await?)
+}
+
+pub async fn build(release: bool) -> anyhow::Result<ExitStatus> {
+    build_package(release, PACKAGE, None).await
+}
+
+pub async fn build_multichain(release: bool) -> anyhow::Result<ExitStatus> {
+    build_package(release, PACKAGE_MULTICHAIN, None).await
+}
+
+pub async fn build_multichain_contract() -> anyhow::Result<ExitStatus> {
+    build_package(true, PACKAGE_CONTRACT, Some(TARGET_CONTRACT)).await
 }
 
 pub async fn spawn(release: bool, node: &str, cli: Cli) -> anyhow::Result<NodeProcess> {
