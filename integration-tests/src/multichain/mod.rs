@@ -2,7 +2,7 @@ pub mod containers;
 pub mod local;
 
 use crate::env::containers::DockerClient;
-use crate::{initialize_sandbox, SandboxCtx};
+use crate::{initialize_lake_indexer, LakeIndexerCtx};
 use mpc_contract::ParticipantInfo;
 use near_workspaces::network::Sandbox;
 use near_workspaces::{AccountId, Contract, Worker};
@@ -62,7 +62,8 @@ pub struct Context<'a> {
     pub docker_network: String,
     pub release: bool,
 
-    pub sandbox: crate::env::containers::Sandbox<'a>,
+    pub localstack: crate::env::containers::LocalStack<'a>,
+    pub lake_indexer: crate::env::containers::LakeIndexer<'a>,
     pub worker: Worker<Sandbox>,
     pub mpc_contract: Contract,
 }
@@ -71,7 +72,11 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
     let docker_network = NETWORK;
     docker_client.create_network(docker_network).await?;
 
-    let SandboxCtx { sandbox, worker } = initialize_sandbox(docker_client, NETWORK).await?;
+    let LakeIndexerCtx {
+        localstack,
+        lake_indexer,
+        worker,
+    } = initialize_lake_indexer(docker_client, docker_network).await?;
 
     let mpc_contract = worker
         .dev_deploy(include_bytes!(
@@ -84,7 +89,8 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
         docker_client,
         docker_network: docker_network.to_string(),
         release: true,
-        sandbox,
+        localstack,
+        lake_indexer,
         worker,
         mpc_contract,
     })

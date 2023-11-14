@@ -8,7 +8,8 @@ use near_workspaces::{
     Account, Worker,
 };
 
-use crate::env::containers;
+use crate::env::containers::{self, LocalStack};
+use testcontainers::{Container, GenericImage};
 
 pub mod env;
 pub mod mpc;
@@ -16,22 +17,20 @@ pub mod multichain;
 pub mod sandbox;
 pub mod util;
 
-async fn fetch_validator_keys(
+async fn fetch_from_validator(
     docker_client: &containers::DockerClient,
-    sandbox: &containers::Sandbox<'_>,
-) -> anyhow::Result<KeyFile> {
-    tracing::info!("Fetching validator keys...");
+    container: &Container<'_, GenericImage>,
+    path: &str,
+) -> anyhow::Result<Vec<u8>> {
+    tracing::info!(path, "fetching data from validator");
     let create_result = docker_client
         .docker
         .create_exec(
-            sandbox.container.id(),
-            CreateExecOptions::<String> {
+            container.id(),
+            CreateExecOptions::<&str> {
                 attach_stdout: Some(true),
                 attach_stderr: Some(true),
-                cmd: Some(vec![
-                    "cat".to_string(),
-                    "/root/.near/validator_key.json".to_string(),
-                ]),
+                cmd: Some(vec!["cat", path]),
                 ..Default::default()
             },
         )
@@ -49,11 +48,21 @@ async fn fetch_validator_keys(
                 stream_contents.extend_from_slice(&chunk?.into_bytes());
             }
 
-            tracing::info!("Validator keys fetched");
-            Ok(serde_json::from_slice(&stream_contents)?)
+            tracing::info!("data fetched");
+            Ok(stream_contents)
         }
         StartExecResults::Detached => unreachable!("unexpected detached output"),
     }
+}
+
+async fn fetch_validator_keys(
+    docker_client: &containers::DockerClient,
+    container: &Container<'_, GenericImage>,
+) -> anyhow::Result<KeyFile> {
+    let _span = tracing::info_span!("fetch_validator_keys");
+    let key_data =
+        fetch_from_validator(docker_client, container, "/root/.near/validator_key.json").await?;
+    Ok(serde_json::from_slice(&key_data)?)
 }
 
 pub struct SandboxCtx<'a> {
@@ -68,7 +77,7 @@ pub async fn initialize_sandbox<'a>(
     tracing::info!("initializing sandbox");
     let sandbox = containers::Sandbox::run(docker_client, network).await?;
 
-    let validator_key = fetch_validator_keys(docker_client, &sandbox).await?;
+    let validator_key = fetch_validator_keys(docker_client, &sandbox.container).await?;
 
     tracing::info!("initializing sandbox worker");
     let worker = near_workspaces::sandbox()
@@ -80,6 +89,48 @@ pub async fn initialize_sandbox<'a>(
         .await?;
 
     Ok(SandboxCtx { sandbox, worker })
+}
+
+pub struct LakeIndexerCtx<'a> {
+    pub localstack: containers::LocalStack<'a>,
+    pub lake_indexer: containers::LakeIndexer<'a>,
+    pub worker: Worker<Sandbox>,
+}
+
+pub async fn initialize_lake_indexer<'a>(
+    docker_client: &'a containers::DockerClient,
+    network: &str,
+) -> anyhow::Result<LakeIndexerCtx<'a>> {
+    let s3_bucket = "near-lake-custom".to_string();
+    let s3_region = "us-east-1".to_string();
+    let localstack =
+        LocalStack::run(docker_client, network, s3_bucket.clone(), s3_region.clone()).await?;
+
+    let lake_indexer = containers::LakeIndexer::run(
+        docker_client,
+        network,
+        &localstack.s3_address,
+        s3_bucket,
+        s3_region,
+    )
+    .await?;
+
+    let validator_key = fetch_validator_keys(docker_client, &lake_indexer.container).await?;
+
+    tracing::info!("initializing sandbox worker");
+    let worker = near_workspaces::sandbox()
+        .rpc_addr(&lake_indexer.rpc_host_address)
+        .validator_key(ValidatorKey::Known(
+            validator_key.account_id.to_string().parse()?,
+            validator_key.secret_key.to_string().parse()?,
+        ))
+        .await?;
+
+    Ok(LakeIndexerCtx {
+        localstack,
+        lake_indexer,
+        worker,
+    })
 }
 
 pub struct RelayerCtx<'a> {
@@ -96,7 +147,9 @@ pub async fn initialize_relayer<'a>(
     network: &str,
     relayer_id: &str,
 ) -> anyhow::Result<RelayerCtx<'a>> {
-    let SandboxCtx { sandbox, worker } = initialize_sandbox(docker_client, network).await?;
+    let SandboxCtx {
+        sandbox, worker, ..
+    } = initialize_sandbox(docker_client, network).await?;
 
     let social_db = sandbox::initialize_social_db(&worker).await?;
     sandbox::initialize_linkdrop(&worker).await?;

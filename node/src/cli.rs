@@ -34,6 +34,9 @@ pub enum Cli {
         /// The web port for this server
         #[arg(long, env("MPC_RECOVERY_WEB_PORT"))]
         web_port: u16,
+        /// NEAR Lake Indexer options
+        #[clap(flatten)]
+        indexer_options: indexer::Options,
     },
 }
 
@@ -52,8 +55,9 @@ impl Cli {
                 account,
                 account_sk,
                 web_port,
+                indexer_options,
             } => {
-                vec![
+                let mut args = vec![
                     "start".to_string(),
                     "--node-id".to_string(),
                     u32::from(node_id).to_string(),
@@ -67,7 +71,9 @@ impl Cli {
                     account_sk.to_string(),
                     "--web-port".to_string(),
                     web_port.to_string(),
-                ]
+                ];
+                args.extend(indexer_options.into_str_args());
+                args
             }
         }
     }
@@ -94,6 +100,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
             mpc_contract_id,
             account,
             account_sk,
+            indexer_options,
         } => {
             tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
@@ -142,7 +149,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
 
                     anyhow::Ok(())
                 })?;
-            indexer::run(&near_rpc, mpc_contract_id)?;
+            indexer::run(&indexer_options, mpc_contract_id)?;
         }
     }
 
