@@ -3,7 +3,7 @@ project = "pagoda-discovery-platform-dev"
 region  = "us-east1"
 zone    = "us-east1-c"
 
-docker_image = "us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev"
+docker_image = "near/mpc-recovery"
 node_id      = "0"
 
 oidc_providers_secret_id = "mpc-recovery-allowed-oidc-providers-0-dev"

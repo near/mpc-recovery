@@ -54,6 +54,11 @@ jobs:
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
 
+      # Build Docker image.
+      - name: Docker Image
+        id: build
+        run: docker build .. -t near/mpc-recovery
+
       # Generates an execution plan for Terraform
       - name: Terraform Plan
         id: plan

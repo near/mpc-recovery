@@ -44,5 +44,4 @@ variable "service_name" {
 }
 
 variable "jwt_signature_pk_url" {
-  type = string
 }

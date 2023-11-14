@@ -21,6 +21,14 @@ provider "google" {
   zone    = var.zone
 }
 
+provider "docker" {
+  registry_auth {
+    address  = "${var.region}-docker.pkg.dev"
+    username = "_json_key"
+    password = local.credentials
+  }
+}
+
 /*
  * Create brand new service account with basic IAM
  */
@@ -62,6 +70,31 @@ resource "google_secret_manager_secret_iam_member" "secret_share_secret_access" 
   member    = "serviceAccount:${google_service_account.service_account.email}"
 }
 
+resource "google_secret_manager_secret_iam_member" "oidc_providers_secret_access" {
+  secret_id = var.oidc_providers_secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.service_account.email}"
+}
+
+/*
+ * Create Artifact Registry repo, tag existing Docker image and push to the repo
+ */
+resource "google_artifact_registry_repository" "mpc_recovery" {
+  repository_id = "mpc-recovery-partner-${var.env}"
+  format        = "DOCKER"
+}
+
+resource "google_secret_manager_secret_iam_member" "secret_share_secret_access" {
+  secret_id = var.sk_share_secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.service_account.email}"
+}
+
+resource "docker_tag" "mpc_recovery" {
+  source_image = var.docker_image
+  target_image = "${var.region}-docker.pkg.dev/${var.project}/${google_artifact_registry_repository.mpc_recovery.name}/mpc-recovery-${var.env}"
+}
+
 /*
  * Create a partner signer node
  */
@@ -80,14 +113,13 @@ module "signer" {
 
   cipher_key_secret_id = var.cipher_key_secret_id
   sk_share_secret_id   = var.sk_share_secret_id
-
-  # optional
-  connector_id = "partner-vpc-connector-id"
-
   jwt_signature_pk_url = var.jwt_signature_pk_url
+  connector_id         = var.connector_id
 
   depends_on = [
+    docker_registry_image.mpc_recovery,
     google_secret_manager_secret_iam_member.cipher_key_secret_access,
     google_secret_manager_secret_iam_member.secret_share_secret_access,
+    google_secret_manager_secret_iam_member.oidc_providers_secret_access
   ]
 }
