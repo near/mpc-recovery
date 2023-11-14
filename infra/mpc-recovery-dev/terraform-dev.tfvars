@@ -3,7 +3,7 @@ project      = "pagoda-discovery-platform-dev"
 docker_image = "us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev:f405e5594e666ef6a6e5ccf701c0d70c9673d4fe"
 
 account_creator_id           = "mpc-recovery-dev-creator.testnet"
-account_creator_sk_secret_id = "mpc-account-creator-sk-dev"
+account_creator_sk_secret_id = "mpc-recovery-account-creator-sk-dev"
 fast_auth_partners_secret_id = "mpc-fast-auth-partners-dev"
 signer_configs = [
   {
