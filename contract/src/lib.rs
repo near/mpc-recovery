@@ -1,6 +1,6 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::{env, near_bindgen, AccountId, PublicKey};
+use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault, PublicKey};
 use std::collections::{HashMap, HashSet};
 
 type ParticipantId = u32;
@@ -25,7 +25,7 @@ pub struct ParticipantInfo {
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
-pub struct InitializedContractState {
+pub struct InitializingContractState {
     pub participants: HashMap<AccountId, ParticipantInfo>,
     pub threshold: usize,
     pub pk_votes: HashMap<PublicKey, HashSet<ParticipantId>>,
@@ -55,24 +55,15 @@ pub struct ResharingContractState {
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
 pub enum ProtocolContractState {
-    NonInitialized,
-    Initialized(InitializedContractState),
+    Initializing(InitializingContractState),
     Running(RunningContractState),
     Resharing(ResharingContractState),
 }
 
 #[near_bindgen]
-#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct MpcContract {
     protocol_state: ProtocolContractState,
-}
-
-impl Default for MpcContract {
-    fn default() -> Self {
-        Self {
-            protocol_state: ProtocolContractState::NonInitialized,
-        }
-    }
 }
 
 #[near_bindgen]
@@ -80,7 +71,7 @@ impl MpcContract {
     #[init]
     pub fn init(threshold: usize, participants: HashMap<AccountId, ParticipantInfo>) -> Self {
         MpcContract {
-            protocol_state: ProtocolContractState::Initialized(InitializedContractState {
+            protocol_state: ProtocolContractState::Initializing(InitializingContractState {
                 participants,
                 threshold,
                 pk_votes: HashMap::new(),
@@ -111,9 +102,6 @@ impl MpcContract {
                         url,
                     },
                 );
-            }
-            ProtocolContractState::NonInitialized => {
-                env::panic_str("protocol state hasn't been initialized yet")
             }
             _ => env::panic_str("protocol state can't accept new participants right now"),
         }
@@ -157,9 +145,6 @@ impl MpcContract {
                     false
                 }
             }
-            ProtocolContractState::NonInitialized => {
-                env::panic_str("protocol state hasn't been initialized yet")
-            }
             _ => env::panic_str("protocol state can't accept new participants right now"),
         }
     }
@@ -202,16 +187,13 @@ impl MpcContract {
                     false
                 }
             }
-            ProtocolContractState::NonInitialized => {
-                env::panic_str("protocol state hasn't been initialized yet")
-            }
             _ => env::panic_str("protocol state can't kick participants right now"),
         }
     }
 
     pub fn vote_pk(&mut self, public_key: PublicKey) -> bool {
         match &mut self.protocol_state {
-            ProtocolContractState::Initialized(InitializedContractState {
+            ProtocolContractState::Initializing(InitializingContractState {
                 participants,
                 threshold,
                 pk_votes,
@@ -237,9 +219,6 @@ impl MpcContract {
                 } else {
                     false
                 }
-            }
-            ProtocolContractState::NonInitialized => {
-                env::panic_str("protocol state hasn't been initialized yet")
             }
             ProtocolContractState::Running(state) if state.public_key == public_key => true,
             ProtocolContractState::Resharing(state) if state.public_key == public_key => true,
@@ -280,9 +259,6 @@ impl MpcContract {
                 } else {
                     false
                 }
-            }
-            ProtocolContractState::NonInitialized => {
-                env::panic_str("protocol state hasn't been initialized yet")
             }
             ProtocolContractState::Running(state) => {
                 if state.epoch == epoch {
