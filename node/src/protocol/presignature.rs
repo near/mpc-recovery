@@ -68,6 +68,35 @@ impl PresignatureManager {
         self.presignatures.len() + self.generators.len()
     }
 
+    fn generate_internal(
+        participants: &[Participant],
+        me: Participant,
+        threshold: usize,
+        triple0: Triple,
+        triple1: Triple,
+        public_key: &PublicKey,
+        private_share: &PrivateKeyShare,
+    ) -> Result<PresignatureGenerator, InitializationError> {
+        let protocol = Box::new(cait_sith::presign(
+            participants,
+            me,
+            PresignArguments {
+                triple0: (triple0.share, triple0.public),
+                triple1: (triple1.share, triple1.public),
+                keygen_out: KeygenOutput {
+                    private_share: *private_share,
+                    public_key: *public_key,
+                },
+                threshold,
+            },
+        )?);
+        Ok(PresignatureGenerator {
+            protocol,
+            triple0: triple0.id,
+            triple1: triple1.id,
+        })
+    }
+
     /// Starts a new presignature generation protocol.
     pub fn generate(
         &mut self,
@@ -78,27 +107,16 @@ impl PresignatureManager {
     ) -> Result<(), InitializationError> {
         let id = rand::random();
         tracing::info!(id, "starting protocol to generate a new presignature");
-        let protocol = Box::new(cait_sith::presign(
+        let generator = Self::generate_internal(
             &self.participants,
             self.me,
-            PresignArguments {
-                triple0: (triple0.share, triple0.public),
-                triple1: (triple1.share, triple1.public),
-                keygen_out: KeygenOutput {
-                    private_share: *private_share,
-                    public_key: *public_key,
-                },
-                threshold: self.threshold,
-            },
-        )?);
-        self.generators.insert(
-            id,
-            PresignatureGenerator {
-                protocol,
-                triple0: triple0.id,
-                triple1: triple1.id,
-            },
-        );
+            self.threshold,
+            triple0,
+            triple1,
+            public_key,
+            private_share,
+        )?;
+        self.generators.insert(id, generator);
         Ok(())
     }
 
@@ -137,24 +155,16 @@ impl PresignatureManager {
                             return Ok(None);
                         }
                     };
-                    let protocol = Box::new(cait_sith::presign(
+                    let generator = Self::generate_internal(
                         &self.participants,
                         self.me,
-                        PresignArguments {
-                            triple0: (triple0.share, triple0.public),
-                            triple1: (triple1.share, triple1.public),
-                            keygen_out: KeygenOutput {
-                                private_share: *private_share,
-                                public_key: *public_key,
-                            },
-                            threshold: self.threshold,
-                        },
-                    )?);
-                    let generator = entry.insert(PresignatureGenerator {
-                        protocol,
-                        triple0: triple0.id,
-                        triple1: triple1.id,
-                    });
+                        self.threshold,
+                        triple0,
+                        triple1,
+                        public_key,
+                        private_share,
+                    )?;
+                    let generator = entry.insert(generator);
                     Ok(Some(&mut generator.protocol))
                 }
                 Entry::Occupied(entry) => Ok(Some(&mut entry.into_mut().protocol)),
