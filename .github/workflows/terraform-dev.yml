@@ -57,7 +57,7 @@ jobs:
       # Build Docker image.
       - name: Docker Image
         id: build
-        run: docker build .. -t near/mpc-recovery
+        run: docker build ../.. -t near/mpc-recovery
 
       # Generates an execution plan for Terraform
       - name: Terraform Plan
