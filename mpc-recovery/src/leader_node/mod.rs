@@ -539,7 +539,7 @@ async fn process_sign(
         })
         .collect();
 
-    if delete_account_actions.len() > 0 {
+    if !delete_account_actions.is_empty() {
         tracing::error!("Account deletion is not allowed");
         Err(LeaderNodeError::AccountDeletionIsNotAllowed)?;
     }
