@@ -43,6 +43,9 @@ pub enum Cli {
         /// The cipher secret key used to decrypt messages between nodes.
         #[arg(long, env("MPC_RECOVERY_CIPHER_SK"))]
         cipher_sk: String,
+        /// NEAR Lake Indexer options
+        #[clap(flatten)]
+        indexer_options: indexer::Options,
     },
 }
 
@@ -63,8 +66,9 @@ impl Cli {
                 web_port,
                 cipher_pk,
                 cipher_sk,
+                indexer_options,
             } => {
-                vec![
+                let mut args = vec![
                     "start".to_string(),
                     "--node-id".to_string(),
                     u32::from(node_id).to_string(),
@@ -82,7 +86,9 @@ impl Cli {
                     cipher_pk,
                     "--cipher-sk".to_string(),
                     cipher_sk,
-                ]
+                ];
+                args.extend(indexer_options.into_str_args());
+                args
             }
         }
     }
@@ -111,6 +117,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
             account_sk,
             cipher_pk,
             cipher_sk,
+            indexer_options,
         } => {
             tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
@@ -163,7 +170,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
 
                     anyhow::Ok(())
                 })?;
-            indexer::run(&near_rpc, mpc_contract_id)?;
+            indexer::run(&indexer_options, mpc_contract_id)?;
         }
     }
 

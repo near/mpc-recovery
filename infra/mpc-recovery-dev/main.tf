@@ -1,5 +1,6 @@
 terraform {
   backend "gcs" {
+    bucket = "mpc-recovery-terraform-dev"
     prefix = "state/mpc-recovery"
   }
 
@@ -33,11 +34,12 @@ locals {
 }
 
 data "external" "git_checkout" {
-  program = ["${path.module}/scripts/get_sha.sh"]
+  program = ["${path.module}/../scripts/get_sha.sh"]
 }
 
 provider "google" {
   credentials = local.credentials
+  # credentials = file("~/.config/gcloud/application_default_credentials.json")
 
   project = var.project
   region  = var.region
@@ -58,6 +60,7 @@ resource "google_service_account_iam_binding" "serivce-account-iam" {
 
   members = [
     "serviceAccount:${local.client_email}",
+    # "serviceAccount:mpc-recovery@pagoda-discovery-platform-dev.iam.gserviceaccount.com"
   ]
 }
 
@@ -98,19 +101,42 @@ resource "google_secret_manager_secret_iam_member" "fast_auth_partners_secret_ac
   member    = "serviceAccount:${google_service_account.service_account.email}"
 }
 
+module "mpc-signer-lb" {
+
+  count         = length(var.signer_configs)
+  source        = "../modules/internal_cloudrun_lb"
+  name          = "mpc-${var.env}-signer-${count.index}"
+  network_id    = data.google_compute_network.prod_network.id
+  subnetwork_id = data.google_compute_subnetwork.prod_subnetwork.id
+  project_id    = var.project
+  region        = "us-central1"
+  service_name  = "mpc-recovery-signer-${count.index}-${var.env}"
+}
+
+module "mpc-leader-lb" {
+  source        = "../modules/internal_cloudrun_lb"
+  name          = "mpc-${var.env}-leader"
+  network_id    = data.google_compute_network.prod_network.id
+  subnetwork_id = data.google_compute_subnetwork.prod_subnetwork.id
+  project_id    = var.project
+  region        = "us-central1"
+  service_name  = "mpc-recovery-leader-${var.env}"
+}
 /*
  * Create multiple signer nodes
  */
 module "signer" {
   count  = length(var.signer_configs)
-  source = "./modules/signer"
+  source = "../modules/signer"
 
   env                   = var.env
+  service_name          = "mpc-recovery-signer-${count.index}-${var.env}"
   project               = var.project
   region                = var.region
   zone                  = var.zone
   service_account_email = google_service_account.service_account.email
   docker_image          = var.docker_image
+  connector_id          = var.dev-connector
 
   node_id = count.index
 
@@ -129,14 +155,16 @@ module "signer" {
  * Create leader node
  */
 module "leader" {
-  source = "./modules/leader"
+  source = "../modules/leader"
 
   env                   = var.env
+  service_name          = "mpc-recovery-leader-${var.env}"
   project               = var.project
   region                = var.region
   zone                  = var.zone
   service_account_email = google_service_account.service_account.email
   docker_image          = var.docker_image
+  connector_id          = var.prod-connector
 
   signer_node_urls   = concat(module.signer.*.node.uri, var.external_signer_node_urls)
   near_rpc           = local.workspace.near_rpc

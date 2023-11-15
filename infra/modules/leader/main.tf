@@ -1,10 +1,17 @@
 resource "google_cloud_run_v2_service" "leader" {
-  name     = "mpc-recovery-leader-${var.env}"
+  name     = var.service_name
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
 
   template {
     service_account = var.service_account_email
+
+    annotations = var.metadata_annotations == null ? null : var.metadata_annotations
+
+    vpc_access {
+      connector = var.connector_id
+      egress    = "PRIVATE_RANGES_ONLY"
+    }
 
     scaling {
       min_instance_count = 1
@@ -48,7 +55,7 @@ resource "google_cloud_run_v2_service" "leader" {
         value_source {
           secret_key_ref {
             secret  = var.account_creator_sk_secret_id
-            version = "1"
+            version = "latest"
           }
         }
       }
@@ -82,7 +89,6 @@ resource "google_cloud_run_v2_service" "leader" {
       ports {
         container_port = 3000
       }
-
       resources {
         cpu_idle = false
 

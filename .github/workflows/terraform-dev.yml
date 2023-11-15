@@ -17,7 +17,7 @@ jobs:
       pull-requests: write
     defaults:
       run:
-        working-directory: ./infra
+        working-directory: ./infra/mpc-recovery-dev
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -53,6 +53,11 @@ jobs:
         run: terraform workspace select dev
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
+
+      # Build Docker image.
+      - name: Docker Image
+        id: build
+        run: docker build .. -t near/mpc-recovery
 
       # Generates an execution plan for Terraform
       - name: Terraform Plan

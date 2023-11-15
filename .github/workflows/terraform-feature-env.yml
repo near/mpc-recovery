@@ -15,7 +15,7 @@ jobs:
       checks: read
     defaults:
       run:
-        working-directory: ./infra
+        working-directory: ./infra/mpc-recovery-dev
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:

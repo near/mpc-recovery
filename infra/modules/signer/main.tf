@@ -1,10 +1,17 @@
 resource "google_cloud_run_v2_service" "signer" {
-  name     = "mpc-recovery-signer-${var.node_id}-${var.env}"
+  name     = var.service_name
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
 
   template {
     service_account = var.service_account_email
+
+    annotations = var.metadata_annotations == null ? null : var.metadata_annotations
+
+    vpc_access {
+      connector = var.connector_id == null ? null : var.connector_id
+      egress    = "PRIVATE_RANGES_ONLY"
+    }
 
     scaling {
       min_instance_count = 1
@@ -61,6 +68,8 @@ resource "google_cloud_run_v2_service" "signer" {
       ports {
         container_port = 3000
       }
+
+
 
       resources {
         cpu_idle = false

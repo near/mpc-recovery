@@ -28,13 +28,18 @@ impl Node {
         let (cipher_sk, cipher_pk) = hpke::generate();
         let cli = mpc_recovery_node::cli::Cli::Start {
             node_id: node_id.into(),
-            near_rpc: ctx.sandbox.local_address.clone(),
+            near_rpc: ctx.lake_indexer.rpc_host_address.clone(),
             mpc_contract_id: ctx.mpc_contract.id().clone(),
             account: account.clone(),
             account_sk: account_sk.to_string().parse()?,
             web_port,
             cipher_pk: hex::encode(cipher_pk.to_bytes()),
             cipher_sk: hex::encode(cipher_sk.to_bytes()),
+            indexer_options: mpc_recovery_node::indexer::Options {
+                s3_bucket: ctx.localstack.s3_host_address.clone(),
+                s3_region: ctx.localstack.s3_region.clone(),
+                start_block_height: 0,
+            },
         };
 
         let mpc_node_id = format!("multichain/{node_id}");

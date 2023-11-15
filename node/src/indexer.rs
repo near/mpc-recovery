@@ -2,6 +2,44 @@ use near_lake_framework::{LakeBuilder, LakeContext};
 use near_lake_primitives::{receipts::ExecutionStatus, AccountId};
 use serde::{Deserialize, Serialize};
 
+/// Configures exporter of span and trace data.
+#[derive(Debug, clap::Parser)]
+pub struct Options {
+    /// AWS S3 bucket name for NEAR Lake Indexer
+    #[clap(
+        long,
+        env("MPC_RECOVERY_INDEXER_S3_BUCKET"),
+        default_value = "near-lake-data-testnet"
+    )]
+    pub s3_bucket: String,
+
+    /// AWS S3 region name for NEAR Lake Indexer
+    #[clap(
+        long,
+        env("MPC_RECOVERY_INDEXER_S3_REGION"),
+        default_value = "eu-central-1"
+    )]
+    pub s3_region: String,
+
+    /// The block height to start indexing from.
+    // Defaults to the latest block on 2023-11-14 07:40:22 AM UTC
+    #[clap(long, default_value = "145964826")]
+    pub start_block_height: u64,
+}
+
+impl Options {
+    pub fn into_str_args(self) -> Vec<String> {
+        vec![
+            "--s3-bucket".to_string(),
+            self.s3_bucket,
+            "--s3-region".to_string(),
+            self.s3_region,
+            "--start-block-height".to_string(),
+            self.start_block_height.to_string(),
+        ]
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 struct SignPayload {
     payload: Vec<u8>,
@@ -43,16 +81,13 @@ async fn handle_block(
     Ok(())
 }
 
-pub fn run(_near_rpc: &str, signer_account: AccountId) -> anyhow::Result<()> {
-    let mut config_builder = LakeBuilder::default();
-    // config_builder = match near_network {
-    //     "mainnet" => config_builder.mainnet().start_block_height(98924566),
-    //     "testnet" => config_builder.testnet().start_block_height(134986320),
-    //     other => anyhow::bail!("unrecognized NEAR network: {other}"),
-    // };
-    config_builder = config_builder.testnet().start_block_height(134986320);
+pub fn run(options: &Options, signer_account: AccountId) -> anyhow::Result<()> {
+    let lake = LakeBuilder::default()
+        .s3_bucket_name(&options.s3_bucket)
+        .s3_region_name(&options.s3_region)
+        .start_block_height(options.start_block_height)
+        .build()?;
     let context = Context { signer_account };
-    let lake = config_builder.build()?;
     lake.run_with_context(handle_block, &context)?;
     Ok(())
 }

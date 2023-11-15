@@ -1,0 +1,152 @@
+name: Deploy to Prod environments.
+on:
+  workflow_dispatch:
+    inputs:
+      network:
+        type: choice
+        options:
+          - mainnet
+          - testnet
+        description: mainnet or testnet network
+        required: true
+      version:
+        description: What mainnet version number is this deployment? (e.g. v0.1.0)
+        required: true
+
+
+env:
+  PROJECT_PROD: "pagoda-discovery-platform-prod"
+  REGION: "us-east1"
+  IMAGE: us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery:${{ github.sha }}
+
+jobs:
+  build-mpc-recovery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        name: "Checkout mpc-recovery"
+
+      - name: Login to Artifact Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGION }}-docker.pkg.dev
+          username: _json_key
+          password: ${{ secrets.GCP_CREDENTIALS_DEV }}
+
+      - name: Build Docker image and push to Google Artifact Registry
+        id: docker-push-tagged
+        uses: docker/build-push-action@v4
+        with:
+          push: true
+          file: ./Dockerfile
+          tags: "${{ env.IMAGE }}:${{ github.sha }}"
+
+  deploy-mpc-recovery-testnet:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.network == 'testnet'
+    needs: build-mpc-recovery
+    env:
+      name: PROD
+    steps:
+      - uses: actions/checkout@v3
+        name: "Checkout mpc-recovery"
+
+      - name: "Authenticate to GCloud"
+        uses: "google-github-actions/auth@v1"
+        with:
+          credentials_json: "${{ secrets.GCP_CREDENTIALS_DEV }}"
+
+      - name: Deploy leader to Cloud Run Testnet
+        id: deploy-leader
+        uses: google-github-actions/deploy-cloudrun@v1
+        with:
+          image: "${{ env.IMAGE }}:${{ github.sha }}"
+          service: mpc-recovery-leader-testnet
+          region: us-east1
+          project_id: "${{ env.PROJECT_PROD }}"
+          tag: "${{ github.event.inputs.version }}"
+
+      - name: Deploy signer to Cloud Run testnet
+        id: deploy-signer-0-testnet
+        uses: google-github-actions/deploy-cloudrun@v1
+        with:
+          image: "${{ env.IMAGE }}:${{ github.sha }}"
+          service: mpc-recovery-signer-0-testnet
+          region: us-east1
+          project_id: "${{ env.PROJECT_PROD }}"
+          tag: "${{ github.event.inputs.version }}"
+
+      - name: Deploy signer to Cloud Run testnet
+        id: deploy-signer-1-testnet
+        uses: google-github-actions/deploy-cloudrun@v1
+        with:
+          image: "${{ env.IMAGE }}:${{ github.sha }}"
+          service: mpc-recovery-signer-1-testnet
+          region: us-east1
+          project_id: "${{ env.PROJECT_PROD }}"
+          tag: "${{ github.event.inputs.version }}"
+        
+      - name: Deploy signer to Cloud Run testnet
+        id: deploy-signer-2-testnet
+        uses: google-github-actions/deploy-cloudrun@v1
+        with:
+          image: "${{ env.IMAGE }}:${{ github.sha }}"
+          service: mpc-recovery-signer-2-testnet
+          region: us-east1
+          project_id: "${{ env.PROJECT_PROD }}"
+          tag: "${{ github.event.inputs.version }}"
+
+  deploy-mpc-recovery-mainnet:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.network == 'mainnet'
+    needs: build-mpc-recovery
+    env:
+      name: PROD
+    steps:
+      - uses: actions/checkout@v3
+        name: "Checkout mpc-recovery"
+
+      - name: "Authenticate to GCloud"
+        uses: "google-github-actions/auth@v1"
+        with:
+          credentials_json: "${{ secrets.GCP_CREDENTIALS_DEV }}"
+
+      - name: Deploy leader to Cloud Run mainnet
+        id: deploy-leader
+        uses: google-github-actions/deploy-cloudrun@v1
+        with:
+          image: "${{ env.IMAGE }}:${{ github.sha }}"
+          service: mpc-recovery-leader-mainnet
+          region: us-east1
+          project_id: "${{ env.PROJECT_PROD }}"
+          tag: "${{ github.event.inputs.version }}"
+
+      - name: Deploy signer to Cloud Run mainnet
+        id: deploy-signer-0
+        uses: google-github-actions/deploy-cloudrun@v1
+        with:
+          image: "${{ env.IMAGE }}:${{ github.sha }}"
+          service: mpc-recovery-signer-0-mainnet
+          region: us-east1
+          project_id: "${{ env.PROJECT_PROD }}"
+          tag: "${{ github.event.inputs.version }}"
+
+      - name: Deploy signer to Cloud Run mainnet
+        id: deploy-signer-1
+        uses: google-github-actions/deploy-cloudrun@v1
+        with:
+          image: "${{ env.IMAGE }}:${{ github.sha }}"
+          service: mpc-recovery-signer-1-mainnet
+          region: us-east1
+          project_id: "${{ env.PROJECT_PROD }}"
+          tag: "${{ github.event.inputs.version }}"
+        
+      - name: Deploy signer to Cloud Run mainnet
+        id: deploy-signer-2
+        uses: google-github-actions/deploy-cloudrun@v1
+        with:
+          image: "${{ env.IMAGE }}:${{ github.sha }}"
+          service: mpc-recovery-signer-2-mainnet
+          region: us-east1
+          project_id: "${{ env.PROJECT_PROD }}"
+          tag: "${{ github.event.inputs.version }}"

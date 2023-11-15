@@ -39,7 +39,7 @@ jobs:
       - name: Pull Relayer & Sandbox Docker Images
         run: |
           docker pull ghcr.io/near/os-relayer:12ba6e35690df3979fce0b36a41d0ca0db9c0ab4
-          docker pull ghcr.io/near/sandbox
+          docker pull ghcr.io/near/near-lake-indexer:e6519c922435f3d18b5f2ddac5d1ec171ef4dd6b
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
