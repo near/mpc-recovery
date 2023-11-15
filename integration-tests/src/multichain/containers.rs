@@ -35,11 +35,16 @@ impl<'a> Node<'a> {
         tracing::info!(node_id, "running node container");
         let args = mpc_recovery_node::cli::Cli::Start {
             node_id: node_id.into(),
-            near_rpc: ctx.sandbox.local_address.clone(),
+            near_rpc: ctx.lake_indexer.rpc_host_address.clone(),
             mpc_contract_id: ctx.mpc_contract.id().clone(),
             account: account.clone(),
             account_sk: account_sk.to_string().parse()?,
             web_port: Self::CONTAINER_PORT,
+            indexer_options: mpc_recovery_node::indexer::Options {
+                s3_bucket: ctx.localstack.s3_host_address.clone(),
+                s3_region: ctx.localstack.s3_region.clone(),
+                start_block_height: 0,
+            },
         }
         .into_str_args();
         let image: GenericImage = GenericImage::new("near/mpc-recovery-node", "latest")

@@ -9,6 +9,12 @@ docker pull ghcr.io/near/os-relayer
 docker pull ghcr.io/near/sandbox
 ```
 
+For M1 you may want to pull the following image instead:
+
+```BASH
+docker pull ghcr.io/near/sandbox:latest-aarch64
+```
+
 In case of authorization issues make sure you have logged into docker using your [access token](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic).
 
 Build OIDC Provider test image

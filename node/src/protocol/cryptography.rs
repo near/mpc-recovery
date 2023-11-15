@@ -4,7 +4,7 @@ use crate::protocol::message::{GeneratingMessage, ResharingMessage};
 use crate::protocol::state::WaitingForConsensusState;
 use crate::protocol::MpcMessage;
 use async_trait::async_trait;
-use cait_sith::protocol::{Action, Participant};
+use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use k256::elliptic_curve::group::GroupEncoding;
 
 pub trait CryptographicCtx {
@@ -18,6 +18,10 @@ pub enum CryptographicError {
     SendError(#[from] SendError),
     #[error("unknown participant: {0:?}")]
     UnknownParticipant(Participant),
+    #[error("cait-sith initialization error: {0}")]
+    CaitSithInitializationError(#[from] InitializationError),
+    #[error("cait-sith protocol error: {0}")]
+    CaitSithProtocolError(#[from] ProtocolError),
 }
 
 #[async_trait]
@@ -36,7 +40,7 @@ impl CryptographicProtocol for GeneratingState {
     ) -> Result<NodeState, CryptographicError> {
         tracing::info!("progressing key generation");
         loop {
-            let action = self.protocol.poke().unwrap();
+            let action = self.protocol.poke()?;
             match action {
                 Action::Wait => {
                     tracing::debug!("waiting");
@@ -170,9 +174,9 @@ impl CryptographicProtocol for RunningState {
         ctx: C,
     ) -> Result<NodeState, CryptographicError> {
         if self.triple_manager.potential_len() < 2 {
-            self.triple_manager.generate();
+            self.triple_manager.generate()?;
         }
-        for (p, msg) in self.triple_manager.poke() {
+        for (p, msg) in self.triple_manager.poke()? {
             let url = self.participants.get(&p).unwrap();
             http_client::message(ctx.http_client(), url.clone(), MpcMessage::Triple(msg)).await?;
         }

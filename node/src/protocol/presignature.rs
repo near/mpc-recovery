@@ -213,7 +213,7 @@ impl PresignatureManager {
                 Action::Return(output) => {
                     tracing::info!(
                         id,
-                        big_r = ?output.big_r.into_base58(),
+                        big_r = ?output.big_r.to_base58(),
                         "completed presignature generation"
                     );
                     self.presignatures

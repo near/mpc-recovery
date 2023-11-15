@@ -46,6 +46,7 @@ use crate::env::{Context, LeaderNodeApi, SignerNodeApi};
 use crate::util::{
     self, create_key_file, create_key_file_with_filepath, create_relayer_cofig_file,
 };
+use bollard::exec::CreateExecOptions;
 
 static NETWORK_MUTEX: Lazy<Mutex<i32>> = Lazy::new(|| Mutex::new(0));
 
@@ -351,20 +352,23 @@ impl<'a> Relayer<'a> {
             format!("{relayer_configs_path}/{config_file_name}"),
         )?;
 
-        let image = GenericImage::new("ghcr.io/near/os-relayer", "latest")
-            .with_wait_for(WaitFor::message_on_stdout("listening on"))
-            .with_exposed_port(Self::CONTAINER_PORT)
-            .with_volume(
-                config_absolute_path,
-                format!("/relayer-app/{}", config_file_name),
-            )
-            .with_volume(
-                keys_absolute_path
-                    .to_str()
-                    .expect("Failed to convert keys path to string"),
-                "/relayer-app/account_keys",
-            )
-            .with_env_var("RUST_LOG", "DEBUG");
+        let image = GenericImage::new(
+            "ghcr.io/near/os-relayer",
+            "12ba6e35690df3979fce0b36a41d0ca0db9c0ab4",
+        )
+        .with_wait_for(WaitFor::message_on_stdout("listening on"))
+        .with_exposed_port(Self::CONTAINER_PORT)
+        .with_volume(
+            config_absolute_path,
+            format!("/relayer-app/{}", config_file_name),
+        )
+        .with_volume(
+            keys_absolute_path
+                .to_str()
+                .expect("Failed to convert keys path to string"),
+            "/relayer-app/account_keys",
+        )
+        .with_env_var("RUST_LOG", "DEBUG");
 
         let image: RunnableImage<GenericImage> = image.into();
         let image = image.with_network(network);
@@ -490,6 +494,155 @@ impl<'a> Datastore<'a> {
             container,
             local_address,
             address: full_address,
+        })
+    }
+}
+
+pub struct LocalStack<'a> {
+    pub container: Container<'a, GenericImage>,
+    pub address: String,
+    pub s3_address: String,
+    pub s3_host_address: String,
+    pub s3_bucket: String,
+    pub s3_region: String,
+}
+
+impl<'a> LocalStack<'a> {
+    const S3_CONTAINER_PORT: u16 = 4566;
+
+    pub async fn run(
+        docker_client: &'a DockerClient,
+        network: &str,
+        s3_bucket: String,
+        s3_region: String,
+    ) -> anyhow::Result<LocalStack<'a>> {
+        tracing::info!("running LocalStack container...");
+        let image = GenericImage::new("localstack/localstack", "latest")
+            .with_exposed_port(Self::S3_CONTAINER_PORT)
+            .with_wait_for(WaitFor::message_on_stdout("Running on"));
+        let image: RunnableImage<GenericImage> = image.into();
+        let image = image.with_network(network);
+        let container = docker_client.cli.run(image);
+        let address = docker_client
+            .get_network_ip_address(&container, network)
+            .await?;
+
+        // Create the bucket
+        let create_result = docker_client
+            .docker
+            .create_exec(
+                container.id(),
+                CreateExecOptions::<&str> {
+                    attach_stdout: Some(true),
+                    attach_stderr: Some(true),
+                    cmd: Some(vec![
+                        "awslocal",
+                        "s3api",
+                        "create-bucket",
+                        "--bucket",
+                        &s3_bucket,
+                        "--region",
+                        &s3_region,
+                    ]),
+                    ..Default::default()
+                },
+            )
+            .await?;
+        docker_client
+            .docker
+            .start_exec(&create_result.id, None)
+            .await?;
+
+        let s3_address = format!("http://{}:{}", address, Self::S3_CONTAINER_PORT);
+        let s3_host_port = container.get_host_port_ipv4(Self::S3_CONTAINER_PORT);
+        let s3_host_address = format!("http://127.0.0.1:{s3_host_port}");
+
+        tracing::info!(
+            s3_address,
+            s3_host_address,
+            "LocalStack container is running"
+        );
+        Ok(LocalStack {
+            container,
+            address,
+            s3_address,
+            s3_host_address,
+            s3_bucket,
+            s3_region,
+        })
+    }
+}
+
+pub struct LakeIndexer<'a> {
+    pub container: Container<'a, GenericImage>,
+    pub bucket_name: String,
+    pub region: String,
+    pub rpc_address: String,
+    pub rpc_host_address: String,
+}
+
+impl<'a> LakeIndexer<'a> {
+    pub const CONTAINER_RPC_PORT: u16 = 3030;
+
+    pub async fn run(
+        docker_client: &'a DockerClient,
+        network: &str,
+        s3_address: &str,
+        bucket_name: String,
+        region: String,
+    ) -> anyhow::Result<LakeIndexer<'a>> {
+        tracing::info!(
+            network,
+            s3_address,
+            bucket_name,
+            region,
+            "running NEAR Lake Indexer container..."
+        );
+
+        let image = GenericImage::new(
+            "ghcr.io/near/near-lake-indexer",
+            "e6519c922435f3d18b5f2ddac5d1ec171ef4dd6b",
+        )
+        .with_env_var("AWS_ACCESS_KEY_ID", "FAKE_LOCALSTACK_KEY_ID")
+        .with_env_var("AWS_SECRET_ACCESS_KEY", "FAKE_LOCALSTACK_ACCESS_KEY")
+        .with_wait_for(WaitFor::message_on_stderr("Starting Streamer"))
+        .with_exposed_port(Self::CONTAINER_RPC_PORT);
+        let image: RunnableImage<GenericImage> = (
+            image,
+            vec![
+                "--endpoint".to_string(),
+                s3_address.to_string(),
+                "--bucket".to_string(),
+                bucket_name.clone(),
+                "--region".to_string(),
+                region.clone(),
+                "--stream-while-syncing".to_string(),
+                "sync-from-latest".to_string(),
+            ],
+        )
+            .into();
+        let image = image.with_network(network);
+        let container = docker_client.cli.run(image);
+        let address = docker_client
+            .get_network_ip_address(&container, network)
+            .await?;
+        let rpc_address = format!("http://{}:{}", address, Self::CONTAINER_RPC_PORT);
+        let rpc_host_port = container.get_host_port_ipv4(Self::CONTAINER_RPC_PORT);
+        let rpc_host_address = format!("http://127.0.0.1:{rpc_host_port}");
+
+        tracing::info!(
+            bucket_name,
+            region,
+            rpc_address,
+            rpc_host_address,
+            "NEAR Lake Indexer container is running"
+        );
+        Ok(LakeIndexer {
+            container,
+            bucket_name,
+            region,
+            rpc_address,
+            rpc_host_address,
         })
     }
 }

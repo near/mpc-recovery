@@ -72,7 +72,7 @@ where
     let docker_client = DockerClient::default();
     let nodes = mpc_recovery_integration_tests::multichain::run(nodes, &docker_client).await?;
 
-    let rpc_client = near_fetch::Client::new(&nodes.ctx().sandbox.local_address);
+    let rpc_client = near_fetch::Client::new(&nodes.ctx().lake_indexer.rpc_host_address);
     f(MultichainTestContext {
         nodes,
         rpc_client,

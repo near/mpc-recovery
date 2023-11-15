@@ -229,8 +229,6 @@ pub async fn run(cmd: Cli) -> anyhow::Result<()> {
                 sign_nodes,
                 near_rpc,
                 near_root_account,
-                // TODO: Create such an account for testnet and mainnet in a secure way
-                account_creator_id,
                 account_creator_signer,
                 partners,
                 jwt_signature_pk_url,

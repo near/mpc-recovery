@@ -149,7 +149,7 @@ impl MpcSignProtocol {
             let mut state = std::mem::take(&mut *state_guard);
             state = state.progress(&self.ctx).await?;
             state = state.advance(&self.ctx, contract_state).await?;
-            state.handle(&self.ctx, &mut queue);
+            state.handle(&self.ctx, &mut queue)?;
             *state_guard = state;
             drop(state_guard);
             tokio::time::sleep(Duration::from_millis(1000)).await;

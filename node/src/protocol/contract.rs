@@ -8,15 +8,15 @@ use std::collections::{HashMap, HashSet};
 use url::Url;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct InitializedContractState {
+pub struct InitializingContractState {
     pub participants: HashMap<Participant, Url>,
     pub threshold: usize,
     pub pk_votes: HashMap<near_crypto::PublicKey, HashSet<Participant>>,
 }
 
-impl From<mpc_contract::InitializedContractState> for InitializedContractState {
-    fn from(value: mpc_contract::InitializedContractState) -> Self {
-        InitializedContractState {
+impl From<mpc_contract::InitializingContractState> for InitializingContractState {
+    fn from(value: mpc_contract::InitializingContractState) -> Self {
+        InitializingContractState {
             participants: contract_participants_into_cait_participants(value.participants),
             threshold: value.threshold,
             pk_votes: value
@@ -114,7 +114,7 @@ impl From<mpc_contract::ResharingContractState> for ResharingContractState {
 
 #[derive(Debug)]
 pub enum ProtocolState {
-    Initialized(InitializedContractState),
+    Initializing(InitializingContractState),
     Running(RunningContractState),
     Resharing(ResharingContractState),
 }
@@ -122,7 +122,7 @@ pub enum ProtocolState {
 impl ProtocolState {
     pub fn participants(&self) -> &HashMap<Participant, Url> {
         match self {
-            ProtocolState::Initialized(InitializedContractState { participants, .. }) => {
+            ProtocolState::Initializing(InitializingContractState { participants, .. }) => {
                 participants
             }
             ProtocolState::Running(RunningContractState { participants, .. }) => participants,
@@ -134,7 +134,7 @@ impl ProtocolState {
 
     pub fn public_key(&self) -> Option<&PublicKey> {
         match self {
-            ProtocolState::Initialized { .. } => None,
+            ProtocolState::Initializing { .. } => None,
             ProtocolState::Running(RunningContractState { public_key, .. }) => Some(public_key),
             ProtocolState::Resharing(ResharingContractState { public_key, .. }) => Some(public_key),
         }
@@ -142,7 +142,7 @@ impl ProtocolState {
 
     pub fn threshold(&self) -> usize {
         match self {
-            ProtocolState::Initialized(InitializedContractState { threshold, .. }) => *threshold,
+            ProtocolState::Initializing(InitializingContractState { threshold, .. }) => *threshold,
             ProtocolState::Running(RunningContractState { threshold, .. }) => *threshold,
             ProtocolState::Resharing(ResharingContractState { threshold, .. }) => *threshold,
         }
@@ -154,9 +154,8 @@ impl TryFrom<ProtocolContractState> for ProtocolState {
 
     fn try_from(value: ProtocolContractState) -> Result<Self, Self::Error> {
         match value {
-            ProtocolContractState::NonInitialized => Err(()),
-            ProtocolContractState::Initialized(state) => {
-                Ok(ProtocolState::Initialized(state.into()))
+            ProtocolContractState::Initializing(state) => {
+                Ok(ProtocolState::Initializing(state.into()))
             }
             ProtocolContractState::Running(state) => Ok(ProtocolState::Running(state.into())),
             ProtocolContractState::Resharing(state) => Ok(ProtocolState::Resharing(state.into())),

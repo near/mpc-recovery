@@ -148,6 +148,9 @@ module "leader" {
 
   jwt_signature_pk_url = var.jwt_signature_pk_url
 
+  otlp_endpoint       = var.otlp_endpoint
+  opentelemetry_level = var.opentelemetry_level
+
   depends_on = [
     google_secret_manager_secret_iam_member.account_creator_secret_access,
     google_secret_manager_secret_iam_member.fast_auth_partners_secret_access,
