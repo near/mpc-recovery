@@ -109,7 +109,7 @@ impl CryptographicProtocol for ResharingState {
     ) -> Result<NodeState, CryptographicError> {
         tracing::info!("progressing key reshare");
         loop {
-            let action = self.protocol.poke().unwrap();
+            let action = self.protocol.poke()?;
             match action {
                 Action::Wait => {
                     tracing::debug!("waiting");
@@ -191,12 +191,12 @@ impl CryptographicProtocol for RunningState {
                     triple1,
                     &self.public_key,
                     &self.private_share,
-                );
+                )?;
             } else {
                 tracing::debug!("we don't have enough triples to generate a presignature");
             }
         }
-        for (p, msg) in self.presignature_manager.poke() {
+        for (p, msg) in self.presignature_manager.poke()? {
             let url = self.participants.get(&p).unwrap();
             http_client::message(
                 ctx.http_client(),

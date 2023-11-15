@@ -2,7 +2,7 @@ use super::message::PresignatureMessage;
 use super::triple::{Triple, TripleId, TripleManager};
 use crate::types::{PresignatureProtocol, PrivateKeyShare, PublicKey};
 use crate::util::AffinePointExt;
-use cait_sith::protocol::{Action, Participant};
+use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::{KeygenOutput, PresignArguments, PresignOutput};
 use k256::Secp256k1;
 use std::collections::hash_map::Entry;
@@ -75,25 +75,22 @@ impl PresignatureManager {
         triple1: Triple,
         public_key: &PublicKey,
         private_share: &PrivateKeyShare,
-    ) {
+    ) -> Result<(), InitializationError> {
         let id = rand::random();
         tracing::info!(id, "starting protocol to generate a new presignature");
-        let protocol = Box::new(
-            cait_sith::presign(
-                &self.participants,
-                self.me,
-                PresignArguments {
-                    triple0: (triple0.share, triple0.public),
-                    triple1: (triple1.share, triple1.public),
-                    keygen_out: KeygenOutput {
-                        private_share: *private_share,
-                        public_key: *public_key,
-                    },
-                    threshold: self.threshold,
+        let protocol = Box::new(cait_sith::presign(
+            &self.participants,
+            self.me,
+            PresignArguments {
+                triple0: (triple0.share, triple0.public),
+                triple1: (triple1.share, triple1.public),
+                keygen_out: KeygenOutput {
+                    private_share: *private_share,
+                    public_key: *public_key,
                 },
-            )
-            .unwrap(),
-        );
+                threshold: self.threshold,
+            },
+        )?);
         self.generators.insert(
             id,
             PresignatureGenerator {
@@ -102,6 +99,7 @@ impl PresignatureManager {
                 triple1: triple1.id,
             },
         );
+        Ok(())
     }
 
     /// Ensures that the presignature with the given id is either:
@@ -118,9 +116,9 @@ impl PresignatureManager {
         triple_manager: &mut TripleManager,
         public_key: &PublicKey,
         private_share: &PrivateKeyShare,
-    ) -> Option<&mut PresignatureProtocol> {
+    ) -> Result<Option<&mut PresignatureProtocol>, InitializationError> {
         if self.presignatures.contains_key(&id) {
-            None
+            Ok(None)
         } else {
             match self.generators.entry(id) {
                 Entry::Vacant(entry) => {
@@ -129,43 +127,37 @@ impl PresignatureManager {
                         Some(triple0) => triple0,
                         None => {
                             tracing::warn!(triple_id = triple0, "triple0 is missing, can't join");
-                            return None;
+                            return Ok(None);
                         }
                     };
                     let triple1 = match triple_manager.take(triple1) {
                         Some(triple1) => triple1,
                         None => {
                             tracing::warn!(triple_id = triple1, "triple1 is missing, can't join");
-                            return None;
+                            return Ok(None);
                         }
                     };
-                    let protocol = Box::new(
-                        cait_sith::presign(
-                            &self.participants,
-                            self.me,
-                            PresignArguments {
-                                triple0: (triple0.share, triple0.public),
-                                triple1: (triple1.share, triple1.public),
-                                keygen_out: KeygenOutput {
-                                    private_share: *private_share,
-                                    public_key: *public_key,
-                                },
-                                threshold: self.threshold,
+                    let protocol = Box::new(cait_sith::presign(
+                        &self.participants,
+                        self.me,
+                        PresignArguments {
+                            triple0: (triple0.share, triple0.public),
+                            triple1: (triple1.share, triple1.public),
+                            keygen_out: KeygenOutput {
+                                private_share: *private_share,
+                                public_key: *public_key,
                             },
-                        )
-                        .unwrap(),
-                    );
-                    Some(
-                        &mut entry
-                            .insert(PresignatureGenerator {
-                                protocol,
-                                triple0: triple0.id,
-                                triple1: triple1.id,
-                            })
-                            .protocol,
-                    )
+                            threshold: self.threshold,
+                        },
+                    )?);
+                    let generator = entry.insert(PresignatureGenerator {
+                        protocol,
+                        triple0: triple0.id,
+                        triple1: triple1.id,
+                    });
+                    Ok(Some(&mut generator.protocol))
                 }
-                Entry::Occupied(entry) => Some(&mut entry.into_mut().protocol),
+                Entry::Occupied(entry) => Ok(Some(&mut entry.into_mut().protocol)),
             }
         }
     }
@@ -174,55 +166,64 @@ impl PresignatureManager {
     /// messages to be sent to the respective participant.
     ///
     /// An empty vector means we cannot progress until we receive a new message.
-    pub fn poke(&mut self) -> Vec<(Participant, PresignatureMessage)> {
+    pub fn poke(&mut self) -> Result<Vec<(Participant, PresignatureMessage)>, ProtocolError> {
         let mut messages = Vec::new();
-        self.generators.retain(|id, generator| loop {
-            let action = generator.protocol.poke().unwrap();
-            match action {
-                Action::Wait => {
-                    tracing::debug!("waiting");
-                    // Retain protocol until we are finished
-                    return true;
-                }
-                Action::SendMany(data) => {
-                    for p in &self.participants {
-                        messages.push((
-                            *p,
-                            PresignatureMessage {
-                                id: *id,
-                                triple0: generator.triple0,
-                                triple1: generator.triple1,
-                                epoch: self.epoch,
-                                from: self.me,
-                                data: data.clone(),
-                            },
-                        ))
+        let mut result = Ok(());
+        self.generators.retain(|id, generator| {
+            loop {
+                let action = match generator.protocol.poke() {
+                    Ok(action) => action,
+                    Err(e) => {
+                        result = Err(e);
+                        break false;
                     }
-                }
-                Action::SendPrivate(p, data) => messages.push((
-                    p,
-                    PresignatureMessage {
-                        id: *id,
-                        triple0: generator.triple0,
-                        triple1: generator.triple1,
-                        epoch: self.epoch,
-                        from: self.me,
-                        data: data.clone(),
-                    },
-                )),
-                Action::Return(output) => {
-                    tracing::info!(
-                        id,
-                        big_r = ?output.big_r.to_base58(),
-                        "completed presignature generation"
-                    );
-                    self.presignatures
-                        .insert(*id, Presignature { id: *id, output });
-                    // Do not retain the protocol
-                    return false;
+                };
+                match action {
+                    Action::Wait => {
+                        tracing::debug!("waiting");
+                        // Retain protocol until we are finished
+                        return true;
+                    }
+                    Action::SendMany(data) => {
+                        for p in &self.participants {
+                            messages.push((
+                                *p,
+                                PresignatureMessage {
+                                    id: *id,
+                                    triple0: generator.triple0,
+                                    triple1: generator.triple1,
+                                    epoch: self.epoch,
+                                    from: self.me,
+                                    data: data.clone(),
+                                },
+                            ))
+                        }
+                    }
+                    Action::SendPrivate(p, data) => messages.push((
+                        p,
+                        PresignatureMessage {
+                            id: *id,
+                            triple0: generator.triple0,
+                            triple1: generator.triple1,
+                            epoch: self.epoch,
+                            from: self.me,
+                            data: data.clone(),
+                        },
+                    )),
+                    Action::Return(output) => {
+                        tracing::info!(
+                            id,
+                            big_r = ?output.big_r.to_base58(),
+                            "completed presignature generation"
+                        );
+                        self.presignatures
+                            .insert(*id, Presignature { id: *id, output });
+                        // Do not retain the protocol
+                        return false;
+                    }
                 }
             }
         });
-        messages
+        result.map(|_| messages)
     }
 }

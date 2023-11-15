@@ -149,7 +149,7 @@ impl MessageHandler for RunningState {
                     &mut self.triple_manager,
                     &self.public_key,
                     &self.private_share,
-                ) {
+                )? {
                     protocol.message(message.from, message.data);
                 }
             }
