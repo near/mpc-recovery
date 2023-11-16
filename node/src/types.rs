@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use cait_sith::triples::TripleGenerationOutput;
+use cait_sith::PresignOutput;
 use cait_sith::{protocol::Protocol, KeygenOutput};
 use k256::{elliptic_curve::CurveArithmetic, Secp256k1};
 use tokio::sync::RwLock;
@@ -11,3 +12,4 @@ pub type KeygenProtocol = Arc<RwLock<dyn Protocol<Output = KeygenOutput<Secp256k
 pub type ReshareProtocol = Arc<RwLock<dyn Protocol<Output = PrivateKeyShare> + Send + Sync>>;
 pub type TripleProtocol =
     Arc<std::sync::RwLock<dyn Protocol<Output = TripleGenerationOutput<Secp256k1>> + Send + Sync>>;
+pub type PresignatureProtocol = Box<dyn Protocol<Output = PresignOutput<Secp256k1>> + Send + Sync>;

@@ -38,10 +38,21 @@ pub struct TripleMessage {
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct PresignatureMessage {
+    pub id: u64,
+    pub triple0: u64,
+    pub triple1: u64,
+    pub epoch: u64,
+    pub from: Participant,
+    pub data: MessageData,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum MpcMessage {
     Generating(GeneratingMessage),
     Resharing(ResharingMessage),
     Triple(TripleMessage),
+    Presignature(PresignatureMessage),
 }
 
 #[derive(Default)]
@@ -49,6 +60,7 @@ pub struct MpcMessageQueue {
     generating: VecDeque<GeneratingMessage>,
     resharing_bins: HashMap<u64, VecDeque<ResharingMessage>>,
     triple_bins: HashMap<u64, HashMap<u64, VecDeque<TripleMessage>>>,
+    presignature_bins: HashMap<u64, HashMap<u64, VecDeque<PresignatureMessage>>>,
 }
 
 impl MpcMessageQueue {
@@ -62,6 +74,13 @@ impl MpcMessageQueue {
                 .push_back(message),
             MpcMessage::Triple(message) => self
                 .triple_bins
+                .entry(message.epoch)
+                .or_default()
+                .entry(message.id)
+                .or_default()
+                .push_back(message),
+            MpcMessage::Presignature(message) => self
+                .presignature_bins
                 .entry(message.epoch)
                 .or_default()
                 .entry(message.id)
@@ -87,6 +106,8 @@ pub enum MessageHandleError {
     DataConversion(#[from] serde_json::Error),
     #[error("encryption failed: {0}")]
     Encryption(String),
+    #[error("invalid state")]
+    InvalidStateHandle(String),
 }
 
 impl From<CryptographicError> for MessageHandleError {
@@ -101,6 +122,7 @@ impl From<CryptographicError> for MessageHandleError {
             CryptographicError::UnknownParticipant(e) => Self::UnknownParticipant(e),
             CryptographicError::DataConversion(e) => Self::DataConversion(e),
             CryptographicError::Encryption(e) => Self::Encryption(e),
+            CryptographicError::InvalidStateHandle(e) => Self::InvalidStateHandle(e),
         }
     }
 }
@@ -154,12 +176,29 @@ impl MessageHandler for RunningState {
         _ctx: C,
         queue: &mut MpcMessageQueue,
     ) -> Result<(), MessageHandleError> {
+        let mut triple_manager = self.triple_manager.write().await;
         for (id, queue) in queue.triple_bins.entry(self.epoch).or_default() {
-            if let Some(protocol) = self.triple_manager.get_or_generate(*id)? {
+            if let Some(protocol) = triple_manager.get_or_generate(*id)? {
                 let mut protocol = protocol
                     .write()
                     .map_err(|err| MessageHandleError::SyncError(err.to_string()))?;
                 while let Some(message) = queue.pop_front() {
+                    protocol.message(message.from, message.data);
+                }
+            }
+        }
+
+        let mut presignature_manager = self.presignature_manager.write().await;
+        for (id, queue) in queue.presignature_bins.entry(self.epoch).or_default() {
+            while let Some(message) = queue.pop_front() {
+                if let Some(protocol) = presignature_manager.get_or_generate(
+                    *id,
+                    message.triple0,
+                    message.triple1,
+                    &mut triple_manager,
+                    &self.public_key,
+                    &self.private_share,
+                )? {
                     protocol.message(message.from, message.data);
                 }
             }
@@ -186,7 +225,6 @@ impl MessageHandler for NodeState {
         }
     }
 }
-
 
 /// A signed message that can be encrypted. Note that the message's signature is included
 /// in the encrypted message to avoid from it being tampered with without first decrypting.

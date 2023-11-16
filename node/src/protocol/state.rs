@@ -1,8 +1,11 @@
+use super::presignature::PresignatureManager;
 use super::triple::TripleManager;
 use crate::protocol::ParticipantInfo;
 use crate::types::{KeygenProtocol, PrivateKeyShare, PublicKey, ReshareProtocol};
 use cait_sith::protocol::Participant;
 use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 #[derive(Clone)]
 pub struct PersistentNodeData {
@@ -37,7 +40,8 @@ pub struct RunningState {
     pub threshold: usize,
     pub private_share: PrivateKeyShare,
     pub public_key: PublicKey,
-    pub triple_manager: TripleManager,
+    pub triple_manager: Arc<RwLock<TripleManager>>,
+    pub presignature_manager: Arc<RwLock<PresignatureManager>>,
 }
 
 #[derive(Clone)]
@@ -56,6 +60,7 @@ pub struct JoiningState {
 }
 
 #[derive(Clone, Default)]
+#[allow(clippy::large_enum_variant)]
 pub enum NodeState {
     #[default]
     Starting,

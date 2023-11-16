@@ -31,7 +31,7 @@ use borsh::BorshDeserialize;
 use curv::elliptic::curves::{Ed25519, Point};
 use near_fetch::signer::KeyRotatingSigner;
 use near_primitives::delegate_action::{DelegateAction, NonDelegateAction};
-use near_primitives::transaction::{Action, DeleteKeyAction};
+use near_primitives::transaction::{Action, DeleteAccountAction, DeleteKeyAction};
 use near_primitives::types::AccountId;
 use prometheus::{Encoder, TextEncoder};
 use std::net::SocketAddr;
@@ -527,6 +527,21 @@ async fn process_sign(
                 delete_key_action.public_key.clone(),
             ))?;
         }
+    }
+
+    // Prevent account deletion
+    // Note: we can allow account deletionn once we sync that with relayer. With current logic user will not be able to create another account.
+    let delete_account_actions: Vec<&DeleteAccountAction> = requested_actions
+        .iter()
+        .filter_map(|action| match action {
+            Action::DeleteAccount(delete_account_action) => Some(delete_account_action),
+            _ => None,
+        })
+        .collect();
+
+    if !delete_account_actions.is_empty() {
+        tracing::error!("Account deletion is not allowed");
+        Err(LeaderNodeError::AccountDeletionUnsupported)?;
     }
 
     // Get MPC signature

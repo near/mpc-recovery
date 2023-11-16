@@ -64,14 +64,7 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
         }
 
         // Performing blacklisted actions
-        let blacklisted_actions = vec![
-            ActionType::CreateAccount,
-            ActionType::DeployContract,
-            ActionType::FunctionCall,
-            ActionType::Transfer,
-            ActionType::Stake,
-            ActionType::DeleteAccount,
-        ];
+        let blacklisted_actions = vec![ActionType::DeleteAccount];
 
         for blacklisted_action in blacklisted_actions {
             ctx.leader_node
@@ -141,11 +134,11 @@ async fn whitlisted_actions_test() -> anyhow::Result<()> {
 }
 
 pub enum ActionType {
-    CreateAccount,
-    DeployContract,
-    FunctionCall,
-    Transfer,
-    Stake,
+    _CreateAccount,
+    _DeployContract,
+    _FunctionCall,
+    _Transfer,
+    _Stake,
     AddKey,
     DeleteKey,
     DeleteAccount,
@@ -153,16 +146,18 @@ pub enum ActionType {
 
 fn get_stub_delegate_action(action_type: ActionType) -> anyhow::Result<DelegateAction> {
     let action: Action = match action_type {
-        ActionType::CreateAccount => Action::CreateAccount(CreateAccountAction {}),
-        ActionType::DeployContract => Action::DeployContract(DeployContractAction { code: vec![] }),
-        ActionType::FunctionCall => Action::FunctionCall(FunctionCallAction {
+        ActionType::_CreateAccount => Action::CreateAccount(CreateAccountAction {}),
+        ActionType::_DeployContract => {
+            Action::DeployContract(DeployContractAction { code: vec![] })
+        }
+        ActionType::_FunctionCall => Action::FunctionCall(FunctionCallAction {
             method_name: "test".to_string(),
             args: vec![],
             gas: 0,
             deposit: 0,
         }),
-        ActionType::Transfer => Action::Transfer(TransferAction { deposit: 0 }),
-        ActionType::Stake => Action::Stake(StakeAction {
+        ActionType::_Transfer => Action::Transfer(TransferAction { deposit: 0 }),
+        ActionType::_Stake => Action::Stake(StakeAction {
             stake: 0,
             public_key: key::random_sk().public_key(),
         }),

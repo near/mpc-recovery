@@ -23,6 +23,17 @@ pub enum Nodes<'a> {
 }
 
 impl Nodes<'_> {
+    pub fn len(&self) -> usize {
+        match self {
+            Nodes::Local { nodes, .. } => nodes.len(),
+            Nodes::Docker { nodes, .. } => nodes.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn ctx(&self) -> &Context {
         match self {
             Nodes::Local { ctx, .. } => ctx,

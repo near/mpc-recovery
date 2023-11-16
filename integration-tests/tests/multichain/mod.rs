@@ -30,10 +30,19 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
 }
 
 #[test(tokio::test)]
-async fn test_triples() -> anyhow::Result<()> {
+async fn test_triples_and_presignatures() -> anyhow::Result<()> {
     with_multichain_nodes(3, |ctx| {
         Box::pin(async move {
-            wait_for::has_at_least_triples(&ctx, 0, 2).await?;
+            // Wait for network to complete key generation
+            let state_0 = wait_for::running_mpc(&ctx, 0).await?;
+            assert_eq!(state_0.participants.len(), 3);
+
+            for i in 0..ctx.nodes.len() {
+                wait_for::has_at_least_triples(&ctx, i, 2).await?;
+            }
+            for i in 0..ctx.nodes.len() {
+                wait_for::has_at_least_presignatures(&ctx, i, 2).await?;
+            }
 
             Ok(())
         })

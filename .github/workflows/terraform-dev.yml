@@ -54,11 +54,6 @@ jobs:
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
 
-      # Build Docker image.
-      - name: Docker Image
-        id: build
-        run: docker build .. -t near/mpc-recovery
-
       # Generates an execution plan for Terraform
       - name: Terraform Plan
         id: plan
@@ -138,7 +133,7 @@ jobs:
 
         # On push to "develop", build or change infrastructure according to Terraform configuration files
       - name: Terraform Apply
-        if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+        if: github.ref == 'refs/heads/develop'
         run: |
           terraform apply -auto-approve -input=false -lock-timeout=1h -var-file terraform-dev.tfvars \
             -var "credentials=$GOOGLE_CREDENTIALS" \

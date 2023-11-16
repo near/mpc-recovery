@@ -3,6 +3,7 @@ use super::state::{
     JoiningState, NodeState, PersistentNodeData, RunningState, StartedState,
     WaitingForConsensusState,
 };
+use crate::protocol::presignature::PresignatureManager;
 use crate::protocol::state::{GeneratingState, ResharingState};
 use crate::protocol::triple::TripleManager;
 use crate::types::PrivateKeyShare;
@@ -91,7 +92,7 @@ impl ConsensusProtocol for StartedState {
                                 tracing::info!(
                                     "contract state is running and we are already a participant"
                                 );
-                                let participants_vec =
+                                let participants_vec: Vec<Participant> =
                                     contract_state.participants.keys().cloned().collect();
                                 Ok(NodeState::Running(RunningState {
                                     epoch,
@@ -99,12 +100,20 @@ impl ConsensusProtocol for StartedState {
                                     threshold: contract_state.threshold,
                                     private_share,
                                     public_key,
-                                    triple_manager: TripleManager::new(
-                                        participants_vec,
+                                    triple_manager: Arc::new(RwLock::new(TripleManager::new(
+                                        participants_vec.clone(),
                                         ctx.me(),
                                         contract_state.threshold,
                                         epoch,
-                                    ),
+                                    ))),
+                                    presignature_manager: Arc::new(RwLock::new(
+                                        PresignatureManager::new(
+                                            participants_vec,
+                                            ctx.me(),
+                                            contract_state.threshold,
+                                            epoch,
+                                        ),
+                                    )),
                                 }))
                             } else {
                                 Ok(NodeState::Joining(JoiningState { public_key }))
@@ -266,19 +275,26 @@ impl ConsensusProtocol for WaitingForConsensusState {
                     if contract_state.public_key != self.public_key {
                         return Err(ConsensusError::MismatchedPublicKey);
                     }
-                    let participants_vec = self.participants.keys().cloned().collect();
+                    let participants_vec: Vec<Participant> =
+                        self.participants.keys().cloned().collect();
                     Ok(NodeState::Running(RunningState {
                         epoch: self.epoch,
                         participants: self.participants,
                         threshold: self.threshold,
                         private_share: self.private_share,
                         public_key: self.public_key,
-                        triple_manager: TripleManager::new(
+                        triple_manager: Arc::new(RwLock::new(TripleManager::new(
+                            participants_vec.clone(),
+                            ctx.me(),
+                            self.threshold,
+                            self.epoch,
+                        ))),
+                        presignature_manager: Arc::new(RwLock::new(PresignatureManager::new(
                             participants_vec,
                             ctx.me(),
                             self.threshold,
                             self.epoch,
-                        ),
+                        ))),
                     }))
                 }
             },

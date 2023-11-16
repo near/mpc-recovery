@@ -21,10 +21,8 @@ use borsh::BorshSerialize;
 use curv::elliptic::curves::{Ed25519, Point};
 use multi_party_eddsa::protocols::{self, ExpandedKeyPair};
 
-use near_primitives::delegate_action::NonDelegateAction;
 use near_primitives::hash::hash;
 use near_primitives::signable_message::{SignableMessage, SignableMessageType};
-use near_primitives::transaction::{Action, AddKeyAction, DeleteKeyAction};
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -265,30 +263,6 @@ async fn process_commit(
                     return Err(SignNodeError::Other(e));
                 }
             };
-
-            // Restrict certain types of DelegateActions
-            let requested_delegate_actions: &Vec<NonDelegateAction> =
-                &request.delegate_action.actions;
-
-            let requested_actions: &Vec<Action> = &requested_delegate_actions
-                .iter()
-                .map(|non_delegate_action| Action::from(non_delegate_action.clone()))
-                .collect();
-
-            for action in requested_actions {
-                match action {
-                    Action::AddKey(AddKeyAction { .. }) => {
-                        tracing::debug!("AddKeyAction is supported");
-                    }
-                    Action::DeleteKey(DeleteKeyAction { .. }) => {
-                        tracing::debug!("DeleteKeyAction is supported");
-                    }
-                    _ => {
-                        tracing::error!("Unsupported action: {:?}", action);
-                        return Err(SignNodeError::UnsupportedAction);
-                    }
-                }
-            }
 
             // Get user credentials
             let internal_account_id = oidc_token_claims.get_internal_account_id();

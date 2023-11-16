@@ -31,6 +31,8 @@ pub enum CryptographicError {
     DataConversion(#[from] serde_json::Error),
     #[error("encryption failed: {0}")]
     Encryption(String),
+    #[error("more than one writing to state: {0}")]
+    InvalidStateHandle(String),
 }
 
 impl<T> From<PoisonError<T>> for CryptographicError {
@@ -199,10 +201,11 @@ impl CryptographicProtocol for RunningState {
         mut self,
         ctx: C,
     ) -> Result<NodeState, CryptographicError> {
-        if self.triple_manager.potential_len()? < 2 {
-            self.triple_manager.generate()?;
+        let mut triple_manager = self.triple_manager.write().await;
+        if triple_manager.my_len() < 2 {
+            triple_manager.generate()?;
         }
-        for (is_public, p, msg) in self.triple_manager.poke()? {
+        for (is_public, p, msg) in triple_manager.poke()? {
             let info = self
                 .participants
                 .get(&p)
@@ -223,6 +226,35 @@ impl CryptographicProtocol for RunningState {
             )
             .await?;
         }
+
+        let mut presignature_manager = self.presignature_manager.write().await;
+        if presignature_manager.potential_len() < 2 {
+            // To ensure there is no contention between different nodes we are only using triples
+            // that we proposed. This way in a non-BFT environment we are guaranteed to never try
+            // to use the same triple as any other node.
+            if let Some((triple0, triple1)) = triple_manager.take_mine_twice() {
+                presignature_manager.generate(
+                    triple0,
+                    triple1,
+                    &self.public_key,
+                    &self.private_share,
+                )?;
+            } else {
+                tracing::debug!("we don't have enough triples to generate a presignature");
+            }
+        }
+        drop(triple_manager);
+        for (p, msg) in presignature_manager.poke()? {
+            let info = self.participants.get(&p).unwrap();
+            http_client::message(
+                ctx.http_client(),
+                info.url.clone(),
+                MpcMessage::Presignature(msg),
+            )
+            .await?;
+        }
+        drop(presignature_manager);
+
         Ok(NodeState::Running(self))
     }
 }
