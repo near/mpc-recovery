@@ -1,3 +1,3 @@
 output "leader_node" {
-  value = module.leader.node.uri
+  value = module.leader-mainnet.node.uri
 }

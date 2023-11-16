@@ -101,37 +101,34 @@ resource "google_secret_manager_secret_iam_member" "fast_auth_partners_secret_ac
   member    = "serviceAccount:${google_service_account.service_account.email}"
 }
 
-module "mpc-signer-lb-mainnet" {
+module "mpc-signer-lb-testnet" {
 
   count         = length(var.signer_configs)
   source        = "../modules/internal_cloudrun_lb"
-  name          = "mpc-prod-signer-${count.index}-mainnet"
+  name          = "mpc-prod-signer-${count.index}-testnet"
   network_id    = data.google_compute_network.prod_network.id
   subnetwork_id = data.google_compute_subnetwork.prod_subnetwork.id
   project_id    = var.project
   region        = "us-central1"
-  service_name  = "mpc-recovery-signer-${count.index}-mainnet"
+  service_name  = "mpc-recovery-signer-${count.index}-testnet"
 }
 
-module "mpc-leader-lb-mainnet" {
+module "mpc-leader-lb-testnet" {
   source        = "../modules/internal_cloudrun_lb"
-  name          = "mpc-prod-leader-mainnet"
+  name          = "mpc-prod-leader-testnet"
   network_id    = data.google_compute_network.prod_network.id
   subnetwork_id = data.google_compute_subnetwork.prod_subnetwork.id
   project_id    = var.project
   region        = "us-central1"
-  service_name  = "mpc-recovery-leader-mainnet"
+  service_name  = "mpc-recovery-leader-testnet"
 }
 
-/*
- * Create multiple signer nodes
- */
-module "signer-mainnet" {
+module "signer-testnet" {
   count  = length(var.signer_configs)
   source = "../modules/signer"
 
-  env                   = "prod"
-  service_name          = "mpc-recovery-signer-${count.index}-mainnet"
+  env                   = "testnet"
+  service_name          = "mpc-recovery-signer-${count.index}-testnet"
   project               = var.project
   region                = var.region
   zone                  = var.zone
@@ -151,14 +148,11 @@ module "signer-mainnet" {
   ]
 }
 
-/*
- * Create leader node
- */
-module "leader-mainnet" {
+module "leader-testnet" {
   source = "../modules/leader"
 
-  env                   = "prod"
-  service_name          = "mpc-recovery-leader-mainnet"
+  env                   = "testnet"
+  service_name          = "mpc-recovery-leader-testnet"
   project               = var.project
   region                = var.region
   zone                  = var.zone
@@ -169,10 +163,11 @@ module "leader-mainnet" {
   opentelemetry_level   = var.opentelemetry_level
   otlp_endpoint         = var.otlp_endpoint
 
-  signer_node_urls   = concat(module.signer-mainnet.*.node.uri, var.external_signer_node_urls)
+  signer_node_urls   = concat(module.signer-testnet.*.node.uri, var.external_signer_node_urls)
   near_rpc           = local.workspace.near_rpc
   near_root_account  = local.workspace.near_root_account
   account_creator_id = var.account_creator_id
+
 
   account_creator_sk_secret_id = var.account_creator_sk_secret_id
   fast_auth_partners_secret_id = var.fast_auth_partners_secret_id
@@ -180,6 +175,6 @@ module "leader-mainnet" {
   depends_on = [
     google_secret_manager_secret_iam_member.account_creator_secret_access,
     google_secret_manager_secret_iam_member.fast_auth_partners_secret_access,
-    module.signer-mainnet
+    module.signer-testnet
   ]
 }
