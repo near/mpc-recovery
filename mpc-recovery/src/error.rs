@@ -72,7 +72,7 @@ pub enum LeaderNodeError {
     #[error("recovery key can not be deleted: {0}")]
     RecoveryKeyCanNotBeDeleted(PublicKey),
     #[error("action can not be performed, account deletion is not allowed")]
-    AccountDeletionIsNotAllowed,
+    AccountDeletionUnsupported,
     #[error("failed to retrieve recovery pk, check digest signature: {0}")]
     FailedToRetrieveRecoveryPk(anyhow::Error),
     #[error("timeout gathering sign node pks")]
@@ -96,7 +96,7 @@ impl LeaderNodeError {
             LeaderNodeError::RelayerError(_) => StatusCode::FAILED_DEPENDENCY,
             LeaderNodeError::TimeoutGatheringPublicKeys => StatusCode::INTERNAL_SERVER_ERROR,
             LeaderNodeError::RecoveryKeyCanNotBeDeleted(_) => StatusCode::BAD_REQUEST,
-            LeaderNodeError::AccountDeletionIsNotAllowed => StatusCode::BAD_REQUEST,
+            LeaderNodeError::AccountDeletionUnsupported => StatusCode::BAD_REQUEST,
             LeaderNodeError::FailedToRetrieveRecoveryPk(_) => StatusCode::UNAUTHORIZED,
             LeaderNodeError::NetworkRejection(err) => {
                 err.status().unwrap_or(StatusCode::REQUEST_TIMEOUT)

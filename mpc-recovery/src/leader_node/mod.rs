@@ -541,7 +541,7 @@ async fn process_sign(
 
     if !delete_account_actions.is_empty() {
         tracing::error!("Account deletion is not allowed");
-        Err(LeaderNodeError::AccountDeletionIsNotAllowed)?;
+        Err(LeaderNodeError::AccountDeletionUnsupported)?;
     }
 
     // Get MPC signature
