@@ -3,6 +3,7 @@ resource "google_cloud_run_v2_service" "leader" {
   location = var.region
   ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
 
+
   template {
     service_account = var.service_account_email
 
