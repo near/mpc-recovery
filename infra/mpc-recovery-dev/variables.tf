@@ -60,15 +60,15 @@ variable "prod-connector" {
 }
 
 data "google_compute_subnetwork" "dev_subnetwork" {
-  name    = "dev-us-central1"
+  name    = "cloudrun-main-dev-us-east1"
   project = "pagoda-shared-infrastructure"
-  region  = "us-central1"
+  region  = "us-east1"
 }
 
 data "google_compute_subnetwork" "prod_subnetwork" {
-  name    = "prod-us-central1"
+  name    = "cloudrun-main-prod-us-east1"
   project = "pagoda-shared-infrastructure"
-  region  = "us-central1"
+  region  = "us-east1"
 }
 
 data "google_compute_network" "dev_network" {

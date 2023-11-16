@@ -13,9 +13,9 @@ terraform {
 }
 
 locals {
-  credentials  = var.credentials != null ? var.credentials : file(var.credentials_file)
-  client_email = jsondecode(local.credentials).client_email
-  client_id    = jsondecode(local.credentials).client_id
+  # credentials  = var.credentials != null ? var.credentials : file(var.credentials_file)
+  # client_email = jsondecode(local.credentials).client_email
+  # client_id    = jsondecode(local.credentials).client_id
 
   env = {
     defaults = {
@@ -38,8 +38,8 @@ data "external" "git_checkout" {
 }
 
 provider "google" {
-  credentials = local.credentials
-  # credentials = file("~/.config/gcloud/application_default_credentials.json")
+  # credentials = local.credentials
+  credentials = file("~/.config/gcloud/application_default_credentials.json")
 
   project = var.project
   region  = var.region
@@ -59,8 +59,8 @@ resource "google_service_account_iam_binding" "serivce-account-iam" {
   role               = "roles/iam.serviceAccountUser"
 
   members = [
-    "serviceAccount:${local.client_email}",
-    # "serviceAccount:mpc-recovery@pagoda-discovery-platform-dev.iam.gserviceaccount.com"
+    # "serviceAccount:${local.client_email}",
+    "serviceAccount:mpc-recovery@pagoda-discovery-platform-dev.iam.gserviceaccount.com"
   ]
 }
 
@@ -106,20 +106,20 @@ module "mpc-signer-lb" {
   count         = length(var.signer_configs)
   source        = "../modules/internal_cloudrun_lb"
   name          = "mpc-${var.env}-signer-${count.index}"
-  network_id    = data.google_compute_network.prod_network.id
-  subnetwork_id = data.google_compute_subnetwork.prod_subnetwork.id
+  network_id    = data.google_compute_network.dev_network.id
+  subnetwork_id = data.google_compute_subnetwork.dev_subnetwork.id
   project_id    = var.project
-  region        = "us-central1"
+  region        = "us-east1"
   service_name  = "mpc-recovery-signer-${count.index}-${var.env}"
 }
 
 module "mpc-leader-lb" {
   source        = "../modules/internal_cloudrun_lb"
   name          = "mpc-${var.env}-leader"
-  network_id    = data.google_compute_network.prod_network.id
-  subnetwork_id = data.google_compute_subnetwork.prod_subnetwork.id
+  network_id    = data.google_compute_network.dev_network.id
+  subnetwork_id = data.google_compute_subnetwork.dev_subnetwork.id
   project_id    = var.project
-  region        = "us-central1"
+  region        = "us-east1"
   service_name  = "mpc-recovery-leader-${var.env}"
 }
 /*
@@ -164,7 +164,7 @@ module "leader" {
   zone                  = var.zone
   service_account_email = google_service_account.service_account.email
   docker_image          = var.docker_image
-  connector_id          = var.prod-connector
+  connector_id          = var.dev-connector
 
   signer_node_urls   = concat(module.signer.*.node.uri, var.external_signer_node_urls)
   near_rpc           = local.workspace.near_rpc
