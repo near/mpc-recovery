@@ -66,3 +66,25 @@ pub enum NodeState {
     Resharing(ResharingState),
     Joining(JoiningState),
 }
+
+impl NodeState {
+    pub fn fetch_participant(&self, p: Participant) -> Option<ParticipantInfo> {
+        let participants = match self {
+            NodeState::Running(state) => &state.participants,
+            NodeState::Generating(state) => &state.participants,
+            NodeState::WaitingForConsensus(state) => &state.participants,
+            NodeState::Resharing(state) => {
+                if let Some(info) = state.new_participants.get(&p) {
+                    return Some(info.clone());
+                } else if let Some(info) = state.old_participants.get(&p) {
+                    return Some(info.clone());
+                } else {
+                    return None;
+                }
+            }
+            _ => return None,
+        };
+
+        participants.get(&p).cloned()
+    }
+}

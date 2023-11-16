@@ -27,6 +27,10 @@ pub enum CryptographicError {
     CaitSithProtocolError(#[from] ProtocolError),
     #[error("sync failed: {0}")]
     SyncError(String),
+    #[error(transparent)]
+    DataConversion(#[from] serde_json::Error),
+    #[error("encryption failed: {0}")]
+    Encryption(String),
 }
 
 impl<T> From<PoisonError<T>> for CryptographicError {

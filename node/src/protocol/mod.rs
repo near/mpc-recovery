@@ -1,10 +1,10 @@
 mod consensus;
 mod contract;
 mod cryptography;
-mod state;
 mod triple;
 
 pub mod message;
+pub mod state;
 
 pub use contract::{ParticipantInfo, ProtocolState};
 pub use message::MpcMessage;

@@ -1,14 +1,14 @@
 mod error;
 
 use self::error::MpcSignError;
-use crate::protocol::message::EncryptedMessage;
-use crate::protocol::{MpcMessage, NodeState, ParticipantInfo};
+use crate::protocol::message::SignedMessage;
+use crate::protocol::{MpcMessage, NodeState};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Extension, Json, Router};
 use axum_extra::extract::WithRejection;
 use cait_sith::protocol::Participant;
-use mpc_keys::hpke;
+use mpc_keys::hpke::{self, Ciphered};
 use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
 use near_primitives::types::AccountId;
@@ -23,29 +23,6 @@ struct AxumState {
     sender: Sender<MpcMessage>,
     protocol_state: Arc<RwLock<NodeState>>,
     cipher_sk: hpke::SecretKey,
-}
-
-impl AxumState {
-    async fn fetch_participant(&self, p: Participant) -> Option<ParticipantInfo> {
-        let protocol_state = self.protocol_state.read().await;
-        let participants = match &*protocol_state {
-            NodeState::Running(state) => &state.participants,
-            NodeState::Generating(state) => &state.participants,
-            NodeState::WaitingForConsensus(state) => &state.participants,
-            NodeState::Resharing(state) => {
-                if let Some(info) = state.new_participants.get(&p) {
-                    return Some(info.clone());
-                } else if let Some(info) = state.old_participants.get(&p) {
-                    return Some(info.clone());
-                } else {
-                    return None;
-                }
-            }
-            _ => return None,
-        };
-
-        participants.get(&p).cloned()
-    }
 }
 
 pub async fn run(
@@ -116,34 +93,17 @@ async fn msg(
 #[tracing::instrument(level = "debug", skip_all)]
 async fn msg_private(
     Extension(state): Extension<Arc<AxumState>>,
-    WithRejection(Json(encrypted), _): WithRejection<Json<EncryptedMessage>, MpcSignError>,
+    WithRejection(Json(encrypted), _): WithRejection<Json<Ciphered>, MpcSignError>,
 ) -> StatusCode {
-    let EncryptedMessage { cipher, sig, from } = encrypted;
-    tracing::debug!(ciphertext = ?cipher.text, "received encrypted");
-
-    let Some(sender) = state.fetch_participant(from).await else {
-        tracing::error!(?from, cipher = ?cipher.text, ?sig, "unknown participant sent encrypted");
-        return StatusCode::BAD_REQUEST;
-    };
-    if !sig.verify(&cipher.text, &sender.sign_pk) {
-        tracing::error!(?sig, ?from, cipher = ?cipher.text, "invalid encrypted message signature");
-        return StatusCode::BAD_REQUEST;
-    }
-
-    let message = match state.cipher_sk.decrypt(&cipher, b"") {
-        Ok(msg) => msg,
-        Err(err) => {
-            tracing::error!(?err, "failed to decrypt an encrypted message");
-            return StatusCode::BAD_REQUEST;
-        }
-    };
-    let message = match serde_json::from_slice(&message) {
-        Ok(msg) => msg,
-        Err(err) => {
-            tracing::error!(?err, "failed to deserialize encrypted message");
-            return StatusCode::BAD_REQUEST;
-        }
-    };
+    tracing::debug!(ciphertext = ?encrypted.text, "received encrypted");
+    let message =
+        match SignedMessage::decrypt(&state.cipher_sk, &state.protocol_state, encrypted).await {
+            Ok(msg) => msg,
+            Err(err) => {
+                tracing::error!(?err, "failed to decrypt or verify an encrypted message");
+                return StatusCode::BAD_REQUEST;
+            }
+        };
 
     match state.sender.send(message).await {
         Ok(()) => StatusCode::OK,
