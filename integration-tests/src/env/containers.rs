@@ -291,7 +291,7 @@ pub struct RelayerConfig {
 
 impl<'a> Relayer<'a> {
     pub const CONTAINER_PORT: u16 = 3000;
-    pub const TMP_FOLDER_PATH: &str = "./tmp";
+    pub const TMP_FOLDER_PATH: &'static str = "./tmp";
 
     pub async fn run(
         docker_client: &'a DockerClient,
