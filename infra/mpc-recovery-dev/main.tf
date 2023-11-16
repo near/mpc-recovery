@@ -106,20 +106,20 @@ module "mpc-signer-lb" {
   count         = length(var.signer_configs)
   source        = "../modules/internal_cloudrun_lb"
   name          = "mpc-${var.env}-signer-${count.index}"
-  network_id    = data.google_compute_network.prod_network.id
-  subnetwork_id = data.google_compute_subnetwork.prod_subnetwork.id
+  network_id    = data.google_compute_network.dev_network.id
+  subnetwork_id = data.google_compute_subnetwork.dev_subnetwork.id
   project_id    = var.project
-  region        = "us-central1"
+  region        = "us-east1"
   service_name  = "mpc-recovery-signer-${count.index}-${var.env}"
 }
 
 module "mpc-leader-lb" {
   source        = "../modules/internal_cloudrun_lb"
   name          = "mpc-${var.env}-leader"
-  network_id    = data.google_compute_network.prod_network.id
-  subnetwork_id = data.google_compute_subnetwork.prod_subnetwork.id
+  network_id    = data.google_compute_network.dev_network.id
+  subnetwork_id = data.google_compute_subnetwork.dev_subnetwork.id
   project_id    = var.project
-  region        = "us-central1"
+  region        = "us-east1"
   service_name  = "mpc-recovery-leader-${var.env}"
 }
 /*
@@ -164,7 +164,7 @@ module "leader" {
   zone                  = var.zone
   service_account_email = google_service_account.service_account.email
   docker_image          = var.docker_image
-  connector_id          = var.prod-connector
+  connector_id          = var.dev-connector
 
   signer_node_urls   = concat(module.signer.*.node.uri, var.external_signer_node_urls)
   near_rpc           = local.workspace.near_rpc
