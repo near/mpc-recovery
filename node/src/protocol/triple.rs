@@ -66,6 +66,11 @@ impl TripleManager {
         self.triples.len()
     }
 
+    /// Returns the number of unspent triples assigned to this node.
+    pub fn my_len(&self) -> usize {
+        self.mine.len()
+    }
+
     /// Returns the number of unspent triples we will have in the manager once
     /// all ongoing generation protocols complete.
     pub fn potential_len(&self) -> usize {

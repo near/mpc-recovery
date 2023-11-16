@@ -173,7 +173,7 @@ impl CryptographicProtocol for RunningState {
         mut self,
         ctx: C,
     ) -> Result<NodeState, CryptographicError> {
-        if self.triple_manager.potential_len() < 2 {
+        if self.triple_manager.my_len() < 2 {
             self.triple_manager.generate()?;
         }
         for (p, msg) in self.triple_manager.poke()? {
