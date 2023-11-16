@@ -8,8 +8,10 @@ use hpke::{
 use serde::{Deserialize, Serialize};
 
 /// This can be used to customize the generated key. This will be used as a sort of
-/// versioning mechanism for the key.
-const INFO_ENTROPY: &[u8] = b"session-key-v1";
+/// versioning mechanism for the key. It's additional context about who is encrypting
+/// the key. This is used to prevent a key from being used in a context it was not
+/// supposed to be used for.
+const INFO_ENTROPY: &[u8] = b"mpc-key-v1";
 
 // Interchangeable type parameters for the HPKE context.
 pub type Kem = X25519HkdfSha256;
