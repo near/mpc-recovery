@@ -162,7 +162,7 @@ impl TripleManager {
     /// messages to be sent to the respective participant.
     ///
     /// An empty vector means we cannot progress until we receive a new message.
-    pub fn poke(&mut self) -> Result<Vec<(bool, Participant, TripleMessage)>, ProtocolError> {
+    pub fn poke(&mut self) -> Result<Vec<(Participant, TripleMessage)>, ProtocolError> {
         let mut messages = Vec::new();
         let mut result = Ok(());
         self.generators.retain(|id, generator| {
@@ -195,7 +195,6 @@ impl TripleManager {
                     Action::SendMany(data) => {
                         for p in &self.participants {
                             messages.push((
-                                true,
                                 *p,
                                 TripleMessage {
                                     id: *id,
@@ -207,7 +206,6 @@ impl TripleManager {
                         }
                     }
                     Action::SendPrivate(p, data) => messages.push((
-                        false,
                         p,
                         TripleMessage {
                             id: *id,

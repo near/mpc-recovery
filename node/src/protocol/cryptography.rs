@@ -73,7 +73,10 @@ impl CryptographicProtocol for GeneratingState {
                             // Skip yourself, cait-sith never sends messages to oneself
                             continue;
                         }
-                        http_client::message(
+                        http_client::send_encrypted(
+                            ctx.me(),
+                            &info.cipher_pk,
+                            ctx.sign_sk(),
                             ctx.http_client(),
                             info.url.clone(),
                             MpcMessage::Generating(GeneratingMessage {
@@ -88,7 +91,7 @@ impl CryptographicProtocol for GeneratingState {
                     tracing::debug!("sending a private message to {to:?}");
                     match self.participants.get(&to) {
                         Some(info) => {
-                            http_client::message_encrypted(
+                            http_client::send_encrypted(
                                 ctx.me(),
                                 &info.cipher_pk,
                                 ctx.sign_sk(),
@@ -147,7 +150,10 @@ impl CryptographicProtocol for ResharingState {
                             // Skip yourself, cait-sith never sends messages to oneself
                             continue;
                         }
-                        http_client::message(
+                        http_client::send_encrypted(
+                            ctx.me(),
+                            &info.cipher_pk,
+                            ctx.sign_sk(),
                             ctx.http_client(),
                             info.url.clone(),
                             MpcMessage::Resharing(ResharingMessage {
@@ -163,7 +169,7 @@ impl CryptographicProtocol for ResharingState {
                     tracing::debug!("sending a private message to {to:?}");
                     match self.new_participants.get(&to) {
                         Some(info) => {
-                            http_client::message_encrypted(
+                            http_client::send_encrypted(
                                 ctx.me(),
                                 &info.cipher_pk,
                                 ctx.sign_sk(),
@@ -205,18 +211,13 @@ impl CryptographicProtocol for RunningState {
         if triple_manager.my_len() < 2 {
             triple_manager.generate()?;
         }
-        for (is_public, p, msg) in triple_manager.poke()? {
+        for (p, msg) in triple_manager.poke()? {
             let info = self
                 .participants
                 .get(&p)
                 .ok_or(CryptographicError::UnknownParticipant(p))?;
-            if is_public {
-                http_client::message(ctx.http_client(), info.url.clone(), MpcMessage::Triple(msg))
-                    .await?;
-                continue;
-            }
 
-            http_client::message_encrypted(
+            http_client::send_encrypted(
                 ctx.me(),
                 &info.cipher_pk,
                 ctx.sign_sk(),
@@ -246,7 +247,10 @@ impl CryptographicProtocol for RunningState {
         drop(triple_manager);
         for (p, msg) in presignature_manager.poke()? {
             let info = self.participants.get(&p).unwrap();
-            http_client::message(
+            http_client::send_encrypted(
+                ctx.me(),
+                &info.cipher_pk,
+                ctx.sign_sk(),
                 ctx.http_client(),
                 info.url.clone(),
                 MpcMessage::Presignature(msg),

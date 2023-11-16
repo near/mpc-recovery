@@ -23,46 +23,7 @@ pub enum SendError {
     EncryptionError(String),
 }
 
-pub async fn message<U: IntoUrl>(
-    client: &Client,
-    url: U,
-    message: MpcMessage,
-) -> Result<(), SendError> {
-    let mut url = url.into_url().unwrap();
-    url.set_path("msg");
-    let action = || async {
-        let response = client
-            .post(url.clone())
-            .header("content-type", "application/json")
-            .json(&message)
-            .send()
-            .await
-            .map_err(SendError::ReqwestClientError)?;
-        let status = response.status();
-        let response_bytes = response
-            .bytes()
-            .await
-            .map_err(SendError::ReqwestBodyError)?;
-        let response_str =
-            std::str::from_utf8(&response_bytes).map_err(SendError::MalformedResponse)?;
-        if status.is_success() {
-            Ok(())
-        } else {
-            tracing::error!(
-                "failed to send a message to {} with code {}: {}",
-                url,
-                status,
-                response_str
-            );
-            Err(SendError::Unsuccessful(response_str.into()))
-        }
-    };
-
-    let retry_strategy = ExponentialBackoff::from_millis(10).map(jitter).take(3);
-    Retry::spawn(retry_strategy, action).await
-}
-
-pub async fn message_encrypted<U: IntoUrl>(
+pub async fn send_encrypted<U: IntoUrl>(
     participant: Participant,
     cipher_pk: &hpke::PublicKey,
     sign_sk: &near_crypto::SecretKey,
@@ -75,7 +36,7 @@ pub async fn message_encrypted<U: IntoUrl>(
     tracing::debug!(?participant, ciphertext = ?encrypted.text, "sending encrypted");
 
     let mut url = url.into_url().unwrap();
-    url.set_path("msg-private");
+    url.set_path("msg");
     let action = || async {
         let response = client
             .post(url.clone())

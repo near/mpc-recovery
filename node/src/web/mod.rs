@@ -54,7 +54,6 @@ pub async fn run(
             }),
         )
         .route("/msg", post(msg))
-        .route("/msg-private", post(msg_private))
         .route("/join", post(join))
         .route("/state", get(state))
         .layer(Extension(Arc::new(axum_state)));
@@ -77,21 +76,6 @@ pub struct MsgRequest {
 
 #[tracing::instrument(level = "debug", skip_all)]
 async fn msg(
-    Extension(state): Extension<Arc<AxumState>>,
-    WithRejection(Json(message), _): WithRejection<Json<MpcMessage>, MpcSignError>,
-) -> StatusCode {
-    tracing::debug!(?message, "received");
-    match state.sender.send(message).await {
-        Ok(()) => StatusCode::OK,
-        Err(e) => {
-            tracing::error!("failed to send a protocol message: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
-    }
-}
-
-#[tracing::instrument(level = "debug", skip_all)]
-async fn msg_private(
     Extension(state): Extension<Arc<AxumState>>,
     WithRejection(Json(encrypted), _): WithRejection<Json<Ciphered>, MpcSignError>,
 ) -> StatusCode {
