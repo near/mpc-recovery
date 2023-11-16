@@ -141,12 +141,9 @@ impl PresignatureManager {
             match self.generators.entry(id) {
                 Entry::Vacant(entry) => {
                     tracing::info!(id, "joining protocol to generate a new presignature");
-                    let triple0 = match triple_manager.take(triple0) {
-                        Some(triple0) => triple0,
-                        None => {
-                            tracing::warn!(triple_id = triple0, "triple0 is missing, can't join");
-                            return Ok(None);
-                        }
+                    let Some(triple0) = triple_manager.take(triple0) else {
+                        tracing::warn!(triple_id = triple0, "triple0 is missing, can't join");
+                        return Ok(None);
                     };
                     let triple1 = match triple_manager.take(triple1) {
                         Some(triple1) => triple1,
