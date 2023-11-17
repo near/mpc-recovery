@@ -5,6 +5,10 @@ on:
     branches:
       - develop
   pull_request:
+    paths:
+      - integration-tests/**
+      - node/**
+      - contract/**
 
 env:
   RUSTFLAGS: -D warnings
