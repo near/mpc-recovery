@@ -46,19 +46,6 @@ jobs:
           docker pull ghcr.io/near/near-lake-indexer:e6519c922435f3d18b5f2ddac5d1ec171ef4dd6b
           docker pull localstack/localstack:latest
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          file: Dockerfile.multichain
-          tags: near/mpc-recovery-node
-          load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
       - name: Install stable toolchain
         uses: actions-rs/toolchain@v1
         with:
