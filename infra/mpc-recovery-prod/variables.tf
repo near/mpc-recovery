@@ -1,6 +1,3 @@
-variable "env" {
-}
-
 variable "project" {
 }
 
