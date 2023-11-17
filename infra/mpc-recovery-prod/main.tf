@@ -109,7 +109,7 @@ module "mpc-signer-lb-mainnet" {
   network_id    = data.google_compute_network.prod_network.id
   subnetwork_id = data.google_compute_subnetwork.prod_subnetwork.id
   project_id    = var.project
-  region        = "us-central1"
+  region        = "us-east1"
   service_name  = "mpc-recovery-signer-${count.index}-mainnet"
 }
 
@@ -119,7 +119,7 @@ module "mpc-leader-lb-mainnet" {
   network_id    = data.google_compute_network.prod_network.id
   subnetwork_id = data.google_compute_subnetwork.prod_subnetwork.id
   project_id    = var.project
-  region        = "us-central1"
+  region        = "us-east1"
   service_name  = "mpc-recovery-leader-mainnet"
 }
 
