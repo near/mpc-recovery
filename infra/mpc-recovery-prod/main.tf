@@ -17,20 +17,10 @@ locals {
   client_email = jsondecode(local.credentials).client_email
   client_id    = jsondecode(local.credentials).client_id
 
-  env = {
-    defaults = {
-      near_rpc          = "https://rpc.testnet.near.org"
-      near_root_account = "testnet"
-    }
-    testnet = {
-    }
-    mainnet = {
-      near_rpc          = "https://rpc.mainnet.near.org"
-      near_root_account = "near"
-    }
+  workspace = {
+    near_rpc          = "https://rpc.mainnet.near.org"
+    near_root_account = "near"
   }
-
-  workspace = merge(local.env["defaults"], contains(keys(local.env), terraform.workspace) ? local.env[terraform.workspace] : local.env["defaults"])
 }
 
 data "external" "git_checkout" {
@@ -39,7 +29,6 @@ data "external" "git_checkout" {
 
 provider "google" {
   credentials = local.credentials
-  # credentials = file("~/.config/gcloud/application_default_credentials.json")
 
   project = var.project
   region  = var.region
@@ -50,8 +39,8 @@ provider "google" {
  * Create brand new service account with basic IAM
  */
 resource "google_service_account" "service_account" {
-  account_id   = "mpc-recovery-prod"
-  display_name = "MPC Recovery prod Account"
+  account_id   = "mpc-recovery-mainnet"
+  display_name = "MPC Recovery mainnet Account"
 }
 
 resource "google_service_account_iam_binding" "serivce-account-iam" {
@@ -59,8 +48,7 @@ resource "google_service_account_iam_binding" "serivce-account-iam" {
   role               = "roles/iam.serviceAccountUser"
 
   members = [
-    "serviceAccount:${local.client_email}",
-    # "serviceAccount:mpc-recovery@pagoda-discovery-platform-prod.iam.gserviceaccount.com"
+    "serviceAccount:${local.client_email}"
   ]
 }
 
@@ -109,7 +97,7 @@ module "mpc-signer-lb-mainnet" {
   network_id    = data.google_compute_network.prod_network.id
   subnetwork_id = data.google_compute_subnetwork.prod_subnetwork.id
   project_id    = var.project
-  region        = "us-central1"
+  region        = "us-east1"
   service_name  = "mpc-recovery-signer-${count.index}-mainnet"
 }
 
@@ -119,7 +107,7 @@ module "mpc-leader-lb-mainnet" {
   network_id    = data.google_compute_network.prod_network.id
   subnetwork_id = data.google_compute_subnetwork.prod_subnetwork.id
   project_id    = var.project
-  region        = "us-central1"
+  region        = "us-east1"
   service_name  = "mpc-recovery-leader-mainnet"
 }
 

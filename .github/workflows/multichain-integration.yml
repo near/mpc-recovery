@@ -5,6 +5,10 @@ on:
     branches:
       - develop
   pull_request:
+    paths:
+      - integration-tests/**
+      - node/**
+      - contract/**
 
 env:
   RUSTFLAGS: -D warnings
@@ -14,7 +18,7 @@ jobs:
     strategy:
       matrix:
         # FIXME: macos-latest-xl is disabled since colima is erroring out right now
-        os: [ubuntu-latest]
+        os: [ubuntu-22.04-4core]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -41,19 +45,6 @@ jobs:
           docker pull ghcr.io/near/os-relayer:12ba6e35690df3979fce0b36a41d0ca0db9c0ab4
           docker pull ghcr.io/near/near-lake-indexer:e6519c922435f3d18b5f2ddac5d1ec171ef4dd6b
           docker pull localstack/localstack:latest
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          file: Dockerfile.multichain
-          tags: near/mpc-recovery-node
-          load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Install stable toolchain
         uses: actions-rs/toolchain@v1

@@ -8,9 +8,13 @@ resource "google_cloud_run_v2_service" "signer" {
 
     annotations = var.metadata_annotations == null ? null : var.metadata_annotations
 
-    vpc_access {
-      connector = var.connector_id == null ? null : var.connector_id
-      egress    = "PRIVATE_RANGES_ONLY"
+    // Conditional block in case connector_id is present. See https://stackoverflow.com/a/69891235
+    dynamic "vpc_access" {
+      for_each = var.connector_id == null ? [] : [1]
+      content {
+        connector = var.connector_id == null ? null : var.connector_id
+        egress    = "PRIVATE_RANGES_ONLY"
+      }
     }
 
     scaling {

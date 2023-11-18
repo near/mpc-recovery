@@ -35,8 +35,10 @@ pub async fn send_encrypted<U: IntoUrl>(
         .map_err(|err| SendError::EncryptionError(err.to_string()))?;
     tracing::debug!(?participant, ciphertext = ?encrypted.text, "sending encrypted");
 
+    let _span = tracing::info_span!("message_request");
     let mut url = url.into_url().unwrap();
     url.set_path("msg");
+    tracing::debug!(%url, "making http request");
     let action = || async {
         let response = client
             .post(url.clone())
@@ -69,18 +71,16 @@ pub async fn send_encrypted<U: IntoUrl>(
     Retry::spawn(retry_strategy, action).await
 }
 
-pub async fn join<U: IntoUrl>(
-    client: &Client,
-    url: U,
-    participant: &Participant,
-) -> Result<(), SendError> {
+pub async fn join<U: IntoUrl>(client: &Client, url: U, me: &Participant) -> Result<(), SendError> {
+    let _span = tracing::info_span!("join_request", ?me);
     let mut url = url.into_url().unwrap();
     url.set_path("join");
+    tracing::debug!(%url, "making http request");
     let action = || async {
         let response = client
             .post(url.clone())
             .header("content-type", "application/json")
-            .json(&participant)
+            .json(&me)
             .send()
             .await
             .map_err(SendError::ReqwestClientError)?;

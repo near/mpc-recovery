@@ -33,10 +33,10 @@ variable "sk_share_secret_id" {
   type = string
 }
 
-variable "oidc_providers_secret_id" {
-  type = string
-}
-
 variable "jwt_signature_pk_url" {
 
+}
+
+variable "service_name" {
+  type = string
 }
