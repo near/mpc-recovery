@@ -118,7 +118,7 @@ module "signer-mainnet" {
   count  = length(var.signer_configs)
   source = "../modules/signer"
 
-  env                   = "prod"
+  env                   = "mainnet"
   service_name          = "mpc-recovery-signer-${count.index}-mainnet"
   project               = var.project
   region                = var.region
@@ -145,7 +145,7 @@ module "signer-mainnet" {
 module "leader-mainnet" {
   source = "../modules/leader"
 
-  env                   = "prod"
+  env                   = "mainnet"
   service_name          = "mpc-recovery-leader-mainnet"
   project               = var.project
   region                = var.region
