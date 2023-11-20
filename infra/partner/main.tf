@@ -63,14 +63,6 @@ resource "google_secret_manager_secret_iam_member" "secret_share_secret_access" 
 }
 
 /*
- * Create Artifact Registry repo, tag existing Docker image and push to the repo
- */
-resource "google_artifact_registry_repository" "mpc_recovery" {
-  repository_id = "mpc-recovery-partner-${var.env}"
-  format        = "DOCKER"
-}
-
-/*
  * Create a partner signer node
  */
 module "signer" {
