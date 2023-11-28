@@ -1,8 +1,9 @@
 mod error;
 
-use self::error::MpcSignError;
+use self::error::Error;
 use crate::protocol::message::SignedMessage;
 use crate::protocol::{MpcMessage, NodeState};
+use crate::web::error::Result;
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Extension, Json, Router};
@@ -77,32 +78,30 @@ pub struct MsgRequest {
 #[tracing::instrument(level = "debug", skip_all)]
 async fn msg(
     Extension(state): Extension<Arc<AxumState>>,
-    WithRejection(Json(encrypted), _): WithRejection<Json<Ciphered>, MpcSignError>,
-) -> StatusCode {
+    WithRejection(Json(encrypted), _): WithRejection<Json<Ciphered>, Error>,
+) -> Result<()> {
     tracing::debug!(ciphertext = ?encrypted.text, "received encrypted");
     let message =
         match SignedMessage::decrypt(&state.cipher_sk, &state.protocol_state, encrypted).await {
             Ok(msg) => msg,
             Err(err) => {
                 tracing::error!(?err, "failed to decrypt or verify an encrypted message");
-                return StatusCode::BAD_REQUEST;
+                return Err(err.into());
             }
         };
 
-    match state.sender.send(message).await {
-        Ok(()) => StatusCode::OK,
-        Err(e) => {
-            tracing::error!("failed to send an encrypted protocol message: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
+    if let Err(err) = state.sender.send(message).await {
+        tracing::error!(?err, "failed to forward an encrypted protocol message");
+        return Err(err.into());
     }
+    Ok(())
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
 async fn join(
     Extension(state): Extension<Arc<AxumState>>,
-    WithRejection(Json(participant), _): WithRejection<Json<Participant>, MpcSignError>,
-) -> StatusCode {
+    WithRejection(Json(participant), _): WithRejection<Json<Participant>, Error>,
+) -> Result<()> {
     let protocol_state = state.protocol_state.read().await;
     match &*protocol_state {
         NodeState::Running { .. } => {
@@ -125,17 +124,17 @@ async fn join(
             {
                 Ok(_) => {
                     tracing::info!(?participant, "successfully voted for a node to join");
-                    StatusCode::OK
+                    Ok(())
                 }
                 Err(e) => {
                     tracing::error!(%e, "failed to vote for a new node to join");
-                    StatusCode::INTERNAL_SERVER_ERROR
+                    Err(e)?
                 }
             }
         }
         _ => {
             tracing::debug!(?participant, "not ready to accept join requests yet");
-            StatusCode::BAD_REQUEST
+            Err(Error::NotRunning)
         }
     }
 }
@@ -153,7 +152,7 @@ pub enum StateView {
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
-async fn state(Extension(state): Extension<Arc<AxumState>>) -> (StatusCode, Json<StateView>) {
+async fn state(Extension(state): Extension<Arc<AxumState>>) -> Result<Json<StateView>> {
     tracing::debug!("fetching state");
     let protocol_state = state.protocol_state.read().await;
     match &*protocol_state {
@@ -162,18 +161,15 @@ async fn state(Extension(state): Extension<Arc<AxumState>>) -> (StatusCode, Json
             let presignature_count = state.presignature_manager.read().await.len();
 
             tracing::debug!("not running, state unavailable");
-            (
-                StatusCode::OK,
-                Json(StateView::Running {
-                    participants: state.participants.keys().cloned().collect(),
-                    triple_count,
-                    presignature_count,
-                }),
-            )
+            Ok(Json(StateView::Running {
+                participants: state.participants.keys().cloned().collect(),
+                triple_count,
+                presignature_count,
+            }))
         }
         _ => {
             tracing::debug!("not running, state unavailable");
-            (StatusCode::OK, Json(StateView::NotRunning))
+            Ok(Json(StateView::NotRunning))
         }
     }
 }
