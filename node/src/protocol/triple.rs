@@ -129,7 +129,7 @@ impl TripleManager {
         tracing::info!(id0, id1, "trying to take two triples");
 
         let val = self.take_two(id0, id1).ok();
-        if let None = &val {
+        if val.is_none() {
             tracing::warn!(id0, id1, "my triples are gone");
         }
         val
