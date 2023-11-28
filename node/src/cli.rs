@@ -130,8 +130,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
             });
             tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
-                .build()
-                .unwrap()
+                .build()?
                 .block_on(async {
                     let (sender, receiver) = mpsc::channel(16384);
 
@@ -149,16 +148,13 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                         signer.clone(),
                         receiver,
                         sign_queue.clone(),
-                        hpke::PublicKey::try_from_bytes(&hex::decode(cipher_pk)?).unwrap(),
+                        hpke::PublicKey::try_from_bytes(&hex::decode(cipher_pk)?)?,
                     );
                     tracing::debug!("protocol initialized");
-                    let protocol_handle = tokio::spawn(async move {
-                        protocol.run().await.unwrap();
-                    });
+                    let protocol_handle = tokio::spawn(async move { protocol.run().await });
                     tracing::debug!("protocol thread spawned");
                     let mpc_contract_id_cloned = mpc_contract_id.clone();
-                    let cipher_sk =
-                        hpke::SecretKey::try_from_bytes(&hex::decode(cipher_sk)?).unwrap();
+                    let cipher_sk = hpke::SecretKey::try_from_bytes(&hex::decode(cipher_sk)?)?;
                     let web_handle = tokio::spawn(async move {
                         web::run(
                             web_port,
@@ -170,12 +166,11 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                             protocol_state,
                         )
                         .await
-                        .unwrap();
                     });
                     tracing::debug!("protocol http server spawned");
 
-                    protocol_handle.await?;
-                    web_handle.await?;
+                    protocol_handle.await??;
+                    web_handle.await??;
                     tracing::debug!("spinning down");
 
                     anyhow::Ok(())

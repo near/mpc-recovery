@@ -96,25 +96,19 @@ impl CryptographicProtocol for GeneratingState {
                 }
                 Action::SendPrivate(to, m) => {
                     tracing::debug!("sending a private message to {to:?}");
-                    match self.participants.get(&to) {
-                        Some(info) => {
-                            http_client::send_encrypted(
-                                ctx.me(),
-                                &info.cipher_pk,
-                                ctx.sign_sk(),
-                                ctx.http_client(),
-                                info.url.clone(),
-                                MpcMessage::Generating(GeneratingMessage {
-                                    from: ctx.me(),
-                                    data: m.clone(),
-                                }),
-                            )
-                            .await?
-                        }
-                        None => {
-                            return Err(CryptographicError::UnknownParticipant(to));
-                        }
-                    }
+                    let info = self.fetch_participant(&to)?;
+                    http_client::send_encrypted(
+                        ctx.me(),
+                        &info.cipher_pk,
+                        ctx.sign_sk(),
+                        ctx.http_client(),
+                        info.url.clone(),
+                        MpcMessage::Generating(GeneratingMessage {
+                            from: ctx.me(),
+                            data: m.clone(),
+                        }),
+                    )
+                    .await?
                 }
                 Action::Return(r) => {
                     tracing::info!(
@@ -219,11 +213,7 @@ impl CryptographicProtocol for RunningState {
             triple_manager.generate()?;
         }
         for (p, msg) in triple_manager.poke()? {
-            let info = self
-                .participants
-                .get(&p)
-                .ok_or(CryptographicError::UnknownParticipant(p))?;
-
+            let info = self.fetch_participant(&p)?;
             http_client::send_encrypted(
                 ctx.me(),
                 &info.cipher_pk,
@@ -253,7 +243,7 @@ impl CryptographicProtocol for RunningState {
         }
         drop(triple_manager);
         for (p, msg) in presignature_manager.poke()? {
-            let info = self.participants.get(&p).unwrap();
+            let info = self.fetch_participant(&p)?;
             http_client::send_encrypted(
                 ctx.me(),
                 &info.cipher_pk,

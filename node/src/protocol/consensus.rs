@@ -552,7 +552,7 @@ impl ConsensusProtocol for JoiningState {
                             ctx.mpc_contract_id(),
                             vec![Action::FunctionCall(FunctionCallAction {
                                 method_name: "join".to_string(),
-                                args: serde_json::to_vec(&args).unwrap(),
+                                args: args.to_string().into_bytes(),
                                 gas: 300_000_000_000_000,
                                 deposit: 0,
                             })],
