@@ -230,7 +230,7 @@ impl CryptographicProtocol for RunningState {
             // To ensure there is no contention between different nodes we are only using triples
             // that we proposed. This way in a non-BFT environment we are guaranteed to never try
             // to use the same triple as any other node.
-            if let Some((triple0, triple1)) = triple_manager.take_twice() {
+            if let Some((triple0, triple1)) = triple_manager.take_two_mine() {
                 presignature_manager.generate(
                     triple0,
                     triple1,
