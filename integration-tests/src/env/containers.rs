@@ -561,7 +561,7 @@ impl<'a> LocalStack<'a> {
         #[cfg(target_arch = "x86_64")]
         let s3_host_address = {
             let s3_host_port = container.get_host_port_ipv6(Self::S3_CONTAINER_PORT);
-            format!("http://[::1]:{s3_host_port}");
+            format!("http://[::1]:{s3_host_port}")
         };
 
         tracing::info!(
