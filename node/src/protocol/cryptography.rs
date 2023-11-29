@@ -73,11 +73,15 @@ impl CryptographicProtocol for GeneratingState {
                 Action::Wait => {
                     drop(protocol);
                     tracing::debug!("waiting");
-                    self.messages
+                    if let Err(err) = self
+                        .messages
                         .write()
                         .await
                         .send_encrypted(ctx.me(), ctx.sign_sk(), ctx.http_client())
-                        .await?;
+                        .await
+                    {
+                        tracing::warn!(?err, participants = ?self.participants, "generating: failed to send encrypted message");
+                    }
 
                     return Ok(NodeState::Generating(self));
                 }
@@ -121,11 +125,15 @@ impl CryptographicProtocol for GeneratingState {
                         "successfully completed key generation"
                     );
                     // Send any leftover messages
-                    self.messages
+                    if let Err(err) = self
+                        .messages
                         .write()
                         .await
                         .send_encrypted(ctx.me(), ctx.sign_sk(), ctx.http_client())
-                        .await?;
+                        .await
+                    {
+                        tracing::warn!(?err, participants = ?self.participants, "generating: failed to send encrypted message");
+                    }
 
                     return Ok(NodeState::WaitingForConsensus(WaitingForConsensusState {
                         epoch: 0,
@@ -147,11 +155,15 @@ impl CryptographicProtocol for WaitingForConsensusState {
         mut self,
         ctx: C,
     ) -> Result<NodeState, CryptographicError> {
-        self.messages
+        if let Err(err) = self
+            .messages
             .write()
             .await
             .send_encrypted(ctx.me(), ctx.sign_sk(), ctx.http_client())
-            .await?;
+            .await
+        {
+            tracing::warn!(?err, participants = ?self.participants, "waiting: failed to send encrypted message");
+        }
 
         // Wait for ConsensusProtocol step to advance state
         Ok(NodeState::WaitingForConsensus(self))
@@ -172,11 +184,15 @@ impl CryptographicProtocol for ResharingState {
                 Action::Wait => {
                     drop(protocol);
                     tracing::debug!("waiting");
-                    self.messages
+                    if let Err(err) = self
+                        .messages
                         .write()
                         .await
                         .send_encrypted(ctx.me(), ctx.sign_sk(), ctx.http_client())
-                        .await?;
+                        .await
+                    {
+                        tracing::warn!(?err, new = ?self.new_participants, old = ?self.old_participants, "resharing(wait): failed to send encrypted message");
+                    }
 
                     return Ok(NodeState::Resharing(self));
                 }
@@ -217,11 +233,15 @@ impl CryptographicProtocol for ResharingState {
                     tracing::debug!("successfully completed key reshare");
 
                     // Send any leftover messages.
-                    self.messages
+                    if let Err(err) = self
+                        .messages
                         .write()
                         .await
                         .send_encrypted(ctx.me(), ctx.sign_sk(), ctx.http_client())
-                        .await?;
+                        .await
+                    {
+                        tracing::warn!(?err, new = ?self.new_participants, old = ?self.old_participants, "resharing(return): failed to send encrypted message");
+                    }
 
                     return Ok(NodeState::WaitingForConsensus(WaitingForConsensusState {
                         epoch: self.old_epoch + 1,
@@ -245,9 +265,12 @@ impl CryptographicProtocol for RunningState {
     ) -> Result<NodeState, CryptographicError> {
         let mut messages = self.messages.write().await;
         // Try sending any leftover messages donated to RunningState.
-        messages
+        if let Err(err) = messages
             .send_encrypted(ctx.me(), ctx.sign_sk(), ctx.http_client())
-            .await?;
+            .await
+        {
+            tracing::warn!(?err, participants = ?self.participants, "running(pre): failed to send encrypted message");
+        }
 
         let mut triple_manager = self.triple_manager.write().await;
         if triple_manager.my_len() < 2 {
@@ -313,9 +336,12 @@ impl CryptographicProtocol for RunningState {
             .publish(ctx.rpc_client(), ctx.signer(), ctx.mpc_contract_id())
             .await?;
         drop(signature_manager);
-        messages
+        if let Err(err) = messages
             .send_encrypted(ctx.me(), ctx.sign_sk(), ctx.http_client())
-            .await?;
+            .await
+        {
+            tracing::warn!(?err, participants = ?self.participants, "running(post): failed to send encrypted message");
+        }
         drop(messages);
 
         Ok(NodeState::Running(self))

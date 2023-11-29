@@ -140,7 +140,6 @@ impl MessageQueue {
                     let _ = self.deque.pop_front();
                 }
                 Err(err) => {
-                    tracing::warn!(?err, "failed to send encrypted message");
                     return Err(err);
                 }
             }
