@@ -3964,6 +3964,7 @@ dependencies = [
  "axum-extra",
  "cait-sith",
  "clap 4.4.8",
+ "google-secretmanager1",
  "hex 0.4.3",
  "k256",
  "local-ip-address",

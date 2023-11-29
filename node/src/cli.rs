@@ -1,5 +1,5 @@
 use crate::protocol::{MpcSignProtocol, SignQueue};
-use crate::{indexer, web};
+use crate::{indexer, storage, web};
 use cait_sith::protocol::Participant;
 use clap::Parser;
 use local_ip_address::local_ip;
@@ -48,6 +48,9 @@ pub enum Cli {
         /// NEAR Lake Indexer options
         #[clap(flatten)]
         indexer_options: indexer::Options,
+        /// Storage options
+        #[clap(flatten)]
+        storage_options: storage::Options,
     },
 }
 
@@ -69,6 +72,7 @@ impl Cli {
                 cipher_pk,
                 cipher_sk,
                 indexer_options,
+                storage_options,
             } => {
                 let mut args = vec![
                     "start".to_string(),
@@ -90,6 +94,7 @@ impl Cli {
                     cipher_sk,
                 ];
                 args.extend(indexer_options.into_str_args());
+                args.extend(storage_options.into_str_args());
                 args
             }
         }
@@ -120,6 +125,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
             cipher_pk,
             cipher_sk,
             indexer_options,
+            storage_options,
         } => {
             let sign_queue = Arc::new(RwLock::new(SignQueue::new()));
             let a = indexer_options.clone();
@@ -134,6 +140,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                 .unwrap()
                 .block_on(async {
                     let (sender, receiver) = mpsc::channel(16384);
+                    let key_storage = storage::init(&storage_options).await?;
 
                     let my_ip = local_ip()?;
                     let my_address = Url::parse(&format!("http://{my_ip}:{web_port}"))?;
@@ -150,6 +157,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                         receiver,
                         sign_queue.clone(),
                         hpke::PublicKey::try_from_bytes(&hex::decode(cipher_pk)?).unwrap(),
+                        key_storage,
                     );
                     tracing::debug!("protocol initialized");
                     let protocol_handle = tokio::spawn(async move {

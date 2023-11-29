@@ -21,6 +21,7 @@ use crate::protocol::consensus::ConsensusProtocol;
 use crate::protocol::cryptography::CryptographicProtocol;
 use crate::protocol::message::{MessageHandler, MpcMessageQueue};
 use crate::rpc_client::{self};
+use crate::storage::SecretNodeStorageBox;
 use cait_sith::protocol::Participant;
 use near_crypto::InMemorySigner;
 use near_primitives::types::AccountId;
@@ -42,6 +43,7 @@ struct Ctx {
     sign_queue: Arc<RwLock<SignQueue>>,
     cipher_pk: hpke::PublicKey,
     sign_sk: near_crypto::SecretKey,
+    secret_storage: SecretNodeStorageBox,
 }
 
 impl ConsensusCtx for &Ctx {
@@ -80,9 +82,13 @@ impl ConsensusCtx for &Ctx {
     fn sign_pk(&self) -> near_crypto::PublicKey {
         self.sign_sk.public_key()
     }
+
+    fn secret_storage(&self) -> &SecretNodeStorageBox {
+        &self.secret_storage
+    }
 }
 
-impl CryptographicCtx for &Ctx {
+impl CryptographicCtx for &mut Ctx {
     fn me(&self) -> Participant {
         self.me
     }
@@ -105,6 +111,10 @@ impl CryptographicCtx for &Ctx {
 
     fn sign_sk(&self) -> &near_crypto::SecretKey {
         &self.sign_sk
+    }
+
+    fn secret_storage(&mut self) -> &mut SecretNodeStorageBox {
+        &mut self.secret_storage
     }
 }
 
@@ -131,6 +141,7 @@ impl MpcSignProtocol {
         receiver: mpsc::Receiver<MpcMessage>,
         sign_queue: Arc<RwLock<SignQueue>>,
         cipher_pk: hpke::PublicKey,
+        secret_storage: SecretNodeStorageBox,
     ) -> (Self, Arc<RwLock<NodeState>>) {
         let state = Arc::new(RwLock::new(NodeState::Starting));
         let ctx = Ctx {
@@ -143,6 +154,7 @@ impl MpcSignProtocol {
             cipher_pk,
             sign_sk: signer.secret_key.clone(),
             signer,
+            secret_storage,
         };
         let protocol = MpcSignProtocol {
             ctx,
@@ -193,7 +205,7 @@ impl MpcSignProtocol {
                 let guard = self.state.read().await;
                 guard.clone()
             };
-            let state = match state.progress(&self.ctx).await {
+            let state = match state.progress(&mut self.ctx).await {
                 Ok(state) => state,
                 Err(err) => {
                     tracing::info!("protocol unable to progress: {err:?}");

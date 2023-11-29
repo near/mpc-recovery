@@ -3,8 +3,9 @@ use std::sync::PoisonError;
 use super::state::{GeneratingState, NodeState, ResharingState, RunningState};
 use crate::http_client::{self, SendError};
 use crate::protocol::message::{GeneratingMessage, ResharingMessage};
-use crate::protocol::state::WaitingForConsensusState;
+use crate::protocol::state::{PersistentNodeData, WaitingForConsensusState};
 use crate::protocol::MpcMessage;
+use crate::storage::{SecretNodeStorageBox, SecretStorageError};
 use async_trait::async_trait;
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use k256::elliptic_curve::group::GroupEncoding;
@@ -18,6 +19,7 @@ pub trait CryptographicCtx {
     fn signer(&self) -> &InMemorySigner;
     fn mpc_contract_id(&self) -> &AccountId;
     fn sign_sk(&self) -> &near_crypto::SecretKey;
+    fn secret_storage(&mut self) -> &mut SecretNodeStorageBox;
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -40,6 +42,8 @@ pub enum CryptographicError {
     Encryption(String),
     #[error("more than one writing to state: {0}")]
     InvalidStateHandle(String),
+    #[error("secret storage error: {0}")]
+    SecretStorageError(#[from] SecretStorageError),
 }
 
 impl<T> From<PoisonError<T>> for CryptographicError {
@@ -61,7 +65,7 @@ pub trait CryptographicProtocol {
 impl CryptographicProtocol for GeneratingState {
     async fn progress<C: CryptographicCtx + Send + Sync>(
         mut self,
-        ctx: C,
+        mut ctx: C,
     ) -> Result<NodeState, CryptographicError> {
         tracing::info!("progressing key generation");
         let mut protocol = self.protocol.write().await;
@@ -121,6 +125,13 @@ impl CryptographicProtocol for GeneratingState {
                         public_key = hex::encode(r.public_key.to_bytes()),
                         "successfully completed key generation"
                     );
+                    ctx.secret_storage()
+                        .store(&PersistentNodeData {
+                            epoch: 0,
+                            private_share: r.private_share,
+                            public_key: r.public_key,
+                        })
+                        .await?;
                     return Ok(NodeState::WaitingForConsensus(WaitingForConsensusState {
                         epoch: 0,
                         participants: self.participants,

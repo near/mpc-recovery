@@ -8,7 +8,8 @@ use crate::protocol::presignature::PresignatureManager;
 use crate::protocol::signature::SignatureManager;
 use crate::protocol::state::{GeneratingState, ResharingState};
 use crate::protocol::triple::TripleManager;
-use crate::types::PrivateKeyShare;
+use crate::storage::{SecretNodeStorageBox, SecretStorageError};
+use crate::types::SecretKeyShare;
 use crate::util::AffinePointExt;
 use crate::{http_client, rpc_client};
 use async_trait::async_trait;
@@ -33,6 +34,7 @@ pub trait ConsensusCtx {
     fn sign_queue(&self) -> Arc<RwLock<SignQueue>>;
     fn cipher_pk(&self) -> &hpke::PublicKey;
     fn sign_pk(&self) -> near_crypto::PublicKey;
+    fn secret_storage(&self) -> &SecretNodeStorageBox;
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -51,6 +53,8 @@ pub enum ConsensusError {
     HasBeenKicked,
     #[error("cait-sith initialization error: {0}")]
     CaitSithInitializationError(#[from] InitializationError),
+    #[error("secret storage error: {0}")]
+    SecretStorageError(#[from] SecretStorageError),
 }
 
 #[async_trait]
@@ -584,8 +588,8 @@ impl ConsensusProtocol for NodeState {
     ) -> Result<NodeState, ConsensusError> {
         match self {
             NodeState::Starting => {
-                // TODO: Load from persistent storage
-                Ok(NodeState::Started(StartedState(None)))
+                let node_data = ctx.secret_storage().load().await?;
+                Ok(NodeState::Started(StartedState(node_data)))
             }
             NodeState::Started(state) => state.advance(ctx, contract_state).await,
             NodeState::Generating(state) => state.advance(ctx, contract_state).await,
@@ -598,7 +602,7 @@ impl ConsensusProtocol for NodeState {
 }
 
 fn start_resharing<C: ConsensusCtx>(
-    private_share: Option<PrivateKeyShare>,
+    private_share: Option<SecretKeyShare>,
     ctx: C,
     contract_state: ResharingContractState,
 ) -> Result<NodeState, ConsensusError> {

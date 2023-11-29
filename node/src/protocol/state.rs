@@ -3,16 +3,17 @@ use super::signature::SignatureManager;
 use super::triple::TripleManager;
 use super::SignQueue;
 use crate::protocol::ParticipantInfo;
-use crate::types::{KeygenProtocol, PrivateKeyShare, PublicKey, ReshareProtocol};
+use crate::types::{KeygenProtocol, PublicKey, ReshareProtocol, SecretKeyShare};
 use cait_sith::protocol::Participant;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct PersistentNodeData {
     pub epoch: u64,
-    pub private_share: PrivateKeyShare,
+    pub private_share: SecretKeyShare,
     pub public_key: PublicKey,
 }
 
@@ -31,7 +32,7 @@ pub struct WaitingForConsensusState {
     pub epoch: u64,
     pub participants: BTreeMap<Participant, ParticipantInfo>,
     pub threshold: usize,
-    pub private_share: PrivateKeyShare,
+    pub private_share: SecretKeyShare,
     pub public_key: PublicKey,
 }
 
@@ -40,7 +41,7 @@ pub struct RunningState {
     pub epoch: u64,
     pub participants: BTreeMap<Participant, ParticipantInfo>,
     pub threshold: usize,
-    pub private_share: PrivateKeyShare,
+    pub private_share: SecretKeyShare,
     pub public_key: PublicKey,
     pub sign_queue: Arc<RwLock<SignQueue>>,
     pub triple_manager: Arc<RwLock<TripleManager>>,
