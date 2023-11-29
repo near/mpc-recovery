@@ -101,18 +101,6 @@ resource "google_secret_manager_secret_iam_member" "fast_auth_partners_secret_ac
   member    = "serviceAccount:${google_service_account.service_account.email}"
 }
 
-module "mpc-signer-lb" {
-
-  count         = length(var.signer_configs)
-  source        = "../modules/internal_cloudrun_lb"
-  name          = "mpc-${var.env}-signer-${count.index}"
-  network_id    = data.google_compute_network.dev_network.id
-  subnetwork_id = data.google_compute_subnetwork.dev_subnetwork.id
-  project_id    = var.project
-  region        = "us-east1"
-  service_name  = "mpc-recovery-signer-${count.index}-${var.env}"
-}
-
 module "mpc-leader-lb" {
   source        = "../modules/internal_cloudrun_lb"
   name          = "mpc-${var.env}-leader"
