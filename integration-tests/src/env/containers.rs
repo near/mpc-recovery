@@ -608,7 +608,7 @@ impl<'a> LakeIndexer<'a> {
 
         let image = GenericImage::new(
             "ghcr.io/near/near-lake-indexer",
-            "e6519c922435f3d18b5f2ddac5d1ec171ef4dd6b",
+            "18ef24922fd7b5b8985ea793fdf7a939e57216ba",
         )
         .with_env_var("AWS_ACCESS_KEY_ID", "FAKE_LOCALSTACK_KEY_ID")
         .with_env_var("AWS_SECRET_ACCESS_KEY", "FAKE_LOCALSTACK_ACCESS_KEY")
