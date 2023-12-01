@@ -8,6 +8,7 @@ mod triple;
 pub mod message;
 pub mod state;
 
+use cait_sith::protocol::Participant;
 pub use contract::{ParticipantInfo, ProtocolState};
 pub use message::MpcMessage;
 pub use signature::SignQueue;
@@ -21,7 +22,6 @@ use crate::protocol::consensus::ConsensusProtocol;
 use crate::protocol::cryptography::CryptographicProtocol;
 use crate::protocol::message::{MessageHandler, MpcMessageQueue};
 use crate::rpc_client::{self};
-use cait_sith::protocol::Participant;
 use near_crypto::InMemorySigner;
 use near_primitives::types::AccountId;
 use reqwest::IntoUrl;
@@ -33,8 +33,8 @@ use url::Url;
 use mpc_keys::hpke;
 
 struct Ctx {
-    me: Participant,
     my_address: Url,
+    account_id: AccountId,
     mpc_contract_id: AccountId,
     signer: InMemorySigner,
     rpc_client: near_fetch::Client,
@@ -46,7 +46,7 @@ struct Ctx {
 
 impl ConsensusCtx for &Ctx {
     fn me(&self) -> Participant {
-        self.me
+        &self.account_id
     }
 
     fn http_client(&self) -> &reqwest::Client {
@@ -83,8 +83,8 @@ impl ConsensusCtx for &Ctx {
 }
 
 impl CryptographicCtx for &Ctx {
-    fn me(&self) -> Participant {
-        self.me
+    fn me(&self) -> &AccountId {
+        &self.account_id
     }
 
     fn http_client(&self) -> &reqwest::Client {
@@ -109,8 +109,8 @@ impl CryptographicCtx for &Ctx {
 }
 
 impl MessageCtx for &Ctx {
-    fn me(&self) -> Participant {
-        self.me
+    fn my_near_acc_id(&self) -> AccountId {
+        self.account_id
     }
 }
 
@@ -123,9 +123,9 @@ pub struct MpcSignProtocol {
 impl MpcSignProtocol {
     #![allow(clippy::too_many_arguments)]
     pub fn init<U: IntoUrl>(
-        me: Participant,
         my_address: U,
         mpc_contract_id: AccountId,
+        account_id: AccountId,
         rpc_client: near_fetch::Client,
         signer: InMemorySigner,
         receiver: mpsc::Receiver<MpcMessage>,
@@ -134,8 +134,8 @@ impl MpcSignProtocol {
     ) -> (Self, Arc<RwLock<NodeState>>) {
         let state = Arc::new(RwLock::new(NodeState::Starting));
         let ctx = Ctx {
-            me,
             my_address: my_address.into_url().unwrap(),
+            account_id,
             mpc_contract_id,
             rpc_client,
             http_client: reqwest::Client::new(),
@@ -153,7 +153,7 @@ impl MpcSignProtocol {
     }
 
     pub async fn run(mut self) -> anyhow::Result<()> {
-        let _span = tracing::info_span!("running", me = u32::from(self.ctx.me));
+        let _span = tracing::info_span!("running", me = u32::from(self.ctx));
         let mut queue = MpcMessageQueue::default();
         loop {
             tracing::debug!("trying to advance mpc recovery protocol");

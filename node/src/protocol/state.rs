@@ -1,11 +1,11 @@
+use super::contract::Participants;
 use super::presignature::PresignatureManager;
 use super::signature::SignatureManager;
 use super::triple::TripleManager;
 use super::SignQueue;
 use crate::protocol::ParticipantInfo;
 use crate::types::{KeygenProtocol, PrivateKeyShare, PublicKey, ReshareProtocol};
-use cait_sith::protocol::Participant;
-use std::collections::BTreeMap;
+use near_primitives::types::AccountId;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -21,7 +21,7 @@ pub struct StartedState(pub Option<PersistentNodeData>);
 
 #[derive(Clone)]
 pub struct GeneratingState {
-    pub participants: BTreeMap<Participant, ParticipantInfo>,
+    pub participants: Participants,
     pub threshold: usize,
     pub protocol: KeygenProtocol,
 }
@@ -29,7 +29,7 @@ pub struct GeneratingState {
 #[derive(Clone)]
 pub struct WaitingForConsensusState {
     pub epoch: u64,
-    pub participants: BTreeMap<Participant, ParticipantInfo>,
+    pub participants: Participants,
     pub threshold: usize,
     pub private_share: PrivateKeyShare,
     pub public_key: PublicKey,
@@ -38,7 +38,7 @@ pub struct WaitingForConsensusState {
 #[derive(Clone)]
 pub struct RunningState {
     pub epoch: u64,
-    pub participants: BTreeMap<Participant, ParticipantInfo>,
+    pub participants: Participants,
     pub threshold: usize,
     pub private_share: PrivateKeyShare,
     pub public_key: PublicKey,
@@ -51,8 +51,8 @@ pub struct RunningState {
 #[derive(Clone)]
 pub struct ResharingState {
     pub old_epoch: u64,
-    pub old_participants: BTreeMap<Participant, ParticipantInfo>,
-    pub new_participants: BTreeMap<Participant, ParticipantInfo>,
+    pub old_participants: Participants,
+    pub new_participants: Participants,
     pub threshold: usize,
     pub public_key: PublicKey,
     pub protocol: ReshareProtocol,
@@ -77,15 +77,15 @@ pub enum NodeState {
 }
 
 impl NodeState {
-    pub fn fetch_participant(&self, p: Participant) -> Option<ParticipantInfo> {
+    pub fn fetch_participant(&self, account_id: AccountId) -> Option<ParticipantInfo> {
         let participants = match self {
             NodeState::Running(state) => &state.participants,
             NodeState::Generating(state) => &state.participants,
             NodeState::WaitingForConsensus(state) => &state.participants,
             NodeState::Resharing(state) => {
-                if let Some(info) = state.new_participants.get(&p) {
+                if let Some(info) = state.new_participants.get(&account_id) {
                     return Some(info.clone());
-                } else if let Some(info) = state.old_participants.get(&p) {
+                } else if let Some(info) = state.old_participants.get(&account_id) {
                     return Some(info.clone());
                 } else {
                     return None;
@@ -94,6 +94,6 @@ impl NodeState {
             _ => return None,
         };
 
-        participants.get(&p).cloned()
+        participants.get(&account_id).cloned()
     }
 }

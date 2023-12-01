@@ -50,17 +50,16 @@ impl Nodes<'_> {
 
     pub async fn add_node(
         &mut self,
-        node_id: u32,
         account: &AccountId,
         account_sk: &near_workspaces::types::SecretKey,
     ) -> anyhow::Result<()> {
         tracing::info!(%account, "adding one more node");
         match self {
             Nodes::Local { ctx, nodes } => {
-                nodes.push(local::Node::run(ctx, node_id, account, account_sk).await?)
+                nodes.push(local::Node::run(ctx, account, account_sk).await?)
             }
             Nodes::Docker { ctx, nodes } => {
-                nodes.push(containers::Node::run(ctx, node_id, account, account_sk).await?)
+                nodes.push(containers::Node::run(ctx, account, account_sk).await?)
             }
         }
 
@@ -125,7 +124,7 @@ pub async fn docker(nodes: usize, docker_client: &DockerClient) -> anyhow::Resul
         .collect::<Result<Vec<_>, _>>()?;
     let mut node_futures = Vec::new();
     for (i, account) in accounts.iter().enumerate() {
-        let node = containers::Node::run(&ctx, i as u32, account.id(), account.secret_key());
+        let node = containers::Node::run(&ctx, account.id(), account.secret_key());
         node_futures.push(node);
     }
     let nodes = futures::future::join_all(node_futures)
@@ -172,12 +171,7 @@ pub async fn host(nodes: usize, docker_client: &DockerClient) -> anyhow::Result<
         .collect::<Result<Vec<_>, _>>()?;
     let mut node_futures = Vec::with_capacity(nodes);
     for (i, account) in accounts.iter().enumerate().take(nodes) {
-        node_futures.push(local::Node::run(
-            &ctx,
-            i as u32,
-            account.id(),
-            account.secret_key(),
-        ));
+        node_futures.push(local::Node::run(&ctx, account.id(), account.secret_key()));
     }
     let nodes = futures::future::join_all(node_futures)
         .await

@@ -6,13 +6,13 @@ use crate::protocol::message::{GeneratingMessage, ResharingMessage};
 use crate::protocol::state::WaitingForConsensusState;
 use crate::protocol::MpcMessage;
 use async_trait::async_trait;
-use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
+use cait_sith::protocol::{Action, InitializationError, ProtocolError, Participant};
 use k256::elliptic_curve::group::GroupEncoding;
 use near_crypto::InMemorySigner;
 use near_primitives::types::AccountId;
 
 pub trait CryptographicCtx {
-    fn me(&self) -> Participant;
+    fn my_near_acc_id(&self) -> &AccountId;
     fn http_client(&self) -> &reqwest::Client;
     fn rpc_client(&self) -> &near_fetch::Client;
     fn signer(&self) -> &InMemorySigner;
@@ -25,7 +25,7 @@ pub enum CryptographicError {
     #[error("failed to send a message: {0}")]
     SendError(#[from] SendError),
     #[error("unknown participant: {0:?}")]
-    UnknownParticipant(Participant),
+    UnknownParticipant(near_sdk::AccountId),
     #[error("rpc error: {0}")]
     RpcError(#[from] near_fetch::Error),
     #[error("cait-sith initialization error: {0}")]
@@ -75,8 +75,8 @@ impl CryptographicProtocol for GeneratingState {
                 }
                 Action::SendMany(m) => {
                     tracing::debug!("sending a message to many participants");
-                    for (p, info) in &self.participants {
-                        if p == &ctx.me() {
+                    for (p, info) in self.participants.iter() {
+                        if p == &self.participants.find(ctx.my_near_acc_id()) {
                             // Skip yourself, cait-sith never sends messages to oneself
                             continue;
                         }
