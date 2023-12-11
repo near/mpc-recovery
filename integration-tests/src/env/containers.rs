@@ -553,8 +553,16 @@ impl<'a> LocalStack<'a> {
             .await?;
 
         let s3_address = format!("http://{}:{}", address, Self::S3_CONTAINER_PORT);
-        let s3_host_port = container.get_host_port_ipv6(Self::S3_CONTAINER_PORT);
-        let s3_host_address = format!("http://[::1]:{s3_host_port}");
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        let s3_host_address = {
+            let s3_host_port = container.get_host_port_ipv4(Self::S3_CONTAINER_PORT);
+            format!("http://127.0.0.1:{s3_host_port}")
+        };
+        #[cfg(target_arch = "x86_64")]
+        let s3_host_address = {
+            let s3_host_port = container.get_host_port_ipv6(Self::S3_CONTAINER_PORT);
+            format!("http://[::1]:{s3_host_port}")
+        };
 
         tracing::info!(
             s3_address,
@@ -600,7 +608,7 @@ impl<'a> LakeIndexer<'a> {
 
         let image = GenericImage::new(
             "ghcr.io/near/near-lake-indexer",
-            "e6519c922435f3d18b5f2ddac5d1ec171ef4dd6b",
+            "18ef24922fd7b5b8985ea793fdf7a939e57216ba",
         )
         .with_env_var("AWS_ACCESS_KEY_ID", "FAKE_LOCALSTACK_KEY_ID")
         .with_env_var("AWS_SECRET_ACCESS_KEY", "FAKE_LOCALSTACK_ACCESS_KEY")
