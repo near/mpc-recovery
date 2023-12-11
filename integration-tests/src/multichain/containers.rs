@@ -53,6 +53,7 @@ impl<'a> Node<'a> {
                 s3_url: Some(ctx.localstack.s3_host_address.clone()),
                 start_block_height: 0,
             },
+            my_address: None,
             storage_options: mpc_recovery_node::storage::Options {
                 gcp_project_id: None,
                 sk_share_secret_id: None,

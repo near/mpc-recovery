@@ -373,10 +373,14 @@ where
             .decrypt(&encrypted, SignedMessage::<T>::ASSOCIATED_DATA)
             .map_err(|err| CryptographicError::Encryption(err.to_string()))?;
         let SignedMessage::<Vec<u8>> { msg, sig, from } = serde_json::from_slice(&message)?;
-        let Some(sender) = protocol_state.read().await.fetch_participant(from) else {
-            return Err(CryptographicError::UnknownParticipant(from));
-        };
-        if !sig.verify(&msg, &sender.sign_pk) {
+        if !sig.verify(
+            &msg,
+            &protocol_state
+                .read()
+                .await
+                .fetch_participant(&from)?
+                .sign_pk,
+        ) {
             return Err(CryptographicError::Encryption(
                 "invalid signature while verifying authenticity of encrypted ".to_string(),
             ));

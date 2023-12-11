@@ -77,7 +77,8 @@ pub struct MpcContract {
 
 #[near_bindgen]
 impl MpcContract {
-    #[init]
+    // TODO: only add ignore_state for dev environments
+    #[init(ignore_state)]
     pub fn init(threshold: usize, participants: BTreeMap<AccountId, ParticipantInfo>) -> Self {
         MpcContract {
             protocol_state: ProtocolContractState::Initializing(InitializingContractState {

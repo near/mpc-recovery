@@ -29,7 +29,7 @@ jobs:
       # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
       - name: Terraform Init
         id: init
-        run: terraform init -backend-config backend-config-dev.tfvars
+        run: terraform init
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_DEV }}
 
