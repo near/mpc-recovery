@@ -53,6 +53,7 @@ impl<'a> Node<'a> {
                 s3_url: Some(ctx.localstack.s3_host_address.clone()),
                 start_block_height: 0,
             },
+            my_address: None,
         }
         .into_str_args();
         let image: GenericImage = GenericImage::new("near/mpc-recovery-node", "latest")

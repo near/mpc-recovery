@@ -8,7 +8,9 @@ pub mod consensus;
 pub mod message;
 pub mod state;
 
+pub use consensus::ConsensusError;
 pub use contract::{ParticipantInfo, ProtocolState};
+pub use cryptography::CryptographicError;
 pub use message::MpcMessage;
 pub use signature::SignQueue;
 pub use signature::SignRequest;

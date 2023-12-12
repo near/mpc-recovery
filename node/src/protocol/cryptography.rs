@@ -104,20 +104,14 @@ impl CryptographicProtocol for GeneratingState {
                 }
                 Action::SendPrivate(to, m) => {
                     tracing::debug!("sending a private message to {to:?}");
-                    match self.participants.get(&to) {
-                        Some(info) => {
-                            self.messages.write().await.push(
-                                info.clone(),
-                                MpcMessage::Generating(GeneratingMessage {
-                                    from: ctx.me(),
-                                    data: m.clone(),
-                                }),
-                            );
-                        }
-                        None => {
-                            return Err(CryptographicError::UnknownParticipant(to));
-                        }
-                    }
+                    let info = self.fetch_participant(&to)?;
+                    self.messages.write().await.push(
+                        info.clone(),
+                        MpcMessage::Generating(GeneratingMessage {
+                            from: ctx.me(),
+                            data: m.clone(),
+                        }),
+                    );
                 }
                 Action::Return(r) => {
                     tracing::info!(
@@ -273,23 +267,20 @@ impl CryptographicProtocol for RunningState {
         }
 
         let mut triple_manager = self.triple_manager.write().await;
-        if triple_manager.my_len() < 2 {
+        if triple_manager.my_len() < 2 && triple_manager.potential_len() < 10 {
             triple_manager.generate()?;
         }
         for (p, msg) in triple_manager.poke()? {
-            let info = self
-                .participants
-                .get(&p)
-                .ok_or(CryptographicError::UnknownParticipant(p))?;
+            let info = self.fetch_participant(&p)?;
             messages.push(info.clone(), MpcMessage::Triple(msg));
         }
 
         let mut presignature_manager = self.presignature_manager.write().await;
-        if presignature_manager.potential_len() < 2 {
+        if presignature_manager.my_len() < 2 && presignature_manager.potential_len() < 10 {
             // To ensure there is no contention between different nodes we are only using triples
             // that we proposed. This way in a non-BFT environment we are guaranteed to never try
             // to use the same triple as any other node.
-            if let Some((triple0, triple1)) = triple_manager.take_mine_twice() {
+            if let Some((triple0, triple1)) = triple_manager.take_two_mine() {
                 presignature_manager.generate(
                     triple0,
                     triple1,
@@ -302,7 +293,7 @@ impl CryptographicProtocol for RunningState {
         }
         drop(triple_manager);
         for (p, msg) in presignature_manager.poke()? {
-            let info = self.participants.get(&p).unwrap();
+            let info = self.fetch_participant(&p)?;
             messages.push(info.clone(), MpcMessage::Presignature(msg));
         }
 
