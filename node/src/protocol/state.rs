@@ -98,7 +98,17 @@ impl ResharingState {
 
 #[derive(Clone)]
 pub struct JoiningState {
+    pub participants: BTreeMap<Participant, ParticipantInfo>,
     pub public_key: PublicKey,
+}
+
+impl JoiningState {
+    pub fn fetch_participant(
+        &self,
+        p: &Participant,
+    ) -> Result<&ParticipantInfo, CryptographicError> {
+        fetch_participant(p, &self.participants)
+    }
 }
 
 #[derive(Clone, Default)]
@@ -124,6 +134,7 @@ impl NodeState {
             NodeState::Generating(state) => state.fetch_participant(p),
             NodeState::WaitingForConsensus(state) => state.fetch_participant(p),
             NodeState::Resharing(state) => state.fetch_participant(p),
+            NodeState::Joining(state) => state.fetch_participant(p),
             _ => Err(CryptographicError::UnknownParticipant(*p)),
         }
     }
