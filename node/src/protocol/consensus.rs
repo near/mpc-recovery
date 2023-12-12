@@ -87,7 +87,10 @@ impl ConsensusProtocol for StartedState {
                                 epoch,
                                 contract_state.epoch
                             );
-                            Ok(NodeState::Joining(JoiningState { public_key }))
+                            Ok(NodeState::Joining(JoiningState {
+                                participants: contract_state.participants,
+                                public_key,
+                            }))
                         }
                         Ordering::Less => Err(ConsensusError::EpochRollback),
                         Ordering::Equal => {
@@ -131,7 +134,10 @@ impl ConsensusProtocol for StartedState {
                                     )),
                                 }))
                             } else {
-                                Ok(NodeState::Joining(JoiningState { public_key }))
+                                Ok(NodeState::Joining(JoiningState {
+                                    participants: contract_state.participants,
+                                    public_key,
+                                }))
                             }
                         }
                     }
@@ -147,7 +153,10 @@ impl ConsensusProtocol for StartedState {
                                 epoch,
                                 contract_state.old_epoch
                             );
-                            Ok(NodeState::Joining(JoiningState { public_key }))
+                            Ok(NodeState::Joining(JoiningState {
+                                participants: contract_state.old_participants,
+                                public_key,
+                            }))
                         }
                         Ordering::Less => Err(ConsensusError::EpochRollback),
                         Ordering::Equal => {
@@ -183,9 +192,11 @@ impl ConsensusProtocol for StartedState {
                     }
                 }
                 ProtocolState::Running(contract_state) => Ok(NodeState::Joining(JoiningState {
+                    participants: contract_state.participants,
                     public_key: contract_state.public_key,
                 })),
                 ProtocolState::Resharing(contract_state) => Ok(NodeState::Joining(JoiningState {
+                    participants: contract_state.old_participants,
                     public_key: contract_state.public_key,
                 })),
             },
@@ -209,6 +220,7 @@ impl ConsensusProtocol for GeneratingState {
                 if contract_state.epoch > 0 {
                     tracing::warn!("contract has already changed epochs, trying to rejoin as a new participant");
                     return Ok(NodeState::Joining(JoiningState {
+                        participants: contract_state.participants,
                         public_key: contract_state.public_key,
                     }));
                 }
@@ -225,6 +237,7 @@ impl ConsensusProtocol for GeneratingState {
                 if contract_state.old_epoch > 0 {
                     tracing::warn!("contract has already changed epochs, trying to rejoin as a new participant");
                     return Ok(NodeState::Joining(JoiningState {
+                        participants: contract_state.old_participants,
                         public_key: contract_state.public_key,
                     }));
                 }
@@ -278,6 +291,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                             contract_state.epoch
                         );
                     Ok(NodeState::Joining(JoiningState {
+                        participants: contract_state.participants,
                         public_key: contract_state.public_key,
                     }))
                 }
@@ -345,6 +359,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                             contract_state.old_epoch
                         );
                         Ok(NodeState::Joining(JoiningState {
+                            participants: contract_state.old_participants,
                             public_key: contract_state.public_key,
                         }))
                     }
@@ -399,6 +414,7 @@ impl ConsensusProtocol for RunningState {
                             contract_state.epoch
                         );
                     Ok(NodeState::Joining(JoiningState {
+                        participants: contract_state.participants,
                         public_key: contract_state.public_key,
                     }))
                 }
@@ -426,6 +442,7 @@ impl ConsensusProtocol for RunningState {
                             contract_state.old_epoch
                         );
                         Ok(NodeState::Joining(JoiningState {
+                            participants: contract_state.old_participants,
                             public_key: contract_state.public_key,
                         }))
                     }
@@ -470,6 +487,7 @@ impl ConsensusProtocol for ResharingState {
                             contract_state.epoch
                         );
                         Ok(NodeState::Joining(JoiningState {
+                            participants: contract_state.participants,
                             public_key: contract_state.public_key,
                         }))
                     }
@@ -498,6 +516,7 @@ impl ConsensusProtocol for ResharingState {
                             contract_state.old_epoch
                         );
                         Ok(NodeState::Joining(JoiningState {
+                            participants: contract_state.old_participants,
                             public_key: contract_state.public_key,
                         }))
                     }
@@ -571,7 +590,7 @@ impl ConsensusProtocol for JoiningState {
                             ctx.mpc_contract_id(),
                             vec![Action::FunctionCall(FunctionCallAction {
                                 method_name: "join".to_string(),
-                                args: serde_json::to_vec(&args).unwrap(),
+                                args: args.to_string().into_bytes(),
                                 gas: 300_000_000_000_000,
                                 deposit: 0,
                             })],

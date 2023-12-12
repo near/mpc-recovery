@@ -39,6 +39,7 @@ impl Node {
                 s3_url: Some(ctx.localstack.s3_host_address.clone()),
                 start_block_height: 0,
             },
+            my_address: None,
         };
 
         let mpc_node_id = format!("multichain/{node_id}");

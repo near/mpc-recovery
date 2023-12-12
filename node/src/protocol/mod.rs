@@ -9,7 +9,9 @@ pub mod message;
 pub mod state;
 
 use cait_sith::protocol::Participant;
+pub use consensus::ConsensusError;
 pub use contract::{ParticipantInfo, ProtocolState};
+pub use cryptography::CryptographicError;
 pub use message::MpcMessage;
 pub use signature::SignQueue;
 pub use signature::SignRequest;
@@ -189,13 +191,28 @@ impl MpcSignProtocol {
                 }
             }
 
-            let mut state = {
-                let guard = self.state.write().await;
+            let state = {
+                let guard = self.state.read().await;
                 guard.clone()
             };
-            state = state.progress(&self.ctx).await?;
-            state = state.advance(&self.ctx, contract_state).await?;
-            state.handle(&self.ctx, &mut queue).await?;
+            let state = match state.progress(&self.ctx).await {
+                Ok(state) => state,
+                Err(err) => {
+                    tracing::info!("protocol unable to progress: {err:?}");
+                    continue;
+                }
+            };
+            let mut state = match state.advance(&self.ctx, contract_state).await {
+                Ok(state) => state,
+                Err(err) => {
+                    tracing::info!("protocol unable to advance: {err:?}");
+                    continue;
+                }
+            };
+            if let Err(err) = state.handle(&self.ctx, &mut queue).await {
+                tracing::info!("protocol unable to handle messages: {err:?}");
+                continue;
+            }
 
             let mut guard = self.state.write().await;
             *guard = state;

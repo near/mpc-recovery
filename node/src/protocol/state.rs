@@ -1,4 +1,5 @@
 use super::contract::Participants;
+use super::cryptography::CryptographicError;
 use super::presignature::PresignatureManager;
 use super::signature::SignatureManager;
 use super::triple::TripleManager;
@@ -26,6 +27,15 @@ pub struct GeneratingState {
     pub protocol: KeygenProtocol,
 }
 
+impl GeneratingState {
+    pub fn fetch_participant(
+        &self,
+        p: &Participant,
+    ) -> Result<&ParticipantInfo, CryptographicError> {
+        fetch_participant(p, &self.participants)
+    }
+}
+
 #[derive(Clone)]
 pub struct WaitingForConsensusState {
     pub epoch: u64,
@@ -33,6 +43,15 @@ pub struct WaitingForConsensusState {
     pub threshold: usize,
     pub private_share: PrivateKeyShare,
     pub public_key: PublicKey,
+}
+
+impl WaitingForConsensusState {
+    pub fn fetch_participant(
+        &self,
+        p: &Participant,
+    ) -> Result<&ParticipantInfo, CryptographicError> {
+        fetch_participant(p, &self.participants)
+    }
 }
 
 #[derive(Clone)]
@@ -48,6 +67,15 @@ pub struct RunningState {
     pub signature_manager: Arc<RwLock<SignatureManager>>,
 }
 
+impl RunningState {
+    pub fn fetch_participant(
+        &self,
+        p: &Participant,
+    ) -> Result<&ParticipantInfo, CryptographicError> {
+        fetch_participant(p, &self.participants)
+    }
+}
+
 #[derive(Clone)]
 pub struct ResharingState {
     pub old_epoch: u64,
@@ -58,9 +86,29 @@ pub struct ResharingState {
     pub protocol: ReshareProtocol,
 }
 
+impl ResharingState {
+    pub fn fetch_participant(
+        &self,
+        p: &Participant,
+    ) -> Result<&ParticipantInfo, CryptographicError> {
+        fetch_participant(p, &self.new_participants)
+            .or_else(|_| fetch_participant(p, &self.old_participants))
+    }
+}
+
 #[derive(Clone)]
 pub struct JoiningState {
+    pub participants: BTreeMap<Participant, ParticipantInfo>,
     pub public_key: PublicKey,
+}
+
+impl JoiningState {
+    pub fn fetch_participant(
+        &self,
+        p: &Participant,
+    ) -> Result<&ParticipantInfo, CryptographicError> {
+        fetch_participant(p, &self.participants)
+    }
 }
 
 #[derive(Clone, Default)]
@@ -77,23 +125,26 @@ pub enum NodeState {
 }
 
 impl NodeState {
-    pub fn fetch_participant(&self, account_id: AccountId) -> Option<ParticipantInfo> {
-        let participants = match self {
-            NodeState::Running(state) => &state.participants,
-            NodeState::Generating(state) => &state.participants,
-            NodeState::WaitingForConsensus(state) => &state.participants,
-            NodeState::Resharing(state) => {
-                if let Some(info) = state.new_participants.get(&account_id) {
-                    return Some(info.clone());
-                } else if let Some(info) = state.old_participants.get(&account_id) {
-                    return Some(info.clone());
-                } else {
-                    return None;
-                }
-            }
-            _ => return None,
-        };
-
-        participants.get(&account_id).cloned()
+    pub fn fetch_participant(
+        &self,
+        p: &Participant,
+    ) -> Result<&ParticipantInfo, CryptographicError> {
+        match self {
+            NodeState::Running(state) => state.fetch_participant(p),
+            NodeState::Generating(state) => state.fetch_participant(p),
+            NodeState::WaitingForConsensus(state) => state.fetch_participant(p),
+            NodeState::Resharing(state) => state.fetch_participant(p),
+            NodeState::Joining(state) => state.fetch_participant(p),
+            _ => Err(CryptographicError::UnknownParticipant(*p)),
+        }
     }
+}
+
+fn fetch_participant<'a>(
+    p: &Participant,
+    participants: &'a BTreeMap<Participant, ParticipantInfo>,
+) -> Result<&'a ParticipantInfo, CryptographicError> {
+    participants
+        .get(p)
+        .ok_or_else(|| CryptographicError::UnknownParticipant(*p))
 }

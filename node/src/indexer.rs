@@ -31,7 +31,11 @@ pub struct Options {
 
     /// The block height to start indexing from.
     // Defaults to the latest block on 2023-11-14 07:40:22 AM UTC
-    #[clap(long, default_value = "145964826")]
+    #[clap(
+        long,
+        env("MPC_RECOVERY_INDEXER_START_BLOCK_HEIGHT"),
+        default_value = "145964826"
+    )]
     pub start_block_height: u64,
 }
 
@@ -101,6 +105,9 @@ async fn handle_block(
                 }
             }
         }
+    }
+    if block.block_height() % 1000 == 0 {
+        tracing::info!(block_height = block.block_height(), "indexed block")
     }
     Ok(())
 }
