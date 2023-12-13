@@ -1,8 +1,10 @@
 use crate::protocol::message::SignedMessage;
 use crate::protocol::MpcMessage;
+use crate::protocol::ParticipantInfo;
 use cait_sith::protocol::Participant;
 use mpc_keys::hpke;
 use reqwest::{Client, IntoUrl};
+use std::collections::VecDeque;
 use std::str::Utf8Error;
 use tokio_retry::strategy::{jitter, ExponentialBackoff};
 use tokio_retry::Retry;
@@ -23,17 +25,17 @@ pub enum SendError {
     EncryptionError(String),
 }
 
-pub async fn send_encrypted<U: IntoUrl>(
-    participant: Participant,
+async fn send_encrypted<U: IntoUrl>(
+    from: Participant,
     cipher_pk: &hpke::PublicKey,
     sign_sk: &near_crypto::SecretKey,
     client: &Client,
     url: U,
-    message: MpcMessage,
+    message: &MpcMessage,
 ) -> Result<(), SendError> {
-    let encrypted = SignedMessage::encrypt(message, participant, sign_sk, cipher_pk)
+    let encrypted = SignedMessage::encrypt(message, from, sign_sk, cipher_pk)
         .map_err(|err| SendError::EncryptionError(err.to_string()))?;
-    tracing::debug!(?participant, ciphertext = ?encrypted.text, "sending encrypted");
+    tracing::debug!(?from, ciphertext = ?encrypted.text, "sending encrypted");
 
     let _span = tracing::info_span!("message_request");
     let mut url = url.into_url()?;
@@ -101,6 +103,50 @@ pub async fn join<U: IntoUrl>(client: &Client, url: U, me: &Participant) -> Resu
 
     let retry_strategy = ExponentialBackoff::from_millis(10).map(jitter).take(3);
     Retry::spawn(retry_strategy, action).await
+}
+
+// TODO: add in retry logic either in struct or at call site.
+// TODO: add check for participant list to see if the messages to be sent are still valid.
+#[derive(Default)]
+pub struct MessageQueue {
+    deque: VecDeque<(ParticipantInfo, MpcMessage)>,
+}
+
+impl MessageQueue {
+    pub fn len(&self) -> usize {
+        self.deque.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.deque.is_empty()
+    }
+
+    pub fn push(&mut self, info: ParticipantInfo, msg: MpcMessage) {
+        self.deque.push_back((info, msg));
+    }
+
+    pub async fn send_encrypted(
+        &mut self,
+        from: Participant,
+        sign_sk: &near_crypto::SecretKey,
+        client: &Client,
+    ) -> Result<(), SendError> {
+        while let Some((info, msg)) = self.deque.front() {
+            let result =
+                send_encrypted(from, &info.cipher_pk, sign_sk, client, &info.url, msg).await;
+
+            match result {
+                Ok(()) => {
+                    let _ = self.deque.pop_front();
+                }
+                Err(err) => {
+                    return Err(err);
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

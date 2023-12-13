@@ -212,6 +212,7 @@ mod check {
 
 mod wait_for {
     use crate::MultichainTestContext;
+    use anyhow::Context;
     use backon::ExponentialBuilder;
     use backon::Retryable;
     use mpc_contract::ProtocolContractState;
@@ -241,6 +242,7 @@ mod wait_for {
         is_running
             .retry(&ExponentialBuilder::default().with_max_times(6))
             .await
+            .with_context(|| format!("mpc nodes did not reach epoch '{epoch}' before deadline"))
     }
 
     pub async fn has_at_least_triples<'a>(
@@ -270,6 +272,7 @@ mod wait_for {
         is_enough_triples
             .retry(&ExponentialBuilder::default().with_max_times(6))
             .await
+            .with_context(|| format!("mpc node '{id}' failed to generate '{expected_triple_count}' triples before deadline"))
     }
 
     pub async fn has_at_least_presignatures<'a>(
@@ -299,6 +302,7 @@ mod wait_for {
         is_enough_presignatures
             .retry(&ExponentialBuilder::default().with_max_times(6))
             .await
+            .with_context(|| format!("mpc node '{id}' failed to generate '{expected_presignature_count}' presignatures before deadline"))
     }
 
     pub async fn has_response<'a>(
@@ -316,6 +320,9 @@ mod wait_for {
         is_enough_presignatures
             .retry(&ExponentialBuilder::default().with_max_times(8))
             .await
+            .with_context(|| {
+                format!("mpc failed to respond to receipt id '{receipt_id}' before deadline")
+            })
     }
 }
 

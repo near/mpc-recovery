@@ -34,6 +34,7 @@ pub trait ConsensusCtx {
     fn sign_queue(&self) -> Arc<RwLock<SignQueue>>;
     fn cipher_pk(&self) -> &hpke::PublicKey;
     fn sign_pk(&self) -> near_crypto::PublicKey;
+    fn sign_sk(&self) -> &near_crypto::SecretKey;
     fn secret_storage(&self) -> &SecretNodeStorageBox;
 }
 
@@ -91,7 +92,10 @@ impl ConsensusProtocol for StartedState {
                                 epoch,
                                 contract_state.epoch
                             );
-                            Ok(NodeState::Joining(JoiningState { public_key }))
+                            Ok(NodeState::Joining(JoiningState {
+                                participants: contract_state.participants,
+                                public_key,
+                            }))
                         }
                         Ordering::Less => Err(ConsensusError::EpochRollback),
                         Ordering::Equal => {
@@ -130,9 +134,13 @@ impl ConsensusProtocol for StartedState {
                                             epoch,
                                         ),
                                     )),
+                                    messages: Default::default(),
                                 }))
                             } else {
-                                Ok(NodeState::Joining(JoiningState { public_key }))
+                                Ok(NodeState::Joining(JoiningState {
+                                    participants: contract_state.participants,
+                                    public_key,
+                                }))
                             }
                         }
                     }
@@ -148,7 +156,10 @@ impl ConsensusProtocol for StartedState {
                                 epoch,
                                 contract_state.old_epoch
                             );
-                            Ok(NodeState::Joining(JoiningState { public_key }))
+                            Ok(NodeState::Joining(JoiningState {
+                                participants: contract_state.old_participants,
+                                public_key,
+                            }))
                         }
                         Ordering::Less => Err(ConsensusError::EpochRollback),
                         Ordering::Equal => {
@@ -174,6 +185,7 @@ impl ConsensusProtocol for StartedState {
                             participants,
                             threshold: contract_state.threshold,
                             protocol: Arc::new(RwLock::new(protocol)),
+                            messages: Default::default(),
                         }))
                     } else {
                         tracing::info!("we are not a part of the initial participant set, waiting for key generation to complete");
@@ -181,9 +193,11 @@ impl ConsensusProtocol for StartedState {
                     }
                 }
                 ProtocolState::Running(contract_state) => Ok(NodeState::Joining(JoiningState {
+                    participants: contract_state.participants,
                     public_key: contract_state.public_key,
                 })),
                 ProtocolState::Resharing(contract_state) => Ok(NodeState::Joining(JoiningState {
+                    participants: contract_state.old_participants,
                     public_key: contract_state.public_key,
                 })),
             },
@@ -207,6 +221,7 @@ impl ConsensusProtocol for GeneratingState {
                 if contract_state.epoch > 0 {
                     tracing::warn!("contract has already changed epochs, trying to rejoin as a new participant");
                     return Ok(NodeState::Joining(JoiningState {
+                        participants: contract_state.participants,
                         public_key: contract_state.public_key,
                     }));
                 }
@@ -223,6 +238,7 @@ impl ConsensusProtocol for GeneratingState {
                 if contract_state.old_epoch > 0 {
                     tracing::warn!("contract has already changed epochs, trying to rejoin as a new participant");
                     return Ok(NodeState::Joining(JoiningState {
+                        participants: contract_state.old_participants,
                         public_key: contract_state.public_key,
                     }));
                 }
@@ -276,6 +292,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                             contract_state.epoch
                         );
                     Ok(NodeState::Joining(JoiningState {
+                        participants: contract_state.participants,
                         public_key: contract_state.public_key,
                     }))
                 }
@@ -318,6 +335,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                             self.public_key,
                             self.epoch,
                         ))),
+                        messages: self.messages,
                     }))
                 }
             },
@@ -343,6 +361,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                             contract_state.old_epoch
                         );
                         Ok(NodeState::Joining(JoiningState {
+                            participants: contract_state.old_participants,
                             public_key: contract_state.public_key,
                         }))
                     }
@@ -391,6 +410,7 @@ impl ConsensusProtocol for RunningState {
                             contract_state.epoch
                         );
                     Ok(NodeState::Joining(JoiningState {
+                        participants: contract_state.participants,
                         public_key: contract_state.public_key,
                     }))
                 }
@@ -418,6 +438,7 @@ impl ConsensusProtocol for RunningState {
                             contract_state.old_epoch
                         );
                         Ok(NodeState::Joining(JoiningState {
+                            participants: contract_state.old_participants,
                             public_key: contract_state.public_key,
                         }))
                     }
@@ -458,6 +479,7 @@ impl ConsensusProtocol for ResharingState {
                             contract_state.epoch
                         );
                         Ok(NodeState::Joining(JoiningState {
+                            participants: contract_state.participants,
                             public_key: contract_state.public_key,
                         }))
                     }
@@ -486,6 +508,7 @@ impl ConsensusProtocol for ResharingState {
                             contract_state.old_epoch
                         );
                         Ok(NodeState::Joining(JoiningState {
+                            participants: contract_state.old_participants,
                             public_key: contract_state.public_key,
                         }))
                     }
@@ -630,5 +653,6 @@ fn start_resharing<C: ConsensusCtx>(
         threshold: contract_state.threshold,
         public_key: contract_state.public_key,
         protocol: Arc::new(RwLock::new(protocol)),
+        messages: Default::default(),
     }))
 }

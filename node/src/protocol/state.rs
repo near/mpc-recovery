@@ -3,6 +3,7 @@ use super::presignature::PresignatureManager;
 use super::signature::SignatureManager;
 use super::triple::TripleManager;
 use super::SignQueue;
+use crate::http_client::MessageQueue;
 use crate::protocol::ParticipantInfo;
 use crate::types::{KeygenProtocol, PublicKey, ReshareProtocol, SecretKeyShare};
 use cait_sith::protocol::Participant;
@@ -26,6 +27,7 @@ pub struct GeneratingState {
     pub participants: BTreeMap<Participant, ParticipantInfo>,
     pub threshold: usize,
     pub protocol: KeygenProtocol,
+    pub messages: Arc<RwLock<MessageQueue>>,
 }
 
 impl GeneratingState {
@@ -44,6 +46,7 @@ pub struct WaitingForConsensusState {
     pub threshold: usize,
     pub private_share: SecretKeyShare,
     pub public_key: PublicKey,
+    pub messages: Arc<RwLock<MessageQueue>>,
 }
 
 impl WaitingForConsensusState {
@@ -66,6 +69,7 @@ pub struct RunningState {
     pub triple_manager: Arc<RwLock<TripleManager>>,
     pub presignature_manager: Arc<RwLock<PresignatureManager>>,
     pub signature_manager: Arc<RwLock<SignatureManager>>,
+    pub messages: Arc<RwLock<MessageQueue>>,
 }
 
 impl RunningState {
@@ -85,6 +89,7 @@ pub struct ResharingState {
     pub threshold: usize,
     pub public_key: PublicKey,
     pub protocol: ReshareProtocol,
+    pub messages: Arc<RwLock<MessageQueue>>,
 }
 
 impl ResharingState {
@@ -99,7 +104,17 @@ impl ResharingState {
 
 #[derive(Clone)]
 pub struct JoiningState {
+    pub participants: BTreeMap<Participant, ParticipantInfo>,
     pub public_key: PublicKey,
+}
+
+impl JoiningState {
+    pub fn fetch_participant(
+        &self,
+        p: &Participant,
+    ) -> Result<&ParticipantInfo, CryptographicError> {
+        fetch_participant(p, &self.participants)
+    }
 }
 
 #[derive(Clone, Default)]
@@ -125,6 +140,7 @@ impl NodeState {
             NodeState::Generating(state) => state.fetch_participant(p),
             NodeState::WaitingForConsensus(state) => state.fetch_participant(p),
             NodeState::Resharing(state) => state.fetch_participant(p),
+            NodeState::Joining(state) => state.fetch_participant(p),
             _ => Err(CryptographicError::UnknownParticipant(*p)),
         }
     }
