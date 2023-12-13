@@ -1,12 +1,10 @@
-use super::contract::Participants;
+use super::contract::primitives::{Participants, ParticipantInfo};
 use super::cryptography::CryptographicError;
 use super::presignature::PresignatureManager;
 use super::signature::SignatureManager;
 use super::triple::TripleManager;
 use super::SignQueue;
-use crate::protocol::ParticipantInfo;
 use crate::types::{KeygenProtocol, PrivateKeyShare, PublicKey, ReshareProtocol};
-use near_primitives::types::AccountId;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
