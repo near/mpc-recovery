@@ -1,13 +1,17 @@
+use cait_sith::protocol::Participant;
 use mpc_keys::hpke;
-use near_primitives::borsh::BorshDeserialize;
 use near_primitives::types::AccountId;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashSet};
+use std::{
+    collections::{BTreeMap, HashSet},
+    str::FromStr,
+};
 
 type ParticipantId = u32;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ParticipantInfo {
+    pub id: ParticipantId, // TODO: do we need this parameter?
     pub account_id: AccountId,
     pub url: String,
     /// The public key used for encrypting messages.
@@ -18,23 +22,59 @@ pub struct ParticipantInfo {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Participants {
-    pub participants: BTreeMap<AccountId, ParticipantInfo>,
+    pub participants: BTreeMap<Participant, ParticipantInfo>,
+}
+
+impl From<mpc_contract::primitives::Participants> for Participants {
+    fn from(contract_participants: mpc_contract::primitives::Participants) -> Self {
+        Participants {
+            // take position of participant in contract_participants as id for participants
+            participants: contract_participants
+                .participants
+                .into_iter()
+                .enumerate()
+                .map(|(participant_id, participant)| {
+                    let contract_participant_info = participant.1;
+                    (
+                        Participant::from(participant_id as ParticipantId),
+                        ParticipantInfo {
+                            id: participant_id as ParticipantId,
+                            account_id: AccountId::from_str(
+                                &contract_participant_info.account_id.to_string(),
+                            )
+                            .unwrap(), // TODO: remove unwrap
+                            url: contract_participant_info.url,
+                            cipher_pk: hpke::PublicKey::from_bytes(
+                                &contract_participant_info.cipher_pk,
+                            ),
+                            sign_pk: near_crypto::PublicKey::SECP256K1(
+                                near_crypto::Secp256K1PublicKey::try_from(
+                                    &contract_participant_info.sign_pk.as_bytes()[1..],
+                                )
+                                .unwrap(),
+                            ),
+                        },
+                    )
+                })
+                .collect(),
+        }
+    }
 }
 
 impl Participants {
-    pub fn get(&self, id: &AccountId) -> Option<&ParticipantInfo> {
+    pub fn get(&self, id: &Participant) -> Option<&ParticipantInfo> {
         self.participants.get(id)
     }
 
-    pub fn contains_key(&self, id: &AccountId) -> bool {
+    pub fn contains_key(&self, id: &Participant) -> bool {
         self.participants.contains_key(id)
     }
 
-    pub fn keys(&self) -> impl Iterator<Item = &AccountId> {
+    pub fn keys(&self) -> impl Iterator<Item = &Participant> {
         self.participants.keys()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&AccountId, &ParticipantInfo)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&Participant, &ParticipantInfo)> {
         self.participants.iter()
     }
 }
@@ -72,13 +112,32 @@ impl Candidates {
     }
 }
 
-impl From<mpc_contract::primitives::CandidateInfo> for CandidateInfo {
-    fn from(contract_info: mpc_contract::primitives::CandidateInfo) -> Self {
-        CandidateInfo {
-            account_id: AccountId::from(contract_info.account_id),
-            url: contract_info.url,
-            cipher_pk: hpke::PublicKey::from_bytes(&contract_info.cipher_pk),
-            sign_pk: BorshDeserialize::try_from_slice(contract_info.sign_pk.as_bytes()).unwrap(),
+impl From<mpc_contract::primitives::Candidates> for Candidates {
+    fn from(contract_candidates: mpc_contract::primitives::Candidates) -> Self {
+        Candidates {
+            candidates: contract_candidates
+                .candidates
+                .into_iter()
+                .map(|(account_id, candidate_info)| {
+                    (
+                        AccountId::from_str(&account_id.to_string()).unwrap(), // TODO: fix unwrap
+                        CandidateInfo {
+                            account_id: AccountId::from_str(
+                                &candidate_info.account_id.to_string(),
+                            )
+                            .unwrap(), // TODO: fix unwrap
+                            url: candidate_info.url,
+                            cipher_pk: hpke::PublicKey::from_bytes(&candidate_info.cipher_pk),
+                            sign_pk: near_crypto::PublicKey::SECP256K1(
+                                near_crypto::Secp256K1PublicKey::try_from(
+                                    &candidate_info.sign_pk.as_bytes()[1..],
+                                )
+                                .unwrap(),
+                            ),
+                        },
+                    )
+                })
+                .collect(),
         }
     }
 }
@@ -101,8 +160,11 @@ impl From<mpc_contract::primitives::PkVotes> for PkVotes {
                         ),
                         participants
                             .into_iter()
-                            .map(AccountId::from)
-                            .collect::<HashSet<_>>(),
+                            .map(|acc_id: near_sdk::AccountId| {
+                                AccountId::from_str(&acc_id.to_string()).unwrap()
+                                // TODO: fix unwrap
+                            })
+                            .collect(),
                     )
                 })
                 .collect(),
@@ -115,19 +177,22 @@ pub struct Votes {
     pub votes: BTreeMap<AccountId, HashSet<AccountId>>,
 }
 
-impl From<mpc_contract::Votes> for Votes {
-    fn from(contract_votes: mpc_contract::Votes) -> Self {
+impl From<mpc_contract::primitives::Votes> for Votes {
+    fn from(contract_votes: mpc_contract::primitives::Votes) -> Self {
         Votes {
             votes: contract_votes
                 .votes
                 .into_iter()
-                .map(|(account_id, votes)| {
+                .map(|(accountId, participants)| {
                     (
-                        account_id,
-                        votes
+                        AccountId::from_str(&accountId.to_string()).unwrap(), // TODO: fix unwrap
+                        participants
                             .into_iter()
-                            .map(|account_id| account_id)
-                            .collect::<HashSet<_>>(),
+                            .map(|acc_id: near_sdk::AccountId| {
+                                AccountId::from_str(&acc_id.to_string()).unwrap()
+                                // TODO: fix unwrap
+                            })
+                            .collect(), // TODO: remove code duplication
                     )
                 })
                 .collect(),

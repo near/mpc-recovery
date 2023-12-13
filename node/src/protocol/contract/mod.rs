@@ -5,7 +5,7 @@ use crate::util::NearPublicKeyExt;
 use mpc_contract::ProtocolContractState;
 use near_primitives::types::AccountId;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::{collections::HashSet, str::FromStr};
 
 use self::primitives::{Participants, PkVotes, Candidates, Votes};
 
@@ -69,7 +69,9 @@ impl From<mpc_contract::ResharingContractState> for ResharingContractState {
             new_participants: contract_state.new_participants.into(),
             threshold: contract_state.threshold,
             public_key: contract_state.public_key.into_affine_point(),
-            finished_votes: contract_state.finished_votes.clone(),
+            finished_votes: contract_state.finished_votes.into_iter().map(|acc_id| {
+                AccountId::from_str(&acc_id.to_string()).unwrap() // TODO: code duplication
+            }).collect(),
         }
     }
 }
@@ -121,18 +123,6 @@ impl TryFrom<ProtocolContractState> for ProtocolState {
             }
             ProtocolContractState::Running(state) => Ok(ProtocolState::Running(state.into())),
             ProtocolContractState::Resharing(state) => Ok(ProtocolState::Resharing(state.into())),
-        }
-    }
-}
-
-impl From<mpc_contract::primitives::Participants> for Participants {
-    fn from(value: mpc_contract::primitives::Participants) -> Self {
-        Participants {
-            participants: value
-                .participants
-                .into_iter()
-                .map(|(account_id, participant_info)| (account_id, participant_info.into()))
-                .collect(),
         }
     }
 }

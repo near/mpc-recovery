@@ -3,7 +3,7 @@ pub mod primitives;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault, PublicKey};
-use primitives::{Votes, PkVotes, Participants, CandidateInfo, Candidates};
+use primitives::{CandidateInfo, Candidates, Participants, PkVotes, Votes};
 use std::collections::HashSet;
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
