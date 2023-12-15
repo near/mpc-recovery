@@ -23,6 +23,7 @@ pub struct SignRequest {
     pub receipt_id: CryptoHash,
     pub msg_hash: [u8; 32],
     pub epsilon: Scalar,
+    pub delta: Scalar,
     pub entropy: [u8; 32],
 }
 

@@ -91,6 +91,7 @@ async fn handle_block(
                         };
                         let epsilon =
                             kdf::derive_epsilon(&action.predecessor_id(), &sign_payload.path);
+                        let delta = kdf::derive_delta(receipt.receipt_id(), entropy);
                         tracing::info!(
                             receipt_id = %receipt.receipt_id(),
                             caller_id = receipt.predecessor_id().to_string(),
@@ -103,6 +104,7 @@ async fn handle_block(
                             receipt_id: receipt.receipt_id(),
                             msg_hash: sign_payload.payload,
                             epsilon,
+                            delta,
                             entropy,
                         });
                         drop(queue);

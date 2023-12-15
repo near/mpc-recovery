@@ -20,6 +20,7 @@ cait-sith = { git = "https://github.com/LIT-Protocol/cait-sith.git", features = 
 ] }
 clap = { version = "4.2", features = ["derive", "env"] }
 hex = "0.4.3"
+hkdf = "0.12.4"
 k256 = { version = "0.13.1", features = ["sha256", "ecdsa", "serde"] }
 local-ip-address = "0.5.4"
 rand = "0.8"

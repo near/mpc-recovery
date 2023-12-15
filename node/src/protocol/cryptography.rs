@@ -5,11 +5,9 @@ use crate::http_client::SendError;
 use crate::protocol::message::{GeneratingMessage, ResharingMessage};
 use crate::protocol::state::WaitingForConsensusState;
 use crate::protocol::MpcMessage;
-use crate::util::ScalarExt;
 use async_trait::async_trait;
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use k256::elliptic_curve::group::GroupEncoding;
-use k256::Scalar;
 use mpc_keys::hpke;
 use near_crypto::InMemorySigner;
 use near_primitives::types::AccountId;
@@ -318,7 +316,7 @@ impl CryptographicProtocol for RunningState {
                 self.public_key,
                 my_request.msg_hash,
                 my_request.epsilon,
-                Scalar::from_bytes(&my_request.entropy),
+                my_request.delta,
             )?;
         }
         drop(sign_queue);

@@ -3966,6 +3966,7 @@ dependencies = [
  "cait-sith",
  "clap 4.4.8",
  "hex 0.4.3",
+ "hkdf",
  "k256",
  "local-ip-address",
  "mpc-contract",
