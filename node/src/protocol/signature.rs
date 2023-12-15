@@ -126,6 +126,7 @@ impl SignatureManager {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn generate_internal(
         participants: &[Participant],
         me: Participant,
@@ -191,6 +192,7 @@ impl SignatureManager {
     /// 3) Has never been seen by the manager in which case start a new protocol and returns `Some(protocol)`, or
     /// 4) Depends on triples (`triple0`/`triple1`) that are unknown to the node
     // TODO: What if the presignature completed generation and is already spent?
+    #[allow(clippy::too_many_arguments)]
     pub fn get_or_generate(
         &mut self,
         receipt_id: CryptoHash,
