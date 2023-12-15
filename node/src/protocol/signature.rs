@@ -1,12 +1,12 @@
 use super::message::SignatureMessage;
 use super::presignature::{Presignature, PresignatureId, PresignatureManager};
 use super::state::RunningState;
+use crate::kdf;
 use crate::types::{PublicKey, SignatureProtocol};
-use crate::util::AffinePointExt;
+use crate::util::{AffinePointExt, ScalarExt};
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
-use cait_sith::FullSignature;
-use k256::elliptic_curve::scalar::FromUintUnchecked;
-use k256::{Scalar, Secp256k1, U256};
+use cait_sith::{FullSignature, PresignOutput};
+use k256::{Scalar, Secp256k1};
 use near_crypto::Signer;
 use near_fetch::signer::ExposeAccountId;
 use near_primitives::hash::CryptoHash;
@@ -22,6 +22,7 @@ use std::sync::Arc;
 pub struct SignRequest {
     pub receipt_id: CryptoHash,
     pub msg_hash: [u8; 32],
+    pub epsilon: Scalar,
     pub entropy: [u8; 32],
 }
 
@@ -92,6 +93,8 @@ pub struct SignatureGenerator {
     pub proposer: Participant,
     pub presignature_id: PresignatureId,
     pub msg_hash: [u8; 32],
+    pub epsilon: Scalar,
+    pub delta: Scalar,
 }
 
 pub struct SignatureManager {
@@ -130,19 +133,30 @@ impl SignatureManager {
         proposer: Participant,
         presignature: Presignature,
         msg_hash: [u8; 32],
+        epsilon: Scalar,
+        delta: Scalar,
     ) -> Result<SignatureGenerator, InitializationError> {
+        let PresignOutput { big_r, k, sigma } = presignature.output;
+        // TODO: Check whether it is okay to use invert_vartime instead
+        let output: PresignOutput<Secp256k1> = PresignOutput {
+            big_r: (big_r * delta).to_affine(),
+            k: k * delta.invert().unwrap(),
+            sigma: (sigma + epsilon * k) * delta.invert().unwrap(),
+        };
         let protocol = Arc::new(std::sync::RwLock::new(cait_sith::sign(
             participants,
             me,
-            public_key,
-            presignature.output,
-            Scalar::from_uint_unchecked(U256::from_le_slice(&msg_hash)),
+            kdf::derive_key(public_key, epsilon),
+            output,
+            Scalar::from_bytes(&msg_hash),
         )?));
         Ok(SignatureGenerator {
             protocol,
             proposer,
             presignature_id: presignature.id,
             msg_hash,
+            epsilon,
+            delta,
         })
     }
 
@@ -153,6 +167,8 @@ impl SignatureManager {
         presignature: Presignature,
         public_key: PublicKey,
         msg_hash: [u8; 32],
+        epsilon: Scalar,
+        delta: Scalar,
     ) -> Result<(), InitializationError> {
         tracing::info!(%receipt_id, "starting protocol to generate a new signature");
         let generator = Self::generate_internal(
@@ -162,6 +178,8 @@ impl SignatureManager {
             self.me,
             presignature,
             msg_hash,
+            epsilon,
+            delta,
         )?;
         self.generators.insert(receipt_id, generator);
         Ok(())
@@ -179,6 +197,8 @@ impl SignatureManager {
         proposer: Participant,
         presignature_id: PresignatureId,
         msg_hash: [u8; 32],
+        epsilon: Scalar,
+        delta: Scalar,
         presignature_manager: &mut PresignatureManager,
     ) -> Result<Option<&mut SignatureProtocol>, InitializationError> {
         match self.generators.entry(receipt_id) {
@@ -195,6 +215,8 @@ impl SignatureManager {
                     proposer,
                     presignature,
                     msg_hash,
+                    epsilon,
+                    delta,
                 )?;
                 let generator = entry.insert(generator);
                 Ok(Some(&mut generator.protocol))
@@ -244,6 +266,8 @@ impl SignatureManager {
                                     proposer: generator.proposer,
                                     presignature_id: generator.presignature_id,
                                     msg_hash: generator.msg_hash,
+                                    epsilon: generator.epsilon,
+                                    delta: generator.delta,
                                     epoch: self.epoch,
                                     from: self.me,
                                     data: data.clone(),
@@ -258,6 +282,8 @@ impl SignatureManager {
                             proposer: generator.proposer,
                             presignature_id: generator.presignature_id,
                             msg_hash: generator.msg_hash,
+                            epsilon: generator.epsilon,
+                            delta: generator.delta,
                             epoch: self.epoch,
                             from: self.me,
                             data: data.clone(),
