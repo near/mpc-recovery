@@ -290,7 +290,7 @@ impl MpcContract {
     }
 
     #[allow(unused_variables)]
-    pub fn sign(&mut self, payload: [u8; 32]) -> [u8; 32] {
+    pub fn sign(&mut self, payload: [u8; 32], path: String) -> [u8; 32] {
         near_sdk::env::random_seed_array()
     }
 

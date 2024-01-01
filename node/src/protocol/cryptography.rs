@@ -325,6 +325,8 @@ impl CryptographicProtocol for RunningState {
                 presignature,
                 self.public_key,
                 my_request.msg_hash,
+                my_request.epsilon,
+                my_request.delta,
             )?;
         }
         drop(sign_queue);

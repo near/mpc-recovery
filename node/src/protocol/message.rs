@@ -6,6 +6,7 @@ use crate::http_client::SendError;
 use crate::storage::SecretStorageError;
 use async_trait::async_trait;
 use cait_sith::protocol::{InitializationError, MessageData, Participant, ProtocolError};
+use k256::Scalar;
 use mpc_keys::hpke::{self, Ciphered};
 use near_crypto::Signature;
 use near_primitives::hash::CryptoHash;
@@ -55,6 +56,8 @@ pub struct SignatureMessage {
     pub proposer: Participant,
     pub presignature_id: PresignatureId,
     pub msg_hash: [u8; 32],
+    pub epsilon: Scalar,
+    pub delta: Scalar,
     pub epoch: u64,
     pub from: Participant,
     pub data: MessageData,
@@ -278,6 +281,8 @@ impl MessageHandler for RunningState {
                     message.proposer,
                     message.presignature_id,
                     message.msg_hash,
+                    message.epsilon,
+                    message.delta,
                     &mut presignature_manager,
                 )? {
                     Some(protocol) => {
