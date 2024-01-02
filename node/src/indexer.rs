@@ -9,6 +9,7 @@ use tokio::sync::RwLock;
 
 /// Configures indexer.
 #[derive(Debug, Clone, clap::Parser)]
+#[group(id = "indexer_options")]
 pub struct Options {
     /// AWS S3 bucket name for NEAR Lake Indexer
     #[clap(

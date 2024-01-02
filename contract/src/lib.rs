@@ -64,6 +64,7 @@ pub struct ResharingContractState {
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
 pub enum ProtocolContractState {
+    NotInitialized,
     Initializing(InitializingContractState),
     Running(RunningContractState),
     Resharing(ResharingContractState),
@@ -77,7 +78,6 @@ pub struct MpcContract {
 
 #[near_bindgen]
 impl MpcContract {
-    // TODO: only add ignore_state for dev environments
     #[init(ignore_state)]
     pub fn init(threshold: usize, participants: BTreeMap<AccountId, ParticipantInfo>) -> Self {
         MpcContract {
@@ -296,4 +296,15 @@ impl MpcContract {
 
     #[allow(unused_variables)]
     pub fn respond(&mut self, receipt_id: [u8; 32], big_r: String, s: String) {}
+
+    #[private]
+    #[init(ignore_state)]
+    pub fn clean(keys: Vec<near_sdk::json_types::Base64VecU8>) -> Self {
+        for key in keys.iter() {
+            env::storage_remove(&key.0);
+        }
+        Self {
+            protocol_state: ProtocolContractState::NotInitialized,
+        }
+    }
 }

@@ -180,6 +180,7 @@ impl TryFrom<ProtocolContractState> for ProtocolState {
 
     fn try_from(value: ProtocolContractState) -> Result<Self, Self::Error> {
         match value {
+            ProtocolContractState::NotInitialized => Err(()),
             ProtocolContractState::Initializing(state) => {
                 Ok(ProtocolState::Initializing(state.into()))
             }

@@ -88,7 +88,10 @@ impl SecretNodeStorage for SecretManagerNodeStorage {
                         ..Default::default()
                     }),
                 },
-                &format!("projects/{}", self.gcp_project_id,),
+                &format!(
+                    "projects/{}/secrets/{}",
+                    self.gcp_project_id, self.sk_share_secret_id
+                ),
             )
             .doit()
             .await?;
@@ -106,9 +109,11 @@ impl SecretNodeStorage for SecretManagerNodeStorage {
             .doit()
             .await?;
         match response.payload {
+            // GCP does not allow to upload empty secrets, so we reserve 1-byte values as a
+            // placeholder for empty secrets.
             Some(SecretPayload {
                 data: Some(data), ..
-            }) if !data.is_empty() => Ok(Some(serde_json::from_slice(&data)?)),
+            }) if data.len() > 1 => Ok(Some(serde_json::from_slice(&data)?)),
             _ => {
                 tracing::info!("failed to load existing key share, presuming it is missing");
                 Ok(None)
@@ -119,6 +124,7 @@ impl SecretNodeStorage for SecretManagerNodeStorage {
 
 /// Configures storage.
 #[derive(Debug, Clone, clap::Parser)]
+#[group(id = "storage_options")]
 pub struct Options {
     /// GCP project ID.
     #[clap(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
