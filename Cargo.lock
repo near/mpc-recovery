@@ -3833,6 +3833,7 @@ dependencies = [
  "near-sdk",
  "schemars",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

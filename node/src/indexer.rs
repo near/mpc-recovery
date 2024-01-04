@@ -87,6 +87,7 @@ async fn handle_block(
                         serde_json::from_slice::<'_, SignPayload>(function_call.args())
                     {
                         let Ok(entropy) = serde_json::from_slice::<'_, [u8; 32]>(&result) else {
+                            tracing::warn!("incorrect `sign` return type: {:?}", result);
                             continue;
                         };
                         let epsilon =
