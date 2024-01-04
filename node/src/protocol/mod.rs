@@ -1,10 +1,10 @@
-mod consensus;
 mod contract;
 mod cryptography;
 mod presignature;
 mod signature;
 mod triple;
 
+pub mod consensus;
 pub mod message;
 pub mod state;
 
@@ -82,6 +82,10 @@ impl ConsensusCtx for &Ctx {
     fn sign_pk(&self) -> near_crypto::PublicKey {
         self.sign_sk.public_key()
     }
+
+    fn sign_sk(&self) -> &near_crypto::SecretKey {
+        &self.sign_sk
+    }
 }
 
 impl CryptographicCtx for &Ctx {
@@ -103,6 +107,10 @@ impl CryptographicCtx for &Ctx {
 
     fn mpc_contract_id(&self) -> &AccountId {
         &self.mpc_contract_id
+    }
+
+    fn cipher_pk(&self) -> &hpke::PublicKey {
+        &self.cipher_pk
     }
 
     fn sign_sk(&self) -> &near_crypto::SecretKey {

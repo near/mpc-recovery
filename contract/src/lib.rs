@@ -74,7 +74,7 @@ pub enum ProtocolContractState {
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct MpcContract {
     protocol_state: ProtocolContractState,
-    pending_requests: LookupMap<Vec<u8>, Option<String>>,
+    pending_requests: LookupMap<[u8; 32], Option<String>>,
 }
 
 #[near_bindgen]
@@ -293,23 +293,22 @@ impl MpcContract {
     }
 
     #[allow(unused_variables)]
-    pub fn sign(&mut self, payload: [u8; 32]) -> Promise {
-        let hash = env::sha256(&payload);
-        self.pending_requests.insert(&hash, &None);
-        Self::ext(env::current_account_id()).sign_helper(hash)
+    pub fn sign(&mut self, payload: [u8; 32], path: String) -> Promise {
+        self.pending_requests.insert(&payload, &None);
+        Self::ext(env::current_account_id()).sign_helper(payload)
     }
 
-    pub fn sign_helper(&mut self, payload_id: Vec<u8>) -> PromiseOrValue<String> {
-        if let Some(signature) = self.pending_requests.get(&payload_id) {
+    pub fn sign_helper(&mut self, payload: [u8; 32]) -> PromiseOrValue<String> {
+        if let Some(signature) = self.pending_requests.get(&payload) {
             match signature {
                 Some(signature) => {
-                    self.pending_requests.remove(&payload_id);
+                    self.pending_requests.remove(&payload);
                     PromiseOrValue::Value(signature)
                 }
                 None => {
                     env::log_str("not ready");
                     let account_id = env::current_account_id();
-                    PromiseOrValue::Promise(Self::ext(account_id).sign_helper(payload_id))
+                    PromiseOrValue::Promise(Self::ext(account_id).sign_helper(payload))
                 }
             }
         } else {
@@ -318,7 +317,7 @@ impl MpcContract {
     }
 
     #[allow(unused_variables)]
-    pub fn respond(&mut self, receipt_id: [u8; 32], big_r: String, s: String) {
-        self.pending_requests.insert(&receipt_id.to_vec(), &Some(s));
+    pub fn respond(&mut self, payload: [u8; 32], big_r: String, s: String) {
+        self.pending_requests.insert(&payload, &Some(s));
     }
 }

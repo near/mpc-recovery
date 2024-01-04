@@ -3,6 +3,7 @@ use super::presignature::PresignatureManager;
 use super::signature::SignatureManager;
 use super::triple::TripleManager;
 use super::SignQueue;
+use crate::http_client::MessageQueue;
 use crate::protocol::ParticipantInfo;
 use crate::types::{KeygenProtocol, PrivateKeyShare, PublicKey, ReshareProtocol};
 use cait_sith::protocol::Participant;
@@ -25,6 +26,7 @@ pub struct GeneratingState {
     pub participants: BTreeMap<Participant, ParticipantInfo>,
     pub threshold: usize,
     pub protocol: KeygenProtocol,
+    pub messages: Arc<RwLock<MessageQueue>>,
 }
 
 impl GeneratingState {
@@ -43,6 +45,7 @@ pub struct WaitingForConsensusState {
     pub threshold: usize,
     pub private_share: PrivateKeyShare,
     pub public_key: PublicKey,
+    pub messages: Arc<RwLock<MessageQueue>>,
 }
 
 impl WaitingForConsensusState {
@@ -65,6 +68,7 @@ pub struct RunningState {
     pub triple_manager: Arc<RwLock<TripleManager>>,
     pub presignature_manager: Arc<RwLock<PresignatureManager>>,
     pub signature_manager: Arc<RwLock<SignatureManager>>,
+    pub messages: Arc<RwLock<MessageQueue>>,
 }
 
 impl RunningState {
@@ -84,6 +88,7 @@ pub struct ResharingState {
     pub threshold: usize,
     pub public_key: PublicKey,
     pub protocol: ReshareProtocol,
+    pub messages: Arc<RwLock<MessageQueue>>,
 }
 
 impl ResharingState {
