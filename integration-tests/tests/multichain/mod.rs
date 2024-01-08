@@ -66,6 +66,13 @@ async fn test_signature() -> anyhow::Result<()> {
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
             assert_eq!(state_0.participants.len(), 3);
 
+            for i in 0..ctx.nodes.len() {
+                wait_for::has_at_least_triples(&ctx, i, 2).await?;
+            }
+            for i in 0..ctx.nodes.len() {
+                wait_for::has_at_least_presignatures(&ctx, i, 2).await?;
+            }
+
             let worker = &ctx.nodes.ctx().worker;
             let (account_id, secret_key) = worker.dev_generate().await;
             worker

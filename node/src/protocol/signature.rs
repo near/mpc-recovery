@@ -326,8 +326,7 @@ impl SignatureManager {
             // let signature = r_s.append(tag);
             // let signature = Secp256K1Signature::try_from(signature.as_slice()).unwrap();
             // let signature = Signature::SECP256K1(signature);
-            tracing::info!(%receipt_id, big_r = signature.big_r.to_base58(), s = ?signature.s, "publishing signature response");
-            rpc_client
+            let response = rpc_client
                 .send_tx(
                     signer,
                     mpc_contract_id,
@@ -346,6 +345,7 @@ impl SignatureManager {
                     )],
                 )
                 .await?;
+            tracing::info!(%receipt_id, big_r = signature.big_r.to_base58(), s = ?signature.s, status = ?response.status, "published signature response");
         }
         Ok(())
     }

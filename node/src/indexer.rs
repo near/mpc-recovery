@@ -78,7 +78,7 @@ async fn handle_block(
     for action in block.actions().cloned().collect::<Vec<_>>() {
         if action.receiver_id() == ctx.mpc_contract_id {
             let receipt = block.receipt_by_id(&action.receipt_id()).unwrap();
-            let ExecutionStatus::SuccessValue(result) = receipt.status() else {
+            let ExecutionStatus::SuccessReceiptId(receipt_id) = receipt.status() else {
                 continue;
             };
             if let Some(function_call) = action.as_function_call() {
@@ -86,15 +86,23 @@ async fn handle_block(
                     if let Ok(sign_payload) =
                         serde_json::from_slice::<'_, SignPayload>(function_call.args())
                     {
-                        let Ok(entropy) = serde_json::from_slice::<'_, [u8; 32]>(&result) else {
-                            tracing::warn!("incorrect `sign` return type: {:?}", result);
+                        if receipt.logs().is_empty() {
+                            tracing::warn!("`sign` did not produce entropy");
+                            continue;
+                        }
+                        let Ok(entropy) = serde_json::from_str::<'_, [u8; 32]>(&receipt.logs()[0])
+                        else {
+                            tracing::warn!(
+                                "`sign` did not produce entropy correctly: {:?}",
+                                receipt.logs()[0]
+                            );
                             continue;
                         };
                         let epsilon =
                             kdf::derive_epsilon(&action.predecessor_id(), &sign_payload.path);
-                        let delta = kdf::derive_delta(receipt.receipt_id(), entropy);
+                        let delta = kdf::derive_delta(receipt_id, entropy);
                         tracing::info!(
-                            receipt_id = %receipt.receipt_id(),
+                            receipt_id = %receipt_id,
                             caller_id = receipt.predecessor_id().to_string(),
                             payload = hex::encode(sign_payload.payload),
                             entropy = hex::encode(entropy),
@@ -102,7 +110,7 @@ async fn handle_block(
                         );
                         let mut queue = ctx.queue.write().await;
                         queue.add(SignRequest {
-                            receipt_id: receipt.receipt_id(),
+                            receipt_id,
                             msg_hash: sign_payload.payload,
                             epsilon,
                             delta,
