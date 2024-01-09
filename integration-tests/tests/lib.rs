@@ -13,6 +13,7 @@ use mpc_recovery::{
 use mpc_recovery_integration_tests::env::containers::DockerClient;
 use mpc_recovery_integration_tests::indexer::FullSignature;
 use mpc_recovery_integration_tests::{env, indexer};
+use near_jsonrpc_client::JsonRpcClient;
 use near_primitives::hash::CryptoHash;
 use near_workspaces::{network::Sandbox, Worker};
 use std::collections::HashMap;
@@ -68,6 +69,7 @@ where
 pub struct MultichainTestContext<'a> {
     nodes: mpc_recovery_integration_tests::multichain::Nodes<'a>,
     rpc_client: near_fetch::Client,
+    jsonrpc_client: JsonRpcClient,
     http_client: reqwest::Client,
     responses: Arc<RwLock<HashMap<CryptoHash, FullSignature>>>,
 }
@@ -97,10 +99,13 @@ where
         .unwrap();
     });
 
-    let rpc_client = near_fetch::Client::new(&nodes.ctx().lake_indexer.rpc_host_address);
+    let connector = JsonRpcClient::new_client();
+    let jsonrpc_client = connector.connect(&nodes.ctx().lake_indexer.rpc_host_address);
+    let rpc_client = near_fetch::Client::from_client(jsonrpc_client.clone());
     f(MultichainTestContext {
         nodes,
         rpc_client,
+        jsonrpc_client,
         http_client: reqwest::Client::default(),
         responses,
     })
