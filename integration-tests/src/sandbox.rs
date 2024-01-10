@@ -1,3 +1,4 @@
+use near_workspaces::types::NearToken;
 use near_workspaces::{network::Sandbox, types::SecretKey, AccessKey, Account, Contract, Worker};
 
 const BATCH_COUNT_LIMIT: usize = 100;
@@ -41,7 +42,7 @@ pub async fn initialize_linkdrop(worker: &Worker<Sandbox>) -> anyhow::Result<()>
 pub async fn create_account(
     worker: &Worker<Sandbox>,
     prefix: &str,
-    initial_balance: u128,
+    initial_balance: NearToken,
 ) -> anyhow::Result<Account> {
     tracing::info!("Creating account with random account_id...");
     let new_account = worker

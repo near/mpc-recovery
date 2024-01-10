@@ -1,6 +1,6 @@
 use super::message::PresignatureMessage;
 use super::triple::{Triple, TripleId, TripleManager};
-use crate::types::{PresignatureProtocol, PrivateKeyShare, PublicKey};
+use crate::types::{PresignatureProtocol, PublicKey, SecretKeyShare};
 use crate::util::AffinePointExt;
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::{KeygenOutput, PresignArguments, PresignOutput};
@@ -96,7 +96,7 @@ impl PresignatureManager {
         triple0: Triple,
         triple1: Triple,
         public_key: &PublicKey,
-        private_share: &PrivateKeyShare,
+        private_share: &SecretKeyShare,
         mine: bool,
     ) -> Result<PresignatureGenerator, InitializationError> {
         let protocol = Arc::new(std::sync::RwLock::new(cait_sith::presign(
@@ -126,7 +126,7 @@ impl PresignatureManager {
         triple0: Triple,
         triple1: Triple,
         public_key: &PublicKey,
-        private_share: &PrivateKeyShare,
+        private_share: &SecretKeyShare,
     ) -> Result<(), InitializationError> {
         let id = rand::random();
         tracing::info!(id, "starting protocol to generate a new presignature");
@@ -157,7 +157,7 @@ impl PresignatureManager {
         triple1: TripleId,
         triple_manager: &mut TripleManager,
         public_key: &PublicKey,
-        private_share: &PrivateKeyShare,
+        private_share: &SecretKeyShare,
     ) -> Result<&mut PresignatureProtocol, GenerationError> {
         if self.presignatures.contains_key(&id) {
             Err(GenerationError::AlreadyGenerated)

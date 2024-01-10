@@ -1,3 +1,7 @@
+variable "project" {
+  type = string
+}
+
 variable "region" {
 }
 
@@ -65,5 +69,9 @@ variable "aws_access_key_secret_id" {
 }
 
 variable "aws_secret_key_secret_id" {
+  type = string
+}
+
+variable "sk_share_secret_id" {
   type = string
 }

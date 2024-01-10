@@ -82,11 +82,28 @@ resource "google_secret_manager_secret_iam_member" "aws_secret_key_secret_access
   member    = "serviceAccount:${google_service_account.service_account.email}"
 }
 
+resource "google_secret_manager_secret_iam_member" "sk_share_secret_access" {
+  count = length(var.node_configs)
+
+  secret_id = var.node_configs[count.index].sk_share_secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.service_account.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "sk_share_secret_manager" {
+  count = length(var.node_configs)
+
+  secret_id = var.node_configs[count.index].sk_share_secret_id
+  role      = "roles/secretmanager.secretVersionManager"
+  member    = "serviceAccount:${google_service_account.service_account.email}"
+}
+
 module "node" {
   count  = length(var.node_configs)
   source = "../modules/multichain"
 
   service_name          = "multichain-${var.env}-${count.index}"
+  project               = var.project
   region                = var.region
   service_account_email = google_service_account.service_account.email
   docker_image          = var.docker_image
@@ -103,11 +120,14 @@ module "node" {
   cipher_sk_secret_id      = var.node_configs[count.index].cipher_sk_secret_id
   aws_access_key_secret_id = var.aws_access_key_secret_id
   aws_secret_key_secret_id = var.aws_secret_key_secret_id
+  sk_share_secret_id       = var.node_configs[count.index].sk_share_secret_id
 
   depends_on = [
     google_secret_manager_secret_iam_member.account_sk_secret_access,
     google_secret_manager_secret_iam_member.cipher_sk_secret_access,
     google_secret_manager_secret_iam_member.aws_access_key_secret_access,
-    google_secret_manager_secret_iam_member.aws_secret_key_secret_access
+    google_secret_manager_secret_iam_member.aws_secret_key_secret_access,
+    google_secret_manager_secret_iam_member.sk_share_secret_access,
+    google_secret_manager_secret_iam_member.sk_share_secret_manager
   ]
 }

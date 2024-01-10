@@ -7,8 +7,9 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-/// Configures exporter of span and trace data.
+/// Configures indexer.
 #[derive(Debug, Clone, clap::Parser)]
+#[group(id = "indexer_options")]
 pub struct Options {
     /// AWS S3 bucket name for NEAR Lake Indexer
     #[clap(

@@ -18,7 +18,7 @@ locals {
   client_id    = jsondecode(local.credentials).client_id
 
   workspace = {
-    near_rpc          = "https://rpc.mainnet.near.org"
+    near_rpc          = "https://rpc.testnet.near.org"
     near_root_account = "near"
   }
 }

@@ -1,7 +1,6 @@
 use bollard::exec::{CreateExecOptions, StartExecResults};
 use futures::StreamExt;
 use near_crypto::KeyFile;
-use near_units::parse_near;
 use near_workspaces::{
     network::{Sandbox, ValidatorKey},
     types::SecretKey,
@@ -9,6 +8,7 @@ use near_workspaces::{
 };
 
 use crate::env::containers::{self, LocalStack};
+use near_workspaces::types::NearToken;
 use testcontainers::{Container, GenericImage};
 
 pub mod env;
@@ -155,13 +155,15 @@ pub async fn initialize_relayer<'a>(
     sandbox::initialize_linkdrop(&worker).await?;
     tracing::info!("Initializing relayer accounts...");
     let relayer_account =
-        sandbox::create_account(&worker, "relayer", parse_near!("1000 N")).await?;
+        sandbox::create_account(&worker, "relayer", NearToken::from_near(1000)).await?;
     let relayer_account_keys = sandbox::gen_rotating_keys(&relayer_account, 5).await?;
 
-    let creator_account = sandbox::create_account(&worker, "creator", parse_near!("200 N")).await?;
+    let creator_account =
+        sandbox::create_account(&worker, "creator", NearToken::from_near(200)).await?;
     let creator_account_keys = sandbox::gen_rotating_keys(&creator_account, 5).await?;
 
-    let social_account = sandbox::create_account(&worker, "social", parse_near!("1000 N")).await?;
+    let social_account =
+        sandbox::create_account(&worker, "social", NearToken::from_near(1000)).await?;
     tracing::info!(
         "Relayer accounts initialized. Relayer account: {}, Creator account: {}, Social account: {}",
         relayer_account.id(),

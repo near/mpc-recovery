@@ -54,6 +54,10 @@ impl<'a> Node<'a> {
                 start_block_height: 0,
             },
             my_address: None,
+            storage_options: mpc_recovery_node::storage::Options {
+                gcp_project_id: None,
+                sk_share_secret_id: None,
+            },
         }
         .into_str_args();
         let image: GenericImage = GenericImage::new("near/mpc-recovery-node", "latest")

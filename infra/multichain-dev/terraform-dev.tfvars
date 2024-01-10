@@ -7,7 +7,7 @@ indexer_options = {
   s3_bucket          = "near-lake-data-testnet"
   s3_region          = "eu-central-1"
   s3_url             = null
-  start_block_height = 149685857
+  start_block_height = 152754054
 }
 
 aws_access_key_secret_id = "multichain-indexer-aws-access-key"
@@ -19,6 +19,7 @@ node_configs = [
     address              = "https://multichain-dev-0-7tk2cmmtcq-ue.a.run.app"
     account_sk_secret_id = "multichain-account-sk-dev-0"
     cipher_sk_secret_id  = "multichain-cipher-sk-dev-0"
+    sk_share_secret_id   = "multichain-sk-share-dev-0"
   },
   {
     account              = "multichain-node-dev-1.testnet"
@@ -26,6 +27,7 @@ node_configs = [
     address              = "https://multichain-dev-1-7tk2cmmtcq-ue.a.run.app"
     account_sk_secret_id = "multichain-account-sk-dev-1"
     cipher_sk_secret_id  = "multichain-cipher-sk-dev-1"
+    sk_share_secret_id   = "multichain-sk-share-dev-1"
   },
   {
     account              = "multichain-node-dev-2.testnet"
@@ -33,5 +35,6 @@ node_configs = [
     address              = "https://multichain-dev-2-7tk2cmmtcq-ue.a.run.app"
     account_sk_secret_id = "multichain-account-sk-dev-2"
     cipher_sk_secret_id  = "multichain-cipher-sk-dev-2"
+    sk_share_secret_id   = "multichain-sk-share-dev-2"
   }
 ]

@@ -3,6 +3,7 @@ use super::presignature::{self, PresignatureId};
 use super::state::{GeneratingState, NodeState, ResharingState, RunningState};
 use super::triple::TripleId;
 use crate::http_client::SendError;
+use crate::storage::SecretStorageError;
 use async_trait::async_trait;
 use cait_sith::protocol::{InitializationError, MessageData, Participant, ProtocolError};
 use k256::Scalar;
@@ -134,6 +135,8 @@ pub enum MessageHandleError {
     InvalidStateHandle(String),
     #[error("rpc error: {0}")]
     RpcError(#[from] near_fetch::Error),
+    #[error("secret storage error: {0}")]
+    SecretStorageError(#[from] SecretStorageError),
 }
 
 impl From<CryptographicError> for MessageHandleError {
@@ -150,6 +153,7 @@ impl From<CryptographicError> for MessageHandleError {
             CryptographicError::Encryption(e) => Self::Encryption(e),
             CryptographicError::InvalidStateHandle(e) => Self::InvalidStateHandle(e),
             CryptographicError::RpcError(e) => Self::RpcError(e),
+            CryptographicError::SecretStorageError(e) => Self::SecretStorageError(e),
         }
     }
 }
