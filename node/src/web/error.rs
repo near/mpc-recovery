@@ -42,7 +42,7 @@ impl axum::response::IntoResponse for Error {
         let status = self.status();
         let message = match self {
             Error::JsonExtractorRejection(json_rejection) => json_rejection.body_text(),
-            err => err.to_string(),
+            err => format!("{err:?}"),
         };
 
         (status, axum::Json(message)).into_response()
