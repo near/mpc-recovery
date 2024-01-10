@@ -1,4 +1,4 @@
-mod contract;
+pub mod contract;
 mod cryptography;
 mod presignature;
 mod signature;
@@ -8,9 +8,8 @@ pub mod consensus;
 pub mod message;
 pub mod state;
 
-use cait_sith::protocol::Participant;
 pub use consensus::ConsensusError;
-pub use contract::{ParticipantInfo, ProtocolState};
+pub use contract::ProtocolState;
 pub use cryptography::CryptographicError;
 pub use message::MpcMessage;
 pub use signature::SignQueue;
@@ -25,7 +24,6 @@ use crate::protocol::cryptography::CryptographicProtocol;
 use crate::protocol::message::{MessageHandler, MpcMessageQueue};
 use crate::rpc_client::{self};
 use crate::storage::SecretNodeStorageBox;
-use cait_sith::protocol::Participant;
 use near_crypto::InMemorySigner;
 use near_primitives::types::AccountId;
 use reqwest::IntoUrl;
@@ -50,7 +48,7 @@ struct Ctx {
 }
 
 impl ConsensusCtx for &Ctx {
-    fn me(&self) -> Participant {
+    fn my_account_id(&self) -> &AccountId {
         &self.account_id
     }
 
@@ -176,7 +174,7 @@ impl MpcSignProtocol {
     }
 
     pub async fn run(mut self) -> anyhow::Result<()> {
-        let _span = tracing::info_span!("running", me = u32::from(self.ctx));
+        let _span = tracing::info_span!("running", me = self.ctx.account_id.to_string());
         let mut queue = MpcMessageQueue::default();
         loop {
             tracing::debug!("trying to advance mpc recovery protocol");
@@ -216,7 +214,7 @@ impl MpcSignProtocol {
                 let guard = self.state.read().await;
                 guard.clone()
             };
-            let state = match state.progress(&mut self.ctx).await {
+            let state = match state.progress(&self.ctx).await {
                 Ok(state) => state,
                 Err(err) => {
                     tracing::info!("protocol unable to progress: {err:?}");

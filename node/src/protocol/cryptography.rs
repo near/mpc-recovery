@@ -7,7 +7,7 @@ use crate::protocol::state::{PersistentNodeData, WaitingForConsensusState};
 use crate::protocol::MpcMessage;
 use crate::storage::{SecretNodeStorageBox, SecretStorageError};
 use async_trait::async_trait;
-use cait_sith::protocol::{Action, InitializationError, ProtocolError};
+use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use k256::elliptic_curve::group::GroupEncoding;
 use mpc_keys::hpke;
 use near_crypto::InMemorySigner;
@@ -29,7 +29,7 @@ pub enum CryptographicError {
     #[error("failed to send a message: {0}")]
     SendError(#[from] SendError),
     #[error("unknown participant: {0:?}")]
-    UnknownParticipant(near_sdk::AccountId),
+    UnknownParticipant(Participant),
     #[error("rpc error: {0}")]
     RpcError(#[from] near_fetch::Error),
     #[error("cait-sith initialization error: {0}")]

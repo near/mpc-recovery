@@ -7,7 +7,7 @@ use near_primitives::types::AccountId;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, str::FromStr};
 
-use self::primitives::{Participants, PkVotes, Candidates, Votes};
+use self::primitives::{Candidates, Participants, PkVotes, Votes};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct InitializingContractState {
@@ -69,9 +69,13 @@ impl From<mpc_contract::ResharingContractState> for ResharingContractState {
             new_participants: contract_state.new_participants.into(),
             threshold: contract_state.threshold,
             public_key: contract_state.public_key.into_affine_point(),
-            finished_votes: contract_state.finished_votes.into_iter().map(|acc_id| {
-                AccountId::from_str(&acc_id.to_string()).unwrap() // TODO: code duplication
-            }).collect(),
+            finished_votes: contract_state
+                .finished_votes
+                .into_iter()
+                .map(|acc_id| {
+                    AccountId::from_str(&acc_id.to_string()).unwrap() // TODO: code duplication
+                })
+                .collect(),
         }
     }
 }
@@ -123,6 +127,7 @@ impl TryFrom<ProtocolContractState> for ProtocolState {
             }
             ProtocolContractState::Running(state) => Ok(ProtocolState::Running(state.into())),
             ProtocolContractState::Resharing(state) => Ok(ProtocolState::Resharing(state.into())),
+            ProtocolContractState::NotInitialized => Err(()),
         }
     }
 }

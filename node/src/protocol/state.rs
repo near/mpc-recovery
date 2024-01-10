@@ -5,12 +5,9 @@ use super::signature::SignatureManager;
 use super::triple::TripleManager;
 use super::SignQueue;
 use crate::http_client::MessageQueue;
-use crate::protocol::ParticipantInfo;
-use crate::types::{KeygenProtocol, PrivateKeyShare, PublicKey, ReshareProtocol};
 use crate::types::{KeygenProtocol, PublicKey, ReshareProtocol, SecretKeyShare};
 use cait_sith::protocol::Participant;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -106,7 +103,7 @@ impl ResharingState {
 
 #[derive(Clone)]
 pub struct JoiningState {
-    pub participants: BTreeMap<Participant, ParticipantInfo>,
+    pub participants: Participants,
     pub public_key: PublicKey,
 }
 
@@ -150,7 +147,7 @@ impl NodeState {
 
 fn fetch_participant<'a>(
     p: &Participant,
-    participants: &'a BTreeMap<Participant, ParticipantInfo>,
+    participants: &'a Participants,
 ) -> Result<&'a ParticipantInfo, CryptographicError> {
     participants
         .get(p)

@@ -10,7 +10,7 @@ use k256::Scalar;
 use mpc_keys::hpke::{self, Ciphered};
 use near_crypto::Signature;
 use near_primitives::hash::CryptoHash;
-use near_sdk::AccountId;
+use near_primitives::types::AccountId;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;

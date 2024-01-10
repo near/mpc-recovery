@@ -1,9 +1,8 @@
-use super::contract::{ProtocolState, ResharingContractState};
 use super::state::{
     JoiningState, NodeState, PersistentNodeData, RunningState, StartedState,
     WaitingForConsensusState,
 };
-use super::SignQueue;
+use super::{ProtocolState, SignQueue};
 use crate::protocol::presignature::PresignatureManager;
 use crate::protocol::signature::SignatureManager;
 use crate::protocol::state::{GeneratingState, ResharingState};
@@ -15,17 +14,18 @@ use crate::{http_client, rpc_client};
 use async_trait::async_trait;
 use cait_sith::protocol::{InitializationError, Participant};
 use k256::Secp256k1;
+use mpc_contract::ResharingContractState;
 use mpc_keys::hpke;
 use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
-use near_sdk::AccountId;
+use near_primitives::types::AccountId;
 use std::cmp::Ordering;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use url::Url;
 
 pub trait ConsensusCtx {
-    fn me(&self) -> &AccountId;
+    fn my_account_id(&self) -> &AccountId;
     fn http_client(&self) -> &reqwest::Client;
     fn rpc_client(&self) -> &near_fetch::Client;
     fn signer(&self) -> &InMemorySigner;
@@ -99,10 +99,7 @@ impl ConsensusProtocol for StartedState {
                         }
                         Ordering::Less => Err(ConsensusError::EpochRollback),
                         Ordering::Equal => {
-                            if contract_state
-                                .participants
-                                .contains_key(&ctx.me())
-                            {
+                            if contract_state.participants.contains_key(&ctx.me()) {
                                 tracing::info!(
                                     "contract state is running and we are already a participant"
                                 );
@@ -176,10 +173,7 @@ impl ConsensusProtocol for StartedState {
             },
             None => match contract_state {
                 ProtocolState::Initializing(contract_state) => {
-                    if contract_state
-                        .participants
-                        .contains_key(&ctx.me())
-                    {
+                    if contract_state.participants.contains_key(&ctx.me()) {
                         tracing::info!("starting key generation as a part of the participant set");
                         let participants = contract_state.participants;
                         let protocol = cait_sith::keygen::<Secp256k1>(
@@ -376,14 +370,8 @@ impl ConsensusProtocol for WaitingForConsensusState {
                         tracing::debug!(
                             "waiting for resharing consensus, contract state has not been finalized yet"
                         );
-                        let has_voted = contract_state
-                            .finished_votes
-                            .contains(&ctx.me());
-                        if !has_voted
-                            && contract_state
-                                .old_participants
-                                .contains_key(&ctx.me())
-                        {
+                        let has_voted = contract_state.finished_votes.contains(&ctx.me());
+                        if !has_voted && contract_state.old_participants.contains_key(&ctx.me()) {
                             tracing::info!(
                                 epoch = self.epoch,
                                 "we haven't voted yet, voting for resharing to complete"
@@ -457,12 +445,8 @@ impl ConsensusProtocol for RunningState {
                     Ordering::Less => Err(ConsensusError::EpochRollback),
                     Ordering::Equal => {
                         tracing::info!("contract is resharing");
-                        if !contract_state
-                            .old_participants
-                            .contains_key(&ctx.me())
-                            || !contract_state
-                                .new_participants
-                                .contains_key(&ctx.me())
+                        if !contract_state.old_participants.contains_key(&ctx.me())
+                            || !contract_state.new_participants.contains_key(&ctx.me())
                         {
                             return Err(ConsensusError::HasBeenKicked);
                         }
@@ -561,10 +545,7 @@ impl ConsensusProtocol for JoiningState {
         match contract_state {
             ProtocolState::Initializing(_) => Err(ConsensusError::ContractStateRollback),
             ProtocolState::Running(contract_state) => {
-                if contract_state
-                    .candidates
-                    .contains_key(&ctx.me())
-                {
+                if contract_state.candidates.contains_key(&ctx.me()) {
                     let voted = contract_state
                         .join_votes
                         .get(&ctx.me())
@@ -609,10 +590,7 @@ impl ConsensusProtocol for JoiningState {
                 }
             }
             ProtocolState::Resharing(contract_state) => {
-                if contract_state
-                    .new_participants
-                    .contains_key(&ctx.me())
-                {
+                if contract_state.new_participants.contains_key(&ctx.me()) {
                     tracing::info!("joining as a new participant");
                     start_resharing(None, ctx, contract_state)
                 } else {

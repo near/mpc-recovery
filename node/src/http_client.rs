@@ -1,6 +1,6 @@
+use crate::protocol::contract::primitives::ParticipantInfo;
 use crate::protocol::message::SignedMessage;
 use crate::protocol::MpcMessage;
-use crate::protocol::ParticipantInfo;
 use cait_sith::protocol::Participant;
 use mpc_keys::hpke;
 use reqwest::{Client, IntoUrl};

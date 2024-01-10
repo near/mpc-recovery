@@ -122,10 +122,8 @@ impl From<mpc_contract::primitives::Candidates> for Candidates {
                     (
                         AccountId::from_str(&account_id.to_string()).unwrap(), // TODO: fix unwrap
                         CandidateInfo {
-                            account_id: AccountId::from_str(
-                                &candidate_info.account_id.to_string(),
-                            )
-                            .unwrap(), // TODO: fix unwrap
+                            account_id: AccountId::from_str(&candidate_info.account_id.to_string())
+                                .unwrap(), // TODO: fix unwrap
                             url: candidate_info.url,
                             cipher_pk: hpke::PublicKey::from_bytes(&candidate_info.cipher_pk),
                             sign_pk: near_crypto::PublicKey::SECP256K1(
