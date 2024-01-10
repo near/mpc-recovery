@@ -132,13 +132,13 @@ async fn test_signature() -> anyhow::Result<()> {
                     anyhow::bail!("tx finished unsuccessfully: {:?}", outcome_view.status);
                 };
                 let (big_r, s): (AffinePoint, Scalar) = serde_json::from_slice(&payload)?;
-                let signature = cait_sith::FullSignature::<Secp256k1> { big_r: big_r, s: s };
+                let signature = cait_sith::FullSignature::<Secp256k1> { big_r, s };
                 Ok(signature)
             };
             let signature = is_tx_ready
                 .retry(&ExponentialBuilder::default().with_max_times(6))
                 .await
-                .with_context(|| format!("failed to wait for signature response"))?;
+                .with_context(|| "failed to wait for signature response")?;
             let mut bytes = vec![0x04];
             bytes.extend_from_slice(&state_0.public_key.as_bytes()[1..]);
             let point = EncodedPoint::from_bytes(bytes).unwrap();
