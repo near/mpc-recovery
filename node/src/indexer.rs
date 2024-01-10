@@ -1,3 +1,4 @@
+use crate::kdf;
 use crate::protocol::{SignQueue, SignRequest};
 use near_lake_framework::{LakeBuilder, LakeContext};
 use near_lake_primitives::actions::ActionMetaDataExt;
@@ -6,8 +7,9 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-/// Configures exporter of span and trace data.
+/// Configures indexer.
 #[derive(Debug, Clone, clap::Parser)]
+#[group(id = "indexer_options")]
 pub struct Options {
     /// AWS S3 bucket name for NEAR Lake Indexer
     #[clap(
@@ -61,6 +63,7 @@ impl Options {
 #[derive(Debug, Serialize, Deserialize)]
 struct SignPayload {
     payload: [u8; 32],
+    path: String,
 }
 
 #[derive(LakeContext)]
@@ -87,6 +90,9 @@ async fn handle_block(
                         let Ok(entropy) = serde_json::from_slice::<'_, [u8; 32]>(&result) else {
                             continue;
                         };
+                        let epsilon =
+                            kdf::derive_epsilon(&action.predecessor_id(), &sign_payload.path);
+                        let delta = kdf::derive_delta(receipt.receipt_id(), entropy);
                         tracing::info!(
                             receipt_id = %receipt.receipt_id(),
                             caller_id = receipt.predecessor_id().to_string(),
@@ -98,6 +104,8 @@ async fn handle_block(
                         queue.add(SignRequest {
                             receipt_id: receipt.receipt_id(),
                             msg_hash: sign_payload.payload,
+                            epsilon,
+                            delta,
                             entropy,
                         });
                         drop(queue);

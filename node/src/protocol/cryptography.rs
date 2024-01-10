@@ -1,13 +1,15 @@
 use std::sync::PoisonError;
 
 use super::state::{GeneratingState, NodeState, ResharingState, RunningState};
-use crate::http_client::{self, SendError};
+use crate::http_client::SendError;
 use crate::protocol::message::{GeneratingMessage, ResharingMessage};
-use crate::protocol::state::WaitingForConsensusState;
+use crate::protocol::state::{PersistentNodeData, WaitingForConsensusState};
 use crate::protocol::MpcMessage;
+use crate::storage::{SecretNodeStorageBox, SecretStorageError};
 use async_trait::async_trait;
-use cait_sith::protocol::{Action, InitializationError, ProtocolError, Participant};
+use cait_sith::protocol::{Action, InitializationError, ProtocolError};
 use k256::elliptic_curve::group::GroupEncoding;
+use mpc_keys::hpke;
 use near_crypto::InMemorySigner;
 use near_primitives::types::AccountId;
 
@@ -17,7 +19,9 @@ pub trait CryptographicCtx {
     fn rpc_client(&self) -> &near_fetch::Client;
     fn signer(&self) -> &InMemorySigner;
     fn mpc_contract_id(&self) -> &AccountId;
+    fn cipher_pk(&self) -> &hpke::PublicKey;
     fn sign_sk(&self) -> &near_crypto::SecretKey;
+    fn secret_storage(&mut self) -> &mut SecretNodeStorageBox;
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -40,6 +44,8 @@ pub enum CryptographicError {
     Encryption(String),
     #[error("more than one writing to state: {0}")]
     InvalidStateHandle(String),
+    #[error("secret storage error: {0}")]
+    SecretStorageError(#[from] SecretStorageError),
 }
 
 impl<T> From<PoisonError<T>> for CryptographicError {
@@ -61,7 +67,7 @@ pub trait CryptographicProtocol {
 impl CryptographicProtocol for GeneratingState {
     async fn progress<C: CryptographicCtx + Send + Sync>(
         mut self,
-        ctx: C,
+        mut ctx: C,
     ) -> Result<NodeState, CryptographicError> {
         tracing::info!("progressing key generation");
         let mut protocol = self.protocol.write().await;
@@ -71,60 +77,100 @@ impl CryptographicProtocol for GeneratingState {
                 Action::Wait => {
                     drop(protocol);
                     tracing::debug!("waiting");
+                    if let Err(err) = self
+                        .messages
+                        .write()
+                        .await
+                        .send_encrypted(ctx.me(), ctx.sign_sk(), ctx.http_client())
+                        .await
+                    {
+                        tracing::warn!(?err, participants = ?self.participants, "generating: failed to send encrypted message");
+                    }
+
                     return Ok(NodeState::Generating(self));
                 }
                 Action::SendMany(m) => {
                     tracing::debug!("sending a message to many participants");
-                    for (p, info) in self.participants.iter() {
+                    let mut messages = self.messages.write().await;
+                    for (p, info) in &self.participants {
                         if p == &self.participants.find(ctx.my_near_acc_id()) {
                             // Skip yourself, cait-sith never sends messages to oneself
                             continue;
                         }
-                        http_client::send_encrypted(
-                            ctx.me(),
-                            &info.cipher_pk,
-                            ctx.sign_sk(),
-                            ctx.http_client(),
-                            info.url.clone(),
+                        messages.push(
+                            info.clone(),
                             MpcMessage::Generating(GeneratingMessage {
                                 from: ctx.me(),
                                 data: m.clone(),
                             }),
-                        )
-                        .await?;
+                        );
                     }
                 }
                 Action::SendPrivate(to, m) => {
                     tracing::debug!("sending a private message to {to:?}");
                     let info = self.fetch_participant(&to)?;
-                    http_client::send_encrypted(
-                        ctx.me(),
-                        &info.cipher_pk,
-                        ctx.sign_sk(),
-                        ctx.http_client(),
-                        info.url.clone(),
+                    self.messages.write().await.push(
+                        info.clone(),
                         MpcMessage::Generating(GeneratingMessage {
                             from: ctx.me(),
                             data: m.clone(),
                         }),
-                    )
-                    .await?
+                    );
                 }
                 Action::Return(r) => {
                     tracing::info!(
                         public_key = hex::encode(r.public_key.to_bytes()),
                         "successfully completed key generation"
                     );
+                    ctx.secret_storage()
+                        .store(&PersistentNodeData {
+                            epoch: 0,
+                            private_share: r.private_share,
+                            public_key: r.public_key,
+                        })
+                        .await?;
+                    // Send any leftover messages
+                    if let Err(err) = self
+                        .messages
+                        .write()
+                        .await
+                        .send_encrypted(ctx.me(), ctx.sign_sk(), ctx.http_client())
+                        .await
+                    {
+                        tracing::warn!(?err, participants = ?self.participants, "generating: failed to send encrypted message");
+                    }
                     return Ok(NodeState::WaitingForConsensus(WaitingForConsensusState {
                         epoch: 0,
                         participants: self.participants,
                         threshold: self.threshold,
                         private_share: r.private_share,
                         public_key: r.public_key,
+                        messages: self.messages,
                     }));
                 }
             }
         }
+    }
+}
+
+#[async_trait]
+impl CryptographicProtocol for WaitingForConsensusState {
+    async fn progress<C: CryptographicCtx + Send + Sync>(
+        mut self,
+        ctx: C,
+    ) -> Result<NodeState, CryptographicError> {
+        if let Err(err) = self
+            .messages
+            .write()
+            .await
+            .send_encrypted(ctx.me(), ctx.sign_sk(), ctx.http_client())
+            .await
+        {
+            tracing::warn!(?err, participants = ?self.participants, "waiting: failed to send encrypted message");
+        }
+
+        // Wait for ConsensusProtocol step to advance state
+        Ok(NodeState::WaitingForConsensus(self))
     }
 }
 
@@ -142,59 +188,72 @@ impl CryptographicProtocol for ResharingState {
                 Action::Wait => {
                     drop(protocol);
                     tracing::debug!("waiting");
+                    if let Err(err) = self
+                        .messages
+                        .write()
+                        .await
+                        .send_encrypted(ctx.me(), ctx.sign_sk(), ctx.http_client())
+                        .await
+                    {
+                        tracing::warn!(?err, new = ?self.new_participants, old = ?self.old_participants, "resharing(wait): failed to send encrypted message");
+                    }
+
                     return Ok(NodeState::Resharing(self));
                 }
                 Action::SendMany(m) => {
                     tracing::debug!("sending a message to all participants");
+                    let mut messages = self.messages.write().await;
                     for (p, info) in &self.new_participants {
                         if p == &ctx.me() {
                             // Skip yourself, cait-sith never sends messages to oneself
                             continue;
                         }
-                        http_client::send_encrypted(
-                            ctx.me(),
-                            &info.cipher_pk,
-                            ctx.sign_sk(),
-                            ctx.http_client(),
-                            info.url.clone(),
+
+                        messages.push(
+                            info.clone(),
                             MpcMessage::Resharing(ResharingMessage {
                                 epoch: self.old_epoch,
                                 from: ctx.me(),
                                 data: m.clone(),
                             }),
                         )
-                        .await?;
                     }
                 }
                 Action::SendPrivate(to, m) => {
                     tracing::debug!("sending a private message to {to:?}");
                     match self.new_participants.get(&to) {
-                        Some(info) => {
-                            http_client::send_encrypted(
-                                ctx.me(),
-                                &info.cipher_pk,
-                                ctx.sign_sk(),
-                                ctx.http_client(),
-                                info.url.clone(),
-                                MpcMessage::Resharing(ResharingMessage {
-                                    epoch: self.old_epoch,
-                                    from: ctx.me(),
-                                    data: m.clone(),
-                                }),
-                            )
-                            .await?;
-                        }
+                        Some(info) => self.messages.write().await.push(
+                            info.clone(),
+                            MpcMessage::Resharing(ResharingMessage {
+                                epoch: self.old_epoch,
+                                from: ctx.me(),
+                                data: m.clone(),
+                            }),
+                        ),
                         None => return Err(CryptographicError::UnknownParticipant(to)),
                     }
                 }
                 Action::Return(private_share) => {
                     tracing::debug!("successfully completed key reshare");
+
+                    // Send any leftover messages.
+                    if let Err(err) = self
+                        .messages
+                        .write()
+                        .await
+                        .send_encrypted(ctx.me(), ctx.sign_sk(), ctx.http_client())
+                        .await
+                    {
+                        tracing::warn!(?err, new = ?self.new_participants, old = ?self.old_participants, "resharing(return): failed to send encrypted message");
+                    }
+
                     return Ok(NodeState::WaitingForConsensus(WaitingForConsensusState {
                         epoch: self.old_epoch + 1,
                         participants: self.new_participants,
                         threshold: self.threshold,
                         private_share,
                         public_key: self.public_key,
+                        messages: self.messages,
                     }));
                 }
             }
@@ -208,21 +267,22 @@ impl CryptographicProtocol for RunningState {
         mut self,
         ctx: C,
     ) -> Result<NodeState, CryptographicError> {
+        let mut messages = self.messages.write().await;
+        // Try sending any leftover messages donated to RunningState.
+        if let Err(err) = messages
+            .send_encrypted(ctx.me(), ctx.sign_sk(), ctx.http_client())
+            .await
+        {
+            tracing::warn!(?err, participants = ?self.participants, "running(pre): failed to send encrypted message");
+        }
+
         let mut triple_manager = self.triple_manager.write().await;
         if triple_manager.my_len() < 2 && triple_manager.potential_len() < 10 {
             triple_manager.generate()?;
         }
         for (p, msg) in triple_manager.poke()? {
             let info = self.fetch_participant(&p)?;
-            http_client::send_encrypted(
-                ctx.me(),
-                &info.cipher_pk,
-                ctx.sign_sk(),
-                ctx.http_client(),
-                info.url.clone(),
-                MpcMessage::Triple(msg),
-            )
-            .await?;
+            messages.push(info.clone(), MpcMessage::Triple(msg));
         }
 
         let mut presignature_manager = self.presignature_manager.write().await;
@@ -244,15 +304,7 @@ impl CryptographicProtocol for RunningState {
         drop(triple_manager);
         for (p, msg) in presignature_manager.poke()? {
             let info = self.fetch_participant(&p)?;
-            http_client::send_encrypted(
-                ctx.me(),
-                &info.cipher_pk,
-                ctx.sign_sk(),
-                ctx.http_client(),
-                info.url.clone(),
-                MpcMessage::Presignature(msg),
-            )
-            .await?;
+            messages.push(info.clone(), MpcMessage::Presignature(msg));
         }
 
         let mut sign_queue = self.sign_queue.write().await;
@@ -273,26 +325,27 @@ impl CryptographicProtocol for RunningState {
                 presignature,
                 self.public_key,
                 my_request.msg_hash,
+                my_request.epsilon,
+                my_request.delta,
             )?;
         }
         drop(sign_queue);
         drop(presignature_manager);
         for (p, msg) in signature_manager.poke()? {
             let info = self.participants.get(&p).unwrap();
-            http_client::send_encrypted(
-                ctx.me(),
-                &info.cipher_pk,
-                ctx.sign_sk(),
-                ctx.http_client(),
-                info.url.clone(),
-                MpcMessage::Signature(msg),
-            )
-            .await?;
+            messages.push(info.clone(), MpcMessage::Signature(msg));
         }
         signature_manager
             .publish(ctx.rpc_client(), ctx.signer(), ctx.mpc_contract_id())
             .await?;
         drop(signature_manager);
+        if let Err(err) = messages
+            .send_encrypted(ctx.me(), ctx.sign_sk(), ctx.http_client())
+            .await
+        {
+            tracing::warn!(?err, participants = ?self.participants, "running(post): failed to send encrypted message");
+        }
+        drop(messages);
 
         Ok(NodeState::Running(self))
     }
@@ -308,6 +361,7 @@ impl CryptographicProtocol for NodeState {
             NodeState::Generating(state) => state.progress(ctx).await,
             NodeState::Resharing(state) => state.progress(ctx).await,
             NodeState::Running(state) => state.progress(ctx).await,
+            NodeState::WaitingForConsensus(state) => state.progress(ctx).await,
             _ => Ok(self),
         }
     }

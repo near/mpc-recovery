@@ -59,6 +59,7 @@ curv = { package = "curv-kzen", version = "0.9", default-features = false }
 # TODO: Update to >=2 to resolve RUSTSEC-2022-0093
 ed25519-dalek = { version = "1.0.1", features = ["serde"] }
 sha2 = "0.9.9"
+zerocopy = "0.7.32"
 
 [dev-dependencies]
 rsa = "0.8.2"

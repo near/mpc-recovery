@@ -101,6 +101,14 @@ resource "google_cloud_run_v2_service" "node" {
         name  = "AWS_DEFAULT_REGION"
         value = var.indexer_options.s3_region
       }
+      env {
+        name  = "MPC_RECOVERY_GCP_PROJECT_ID"
+        value = var.project
+      }
+      env {
+        name  = "MPC_RECOVERY_SK_SHARE_SECRET_ID"
+        value = var.sk_share_secret_id
+      }
 
       env {
         name  = "MPC_RECOVERY_WEB_PORT"

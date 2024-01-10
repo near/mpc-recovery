@@ -6,10 +6,10 @@ use cait_sith::{FullSignature, PresignOutput};
 use k256::{elliptic_curve::CurveArithmetic, Secp256k1};
 use tokio::sync::RwLock;
 
-pub type PrivateKeyShare = <Secp256k1 as CurveArithmetic>::Scalar;
+pub type SecretKeyShare = <Secp256k1 as CurveArithmetic>::Scalar;
 pub type PublicKey = <Secp256k1 as CurveArithmetic>::AffinePoint;
 pub type KeygenProtocol = Arc<RwLock<dyn Protocol<Output = KeygenOutput<Secp256k1>> + Send + Sync>>;
-pub type ReshareProtocol = Arc<RwLock<dyn Protocol<Output = PrivateKeyShare> + Send + Sync>>;
+pub type ReshareProtocol = Arc<RwLock<dyn Protocol<Output = SecretKeyShare> + Send + Sync>>;
 pub type TripleProtocol =
     Arc<std::sync::RwLock<dyn Protocol<Output = TripleGenerationOutput<Secp256k1>> + Send + Sync>>;
 pub type PresignatureProtocol =

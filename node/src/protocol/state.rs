@@ -1,17 +1,23 @@
-use super::contract::primitives::{Participants, ParticipantInfo};
+use super::contract::primitives::{ParticipantInfo, Participants};
 use super::cryptography::CryptographicError;
 use super::presignature::PresignatureManager;
 use super::signature::SignatureManager;
 use super::triple::TripleManager;
 use super::SignQueue;
+use crate::http_client::MessageQueue;
+use crate::protocol::ParticipantInfo;
 use crate::types::{KeygenProtocol, PrivateKeyShare, PublicKey, ReshareProtocol};
+use crate::types::{KeygenProtocol, PublicKey, ReshareProtocol, SecretKeyShare};
+use cait_sith::protocol::Participant;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct PersistentNodeData {
     pub epoch: u64,
-    pub private_share: PrivateKeyShare,
+    pub private_share: SecretKeyShare,
     pub public_key: PublicKey,
 }
 
@@ -23,6 +29,7 @@ pub struct GeneratingState {
     pub participants: Participants,
     pub threshold: usize,
     pub protocol: KeygenProtocol,
+    pub messages: Arc<RwLock<MessageQueue>>,
 }
 
 impl GeneratingState {
@@ -39,8 +46,9 @@ pub struct WaitingForConsensusState {
     pub epoch: u64,
     pub participants: Participants,
     pub threshold: usize,
-    pub private_share: PrivateKeyShare,
+    pub private_share: SecretKeyShare,
     pub public_key: PublicKey,
+    pub messages: Arc<RwLock<MessageQueue>>,
 }
 
 impl WaitingForConsensusState {
@@ -57,12 +65,13 @@ pub struct RunningState {
     pub epoch: u64,
     pub participants: Participants,
     pub threshold: usize,
-    pub private_share: PrivateKeyShare,
+    pub private_share: SecretKeyShare,
     pub public_key: PublicKey,
     pub sign_queue: Arc<RwLock<SignQueue>>,
     pub triple_manager: Arc<RwLock<TripleManager>>,
     pub presignature_manager: Arc<RwLock<PresignatureManager>>,
     pub signature_manager: Arc<RwLock<SignatureManager>>,
+    pub messages: Arc<RwLock<MessageQueue>>,
 }
 
 impl RunningState {
@@ -82,6 +91,7 @@ pub struct ResharingState {
     pub threshold: usize,
     pub public_key: PublicKey,
     pub protocol: ReshareProtocol,
+    pub messages: Arc<RwLock<MessageQueue>>,
 }
 
 impl ResharingState {

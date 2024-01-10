@@ -8,7 +8,8 @@ use crate::protocol::presignature::PresignatureManager;
 use crate::protocol::signature::SignatureManager;
 use crate::protocol::state::{GeneratingState, ResharingState};
 use crate::protocol::triple::TripleManager;
-use crate::types::PrivateKeyShare;
+use crate::storage::{SecretNodeStorageBox, SecretStorageError};
+use crate::types::SecretKeyShare;
 use crate::util::AffinePointExt;
 use crate::{http_client, rpc_client};
 use async_trait::async_trait;
@@ -33,6 +34,8 @@ pub trait ConsensusCtx {
     fn sign_queue(&self) -> Arc<RwLock<SignQueue>>;
     fn cipher_pk(&self) -> &hpke::PublicKey;
     fn sign_pk(&self) -> near_crypto::PublicKey;
+    fn sign_sk(&self) -> &near_crypto::SecretKey;
+    fn secret_storage(&self) -> &SecretNodeStorageBox;
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -51,6 +54,8 @@ pub enum ConsensusError {
     HasBeenKicked,
     #[error("cait-sith initialization error: {0}")]
     CaitSithInitializationError(#[from] InitializationError),
+    #[error("secret storage error: {0}")]
+    SecretStorageError(#[from] SecretStorageError),
 }
 
 #[async_trait]
@@ -132,6 +137,7 @@ impl ConsensusProtocol for StartedState {
                                             epoch,
                                         ),
                                     )),
+                                    messages: Default::default(),
                                 }))
                             } else {
                                 Ok(NodeState::Joining(JoiningState {
@@ -185,6 +191,7 @@ impl ConsensusProtocol for StartedState {
                             participants,
                             threshold: contract_state.threshold,
                             protocol: Arc::new(RwLock::new(protocol)),
+                            messages: Default::default(),
                         }))
                     } else {
                         tracing::info!("we are not a part of the initial participant set, waiting for key generation to complete");
@@ -334,6 +341,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                             self.public_key,
                             self.epoch,
                         ))),
+                        messages: self.messages,
                     }))
                 }
             },
@@ -625,8 +633,8 @@ impl ConsensusProtocol for NodeState {
     ) -> Result<NodeState, ConsensusError> {
         match self {
             NodeState::Starting => {
-                // TODO: Load from persistent storage
-                Ok(NodeState::Started(StartedState(None)))
+                let node_data = ctx.secret_storage().load().await?;
+                Ok(NodeState::Started(StartedState(node_data)))
             }
             NodeState::Started(state) => state.advance(ctx, contract_state).await,
             NodeState::Generating(state) => state.advance(ctx, contract_state).await,
@@ -639,7 +647,7 @@ impl ConsensusProtocol for NodeState {
 }
 
 fn start_resharing<C: ConsensusCtx>(
-    private_share: Option<PrivateKeyShare>,
+    private_share: Option<SecretKeyShare>,
     ctx: C,
     contract_state: ResharingContractState,
 ) -> Result<NodeState, ConsensusError> {
@@ -667,5 +675,6 @@ fn start_resharing<C: ConsensusCtx>(
         threshold: contract_state.threshold,
         public_key: contract_state.public_key,
         protocol: Arc::new(RwLock::new(protocol)),
+        messages: Default::default(),
     }))
 }

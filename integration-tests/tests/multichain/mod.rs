@@ -1,7 +1,8 @@
 use crate::{wait_for, with_multichain_nodes};
-use k256::elliptic_curve::scalar::FromUintUnchecked;
 use k256::elliptic_curve::sec1::FromEncodedPoint;
-use k256::{AffinePoint, EncodedPoint, Scalar, Secp256k1, U256};
+use k256::{AffinePoint, EncodedPoint, Scalar, Secp256k1};
+use mpc_recovery_node::kdf;
+use mpc_recovery_node::util::ScalarExt;
 use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
 use near_primitives::views::ExecutionStatusView;
@@ -76,7 +77,7 @@ async fn test_signature() -> anyhow::Result<()> {
                 .rpc_client
                 .send_tx(
                     &InMemorySigner {
-                        account_id,
+                        account_id: account_id.clone(),
                         public_key: secret_key.public_key().clone().into(),
                         secret_key: secret_key.to_string().parse()?,
                     },
@@ -84,7 +85,8 @@ async fn test_signature() -> anyhow::Result<()> {
                     vec![Action::FunctionCall(FunctionCallAction {
                         method_name: "sign".to_string(),
                         args: serde_json::to_vec(&serde_json::json!({
-                            "payload": payload
+                            "payload": payload,
+                            "path": "test",
                         }))?,
                         gas: 300_000_000_000_000,
                         deposit: 0,
@@ -107,10 +109,11 @@ async fn test_signature() -> anyhow::Result<()> {
             bytes.extend_from_slice(&state_0.public_key.as_bytes()[1..]);
             let point = EncodedPoint::from_bytes(bytes).unwrap();
             let public_key = AffinePoint::from_encoded_point(&point).unwrap();
+            let epsilon = kdf::derive_epsilon(&account_id, "test");
 
             assert!(signature_output.verify(
-                &public_key,
-                &Scalar::from_uint_unchecked(U256::from_le_slice(&payload)),
+                &kdf::derive_key(public_key, epsilon),
+                &Scalar::from_bytes(&payload),
             ));
 
             Ok(())

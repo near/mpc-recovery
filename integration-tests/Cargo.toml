@@ -32,8 +32,9 @@ serde_json = "1"
 testcontainers = { version = "0.15", features = ["experimental"] }
 tokio = { version = "1.28", features = ["full"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-near-workspaces = "0.8.0"
+near-workspaces = { git = "https://github.com/near/near-workspaces-rs.git", branch = "main" }
 toml = "0.8.1"
+sha2 = "0.10.8"
 
 near-crypto = "0.17"
 near-fetch = "0.0.12"
@@ -41,7 +42,6 @@ near-jsonrpc-client = "0.6"
 near-primitives = "0.17"
 near-lake-framework = { git = "https://github.com/near/near-lake-framework-rs.git", branch = "daniyar/upgrade-sdk" }
 near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs.git", branch = "daniyar/upgrade-sdk" }
-near-units = "0.2.0"
 
 mpc-contract = { path = "../contract" }
 mpc-keys = { path = "../keys" }

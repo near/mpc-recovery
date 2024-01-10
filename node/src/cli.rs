@@ -1,5 +1,5 @@
 use crate::protocol::{MpcSignProtocol, SignQueue};
-use crate::{indexer, web};
+use crate::{indexer, storage, web};
 use cait_sith::protocol::Participant;
 use clap::Parser;
 use local_ip_address::local_ip;
@@ -48,6 +48,9 @@ pub enum Cli {
         /// Local address that other peers can use to message this node.
         #[arg(long, env("MPC_RECOVERY_LOCAL_ADDRESS"))]
         my_address: Option<Url>,
+        /// Storage options
+        #[clap(flatten)]
+        storage_options: storage::Options,
     },
 }
 
@@ -69,6 +72,7 @@ impl Cli {
                 cipher_sk,
                 indexer_options,
                 my_address,
+                storage_options,
             } => {
                 let mut args = vec![
                     "start".to_string(),
@@ -91,6 +95,7 @@ impl Cli {
                     args.extend(vec!["--my-address".to_string(), my_address.to_string()]);
                 }
                 args.extend(indexer_options.into_str_args());
+                args.extend(storage_options.into_str_args());
                 args
             }
         }
@@ -121,6 +126,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
             cipher_sk,
             indexer_options,
             my_address,
+            storage_options,
         } => {
             let sign_queue = Arc::new(RwLock::new(SignQueue::new()));
             let a = indexer_options.clone();
@@ -134,6 +140,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                 .build()?
                 .block_on(async {
                     let (sender, receiver) = mpsc::channel(16384);
+                    let key_storage = storage::init(&storage_options).await?;
 
                     let my_address = my_address.unwrap_or_else(|| {
                         let my_ip = local_ip().unwrap();
@@ -152,6 +159,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                         receiver,
                         sign_queue.clone(),
                         hpke::PublicKey::try_from_bytes(&hex::decode(cipher_pk)?)?,
+                        key_storage,
                     );
                     tracing::debug!("protocol initialized");
                     let protocol_handle = tokio::spawn(async move { protocol.run().await });

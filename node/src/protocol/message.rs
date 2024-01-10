@@ -3,18 +3,21 @@ use super::presignature::{self, PresignatureId};
 use super::state::{GeneratingState, NodeState, ResharingState, RunningState};
 use super::triple::TripleId;
 use crate::http_client::SendError;
+use crate::storage::SecretStorageError;
 use async_trait::async_trait;
 use cait_sith::protocol::{InitializationError, MessageData, Participant, ProtocolError};
+use k256::Scalar;
 use mpc_keys::hpke::{self, Ciphered};
 use near_crypto::Signature;
 use near_primitives::hash::CryptoHash;
+use near_sdk::AccountId;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub trait MessageCtx {
-    fn me(&self) -> Participant;
+    fn my_near_acc_id(&self) -> AccountId;
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -54,6 +57,8 @@ pub struct SignatureMessage {
     pub proposer: Participant,
     pub presignature_id: PresignatureId,
     pub msg_hash: [u8; 32],
+    pub epsilon: Scalar,
+    pub delta: Scalar,
     pub epoch: u64,
     pub from: Participant,
     pub data: MessageData,
@@ -131,6 +136,8 @@ pub enum MessageHandleError {
     InvalidStateHandle(String),
     #[error("rpc error: {0}")]
     RpcError(#[from] near_fetch::Error),
+    #[error("secret storage error: {0}")]
+    SecretStorageError(#[from] SecretStorageError),
 }
 
 impl From<CryptographicError> for MessageHandleError {
@@ -147,6 +154,7 @@ impl From<CryptographicError> for MessageHandleError {
             CryptographicError::Encryption(e) => Self::Encryption(e),
             CryptographicError::InvalidStateHandle(e) => Self::InvalidStateHandle(e),
             CryptographicError::RpcError(e) => Self::RpcError(e),
+            CryptographicError::SecretStorageError(e) => Self::SecretStorageError(e),
         }
     }
 }
@@ -274,6 +282,8 @@ impl MessageHandler for RunningState {
                     message.proposer,
                     message.presignature_id,
                     message.msg_hash,
+                    message.epsilon,
+                    message.delta,
                     &mut presignature_manager,
                 )? {
                     Some(protocol) => {
