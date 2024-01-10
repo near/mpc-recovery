@@ -1,3 +1,4 @@
+use super::contract::ResharingContractState;
 use super::state::{
     JoiningState, NodeState, PersistentNodeData, RunningState, StartedState,
     WaitingForConsensusState,
@@ -14,7 +15,6 @@ use crate::{http_client, rpc_client};
 use async_trait::async_trait;
 use cait_sith::protocol::{InitializationError, Participant};
 use k256::Secp256k1;
-use mpc_contract::ResharingContractState;
 use mpc_keys::hpke;
 use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
@@ -74,6 +74,10 @@ impl ConsensusProtocol for StartedState {
         ctx: C,
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
+        let me = contract_state
+            .participants()
+            .find_participant(ctx.my_account_id())
+            .unwrap(); // TODO: remove unwrap
         match self.0 {
             Some(PersistentNodeData {
                 epoch,
@@ -99,12 +103,16 @@ impl ConsensusProtocol for StartedState {
                         }
                         Ordering::Less => Err(ConsensusError::EpochRollback),
                         Ordering::Equal => {
-                            if contract_state.participants.contains_key(&ctx.me()) {
+                            if contract_state
+                                .participants
+                                .contains_account_id(&ctx.my_account_id())
+                            {
                                 tracing::info!(
                                     "contract state is running and we are already a participant"
                                 );
-                                let participants_vec: Vec<AccountId> =
+                                let participants_vec: Vec<Participant> =
                                     contract_state.participants.keys().cloned().collect();
+
                                 Ok(NodeState::Running(RunningState {
                                     epoch,
                                     participants: contract_state.participants,
@@ -114,14 +122,14 @@ impl ConsensusProtocol for StartedState {
                                     sign_queue: ctx.sign_queue(),
                                     triple_manager: Arc::new(RwLock::new(TripleManager::new(
                                         participants_vec.clone(),
-                                        ctx.me(),
+                                        me,
                                         contract_state.threshold,
                                         epoch,
                                     ))),
                                     presignature_manager: Arc::new(RwLock::new(
                                         PresignatureManager::new(
                                             participants_vec.clone(),
-                                            ctx.me(),
+                                            me,
                                             contract_state.threshold,
                                             epoch,
                                         ),
@@ -129,7 +137,7 @@ impl ConsensusProtocol for StartedState {
                                     signature_manager: Arc::new(RwLock::new(
                                         SignatureManager::new(
                                             participants_vec,
-                                            ctx.me(),
+                                            me,
                                             contract_state.public_key,
                                             epoch,
                                         ),
@@ -173,12 +181,15 @@ impl ConsensusProtocol for StartedState {
             },
             None => match contract_state {
                 ProtocolState::Initializing(contract_state) => {
-                    if contract_state.participants.contains_key(&ctx.me()) {
+                    if contract_state
+                        .participants
+                        .contains_account_id(&ctx.my_account_id())
+                    {
                         tracing::info!("starting key generation as a part of the participant set");
                         let participants = contract_state.participants;
                         let protocol = cait_sith::keygen::<Secp256k1>(
                             &participants.keys().cloned().collect::<Vec<_>>(),
-                            ctx.me(),
+                            me,
                             contract_state.threshold,
                         )?;
                         Ok(NodeState::Generating(GeneratingState {
@@ -262,6 +273,10 @@ impl ConsensusProtocol for WaitingForConsensusState {
         ctx: C,
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
+        let me = self
+            .participants
+            .find_participant(ctx.my_account_id())
+            .unwrap(); // TODO: remove unwrap
         match contract_state {
             ProtocolState::Initializing(contract_state) => {
                 tracing::debug!("waiting for consensus, contract state has not been finalized yet");
@@ -269,7 +284,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                 let has_voted = contract_state
                     .pk_votes
                     .get(&public_key)
-                    .map(|ps| ps.contains(&ctx.me()))
+                    .map(|ps| ps.contains(ctx.my_account_id()))
                     .unwrap_or_default();
                 if !has_voted {
                     tracing::info!("we haven't voted yet, voting for the generated public key");
@@ -319,19 +334,19 @@ impl ConsensusProtocol for WaitingForConsensusState {
                         sign_queue: ctx.sign_queue(),
                         triple_manager: Arc::new(RwLock::new(TripleManager::new(
                             participants_vec.clone(),
-                            ctx.me(),
+                            me,
                             self.threshold,
                             self.epoch,
                         ))),
                         presignature_manager: Arc::new(RwLock::new(PresignatureManager::new(
                             participants_vec.clone(),
-                            ctx.me(),
+                            me,
                             self.threshold,
                             self.epoch,
                         ))),
                         signature_manager: Arc::new(RwLock::new(SignatureManager::new(
                             participants_vec,
-                            ctx.me(),
+                            me,
                             self.public_key,
                             self.epoch,
                         ))),
@@ -370,8 +385,8 @@ impl ConsensusProtocol for WaitingForConsensusState {
                         tracing::debug!(
                             "waiting for resharing consensus, contract state has not been finalized yet"
                         );
-                        let has_voted = contract_state.finished_votes.contains(&ctx.me());
-                        if !has_voted && contract_state.old_participants.contains_key(&ctx.me()) {
+                        let has_voted = contract_state.finished_votes.contains(ctx.my_account_id());
+                        if !has_voted && contract_state.old_participants.contains_key(&me) {
                             tracing::info!(
                                 epoch = self.epoch,
                                 "we haven't voted yet, voting for resharing to complete"
@@ -400,6 +415,10 @@ impl ConsensusProtocol for RunningState {
         ctx: C,
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
+        let me = contract_state
+            .participants()
+            .find_participant(ctx.my_account_id())
+            .unwrap(); // TODO: remove unwrap
         match contract_state {
             ProtocolState::Initializing(_) => Err(ConsensusError::ContractStateRollback),
             ProtocolState::Running(contract_state) => match contract_state.epoch.cmp(&self.epoch) {
@@ -445,8 +464,8 @@ impl ConsensusProtocol for RunningState {
                     Ordering::Less => Err(ConsensusError::EpochRollback),
                     Ordering::Equal => {
                         tracing::info!("contract is resharing");
-                        if !contract_state.old_participants.contains_key(&ctx.me())
-                            || !contract_state.new_participants.contains_key(&ctx.me())
+                        if !contract_state.old_participants.contains_key(&me)
+                            || !contract_state.new_participants.contains_key(&me)
                         {
                             return Err(ConsensusError::HasBeenKicked);
                         }
@@ -548,7 +567,7 @@ impl ConsensusProtocol for JoiningState {
                 if contract_state.candidates.contains_key(&ctx.me()) {
                     let voted = contract_state
                         .join_votes
-                        .get(&ctx.me())
+                        .get(&ctx.my_account_id())
                         .cloned()
                         .unwrap_or_default();
                     tracing::info!(
@@ -642,16 +661,19 @@ fn start_resharing<C: ConsensusCtx>(
             .cloned()
             .collect::<Vec<_>>(),
         contract_state.threshold,
-        ctx.me(),
+        contract_state
+            .old_participants
+            .find_participant(ctx.my_account_id())
+            .unwrap(), // TODO: remove unwrap
         private_share,
         contract_state.public_key,
     )?;
     Ok(NodeState::Resharing(ResharingState {
         old_epoch: contract_state.old_epoch,
-        old_participants: contract_state.old_participants,
-        new_participants: contract_state.new_participants,
+        old_participants: contract_state.old_participants.into(),
+        new_participants: contract_state.new_participants.into(),
         threshold: contract_state.threshold,
-        public_key: contract_state.public_key,
+        public_key: contract_state.public_key.into(),
         protocol: Arc::new(RwLock::new(protocol)),
         messages: Default::default(),
     }))

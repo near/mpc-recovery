@@ -96,6 +96,10 @@ impl Participants {
     pub fn into_iter(self) -> impl Iterator<Item = (AccountId, ParticipantInfo)> {
         self.participants.into_iter()
     }
+
+    pub fn keys(&self) -> impl Iterator<Item = &AccountId> {
+        self.participants.keys()
+    }
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug, Clone)]

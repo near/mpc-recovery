@@ -77,6 +77,19 @@ impl Participants {
     pub fn iter(&self) -> impl Iterator<Item = (&Participant, &ParticipantInfo)> {
         self.participants.iter()
     }
+
+    pub fn find_participant(&self, account_id: &AccountId) -> Option<Participant> {
+        self.participants
+            .iter()
+            .find(|(_, participant_info)| participant_info.account_id == *account_id)
+            .map(|(participant, _)| *participant)
+    }
+
+    pub fn contains_account_id(&self, account_id: &AccountId) -> bool {
+        self.participants
+            .iter()
+            .any(|(_, participant_info)| participant_info.account_id == *account_id)
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -143,6 +156,12 @@ impl From<mpc_contract::primitives::Candidates> for Candidates {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PkVotes {
     pub pk_votes: BTreeMap<near_crypto::PublicKey, HashSet<AccountId>>,
+}
+
+impl PkVotes {
+    pub fn get(&self, id: &near_crypto::PublicKey) -> Option<&HashSet<AccountId>> {
+        self.pk_votes.get(id)
+    }
 }
 
 impl From<mpc_contract::primitives::PkVotes> for PkVotes {
