@@ -100,6 +100,10 @@ impl Participants {
     pub fn keys(&self) -> impl Iterator<Item = &AccountId> {
         self.participants.keys()
     }
+
+    pub fn len(&self) -> usize {
+        self.participants.len()
+    }
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug, Clone)]
