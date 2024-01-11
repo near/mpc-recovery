@@ -172,14 +172,13 @@ pub trait MessageHandler {
 impl MessageHandler for GeneratingState {
     async fn handle<C: MessageCtx + Send + Sync>(
         &mut self,
-        ctx: C,
+        _ctx: C,
         queue: &mut MpcMessageQueue,
     ) -> Result<(), MessageHandleError> {
         let mut protocol = self.protocol.write().await;
         while let Some(msg) = queue.generating.pop_front() {
             tracing::debug!("handling new generating message");
-            let participant = self
-                .participants
+            self.participants
                 .find_participant(&msg.from)
                 .map(|participant| {
                     tracing::debug!(from = %msg.from, "handling message from");
@@ -206,8 +205,7 @@ impl MessageHandler for ResharingState {
         let q = queue.resharing_bins.entry(self.old_epoch).or_default();
         let mut protocol = self.protocol.write().await;
         while let Some(msg) = q.pop_front() {
-            let participant = self
-                .old_participants
+            self.old_participants
                 .find_participant(&msg.from)
                 .map(|participant| {
                     tracing::debug!(from = %msg.from, "handling resharing message from");
@@ -238,7 +236,7 @@ impl MessageHandler for RunningState {
                     .write()
                     .map_err(|err| MessageHandleError::SyncError(err.to_string()))?;
                 while let Some(message) = queue.pop_front() {
-                    let participant = self
+                    self
                         .participants
                         .find_participant(&message.from)
                         .map(|participant| {
@@ -271,7 +269,7 @@ impl MessageHandler for RunningState {
                         let mut protocol = protocol
                             .write()
                             .map_err(|err| MessageHandleError::SyncError(err.to_string()))?;
-                        let participant = self
+                        self
                             .participants
                             .find_participant(&message.from)
                             .map(|participant| {

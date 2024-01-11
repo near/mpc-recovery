@@ -229,9 +229,9 @@ impl From<mpc_contract::primitives::Votes> for Votes {
             votes: contract_votes
                 .votes
                 .into_iter()
-                .map(|(accountId, participants)| {
+                .map(|(account_id, participants)| {
                     (
-                        AccountId::from_str(&accountId.to_string()).unwrap(), // TODO: fix unwrap
+                        AccountId::from_str(&account_id.to_string()).unwrap(), // TODO: fix unwrap
                         participants
                             .into_iter()
                             .map(|acc_id: near_sdk::AccountId| {

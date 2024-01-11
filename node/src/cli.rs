@@ -1,6 +1,5 @@
 use crate::protocol::{MpcSignProtocol, SignQueue};
 use crate::{indexer, storage, web};
-use cait_sith::protocol::Participant;
 use clap::Parser;
 use local_ip_address::local_ip;
 use near_crypto::{InMemorySigner, SecretKey};
@@ -52,11 +51,6 @@ pub enum Cli {
         #[clap(flatten)]
         storage_options: storage::Options,
     },
-}
-
-fn parse_participant(arg: &str) -> Result<Participant, std::num::ParseIntError> {
-    let participant_id: u32 = arg.parse()?;
-    Ok(participant_id.into())
 }
 
 impl Cli {
