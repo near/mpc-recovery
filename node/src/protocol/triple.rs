@@ -199,7 +199,7 @@ impl TripleManager {
                 };
 
                 // TODO: in this context we don't have access to the account id of the node.
-                let my_account_id: AccountId =  AccountId::from_str("acc.near").unwrap();
+                let my_account_id: AccountId = AccountId::from_str("acc.near").unwrap();
 
                 match action {
                     Action::Wait => {

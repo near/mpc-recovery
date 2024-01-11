@@ -93,7 +93,7 @@ impl ConsensusCtx for &Ctx {
     }
 }
 
-impl CryptographicCtx for &Ctx {
+impl CryptographicCtx for &mut Ctx {
     fn my_near_acc_id(&self) -> &AccountId {
         &self.account_id
     }

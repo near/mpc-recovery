@@ -3,12 +3,12 @@ use crate::protocol::message::SignedMessage;
 use crate::protocol::MpcMessage;
 use cait_sith::protocol::Participant;
 use mpc_keys::hpke;
+use near_primitives::types::AccountId;
 use reqwest::{Client, IntoUrl};
 use std::collections::VecDeque;
 use std::str::Utf8Error;
 use tokio_retry::strategy::{jitter, ExponentialBackoff};
 use tokio_retry::Retry;
-use near_primitives::types::AccountId;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SendError {

@@ -93,7 +93,11 @@ impl CryptographicProtocol for GeneratingState {
                     tracing::debug!("sending a message to many participants");
                     let mut messages = self.messages.write().await;
                     for (p, info) in self.participants.clone() {
-                        if p == self.participants.find_participant(ctx.my_near_acc_id()).unwrap() {
+                        if p == self
+                            .participants
+                            .find_participant(ctx.my_near_acc_id())
+                            .unwrap()
+                        {
                             // Skip yourself, cait-sith never sends messages to oneself
                             continue;
                         }
@@ -267,7 +271,10 @@ impl CryptographicProtocol for RunningState {
         mut self,
         ctx: C,
     ) -> Result<NodeState, CryptographicError> {
-        let me = self.participants.find_participant(ctx.my_near_acc_id()).unwrap();
+        let me = self
+            .participants
+            .find_participant(ctx.my_near_acc_id())
+            .unwrap();
         let mut messages = self.messages.write().await;
         // Try sending any leftover messages donated to RunningState.
         if let Err(err) = messages

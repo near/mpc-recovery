@@ -579,8 +579,14 @@ impl ConsensusProtocol for JoiningState {
                         if voted.contains(&account_id) {
                             continue;
                         }
-                        let info = contract_state.participants.find_participant_info(&account_id).unwrap();
-                        let my_participant_info = contract_state.participants.find_participant_info(ctx.my_account_id()).unwrap();
+                        let info = contract_state
+                            .participants
+                            .find_participant_info(&account_id)
+                            .unwrap();
+                        let my_participant_info = contract_state
+                            .participants
+                            .find_participant_info(ctx.my_account_id())
+                            .unwrap();
                         let participant: Participant = my_participant_info.id.clone().into();
                         http_client::join(ctx.http_client(), info.url.clone(), &participant) // TODO: should this be account_id?
                             .await
@@ -611,7 +617,10 @@ impl ConsensusProtocol for JoiningState {
                 }
             }
             ProtocolState::Resharing(contract_state) => {
-                if contract_state.new_participants.contains_account_id(&ctx.my_account_id()) {
+                if contract_state
+                    .new_participants
+                    .contains_account_id(&ctx.my_account_id())
+                {
                     tracing::info!("joining as a new participant");
                     start_resharing(None, ctx, contract_state)
                 } else {

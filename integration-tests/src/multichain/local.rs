@@ -6,8 +6,7 @@ use near_workspaces::AccountId;
 #[allow(dead_code)]
 pub struct Node {
     pub address: String,
-    node_id: usize,
-    account: AccountId,
+    account_id: AccountId,
     pub account_sk: near_workspaces::types::SecretKey,
     pub cipher_pk: hpke::PublicKey,
     cipher_sk: hpke::SecretKey,
@@ -46,17 +45,16 @@ impl Node {
             },
         };
 
-        let mpc_node_id = format!("multichain/{node_id}");
+        let mpc_node_id = format!("multichain/{account_id}", account_id = account_id);
         let process = mpc::spawn_multichain(ctx.release, &mpc_node_id, cli)?;
         let address = format!("http://127.0.0.1:{web_port}");
         tracing::info!("node is starting at {}", address);
         util::ping_until_ok(&address, 60).await?;
-        tracing::info!("node started [node_id={node_id}, {address}]");
+        tracing::info!("node started [node_account_id={account_id}, {address}]");
 
         Ok(Self {
             address,
-            node_id: node_id as usize,
-            account: account.clone(),
+            account_id: account_id.clone(),
             account_sk: account_sk.clone(),
             cipher_pk,
             cipher_sk,

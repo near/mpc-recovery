@@ -414,7 +414,11 @@ where
     ) -> Result<Ciphered, CryptographicError> {
         let msg = serde_json::to_vec(&msg)?;
         let sig = sign_sk.sign(&msg);
-        let msg = SignedMessage { msg, sig, from: from.clone() };
+        let msg = SignedMessage {
+            msg,
+            sig,
+            from: from.clone(),
+        };
         let msg = serde_json::to_vec(&msg)?;
         let ciphered = cipher_pk
             .encrypt(&msg, SignedMessage::<T>::ASSOCIATED_DATA)
