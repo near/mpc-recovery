@@ -38,8 +38,8 @@ provider "google" {
  * Create brand new service account with basic IAM
  */
 resource "google_service_account" "service_account" {
-  account_id   = "multichain-${var.env}"
-  display_name = "Multichain ${var.env} Account"
+  account_id   = "multichain-mainnet"
+  display_name = "Multichain mainnet Account"
 }
 
 resource "google_service_account_iam_binding" "serivce-account-iam" {
@@ -102,7 +102,7 @@ module "node" {
   count  = length(var.node_configs)
   source = "../modules/multichain"
 
-  service_name          = "multichain-${var.env}-${count.index}"
+  service_name          = "multichain-mainnet-${count.index}"
   project               = var.project
   region                = var.region
   service_account_email = google_service_account.service_account.email
