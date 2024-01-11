@@ -296,10 +296,15 @@ impl MpcContract {
     pub fn sign(&mut self, payload: [u8; 32], path: String) -> Promise {
         self.pending_requests.insert(&payload, &None);
         env::log_str(&serde_json::to_string(&near_sdk::env::random_seed_array()).unwrap());
-        Self::ext(env::current_account_id()).sign_helper(payload)
+        Self::ext(env::current_account_id()).sign_helper(payload, 0)
     }
 
-    pub fn sign_helper(&mut self, payload: [u8; 32]) -> PromiseOrValue<(String, String)> {
+    #[private]
+    pub fn sign_helper(
+        &mut self,
+        payload: [u8; 32],
+        depth: usize,
+    ) -> PromiseOrValue<(String, String)> {
         if let Some(signature) = self.pending_requests.get(&payload) {
             match signature {
                 Some(signature) => {
@@ -307,9 +312,9 @@ impl MpcContract {
                     PromiseOrValue::Value(signature)
                 }
                 None => {
-                    env::log_str("not ready");
+                    env::log_str(&format!("not ready yet (depth={})", depth));
                     let account_id = env::current_account_id();
-                    PromiseOrValue::Promise(Self::ext(account_id).sign_helper(payload))
+                    PromiseOrValue::Promise(Self::ext(account_id).sign_helper(payload, depth + 1))
                 }
             }
         } else {
