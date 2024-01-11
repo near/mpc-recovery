@@ -564,7 +564,7 @@ impl ConsensusProtocol for JoiningState {
         match contract_state {
             ProtocolState::Initializing(_) => Err(ConsensusError::ContractStateRollback),
             ProtocolState::Running(contract_state) => {
-                if contract_state.candidates.contains_key(&ctx.me()) {
+                if contract_state.candidates.contains_key(&ctx.my_account_id()) {
                     let voted = contract_state
                         .join_votes
                         .get(&ctx.my_account_id())
@@ -575,11 +575,14 @@ impl ConsensusProtocol for JoiningState {
                         votes_to_go = contract_state.threshold - voted.len(),
                         "trying to get participants to vote for us"
                     );
-                    for (p, info) in contract_state.participants {
-                        if voted.contains(&p) {
+                    for account_id in contract_state.participants.account_ids() {
+                        if voted.contains(&account_id) {
                             continue;
                         }
-                        http_client::join(ctx.http_client(), info.url, &ctx.me())
+                        let info = contract_state.participants.find_participant_info(&account_id).unwrap();
+                        let my_participant_info = contract_state.participants.find_participant_info(ctx.my_account_id()).unwrap();
+                        let participant: Participant = my_participant_info.id.clone().into();
+                        http_client::join(ctx.http_client(), info.url.clone(), &participant) // TODO: should this be account_id?
                             .await
                             .unwrap()
                     }
@@ -587,7 +590,6 @@ impl ConsensusProtocol for JoiningState {
                 } else {
                     tracing::info!("sending a transaction to join the participant set");
                     let args = serde_json::json!({
-                        "participant_id": ctx.me(),
                         "url": ctx.my_address(),
                         "cipher_pk": ctx.cipher_pk().to_bytes(),
                         "sign_pk": ctx.sign_pk(),
@@ -609,7 +611,7 @@ impl ConsensusProtocol for JoiningState {
                 }
             }
             ProtocolState::Resharing(contract_state) => {
-                if contract_state.new_participants.contains_key(&ctx.me()) {
+                if contract_state.new_participants.contains_account_id(&ctx.my_account_id()) {
                     tracing::info!("joining as a new participant");
                     start_resharing(None, ctx, contract_state)
                 } else {

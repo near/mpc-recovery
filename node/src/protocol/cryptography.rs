@@ -81,10 +81,10 @@ impl CryptographicProtocol for GeneratingState {
                         .messages
                         .write()
                         .await
-                        .send_encrypted(ctx.me(), ctx.sign_sk(), ctx.http_client())
+                        .send_encrypted(ctx.my_near_acc_id(), ctx.sign_sk(), ctx.http_client())
                         .await
                     {
-                        tracing::warn!(?err, participants = ?self.participants, "generating: failed to send encrypted message");
+                        tracing::warn!(?err, "generating: failed to send encrypted message");
                     }
 
                     return Ok(NodeState::Generating(self));
@@ -92,15 +92,15 @@ impl CryptographicProtocol for GeneratingState {
                 Action::SendMany(m) => {
                     tracing::debug!("sending a message to many participants");
                     let mut messages = self.messages.write().await;
-                    for (p, info) in &self.participants {
-                        if p == &self.participants.find(ctx.my_near_acc_id()) {
+                    for (p, info) in self.participants.clone() {
+                        if p == self.participants.find_participant(ctx.my_near_acc_id()).unwrap() {
                             // Skip yourself, cait-sith never sends messages to oneself
                             continue;
                         }
                         messages.push(
                             info.clone(),
                             MpcMessage::Generating(GeneratingMessage {
-                                from: ctx.me(),
+                                from: ctx.my_near_acc_id().clone(),
                                 data: m.clone(),
                             }),
                         );
@@ -112,7 +112,7 @@ impl CryptographicProtocol for GeneratingState {
                     self.messages.write().await.push(
                         info.clone(),
                         MpcMessage::Generating(GeneratingMessage {
-                            from: ctx.me(),
+                            from: ctx.my_near_acc_id().clone(),
                             data: m.clone(),
                         }),
                     );
@@ -134,7 +134,7 @@ impl CryptographicProtocol for GeneratingState {
                         .messages
                         .write()
                         .await
-                        .send_encrypted(ctx.me(), ctx.sign_sk(), ctx.http_client())
+                        .send_encrypted(ctx.my_near_acc_id(), ctx.sign_sk(), ctx.http_client())
                         .await
                     {
                         tracing::warn!(?err, participants = ?self.participants, "generating: failed to send encrypted message");
@@ -163,7 +163,7 @@ impl CryptographicProtocol for WaitingForConsensusState {
             .messages
             .write()
             .await
-            .send_encrypted(ctx.me(), ctx.sign_sk(), ctx.http_client())
+            .send_encrypted(ctx.my_near_acc_id(), ctx.sign_sk(), ctx.http_client())
             .await
         {
             tracing::warn!(?err, participants = ?self.participants, "waiting: failed to send encrypted message");
@@ -192,10 +192,10 @@ impl CryptographicProtocol for ResharingState {
                         .messages
                         .write()
                         .await
-                        .send_encrypted(ctx.me(), ctx.sign_sk(), ctx.http_client())
+                        .send_encrypted(ctx.my_near_acc_id(), ctx.sign_sk(), ctx.http_client())
                         .await
                     {
-                        tracing::warn!(?err, new = ?self.new_participants, old = ?self.old_participants, "resharing(wait): failed to send encrypted message");
+                        tracing::warn!(?err, "resharing(wait): failed to send encrypted message");
                     }
 
                     return Ok(NodeState::Resharing(self));
@@ -203,8 +203,8 @@ impl CryptographicProtocol for ResharingState {
                 Action::SendMany(m) => {
                     tracing::debug!("sending a message to all participants");
                     let mut messages = self.messages.write().await;
-                    for (p, info) in &self.new_participants {
-                        if p == &ctx.me() {
+                    for (_, info) in self.new_participants.clone() {
+                        if &info.account_id == ctx.my_near_acc_id() {
                             // Skip yourself, cait-sith never sends messages to oneself
                             continue;
                         }
@@ -213,7 +213,7 @@ impl CryptographicProtocol for ResharingState {
                             info.clone(),
                             MpcMessage::Resharing(ResharingMessage {
                                 epoch: self.old_epoch,
-                                from: ctx.me(),
+                                from: ctx.my_near_acc_id().clone(),
                                 data: m.clone(),
                             }),
                         )
@@ -226,7 +226,7 @@ impl CryptographicProtocol for ResharingState {
                             info.clone(),
                             MpcMessage::Resharing(ResharingMessage {
                                 epoch: self.old_epoch,
-                                from: ctx.me(),
+                                from: ctx.my_near_acc_id().clone(),
                                 data: m.clone(),
                             }),
                         ),
@@ -241,7 +241,7 @@ impl CryptographicProtocol for ResharingState {
                         .messages
                         .write()
                         .await
-                        .send_encrypted(ctx.me(), ctx.sign_sk(), ctx.http_client())
+                        .send_encrypted(ctx.my_near_acc_id(), ctx.sign_sk(), ctx.http_client())
                         .await
                     {
                         tracing::warn!(?err, new = ?self.new_participants, old = ?self.old_participants, "resharing(return): failed to send encrypted message");
@@ -267,10 +267,11 @@ impl CryptographicProtocol for RunningState {
         mut self,
         ctx: C,
     ) -> Result<NodeState, CryptographicError> {
+        let me = self.participants.find_participant(ctx.my_near_acc_id()).unwrap();
         let mut messages = self.messages.write().await;
         // Try sending any leftover messages donated to RunningState.
         if let Err(err) = messages
-            .send_encrypted(ctx.me(), ctx.sign_sk(), ctx.http_client())
+            .send_encrypted(ctx.my_near_acc_id(), ctx.sign_sk(), ctx.http_client())
             .await
         {
             tracing::warn!(?err, participants = ?self.participants, "running(pre): failed to send encrypted message");
@@ -309,8 +310,8 @@ impl CryptographicProtocol for RunningState {
 
         let mut sign_queue = self.sign_queue.write().await;
         let mut signature_manager = self.signature_manager.write().await;
-        sign_queue.organize(&self, ctx.me());
-        let my_requests = sign_queue.my_requests(ctx.me());
+        sign_queue.organize(&self, me);
+        let my_requests = sign_queue.my_requests(me);
         while presignature_manager.my_len() > 0 {
             let Some((receipt_id, _)) = my_requests.iter().next() else {
                 break;
@@ -340,7 +341,7 @@ impl CryptographicProtocol for RunningState {
             .await?;
         drop(signature_manager);
         if let Err(err) = messages
-            .send_encrypted(ctx.me(), ctx.sign_sk(), ctx.http_client())
+            .send_encrypted(ctx.my_near_acc_id(), ctx.sign_sk(), ctx.http_client())
             .await
         {
             tracing::warn!(?err, participants = ?self.participants, "running(post): failed to send encrypted message");

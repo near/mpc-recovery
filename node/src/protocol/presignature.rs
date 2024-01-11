@@ -7,7 +7,9 @@ use cait_sith::{KeygenOutput, PresignArguments, PresignOutput};
 use k256::Secp256k1;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
+use std::str::FromStr;
 use std::sync::Arc;
+use near_primitives::types::AccountId;
 
 /// Unique number used to identify a specific ongoing presignature generation protocol.
 /// Without `PresignatureId` it would be unclear where to route incoming cait-sith presignature
@@ -230,6 +232,7 @@ impl PresignatureManager {
                         break false;
                     }
                 };
+                let my_account_id: AccountId = AccountId::from_str("acc.near").unwrap(); // TODO: account id is not available in this context
                 match action {
                     Action::Wait => {
                         tracing::debug!("waiting");
@@ -245,7 +248,7 @@ impl PresignatureManager {
                                     triple0: generator.triple0,
                                     triple1: generator.triple1,
                                     epoch: self.epoch,
-                                    from: self.me,
+                                    from: my_account_id.clone(),
                                     data: data.clone(),
                                 },
                             ))
@@ -258,7 +261,7 @@ impl PresignatureManager {
                             triple0: generator.triple0,
                             triple1: generator.triple1,
                             epoch: self.epoch,
-                            from: self.me,
+                            from: my_account_id,
                             data: data.clone(),
                         },
                     )),

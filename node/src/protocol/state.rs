@@ -7,6 +7,7 @@ use super::SignQueue;
 use crate::http_client::MessageQueue;
 use crate::types::{KeygenProtocol, PublicKey, ReshareProtocol, SecretKeyShare};
 use cait_sith::protocol::Participant;
+use near_primitives::types::AccountId;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -141,6 +142,23 @@ impl NodeState {
             NodeState::Resharing(state) => state.fetch_participant(p),
             NodeState::Joining(state) => state.fetch_participant(p),
             _ => Err(CryptographicError::UnknownParticipant(*p)),
+        }
+    }
+
+    pub fn find_participant_info(&self, account_id: &AccountId) -> Option<&ParticipantInfo> {
+        match self {
+            NodeState::Starting => None,
+            NodeState::Started(_) => None,
+            NodeState::Generating(state) => state.participants.find_participant_info(account_id),
+            NodeState::WaitingForConsensus(state) => {
+                state.participants.find_participant_info(account_id)
+            }
+            NodeState::Running(state) => state.participants.find_participant_info(account_id),
+            NodeState::Resharing(state) => state
+                .new_participants
+                .find_participant_info(account_id)
+                .or_else(|| state.old_participants.find_participant_info(account_id)),
+            NodeState::Joining(state) => state.participants.find_participant_info(account_id),
         }
     }
 }

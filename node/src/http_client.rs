@@ -8,6 +8,7 @@ use std::collections::VecDeque;
 use std::str::Utf8Error;
 use tokio_retry::strategy::{jitter, ExponentialBackoff};
 use tokio_retry::Retry;
+use near_primitives::types::AccountId;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SendError {
@@ -26,7 +27,7 @@ pub enum SendError {
 }
 
 async fn send_encrypted<U: IntoUrl>(
-    from: Participant,
+    from: &AccountId,
     cipher_pk: &hpke::PublicKey,
     sign_sk: &near_crypto::SecretKey,
     client: &Client,
@@ -127,7 +128,7 @@ impl MessageQueue {
 
     pub async fn send_encrypted(
         &mut self,
-        from: Participant,
+        from: &AccountId,
         sign_sk: &near_crypto::SecretKey,
         client: &Client,
     ) -> Result<(), SendError> {
@@ -151,6 +152,10 @@ impl MessageQueue {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use near_lake_primitives::AccountId;
+
     use crate::protocol::message::GeneratingMessage;
     use crate::protocol::MpcMessage;
 
@@ -159,7 +164,7 @@ mod tests {
         let associated_data = b"";
         let (sk, pk) = mpc_keys::hpke::generate();
         let starting_message = MpcMessage::Generating(GeneratingMessage {
-            from: cait_sith::protocol::Participant::from(0),
+            from: AccountId::from_str("alice.near").unwrap(),
             data: vec![],
         });
 

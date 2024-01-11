@@ -5,8 +5,10 @@ use crate::util::AffinePointExt;
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::triples::{TriplePub, TripleShare};
 use k256::Secp256k1;
+use near_lake_primitives::AccountId;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
+use std::str::FromStr;
 use std::sync::Arc;
 
 /// Unique number used to identify a specific ongoing triple generation protocol.
@@ -196,6 +198,9 @@ impl TripleManager {
                     }
                 };
 
+                // TODO: in this context we don't have access to the account id of the node.
+                let my_account_id: AccountId =  AccountId::from_str("acc.near").unwrap();
+
                 match action {
                     Action::Wait => {
                         tracing::debug!("waiting");
@@ -209,7 +214,7 @@ impl TripleManager {
                                 TripleMessage {
                                     id: *id,
                                     epoch: self.epoch,
-                                    from: self.me,
+                                    from: my_account_id.clone(),
                                     data: data.clone(),
                                 },
                             ))
@@ -220,7 +225,7 @@ impl TripleManager {
                         TripleMessage {
                             id: *id,
                             epoch: self.epoch,
-                            from: self.me,
+                            from: my_account_id,
                             data: data.clone(),
                         },
                     )),

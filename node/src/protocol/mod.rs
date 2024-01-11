@@ -128,8 +128,8 @@ impl CryptographicCtx for &Ctx {
 }
 
 impl MessageCtx for &Ctx {
-    fn my_near_acc_id(&self) -> AccountId {
-        self.account_id
+    fn my_near_acc_id(&self) -> &AccountId {
+        &self.account_id
     }
 }
 
@@ -214,7 +214,7 @@ impl MpcSignProtocol {
                 let guard = self.state.read().await;
                 guard.clone()
             };
-            let state = match state.progress(&self.ctx).await {
+            let state = match state.progress(&mut self.ctx).await {
                 Ok(state) => state,
                 Err(err) => {
                     tracing::info!("protocol unable to progress: {err:?}");

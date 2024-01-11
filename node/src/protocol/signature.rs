@@ -254,6 +254,9 @@ impl SignatureManager {
                         break false;
                     }
                 };
+
+                let my_near_account_id: AccountId = "acc.near".parse().unwrap(); // TODO: account id is not available in this context
+
                 match action {
                     Action::Wait => {
                         tracing::debug!("waiting");
@@ -272,7 +275,7 @@ impl SignatureManager {
                                     epsilon: generator.epsilon,
                                     delta: generator.delta,
                                     epoch: self.epoch,
-                                    from: self.me,
+                                    from: my_near_account_id.clone(),
                                     data: data.clone(),
                                 },
                             ))
@@ -288,7 +291,7 @@ impl SignatureManager {
                             epsilon: generator.epsilon,
                             delta: generator.delta,
                             epoch: self.epoch,
-                            from: self.me,
+                            from: my_near_account_id,
                             data: data.clone(),
                         },
                     )),

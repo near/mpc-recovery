@@ -20,7 +20,7 @@ pub struct ParticipantInfo {
     pub sign_pk: near_crypto::PublicKey,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Participants {
     pub participants: BTreeMap<Participant, ParticipantInfo>,
 }
@@ -61,6 +61,15 @@ impl From<mpc_contract::primitives::Participants> for Participants {
     }
 }
 
+impl IntoIterator for Participants {
+    type Item = (Participant, ParticipantInfo);
+    type IntoIter = std::collections::btree_map::IntoIter<Participant, ParticipantInfo>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.participants.into_iter()
+    }
+}
+
 impl Participants {
     pub fn get(&self, id: &Participant) -> Option<&ParticipantInfo> {
         self.participants.get(id)
@@ -85,10 +94,24 @@ impl Participants {
             .map(|(participant, _)| *participant)
     }
 
+    pub fn find_participant_info(&self, account_id: &AccountId) -> Option<&ParticipantInfo> {
+        self.participants
+            .iter()
+            .find(|(_, participant_info)| participant_info.account_id == *account_id)
+            .map(|(_, participant_info)| participant_info)
+    }
+
     pub fn contains_account_id(&self, account_id: &AccountId) -> bool {
         self.participants
             .iter()
             .any(|(_, participant_info)| participant_info.account_id == *account_id)
+    }
+
+    pub fn account_ids(&self) -> Vec<AccountId> {
+        self.participants
+            .iter()
+            .map(|(_, participant_info)| participant_info.account_id.clone())
+            .collect()
     }
 }
 
@@ -192,6 +215,12 @@ impl From<mpc_contract::primitives::PkVotes> for PkVotes {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Votes {
     pub votes: BTreeMap<AccountId, HashSet<AccountId>>,
+}
+
+impl Votes {
+    pub fn get(&self, id: &AccountId) -> Option<&HashSet<AccountId>> {
+        self.votes.get(id)
+    }
 }
 
 impl From<mpc_contract::primitives::Votes> for Votes {
