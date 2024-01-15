@@ -100,13 +100,13 @@ async fn msg(
 #[tracing::instrument(level = "debug", skip_all)]
 async fn join(
     Extension(state): Extension<Arc<AxumState>>,
-    WithRejection(Json(participant), _): WithRejection<Json<Participant>, Error>,
+    WithRejection(Json(account_id), _): WithRejection<Json<AccountId>, Error>,
 ) -> Result<()> {
     let protocol_state = state.protocol_state.read().await;
     match &*protocol_state {
         NodeState::Running { .. } => {
             let args = serde_json::json!({
-                "participant": participant
+                "candidate_account_id": account_id
             });
             match state
                 .rpc_client
@@ -123,7 +123,7 @@ async fn join(
                 .await
             {
                 Ok(_) => {
-                    tracing::info!(?participant, "successfully voted for a node to join");
+                    tracing::info!(?account_id, "successfully voted for a node to join");
                     Ok(())
                 }
                 Err(e) => {
@@ -133,7 +133,7 @@ async fn join(
             }
         }
         _ => {
-            tracing::debug!(?participant, "not ready to accept join requests yet");
+            tracing::debug!(?account_id, "not ready to accept join requests yet");
             Err(Error::NotRunning)
         }
     }

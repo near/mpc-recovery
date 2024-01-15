@@ -583,52 +583,57 @@ impl ConsensusProtocol for JoiningState {
         match contract_state {
             ProtocolState::Initializing(_) => Err(ConsensusError::ContractStateRollback),
             ProtocolState::Running(contract_state) => {
-                let me = contract_state
-                    .participants
-                    .find_participant(ctx.my_account_id())
-                    .unwrap();
-                if contract_state.candidates.contains_key(ctx.my_account_id()) {
-                    let voted = contract_state
-                        .join_votes
-                        .get(ctx.my_account_id())
-                        .cloned()
-                        .unwrap_or_default();
-                    tracing::info!(
-                        already_voted = voted.len(),
-                        votes_to_go = contract_state.threshold - voted.len(),
-                        "trying to get participants to vote for us"
-                    );
-                    for (_, info) in contract_state.participants {
-                        if voted.contains(&info.account_id) {
-                            continue;
-                        }
-                        http_client::join(ctx.http_client(), info.url, &me)
+                match contract_state
+                    .candidates
+                    .find_candidate(ctx.my_account_id())
+                {
+                    Some(candidate_info) => {
+                        let voted = contract_state
+                            .join_votes
+                            .get(ctx.my_account_id())
+                            .cloned()
+                            .unwrap_or_default();
+                        tracing::info!(
+                            already_voted = voted.len(),
+                            votes_to_go = contract_state.threshold - voted.len(),
+                            "trying to get participants to vote for us"
+                        );
+                        for (_, info) in contract_state.participants {
+                            if voted.contains(&info.account_id) {
+                                continue;
+                            }
+                            http_client::join(
+                                ctx.http_client(),
+                                info.url,
+                                &candidate_info.account_id,
+                            )
                             .await
                             .unwrap()
+                        }
+                        Ok(NodeState::Joining(self))
                     }
-                    Ok(NodeState::Joining(self))
-                } else {
-                    tracing::info!("sending a transaction to join the participant set");
-                    let args = serde_json::json!({
-                        "participant_id": me,
-                        "url": ctx.my_address(),
-                        "cipher_pk": ctx.cipher_pk().to_bytes(),
-                        "sign_pk": ctx.sign_pk(),
-                    });
-                    ctx.rpc_client()
-                        .send_tx(
-                            ctx.signer(),
-                            ctx.mpc_contract_id(),
-                            vec![Action::FunctionCall(FunctionCallAction {
-                                method_name: "join".to_string(),
-                                args: args.to_string().into_bytes(),
-                                gas: 300_000_000_000_000,
-                                deposit: 0,
-                            })],
-                        )
-                        .await
-                        .unwrap();
-                    Ok(NodeState::Joining(self))
+                    None => {
+                        tracing::info!("sending a transaction to join the participant set");
+                        let args = serde_json::json!({
+                            "url": ctx.my_address(),
+                            "cipher_pk": ctx.cipher_pk().to_bytes(),
+                            "sign_pk": ctx.sign_pk(),
+                        });
+                        ctx.rpc_client()
+                            .send_tx(
+                                ctx.signer(),
+                                ctx.mpc_contract_id(),
+                                vec![Action::FunctionCall(FunctionCallAction {
+                                    method_name: "join".to_string(),
+                                    args: args.to_string().into_bytes(),
+                                    gas: 300_000_000_000_000,
+                                    deposit: 0,
+                                })],
+                            )
+                            .await
+                            .unwrap();
+                        Ok(NodeState::Joining(self))
+                    }
                 }
             }
             ProtocolState::Resharing(contract_state) => {

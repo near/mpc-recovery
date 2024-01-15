@@ -143,6 +143,10 @@ impl Candidates {
     pub fn iter(&self) -> impl Iterator<Item = (&AccountId, &CandidateInfo)> {
         self.candidates.iter()
     }
+
+    pub fn find_candidate(&self, account_id: &AccountId) -> Option<&CandidateInfo> {
+        self.candidates.get(account_id)
+    }
 }
 
 impl From<mpc_contract::primitives::Candidates> for Candidates {
