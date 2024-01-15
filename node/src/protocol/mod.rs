@@ -51,10 +51,6 @@ struct Ctx {
 
 #[async_trait::async_trait]
 impl ConsensusCtx for &MpcSignProtocol {
-    async fn me(&self) -> Participant {
-        get_my_participant(self).await
-    }
-
     fn my_account_id(&self) -> &AccountId {
         &self.ctx.account_id
     }
