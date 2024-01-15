@@ -67,6 +67,12 @@ pub struct Participants {
     pub participants: BTreeMap<AccountId, ParticipantInfo>,
 }
 
+impl Default for Participants {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Participants {
     pub fn new() -> Self {
         Participants {
@@ -93,10 +99,6 @@ impl Participants {
         self.participants.iter()
     }
 
-    pub fn into_iter(self) -> impl Iterator<Item = (AccountId, ParticipantInfo)> {
-        self.participants.into_iter()
-    }
-
     pub fn keys(&self) -> impl Iterator<Item = &AccountId> {
         self.participants.keys()
     }
@@ -104,11 +106,21 @@ impl Participants {
     pub fn len(&self) -> usize {
         self.participants.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.participants.is_empty()
+    }
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug, Clone)]
 pub struct Candidates {
     pub candidates: BTreeMap<AccountId, CandidateInfo>,
+}
+
+impl Default for Candidates {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Candidates {
@@ -136,15 +148,17 @@ impl Candidates {
     pub fn iter(&self) -> impl Iterator<Item = (&AccountId, &CandidateInfo)> {
         self.candidates.iter()
     }
-
-    pub fn into_iter(self) -> impl Iterator<Item = (AccountId, CandidateInfo)> {
-        self.candidates.into_iter()
-    }
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
 pub struct Votes {
     pub votes: BTreeMap<AccountId, HashSet<AccountId>>,
+}
+
+impl Default for Votes {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Votes {
@@ -157,15 +171,17 @@ impl Votes {
     pub fn entry(&mut self, account_id: AccountId) -> &mut HashSet<AccountId> {
         self.votes.entry(account_id).or_default()
     }
-
-    pub fn into_iter(self) -> impl Iterator<Item = (AccountId, HashSet<AccountId>)> {
-        self.votes.into_iter()
-    }
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
 pub struct PkVotes {
     pub votes: BTreeMap<PublicKey, HashSet<AccountId>>,
+}
+
+impl Default for PkVotes {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PkVotes {
@@ -177,9 +193,5 @@ impl PkVotes {
 
     pub fn entry(&mut self, public_key: PublicKey) -> &mut HashSet<AccountId> {
         self.votes.entry(public_key).or_default()
-    }
-
-    pub fn into_iter(self) -> impl Iterator<Item = (PublicKey, HashSet<AccountId>)> {
-        self.votes.into_iter()
     }
 }
