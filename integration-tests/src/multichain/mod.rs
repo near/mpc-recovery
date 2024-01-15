@@ -123,7 +123,7 @@ pub async fn docker(nodes: usize, docker_client: &DockerClient) -> anyhow::Resul
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
     let mut node_futures = Vec::new();
-    for (_, account) in accounts.iter().enumerate() {
+    for account in accounts.iter() {
         let node = containers::Node::run(&ctx, account.id(), account.secret_key());
         node_futures.push(node);
     }
