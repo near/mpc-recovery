@@ -3,8 +3,8 @@ pub mod primitives;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault, PublicKey};
-use primitives::{CandidateInfo, Candidates, Participants, PkVotes, Votes};
-use std::collections::HashSet;
+use primitives::{CandidateInfo, Candidates, ParticipantInfo, Participants, PkVotes, Votes};
+use std::collections::{BTreeMap, HashSet};
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
 pub struct InitializingContractState {
@@ -52,10 +52,10 @@ pub struct MpcContract {
 #[near_bindgen]
 impl MpcContract {
     #[init(ignore_state)]
-    pub fn init(threshold: usize, participants: Participants) -> Self {
+    pub fn init(threshold: usize, participants: BTreeMap<AccountId, ParticipantInfo>) -> Self {
         MpcContract {
             protocol_state: ProtocolContractState::Initializing(InitializingContractState {
-                participants,
+                participants: Participants { participants },
                 threshold,
                 pk_votes: PkVotes::new(),
             }),
