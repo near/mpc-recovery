@@ -1,6 +1,6 @@
 use cait_sith::protocol::Participant;
 use mpc_keys::hpke;
-use near_primitives::types::AccountId;
+use near_primitives::{borsh::BorshDeserialize, types::AccountId};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashSet},
@@ -42,17 +42,15 @@ impl From<mpc_contract::primitives::Participants> for Participants {
                             account_id: AccountId::from_str(
                                 &contract_participant_info.account_id.to_string(),
                             )
-                            .unwrap(), // TODO: remove unwrap
+                            .unwrap(),
                             url: contract_participant_info.url,
                             cipher_pk: hpke::PublicKey::from_bytes(
                                 &contract_participant_info.cipher_pk,
                             ),
-                            sign_pk: near_crypto::PublicKey::SECP256K1(
-                                near_crypto::Secp256K1PublicKey::try_from(
-                                    &contract_participant_info.sign_pk.as_bytes()[1..],
-                                )
-                                .unwrap(),
-                            ),
+                            sign_pk: BorshDeserialize::try_from_slice(
+                                contract_participant_info.sign_pk.as_bytes(),
+                            )
+                            .unwrap(),
                         },
                     )
                 })
