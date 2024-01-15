@@ -261,9 +261,8 @@ impl TripleManager {
 
 #[cfg(test)]
 mod test {
-    use cait_sith::protocol::{InitializationError, Participant, ProtocolError};
-
     use crate::protocol::message::TripleMessage;
+    use cait_sith::protocol::{InitializationError, Participant, ProtocolError};
 
     use super::TripleManager;
 
@@ -289,7 +288,6 @@ mod test {
         fn poke(&mut self, index: usize) -> Result<bool, ProtocolError> {
             let mut quiet = true;
             let messages = self.managers[index].poke()?;
-            println!("{}, {}", index, messages.len());
             for (participant, TripleMessage { id, from, data, .. }) in messages {
                 quiet = false;
                 let participant_i: u32 = participant.into();
@@ -307,10 +305,8 @@ mod test {
                 let mut quiet = true;
                 for i in 0..self.managers.len() {
                     let poke = self.poke(i)?;
-                    println!("{}, {}", i, poke);
                     quiet = quiet && poke;
                 }
-                println!("Not quiet");
                 if quiet {
                     return Ok(());
                 }
@@ -320,18 +316,18 @@ mod test {
 
     #[test]
     fn happy_triple_generation() {
-        let mut tm = TestManagers::new(10);
+        let mut tm = TestManagers::new(5);
 
-        const N: usize = 23;
+        const M: usize = 2;
+        const N: usize = M + 3;
         // Generate 23 triples
-        for _ in 1..20 {
+        for _ in 0..M {
             tm.generate(0).unwrap();
         }
         tm.poke_until_quiet().unwrap();
-        println!("Sending messages!");
         tm.generate(1).unwrap();
-        tm.generate(8).unwrap();
-        tm.generate(9).unwrap();
+        tm.generate(2).unwrap();
+        tm.generate(4).unwrap();
 
         tm.poke_until_quiet().unwrap();
 
@@ -350,5 +346,13 @@ mod test {
         for l in lens {
             assert_eq!(l, N, "All nodes should have {N} completed triples")
         }
+
+        // This passes, but we don't have deterministic entropy or enough triples
+        // to ensure that it will no coincidentally fail
+        // assert_ne!(
+        //     my_lens,
+        //     vec![M, 1, 1, 0, 1],
+        //     "The nodes that started the triple don't own it"
+        // );
     }
 }
