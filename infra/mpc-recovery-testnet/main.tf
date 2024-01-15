@@ -19,7 +19,7 @@ locals {
 
   workspace = {
     near_rpc          = "https://rpc.testnet.near.org"
-    near_root_account = "near"
+    near_root_account = "testnet"
   }
 }
 
