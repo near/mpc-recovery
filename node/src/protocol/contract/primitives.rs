@@ -154,10 +154,10 @@ impl From<mpc_contract::primitives::Candidates> for Candidates {
                 .into_iter()
                 .map(|(account_id, candidate_info)| {
                     (
-                        AccountId::from_str(&account_id.to_string()).unwrap(), // TODO: fix unwrap
+                        AccountId::from_str(&account_id.to_string()).unwrap(),
                         CandidateInfo {
                             account_id: AccountId::from_str(&candidate_info.account_id.to_string())
-                                .unwrap(), // TODO: fix unwrap
+                                .unwrap(),
                             url: candidate_info.url,
                             cipher_pk: hpke::PublicKey::from_bytes(&candidate_info.cipher_pk),
                             sign_pk: near_crypto::PublicKey::SECP256K1(
@@ -200,7 +200,6 @@ impl From<mpc_contract::primitives::PkVotes> for PkVotes {
                             .into_iter()
                             .map(|acc_id: near_sdk::AccountId| {
                                 AccountId::from_str(&acc_id.to_string()).unwrap()
-                                // TODO: fix unwrap
                             })
                             .collect(),
                     )
@@ -229,14 +228,13 @@ impl From<mpc_contract::primitives::Votes> for Votes {
                 .into_iter()
                 .map(|(account_id, participants)| {
                     (
-                        AccountId::from_str(&account_id.to_string()).unwrap(), // TODO: fix unwrap
+                        AccountId::from_str(&account_id.to_string()).unwrap(),
                         participants
                             .into_iter()
                             .map(|acc_id: near_sdk::AccountId| {
                                 AccountId::from_str(&acc_id.to_string()).unwrap()
-                                // TODO: fix unwrap
                             })
-                            .collect(), // TODO: remove code duplication
+                            .collect(),
                     )
                 })
                 .collect(),

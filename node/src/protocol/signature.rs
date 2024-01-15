@@ -254,7 +254,6 @@ impl SignatureManager {
                         break false;
                     }
                 };
-
                 match action {
                     Action::Wait => {
                         tracing::debug!("waiting");
