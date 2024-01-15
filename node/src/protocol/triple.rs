@@ -27,16 +27,16 @@ pub struct Triple {
 /// complete some time in the future and a way to take an already generated triple.
 pub struct TripleManager {
     /// Completed unspent triples
-    triples: HashMap<TripleId, Triple>,
+    pub triples: HashMap<TripleId, Triple>,
     /// Ongoing triple generation protocols
-    generators: HashMap<TripleId, TripleProtocol>,
+    pub generators: HashMap<TripleId, TripleProtocol>,
     /// List of triple ids generation of which was initiated by the current node.
-    mine: VecDeque<TripleId>,
+    pub mine: VecDeque<TripleId>,
 
-    participants: Vec<Participant>,
-    me: Participant,
-    threshold: usize,
-    epoch: u64,
+    pub participants: Vec<Participant>,
+    pub me: Participant,
+    pub threshold: usize,
+    pub epoch: u64,
 }
 
 impl TripleManager {
@@ -256,5 +256,99 @@ impl TripleManager {
             }
         });
         result.map(|_| messages)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use cait_sith::protocol::{InitializationError, Participant, ProtocolError};
+
+    use crate::protocol::message::TripleMessage;
+
+    use super::TripleManager;
+
+    struct TestManagers {
+        managers: Vec<TripleManager>,
+    }
+
+    impl TestManagers {
+        fn new(number: u32) -> Self {
+            let range = 0..number;
+            let participants: Vec<Participant> = range.map(Participant::from).collect();
+            let managers = participants
+                .iter()
+                .map(|me| TripleManager::new(participants.clone(), *me, number as usize, 0))
+                .collect();
+            TestManagers { managers }
+        }
+
+        fn generate(&mut self, index: usize) -> Result<(), InitializationError> {
+            self.managers[index].generate()
+        }
+
+        fn poke(&mut self, index: usize) -> Result<bool, ProtocolError> {
+            let mut quiet = true;
+            let messages = self.managers[index].poke()?;
+            println!("{}, {}", index, messages.len());
+            for (participant, TripleMessage { id, from, data, .. }) in messages {
+                quiet = false;
+                let participant_i: u32 = participant.into();
+                let manager = &mut self.managers[participant_i as usize];
+                if let Some(protocol) = manager.get_or_generate(id).unwrap() {
+                    let mut protocol = protocol.write().unwrap();
+                    protocol.message(from, data);
+                }
+            }
+            Ok(quiet)
+        }
+
+        fn poke_until_quiet(&mut self) -> Result<(), ProtocolError> {
+            loop {
+                let mut quiet = true;
+                for i in 0..self.managers.len() {
+                    let poke = self.poke(i)?;
+                    println!("{}, {}", i, poke);
+                    quiet = quiet && poke;
+                }
+                println!("Not quiet");
+                if quiet {
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn happy_triple_generation() {
+        let mut tm = TestManagers::new(10);
+
+        const N: usize = 23;
+        // Generate 23 triples
+        for _ in 1..20 {
+            tm.generate(0).unwrap();
+        }
+        tm.poke_until_quiet().unwrap();
+        println!("Sending messages!");
+        tm.generate(1).unwrap();
+        tm.generate(8).unwrap();
+        tm.generate(9).unwrap();
+
+        tm.poke_until_quiet().unwrap();
+
+        let (my_lens, lens): (Vec<_>, Vec<_>) = tm
+            .managers
+            .into_iter()
+            .map(|m| (m.my_len(), m.len()))
+            .unzip();
+
+        assert_eq!(
+            my_lens.iter().sum::<usize>(),
+            N,
+            "There should be {N} owned completed triples in total",
+        );
+
+        for l in lens {
+            assert_eq!(l, N, "All nodes should have {N} completed triples")
+        }
     }
 }
