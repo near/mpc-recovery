@@ -163,12 +163,10 @@ impl From<mpc_contract::primitives::Candidates> for Candidates {
                                 .unwrap(),
                             url: candidate_info.url,
                             cipher_pk: hpke::PublicKey::from_bytes(&candidate_info.cipher_pk),
-                            sign_pk: near_crypto::PublicKey::SECP256K1(
-                                near_crypto::Secp256K1PublicKey::try_from(
-                                    &candidate_info.sign_pk.as_bytes()[1..],
-                                )
-                                .unwrap(),
-                            ),
+                            sign_pk: BorshDeserialize::try_from_slice(
+                                candidate_info.sign_pk.as_bytes(),
+                            )
+                            .unwrap(),
                         },
                     )
                 })
