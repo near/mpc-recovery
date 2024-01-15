@@ -72,7 +72,7 @@ impl From<mpc_contract::ResharingContractState> for ResharingContractState {
             finished_votes: contract_state
                 .finished_votes
                 .into_iter()
-                .map(|acc_id| AccountId::from_str(&acc_id.to_string()).unwrap())
+                .map(|acc_id| AccountId::from_str(acc_id.as_ref()).unwrap())
                 .collect(),
         }
     }

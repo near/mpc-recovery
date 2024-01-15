@@ -102,7 +102,7 @@ impl ConsensusProtocol for StartedState {
                         Ordering::Equal => {
                             match contract_state
                                 .participants
-                                .find_participant(&ctx.my_account_id())
+                                .find_participant(ctx.my_account_id())
                             {
                                 Some(me) => {
                                     tracing::info!(
@@ -180,7 +180,7 @@ impl ConsensusProtocol for StartedState {
                 ProtocolState::Initializing(contract_state) => {
                     match contract_state
                         .participants
-                        .find_participant(&ctx.my_account_id())
+                        .find_participant(ctx.my_account_id())
                     {
                         Some(me) => {
                             tracing::info!(
@@ -326,7 +326,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
 
                     let me = contract_state
                         .participants
-                        .find_participant(&ctx.my_account_id())
+                        .find_participant(ctx.my_account_id())
                         .unwrap();
 
                     Ok(NodeState::Running(RunningState {
@@ -392,7 +392,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                         let has_voted = contract_state.finished_votes.contains(ctx.my_account_id());
                         match contract_state
                             .old_participants
-                            .find_participant(&ctx.my_account_id())
+                            .find_participant(ctx.my_account_id())
                         {
                             Some(_) => {
                                 if !has_voted {
@@ -585,12 +585,12 @@ impl ConsensusProtocol for JoiningState {
             ProtocolState::Running(contract_state) => {
                 let me = contract_state
                     .participants
-                    .find_participant(&ctx.my_account_id())
+                    .find_participant(ctx.my_account_id())
                     .unwrap();
-                if contract_state.candidates.contains_key(&ctx.my_account_id()) {
+                if contract_state.candidates.contains_key(ctx.my_account_id()) {
                     let voted = contract_state
                         .join_votes
-                        .get(&ctx.my_account_id())
+                        .get(ctx.my_account_id())
                         .cloned()
                         .unwrap_or_default();
                     tracing::info!(
@@ -634,7 +634,7 @@ impl ConsensusProtocol for JoiningState {
             ProtocolState::Resharing(contract_state) => {
                 if contract_state
                     .new_participants
-                    .contains_account_id(&ctx.my_account_id())
+                    .contains_account_id(ctx.my_account_id())
                 {
                     tracing::info!("joining as a new participant");
                     start_resharing(None, ctx, contract_state).await
@@ -676,7 +676,7 @@ async fn start_resharing<C: ConsensusCtx>(
 ) -> Result<NodeState, ConsensusError> {
     let me = contract_state
         .new_participants
-        .find_participant(&ctx.my_account_id())
+        .find_participant(ctx.my_account_id())
         .unwrap();
     let protocol = cait_sith::reshare::<Secp256k1>(
         &contract_state

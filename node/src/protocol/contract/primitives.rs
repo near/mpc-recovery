@@ -40,7 +40,7 @@ impl From<mpc_contract::primitives::Participants> for Participants {
                         ParticipantInfo {
                             id: participant_id as ParticipantId,
                             account_id: AccountId::from_str(
-                                &contract_participant_info.account_id.to_string(),
+                                contract_participant_info.account_id.as_ref(),
                             )
                             .unwrap(),
                             url: contract_participant_info.url,
@@ -94,21 +94,21 @@ impl Participants {
 
     pub fn find_participant_info(&self, account_id: &AccountId) -> Option<&ParticipantInfo> {
         self.participants
-            .iter()
-            .find(|(_, participant_info)| participant_info.account_id == *account_id)
-            .map(|(_, participant_info)| participant_info)
+            .values()
+            .find(|participant_info| participant_info.account_id == *account_id)
+            .map(|participant_info| participant_info)
     }
 
     pub fn contains_account_id(&self, account_id: &AccountId) -> bool {
         self.participants
-            .iter()
-            .any(|(_, participant_info)| participant_info.account_id == *account_id)
+            .values()
+            .any(|participant_info| participant_info.account_id == *account_id)
     }
 
     pub fn account_ids(&self) -> Vec<AccountId> {
         self.participants
-            .iter()
-            .map(|(_, participant_info)| participant_info.account_id.clone())
+            .values()
+            .map(|participant_info| participant_info.account_id.clone())
             .collect()
     }
 }
@@ -199,7 +199,7 @@ impl From<mpc_contract::primitives::PkVotes> for PkVotes {
                         participants
                             .into_iter()
                             .map(|acc_id: near_sdk::AccountId| {
-                                AccountId::from_str(&acc_id.to_string()).unwrap()
+                                AccountId::from_str(acc_id.as_ref()).unwrap()
                             })
                             .collect(),
                     )
@@ -232,7 +232,7 @@ impl From<mpc_contract::primitives::Votes> for Votes {
                         participants
                             .into_iter()
                             .map(|acc_id: near_sdk::AccountId| {
-                                AccountId::from_str(&acc_id.to_string()).unwrap()
+                                AccountId::from_str(acc_id.as_ref()).unwrap()
                             })
                             .collect(),
                     )
