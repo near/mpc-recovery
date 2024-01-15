@@ -9,6 +9,7 @@ pub mod message;
 pub mod state;
 
 pub use consensus::ConsensusError;
+pub use contract::primitives::ParticipantInfo;
 pub use contract::ProtocolState;
 pub use cryptography::CryptographicError;
 pub use message::MpcMessage;
@@ -24,6 +25,7 @@ use crate::protocol::cryptography::CryptographicProtocol;
 use crate::protocol::message::{MessageHandler, MpcMessageQueue};
 use crate::rpc_client::{self};
 use crate::storage::SecretNodeStorageBox;
+use cait_sith::protocol::Participant;
 use near_crypto::InMemorySigner;
 use near_primitives::types::AccountId;
 use reqwest::IntoUrl;
@@ -47,89 +49,96 @@ struct Ctx {
     secret_storage: SecretNodeStorageBox,
 }
 
-impl ConsensusCtx for &Ctx {
+#[async_trait::async_trait]
+impl ConsensusCtx for &MpcSignProtocol {
+    async fn me(&self) -> Participant {
+        get_my_participant(self).await
+    }
+
     fn my_account_id(&self) -> &AccountId {
-        &self.account_id
+        &self.ctx.account_id
     }
 
     fn http_client(&self) -> &reqwest::Client {
-        &self.http_client
+        &self.ctx.http_client
     }
 
     fn rpc_client(&self) -> &near_fetch::Client {
-        &self.rpc_client
+        &self.ctx.rpc_client
     }
 
     fn signer(&self) -> &InMemorySigner {
-        &self.signer
+        &self.ctx.signer
     }
 
     fn mpc_contract_id(&self) -> &AccountId {
-        &self.mpc_contract_id
+        &self.ctx.mpc_contract_id
     }
 
     fn my_address(&self) -> &Url {
-        &self.my_address
+        &self.ctx.my_address
     }
 
     fn sign_queue(&self) -> Arc<RwLock<SignQueue>> {
-        self.sign_queue.clone()
+        self.ctx.sign_queue.clone()
     }
 
     fn cipher_pk(&self) -> &hpke::PublicKey {
-        &self.cipher_pk
+        &self.ctx.cipher_pk
     }
 
     fn sign_pk(&self) -> near_crypto::PublicKey {
-        self.sign_sk.public_key()
+        self.ctx.sign_sk.public_key()
     }
 
     fn sign_sk(&self) -> &near_crypto::SecretKey {
-        &self.sign_sk
+        &self.ctx.sign_sk
     }
 
     fn secret_storage(&self) -> &SecretNodeStorageBox {
-        &self.secret_storage
+        &self.ctx.secret_storage
     }
 }
 
-impl CryptographicCtx for &mut Ctx {
-    fn my_near_acc_id(&self) -> &AccountId {
-        &self.account_id
+#[async_trait::async_trait]
+impl CryptographicCtx for &mut MpcSignProtocol {
+    async fn me(&self) -> Participant {
+        get_my_participant(self).await
     }
 
     fn http_client(&self) -> &reqwest::Client {
-        &self.http_client
+        &self.ctx.http_client
     }
 
     fn rpc_client(&self) -> &near_fetch::Client {
-        &self.rpc_client
+        &self.ctx.rpc_client
     }
 
     fn signer(&self) -> &InMemorySigner {
-        &self.signer
+        &self.ctx.signer
     }
 
     fn mpc_contract_id(&self) -> &AccountId {
-        &self.mpc_contract_id
+        &self.ctx.mpc_contract_id
     }
 
     fn cipher_pk(&self) -> &hpke::PublicKey {
-        &self.cipher_pk
+        &self.ctx.cipher_pk
     }
 
     fn sign_sk(&self) -> &near_crypto::SecretKey {
-        &self.sign_sk
+        &self.ctx.sign_sk
     }
 
     fn secret_storage(&mut self) -> &mut SecretNodeStorageBox {
-        &mut self.secret_storage
+        &mut self.ctx.secret_storage
     }
 }
 
-impl MessageCtx for &Ctx {
-    fn my_near_acc_id(&self) -> &AccountId {
-        &self.account_id
+#[async_trait::async_trait]
+impl MessageCtx for &MpcSignProtocol {
+    async fn me(&self) -> Participant {
+        get_my_participant(self).await
     }
 }
 
@@ -174,7 +183,7 @@ impl MpcSignProtocol {
     }
 
     pub async fn run(mut self) -> anyhow::Result<()> {
-        let _span = tracing::info_span!("running", me = self.ctx.account_id.to_string());
+        let _span = tracing::info_span!("running", my_account_id = self.ctx.account_id.to_string());
         let mut queue = MpcMessageQueue::default();
         loop {
             tracing::debug!("trying to advance mpc recovery protocol");
@@ -214,21 +223,21 @@ impl MpcSignProtocol {
                 let guard = self.state.read().await;
                 guard.clone()
             };
-            let state = match state.progress(&mut self.ctx).await {
+            let state = match state.progress(&mut self).await {
                 Ok(state) => state,
                 Err(err) => {
                     tracing::info!("protocol unable to progress: {err:?}");
                     continue;
                 }
             };
-            let mut state = match state.advance(&self.ctx, contract_state).await {
+            let mut state = match state.advance(&self, contract_state).await {
                 Ok(state) => state,
                 Err(err) => {
                     tracing::info!("protocol unable to advance: {err:?}");
                     continue;
                 }
             };
-            if let Err(err) = state.handle(&self.ctx, &mut queue).await {
+            if let Err(err) = state.handle(&self, &mut queue).await {
                 tracing::info!("protocol unable to handle messages: {err:?}");
                 continue;
             }
@@ -240,4 +249,16 @@ impl MpcSignProtocol {
             tokio::time::sleep(Duration::from_millis(1000)).await;
         }
     }
+}
+
+async fn get_my_participant(protocol: &MpcSignProtocol) -> Participant {
+    let my_near_acc_id = protocol.ctx.account_id.clone();
+    let state = protocol.state.read().await;
+    let participant_info = state
+        .find_participant_info(&my_near_acc_id)
+        .unwrap_or_else(|| {
+            tracing::error!("could not find participant info for {my_near_acc_id}");
+            panic!("could not find participant info for {my_near_acc_id}"); // TOOD: probably we should not panic here
+        });
+    participant_info.id.into()
 }

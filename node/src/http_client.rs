@@ -3,7 +3,6 @@ use crate::protocol::message::SignedMessage;
 use crate::protocol::MpcMessage;
 use cait_sith::protocol::Participant;
 use mpc_keys::hpke;
-use near_primitives::types::AccountId;
 use reqwest::{Client, IntoUrl};
 use std::collections::VecDeque;
 use std::str::Utf8Error;
@@ -27,7 +26,7 @@ pub enum SendError {
 }
 
 async fn send_encrypted<U: IntoUrl>(
-    from: &AccountId,
+    from: Participant,
     cipher_pk: &hpke::PublicKey,
     sign_sk: &near_crypto::SecretKey,
     client: &Client,
@@ -128,7 +127,7 @@ impl MessageQueue {
 
     pub async fn send_encrypted(
         &mut self,
-        from: &AccountId,
+        from: Participant,
         sign_sk: &near_crypto::SecretKey,
         client: &Client,
     ) -> Result<(), SendError> {
@@ -152,10 +151,6 @@ impl MessageQueue {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
-    use near_lake_primitives::AccountId;
-
     use crate::protocol::message::GeneratingMessage;
     use crate::protocol::MpcMessage;
 
@@ -164,7 +159,7 @@ mod tests {
         let associated_data = b"";
         let (sk, pk) = mpc_keys::hpke::generate();
         let starting_message = MpcMessage::Generating(GeneratingMessage {
-            from: AccountId::from_str("alice.near").unwrap(),
+            from: cait_sith::protocol::Participant::from(0),
             data: vec![],
         });
 

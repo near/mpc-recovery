@@ -10,26 +10,26 @@ use k256::Scalar;
 use mpc_keys::hpke::{self, Ciphered};
 use near_crypto::Signature;
 use near_primitives::hash::CryptoHash;
-use near_primitives::types::AccountId;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+#[async_trait::async_trait]
 pub trait MessageCtx {
-    fn my_near_acc_id(&self) -> &AccountId;
+    async fn me(&self) -> Participant;
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct GeneratingMessage {
-    pub from: AccountId,
+    pub from: Participant,
     pub data: MessageData,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct ResharingMessage {
     pub epoch: u64,
-    pub from: AccountId,
+    pub from: Participant,
     pub data: MessageData,
 }
 
@@ -37,7 +37,7 @@ pub struct ResharingMessage {
 pub struct TripleMessage {
     pub id: u64,
     pub epoch: u64,
-    pub from: AccountId,
+    pub from: Participant,
     pub data: MessageData,
 }
 
@@ -47,20 +47,20 @@ pub struct PresignatureMessage {
     pub triple0: TripleId,
     pub triple1: TripleId,
     pub epoch: u64,
-    pub from: AccountId,
+    pub from: Participant,
     pub data: MessageData,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct SignatureMessage {
     pub receipt_id: CryptoHash,
-    pub proposer: Participant, // TODO: should it be node AccountId?
+    pub proposer: Participant,
     pub presignature_id: PresignatureId,
     pub msg_hash: [u8; 32],
     pub epsilon: Scalar,
     pub delta: Scalar,
     pub epoch: u64,
-    pub from: AccountId,
+    pub from: Participant,
     pub data: MessageData,
 }
 
@@ -178,18 +178,7 @@ impl MessageHandler for GeneratingState {
         let mut protocol = self.protocol.write().await;
         while let Some(msg) = queue.generating.pop_front() {
             tracing::debug!("handling new generating message");
-            self.participants
-                .find_participant(&msg.from)
-                .map(|participant| {
-                    tracing::debug!(from = %msg.from, "handling message from");
-                    protocol.message(participant, msg.data);
-                })
-                .unwrap_or_else(|| {
-                    tracing::warn!(
-                        participant = %msg.from,
-                        "received message from unknown participant"
-                    );
-                });
+            protocol.message(msg.from, msg.data);
         }
         Ok(())
     }
@@ -205,18 +194,7 @@ impl MessageHandler for ResharingState {
         let q = queue.resharing_bins.entry(self.old_epoch).or_default();
         let mut protocol = self.protocol.write().await;
         while let Some(msg) = q.pop_front() {
-            self.old_participants
-                .find_participant(&msg.from)
-                .map(|participant| {
-                    tracing::debug!(from = %msg.from, "handling resharing message from");
-                    protocol.message(participant, msg.data);
-                })
-                .unwrap_or_else(|| {
-                    tracing::warn!(
-                        participant = %msg.from,
-                        "received message from unknown participant in resharing state"
-                    );
-                });
+            protocol.message(msg.from, msg.data);
         }
         Ok(())
     }
@@ -236,19 +214,7 @@ impl MessageHandler for RunningState {
                     .write()
                     .map_err(|err| MessageHandleError::SyncError(err.to_string()))?;
                 while let Some(message) = queue.pop_front() {
-                    self
-                        .participants
-                        .find_participant(&message.from)
-                        .map(|participant| {
-                            tracing::debug!(from = %message.from, "running state, triple message, handling message from");
-                            protocol.message(participant, message.data);
-                        })
-                        .unwrap_or_else(|| {
-                            tracing::warn!(
-                                participant = %message.from,
-                                "received message from unknown participant in running state"
-                            );
-                        });
+                    protocol.message(message.from, message.data);
                 }
             }
         }
@@ -269,19 +235,7 @@ impl MessageHandler for RunningState {
                         let mut protocol = protocol
                             .write()
                             .map_err(|err| MessageHandleError::SyncError(err.to_string()))?;
-                        self
-                            .participants
-                            .find_participant(&message.from)
-                            .map(|participant| {
-                                tracing::debug!(from = %message.from, "running state, presignature message, handling message from");
-                                protocol.message(participant, message.data);
-                            })
-                            .unwrap_or_else(|| {
-                                tracing::warn!(
-                                    participant = %message.from,
-                                    "received message from unknown participant in running state"
-                                );
-                            });
+                        protocol.message(message.from, message.data);
                     }
                     Err(presignature::GenerationError::AlreadyGenerated) => {
                         tracing::info!(id, "presignature already generated, nothing left to do")
@@ -335,17 +289,7 @@ impl MessageHandler for RunningState {
                         let mut protocol = protocol
                             .write()
                             .map_err(|err| MessageHandleError::SyncError(err.to_string()))?;
-                        let participant = match self.participants.find_participant(&message.from) {
-                            Some(participant) => participant,
-                            None => {
-                                tracing::warn!(
-                                    participant = %message.from,
-                                    "received message from unknown participant in running state"
-                                );
-                                continue;
-                            }
-                        };
-                        protocol.message(participant, message.data)
+                        protocol.message(message.from, message.data);
                     }
                     None => {
                         // Store the message until we are ready to process it
@@ -393,7 +337,7 @@ pub struct SignedMessage<T> {
     /// The signature used to verify the authenticity of the encrypted message.
     pub sig: Signature,
     /// From which particpant the message was sent.
-    pub from: AccountId,
+    pub from: Participant,
 }
 
 impl<T> SignedMessage<T> {
@@ -406,17 +350,13 @@ where
 {
     pub fn encrypt(
         msg: T,
-        from: &AccountId,
+        from: Participant,
         sign_sk: &near_crypto::SecretKey,
         cipher_pk: &hpke::PublicKey,
     ) -> Result<Ciphered, CryptographicError> {
         let msg = serde_json::to_vec(&msg)?;
         let sig = sign_sk.sign(&msg);
-        let msg = SignedMessage {
-            msg,
-            sig,
-            from: from.clone(),
-        };
+        let msg = SignedMessage { msg, sig, from };
         let msg = serde_json::to_vec(&msg)?;
         let ciphered = cipher_pk
             .encrypt(&msg, SignedMessage::<T>::ASSOCIATED_DATA)
@@ -438,15 +378,14 @@ where
             .decrypt(&encrypted, SignedMessage::<T>::ASSOCIATED_DATA)
             .map_err(|err| CryptographicError::Encryption(err.to_string()))?;
         let SignedMessage::<Vec<u8>> { msg, sig, from } = serde_json::from_slice(&message)?;
-        let sign_pk = match protocol_state.read().await.find_participant_info(&from) {
-            Some(info) => info.sign_pk.clone(),
-            None => {
-                return Err(CryptographicError::Encryption(
-                    "unknown participant".to_string(),
-                ));
-            }
-        };
-        if !sig.verify(&msg, &sign_pk) {
+        if !sig.verify(
+            &msg,
+            &protocol_state
+                .read()
+                .await
+                .fetch_participant(&from)?
+                .sign_pk,
+        ) {
             return Err(CryptographicError::Encryption(
                 "invalid signature while verifying authenticity of encrypted ".to_string(),
             ));
