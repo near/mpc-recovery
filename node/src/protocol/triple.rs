@@ -4,11 +4,11 @@ use crate::types::TripleProtocol;
 use crate::util::AffinePointExt;
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::triples::{TriplePub, TripleShare};
+use highway::{HighwayHash, HighwayHasher};
 use k256::elliptic_curve::group::GroupEncoding;
 use k256::Secp256k1;
-use std::collections::hash_map::{DefaultHasher, Entry};
+use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
-use std::hash::Hasher;
 use std::sync::Arc;
 
 /// Unique number used to identify a specific ongoing triple generation protocol.
@@ -223,6 +223,7 @@ impl TripleManager {
                             big_c = ?output.1.big_c.to_base58(),
                             "completed triple generation"
                         );
+
                         let triple = Triple {
                             id: *id,
                             share: output.0,
@@ -232,19 +233,20 @@ impl TripleManager {
                         // After creation the triple is assigned to a random node, which is NOT necessarily the one that initiated it's creation
                         let triple_is_mine = {
                             // This is an entirely unpredictable value to all participants because it's a combination of big_c_i
+                            // It is the same value across all participants
                             let big_c = triple.public.big_c;
 
-                            // We turn this into a u64 in a way not biased to the structure of the byte serialisation
-                            let mut hasher = DefaultHasher::new();
-                            hasher.write(&big_c.to_bytes());
-                            let entropy = hasher.finish() as usize;
+                            // We turn this into a u64 in a way not biased to the structure of the byte serialisation so we hash it
+                            // We use Highway Hash because the DefaultHasher doesn't guarantee a consistent output across versions
+                            let entropy =
+                                HighwayHasher::default().hash64(&big_c.to_bytes()) as usize;
 
                             let num_participants = self.participants.len();
                             // This has a *tiny* bias towards lower indexed participants, they're up to (1 + num_participants / u64::MAX)^2 times more likely to be selected
                             // This is acceptably small that it will likely never result in a biased selection happening
-                            let triple_owner = &self.participants[entropy % num_participants];
+                            let triple_owner = self.participants[entropy % num_participants];
 
-                            triple_owner == &self.me
+                            triple_owner == self.me
                         };
 
                         if triple_is_mine {
