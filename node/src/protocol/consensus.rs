@@ -105,6 +105,24 @@ impl ConsensusProtocol for StartedState {
                                 );
                                 let participants_vec: Vec<Participant> =
                                     contract_state.participants.keys().cloned().collect();
+                                let mut triple_manager = TripleManager::new(
+                                    participants_vec.clone(),
+                                    ctx.me(),
+                                    contract_state.threshold,
+                                    epoch,
+                                );
+                                // Start stockpiling triples in the background. This will wait until crypto loop to generate.
+                                if let Err(err) = triple_manager
+                                    .generate_pile_by_bandwidth(participants_vec.len())
+                                {
+                                    tracing::warn!(
+                                        ?err,
+                                        len = triple_manager.len(),
+                                        potential_len = triple_manager.potential_len(),
+                                        "failed to stockpile triples on startup: not fatal, but will slow down signing"
+                                    );
+                                }
+
                                 Ok(NodeState::Running(RunningState {
                                     epoch,
                                     participants: contract_state.participants,
@@ -112,12 +130,7 @@ impl ConsensusProtocol for StartedState {
                                     private_share,
                                     public_key,
                                     sign_queue: ctx.sign_queue(),
-                                    triple_manager: Arc::new(RwLock::new(TripleManager::new(
-                                        participants_vec.clone(),
-                                        ctx.me(),
-                                        contract_state.threshold,
-                                        epoch,
-                                    ))),
+                                    triple_manager: Arc::new(RwLock::new(triple_manager)),
                                     presignature_manager: Arc::new(RwLock::new(
                                         PresignatureManager::new(
                                             participants_vec.clone(),
@@ -310,6 +323,25 @@ impl ConsensusProtocol for WaitingForConsensusState {
                     }
                     let participants_vec: Vec<Participant> =
                         self.participants.keys().cloned().collect();
+
+                    let mut triple_manager = TripleManager::new(
+                        participants_vec.clone(),
+                        ctx.me(),
+                        self.threshold,
+                        self.epoch,
+                    );
+                    // Start stockpiling triples in the background. This will wait until crypto loop to generate.
+                    if let Err(err) =
+                        triple_manager.generate_pile_by_bandwidth(participants_vec.len())
+                    {
+                        tracing::warn!(
+                            ?err,
+                            len = triple_manager.len(),
+                            potential_len = triple_manager.potential_len(),
+                            "failed to stockpile triples on startup: not fatal, but will slow down signing"
+                        );
+                    }
+
                     Ok(NodeState::Running(RunningState {
                         epoch: self.epoch,
                         participants: self.participants,
@@ -317,12 +349,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                         private_share: self.private_share,
                         public_key: self.public_key,
                         sign_queue: ctx.sign_queue(),
-                        triple_manager: Arc::new(RwLock::new(TripleManager::new(
-                            participants_vec.clone(),
-                            ctx.me(),
-                            self.threshold,
-                            self.epoch,
-                        ))),
+                        triple_manager: Arc::new(RwLock::new(triple_manager)),
                         presignature_manager: Arc::new(RwLock::new(PresignatureManager::new(
                             participants_vec.clone(),
                             ctx.me(),

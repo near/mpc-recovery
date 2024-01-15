@@ -218,14 +218,14 @@ impl MpcSignProtocol {
             let state = match state.progress(&mut self.ctx).await {
                 Ok(state) => state,
                 Err(err) => {
-                    tracing::info!("protocol unable to progress: {err:?}");
+                    tracing::info!("protocol(crypto) unable to progress: {err:?}");
                     continue;
                 }
             };
             let mut state = match state.advance(&self.ctx, contract_state).await {
                 Ok(state) => state,
                 Err(err) => {
-                    tracing::info!("protocol unable to advance: {err:?}");
+                    tracing::info!("protocol(consensus) unable to advance: {err:?}");
                     continue;
                 }
             };
