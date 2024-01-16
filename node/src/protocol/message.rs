@@ -210,9 +210,6 @@ impl MessageHandler for RunningState {
         let mut triple_manager = self.triple_manager.write().await;
         for (id, queue) in queue.triple_bins.entry(self.epoch).or_default() {
             if let Some(protocol) = triple_manager.get_or_generate(*id)? {
-                let mut protocol = protocol
-                    .write()
-                    .map_err(|err| MessageHandleError::SyncError(err.to_string()))?;
                 while let Some(message) = queue.pop_front() {
                     protocol.message(message.from, message.data);
                 }

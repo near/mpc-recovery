@@ -9,7 +9,6 @@ use k256::elliptic_curve::group::GroupEncoding;
 use k256::Secp256k1;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
-use std::sync::Arc;
 
 /// Unique number used to identify a specific ongoing triple generation protocol.
 /// Without `TripleId` it would be unclear where to route incoming cait-sith triple generation
@@ -77,13 +76,11 @@ impl TripleManager {
     pub fn generate(&mut self) -> Result<(), InitializationError> {
         let id = rand::random();
         tracing::debug!(id, "starting protocol to generate a new triple");
-        let protocol: TripleProtocol = Arc::new(std::sync::RwLock::new(
-            cait_sith::triples::generate_triple::<Secp256k1>(
-                &self.participants,
-                self.me,
-                self.threshold,
-            )?,
-        ));
+        let protocol: TripleProtocol = Box::new(cait_sith::triples::generate_triple::<Secp256k1>(
+            &self.participants,
+            self.me,
+            self.threshold,
+        )?);
         self.generators.insert(id, protocol);
         Ok(())
     }
@@ -138,13 +135,11 @@ impl TripleManager {
             match self.generators.entry(id) {
                 Entry::Vacant(e) => {
                     tracing::debug!(id, "joining protocol to generate a new triple");
-                    let protocol = Arc::new(std::sync::RwLock::new(
-                        cait_sith::triples::generate_triple::<Secp256k1>(
-                            &self.participants,
-                            self.me,
-                            self.threshold,
-                        )?,
-                    ));
+                    let protocol = Box::new(cait_sith::triples::generate_triple::<Secp256k1>(
+                        &self.participants,
+                        self.me,
+                        self.threshold,
+                    )?);
                     let generator = e.insert(protocol);
                     Ok(Some(generator))
                 }
@@ -160,19 +155,8 @@ impl TripleManager {
     pub fn poke(&mut self) -> Result<Vec<(Participant, TripleMessage)>, ProtocolError> {
         let mut messages = Vec::new();
         let mut result = Ok(());
-        self.generators.retain(|id, generator| {
+        self.generators.retain(|id, protocol| {
             loop {
-                let mut protocol = match generator.write() {
-                    Ok(protocol) => protocol,
-                    Err(err) => {
-                        tracing::error!(
-                            ?err,
-                            "failed to acquire lock on triple generation protocol"
-                        );
-                        break false;
-                    }
-                };
-
                 let action = match protocol.poke() {
                     Ok(action) => action,
                     Err(e) => {
@@ -305,7 +289,6 @@ mod test {
                 let participant_i: u32 = participant.into();
                 let manager = &mut self.managers[participant_i as usize];
                 if let Some(protocol) = manager.get_or_generate(id).unwrap() {
-                    let mut protocol = protocol.write().unwrap();
                     protocol.message(from, data.to_vec());
                 } else {
                     println!("Tried to write to completed mailbox {:?}", tm);
