@@ -261,11 +261,12 @@ impl TripleManager {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashMap;
+    use std::{collections::HashMap, fs::OpenOptions, ops::Range};
 
     use crate::protocol::message::TripleMessage;
     use cait_sith::protocol::{InitializationError, Participant, ProtocolError};
     use itertools::multiunzip;
+    use std::io::prelude::*;
 
     use super::TripleManager;
 
@@ -276,6 +277,7 @@ mod test {
     impl TestManagers {
         fn new(number: u32) -> Self {
             let range = 0..number;
+            // Self::wipe_mailboxes(range.clone());
             let participants: Vec<Participant> = range.map(Participant::from).collect();
             let managers = participants
                 .iter()
@@ -291,16 +293,50 @@ mod test {
         fn poke(&mut self, index: usize) -> Result<bool, ProtocolError> {
             let mut quiet = true;
             let messages = self.managers[index].poke()?;
-            for (participant, TripleMessage { id, from, data, .. }) in messages {
+            for (
+                participant,
+                ref tm @ TripleMessage {
+                    id, from, ref data, ..
+                },
+            ) in messages
+            {
+                // Self::debug_mailbox(participant.into(), &tm);
                 quiet = false;
                 let participant_i: u32 = participant.into();
                 let manager = &mut self.managers[participant_i as usize];
                 if let Some(protocol) = manager.get_or_generate(id).unwrap() {
                     let mut protocol = protocol.write().unwrap();
-                    protocol.message(from, data);
+                    protocol.message(from, data.to_vec());
+                } else {
+                    println!("Tried to write to completed mailbox {:?}", tm);
                 }
             }
             Ok(quiet)
+        }
+
+        #[allow(unused)]
+        fn wipe_mailboxes(mailboxes: Range<u32>) {
+            for m in mailboxes {
+                let mut file = OpenOptions::new()
+                    .write(true)
+                    .append(false)
+                    .create(true)
+                    .open(format!("{}.csv", m))
+                    .unwrap();
+                write!(file, "").unwrap();
+            }
+        }
+
+        // This allows you to see what each node is recieving and when
+        #[allow(unused)]
+        fn debug_mailbox(participant: u32, TripleMessage { id, from, data, .. }: &TripleMessage) {
+            let mut file = OpenOptions::new()
+                .write(true)
+                .append(true)
+                .open(format!("{}.csv", participant))
+                .unwrap();
+
+            writeln!(file, "'{id}, {from:?}, {}", hex::encode(data)).unwrap();
         }
 
         fn poke_until_quiet(&mut self) -> Result<(), ProtocolError> {
@@ -325,7 +361,7 @@ mod test {
 
         const M: usize = 2;
         const N: usize = M + 3;
-        // Generate 23 triples
+        // Generate 5 triples
         for _ in 0..M {
             tm.generate(0).unwrap();
         }
