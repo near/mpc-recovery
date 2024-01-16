@@ -119,6 +119,7 @@ impl ConsensusProtocol for StartedState {
                                         ?err,
                                         len = triple_manager.len(),
                                         potential_len = triple_manager.potential_len(),
+                                        node_state = ?self,
                                         "failed to stockpile triples on startup: not fatal, but will slow down signing"
                                     );
                                 }
@@ -338,6 +339,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                             ?err,
                             len = triple_manager.len(),
                             potential_len = triple_manager.potential_len(),
+                            node_state = ?self,
                             "failed to stockpile triples on startup: not fatal, but will slow down signing"
                         );
                     }
