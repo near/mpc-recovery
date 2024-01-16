@@ -145,7 +145,6 @@ impl MpcContract {
                 participants,
                 threshold,
                 public_key,
-                candidates: _,
                 leave_votes,
                 ..
             }) => {

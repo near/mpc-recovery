@@ -24,7 +24,6 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use url::Url;
 
-#[async_trait::async_trait]
 pub trait ConsensusCtx {
     fn my_account_id(&self) -> &AccountId;
     fn http_client(&self) -> &reqwest::Client;

@@ -123,7 +123,7 @@ pub async fn docker(nodes: usize, docker_client: &DockerClient) -> anyhow::Resul
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
     let mut node_futures = Vec::new();
-    for account in accounts.iter() {
+    for account in &accounts {
         let node = containers::Node::run(&ctx, account.id(), account.secret_key());
         node_futures.push(node);
     }
@@ -134,9 +134,8 @@ pub async fn docker(nodes: usize, docker_client: &DockerClient) -> anyhow::Resul
     let participants: HashMap<AccountId, ParticipantInfo> = accounts
         .iter()
         .cloned()
-        .enumerate()
         .zip(&nodes)
-        .map(|((_, account), node)| {
+        .map(|(account, node)| {
             (
                 account.id().clone(),
                 ParticipantInfo {
@@ -169,7 +168,7 @@ pub async fn host(nodes: usize, docker_client: &DockerClient) -> anyhow::Result<
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
     let mut node_futures = Vec::with_capacity(nodes);
-    for (_, account) in accounts.iter().enumerate().take(nodes) {
+    for account in accounts.iter().take(nodes) {
         node_futures.push(local::Node::run(&ctx, account.id(), account.secret_key()));
     }
     let nodes = futures::future::join_all(node_futures)
@@ -179,9 +178,8 @@ pub async fn host(nodes: usize, docker_client: &DockerClient) -> anyhow::Result<
     let participants: HashMap<AccountId, ParticipantInfo> = accounts
         .iter()
         .cloned()
-        .enumerate()
         .zip(&nodes)
-        .map(|((_, account), node)| {
+        .map(|(account, node)| {
             (
                 account.id().clone(),
                 ParticipantInfo {

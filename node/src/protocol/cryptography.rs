@@ -93,8 +93,8 @@ impl CryptographicProtocol for GeneratingState {
                 Action::SendMany(m) => {
                     tracing::debug!("sending a message to many participants");
                     let mut messages = self.messages.write().await;
-                    for (p, info) in self.participants.clone() {
-                        if p == ctx.me().await {
+                    for (p, info) in self.participants.iter() {
+                        if p == &ctx.me().await {
                             // Skip yourself, cait-sith never sends messages to oneself
                             continue;
                         }
@@ -196,7 +196,7 @@ impl CryptographicProtocol for ResharingState {
                         .send_encrypted(ctx.me().await, ctx.sign_sk(), ctx.http_client())
                         .await
                     {
-                        tracing::warn!(?err, new = ?self.new_participants.clone(), old = ?self.old_participants.clone(), "resharing(wait): failed to send encrypted message");
+                        tracing::warn!(?err, new = ?self.new_participants, old = ?self.old_participants, "resharing(wait): failed to send encrypted message");
                     }
 
                     return Ok(NodeState::Resharing(self));

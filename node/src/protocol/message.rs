@@ -235,7 +235,7 @@ impl MessageHandler for RunningState {
                         let mut protocol = protocol
                             .write()
                             .map_err(|err| MessageHandleError::SyncError(err.to_string()))?;
-                        protocol.message(message.from, message.data);
+                        protocol.message(message.from, message.data)
                     }
                     Err(presignature::GenerationError::AlreadyGenerated) => {
                         tracing::info!(id, "presignature already generated, nothing left to do")
@@ -289,7 +289,7 @@ impl MessageHandler for RunningState {
                         let mut protocol = protocol
                             .write()
                             .map_err(|err| MessageHandleError::SyncError(err.to_string()))?;
-                        protocol.message(message.from, message.data);
+                        protocol.message(message.from, message.data)
                     }
                     None => {
                         // Store the message until we are ready to process it

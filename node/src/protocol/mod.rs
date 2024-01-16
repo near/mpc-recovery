@@ -49,7 +49,6 @@ struct Ctx {
     secret_storage: SecretNodeStorageBox,
 }
 
-#[async_trait::async_trait]
 impl ConsensusCtx for &MpcSignProtocol {
     fn my_account_id(&self) -> &AccountId {
         &self.ctx.account_id
@@ -254,7 +253,7 @@ async fn get_my_participant(protocol: &MpcSignProtocol) -> Participant {
         .find_participant_info(&my_near_acc_id)
         .unwrap_or_else(|| {
             tracing::error!("could not find participant info for {my_near_acc_id}");
-            panic!("could not find participant info for {my_near_acc_id}"); // TOOD: probably we should not panic here
+            panic!("could not find participant info for {my_near_acc_id}");
         });
     participant_info.id.into()
 }

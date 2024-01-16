@@ -11,7 +11,7 @@ type ParticipantId = u32;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ParticipantInfo {
-    pub id: ParticipantId, // TODO: do we need this parameter?
+    pub id: ParticipantId,
     pub account_id: AccountId,
     pub url: String,
     /// The public key used for encrypting messages.

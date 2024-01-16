@@ -95,6 +95,7 @@ impl Participants {
     pub fn get(&self, account_id: &AccountId) -> Option<&ParticipantInfo> {
         self.participants.get(account_id)
     }
+
     pub fn iter(&self) -> impl Iterator<Item = (&AccountId, &ParticipantInfo)> {
         self.participants.iter()
     }
@@ -145,6 +146,7 @@ impl Candidates {
     pub fn get(&self, account_id: &AccountId) -> Option<&CandidateInfo> {
         self.candidates.get(account_id)
     }
+
     pub fn iter(&self) -> impl Iterator<Item = (&AccountId, &CandidateInfo)> {
         self.candidates.iter()
     }
