@@ -10,9 +10,9 @@ use mpc_recovery::{
         ClaimOidcResponse, MpcPkResponse, NewAccountResponse, SignResponse, UserCredentialsResponse,
     },
 };
-use mpc_recovery_integration_tests::env::containers::DockerClient;
 use mpc_recovery_integration_tests::indexer::FullSignature;
 use mpc_recovery_integration_tests::{env, indexer};
+use mpc_recovery_integration_tests::{env::containers::DockerClient, multichain::MultichainConfig};
 use near_primitives::hash::CryptoHash;
 use near_workspaces::{network::Sandbox, Worker};
 use std::collections::HashMap;
@@ -70,14 +70,16 @@ pub struct MultichainTestContext<'a> {
     rpc_client: near_fetch::Client,
     http_client: reqwest::Client,
     responses: Arc<RwLock<HashMap<CryptoHash, FullSignature>>>,
+    cfg: MultichainConfig,
 }
 
-async fn with_multichain_nodes<F>(nodes: usize, f: F) -> anyhow::Result<()>
+async fn with_multichain_nodes<F>(cfg: MultichainConfig, f: F) -> anyhow::Result<()>
 where
     F: for<'a> FnOnce(MultichainTestContext<'a>) -> BoxFuture<'a, anyhow::Result<()>>,
 {
     let docker_client = DockerClient::default();
-    let nodes = mpc_recovery_integration_tests::multichain::run(nodes, &docker_client).await?;
+    let nodes =
+        mpc_recovery_integration_tests::multichain::run(cfg.clone(), &docker_client).await?;
 
     let s3_bucket = nodes.ctx().localstack.s3_bucket.clone();
     let s3_region = nodes.ctx().localstack.s3_region.clone();
@@ -103,6 +105,7 @@ where
         rpc_client,
         http_client: reqwest::Client::default(),
         responses,
+        cfg,
     })
     .await?;
 

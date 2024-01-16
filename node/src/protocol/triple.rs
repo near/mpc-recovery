@@ -43,6 +43,7 @@ pub struct TripleManager {
     pub me: Participant,
     pub threshold: usize,
     pub epoch: u64,
+    pub triple_stockpile: Option<usize>,
 }
 
 impl TripleManager {
@@ -51,6 +52,7 @@ impl TripleManager {
         me: Participant,
         threshold: usize,
         epoch: u64,
+        triple_stockpile: Option<usize>,
     ) -> Self {
         Self {
             triples: HashMap::new(),
@@ -60,6 +62,7 @@ impl TripleManager {
             me,
             threshold,
             epoch,
+            triple_stockpile,
         }
     }
 
@@ -95,9 +98,15 @@ impl TripleManager {
     }
 
     pub fn generate_pile_by_bandwidth(&mut self, nodes: usize) -> Result<(), InitializationError> {
-        let pile = calc_optimal_pile(DEFAULT_MAX_MESSAGES, nodes);
+        let pile = if let Some(triple_stockpile) = self.triple_stockpile {
+            triple_stockpile
+        } else {
+            let pile = calc_optimal_pile(DEFAULT_MAX_MESSAGES, nodes);
+            pile.min(DEFAULT_MAX_PILE)
+        };
         tracing::info!(nodes, pile, "generating pile of triples");
-        for _ in 0..pile.min(DEFAULT_MAX_PILE) {
+
+        for _ in 0..pile {
             self.generate()?;
         }
         Ok(())
@@ -303,7 +312,7 @@ mod test {
             let participants: Vec<Participant> = range.map(Participant::from).collect();
             let managers = participants
                 .iter()
-                .map(|me| TripleManager::new(participants.clone(), *me, number as usize, 0))
+                .map(|me| TripleManager::new(participants.clone(), *me, number as usize, 0, None))
                 .collect();
             TestManagers { managers }
         }

@@ -54,6 +54,9 @@ pub enum Cli {
         /// Storage options
         #[clap(flatten)]
         storage_options: storage::Options,
+        /// How many triples to stockpile
+        #[arg(long, env("MPC_RECOVERY_TRIPLE_STOCKPILE_SIZE"))]
+        triple_stockpile: Option<usize>,
     },
 }
 
@@ -77,6 +80,7 @@ impl Cli {
                 indexer_options,
                 my_address,
                 storage_options,
+                triple_stockpile,
             } => {
                 let mut args = vec![
                     "start".to_string(),
@@ -99,6 +103,12 @@ impl Cli {
                 ];
                 if let Some(my_address) = my_address {
                     args.extend(vec!["--my-address".to_string(), my_address.to_string()]);
+                }
+                if let Some(triple_stockpile) = triple_stockpile {
+                    args.extend(vec![
+                        "--triple-stockpile".to_string(),
+                        triple_stockpile.to_string(),
+                    ]);
                 }
                 args.extend(indexer_options.into_str_args());
                 args.extend(storage_options.into_str_args());
@@ -134,6 +144,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
             indexer_options,
             my_address,
             storage_options,
+            triple_stockpile,
         } => {
             let sign_queue = Arc::new(RwLock::new(SignQueue::new()));
             let a = indexer_options.clone();
@@ -167,6 +178,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                         sign_queue.clone(),
                         hpke::PublicKey::try_from_bytes(&hex::decode(cipher_pk)?)?,
                         key_storage,
+                        triple_stockpile,
                     );
                     tracing::debug!("protocol initialized");
                     let protocol_handle = tokio::spawn(async move { protocol.run().await });

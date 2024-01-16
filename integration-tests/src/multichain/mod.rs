@@ -11,6 +11,21 @@ use std::collections::HashMap;
 
 const NETWORK: &str = "mpc_it_network";
 
+#[derive(Clone)]
+pub struct MultichainConfig {
+    pub nodes: usize,
+    pub triple_stockpile: usize,
+}
+
+impl Default for MultichainConfig {
+    fn default() -> Self {
+        Self {
+            nodes: 3,
+            triple_stockpile: 10,
+        }
+    }
+}
+
 pub enum Nodes<'a> {
     Local {
         ctx: Context<'a>,
@@ -53,15 +68,15 @@ impl Nodes<'_> {
         node_id: u32,
         account: &AccountId,
         account_sk: &near_workspaces::types::SecretKey,
+        triple_stockpile: usize,
     ) -> anyhow::Result<()> {
         tracing::info!(%account, "adding one more node");
         match self {
-            Nodes::Local { ctx, nodes } => {
-                nodes.push(local::Node::run(ctx, node_id, account, account_sk).await?)
-            }
-            Nodes::Docker { ctx, nodes } => {
-                nodes.push(containers::Node::run(ctx, node_id, account, account_sk).await?)
-            }
+            Nodes::Local { ctx, nodes } => nodes
+                .push(local::Node::run(ctx, node_id, account, account_sk, triple_stockpile).await?),
+            Nodes::Docker { ctx, nodes } => nodes.push(
+                containers::Node::run(ctx, node_id, account, account_sk, triple_stockpile).await?,
+            ),
         }
 
         Ok(())
@@ -116,7 +131,13 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
     })
 }
 
-pub async fn docker(nodes: usize, docker_client: &DockerClient) -> anyhow::Result<Nodes> {
+pub async fn docker(
+    MultichainConfig {
+        nodes,
+        triple_stockpile,
+    }: MultichainConfig,
+    docker_client: &DockerClient,
+) -> anyhow::Result<Nodes> {
     let ctx = setup(docker_client).await?;
 
     let accounts = futures::future::join_all((0..nodes).map(|_| ctx.worker.dev_create_account()))
@@ -125,7 +146,13 @@ pub async fn docker(nodes: usize, docker_client: &DockerClient) -> anyhow::Resul
         .collect::<Result<Vec<_>, _>>()?;
     let mut node_futures = Vec::new();
     for (i, account) in accounts.iter().enumerate() {
-        let node = containers::Node::run(&ctx, i as u32, account.id(), account.secret_key());
+        let node = containers::Node::run(
+            &ctx,
+            i as u32,
+            account.id(),
+            account.secret_key(),
+            triple_stockpile,
+        );
         node_futures.push(node);
     }
     let nodes = futures::future::join_all(node_futures)
@@ -163,7 +190,13 @@ pub async fn docker(nodes: usize, docker_client: &DockerClient) -> anyhow::Resul
     Ok(Nodes::Docker { ctx, nodes })
 }
 
-pub async fn host(nodes: usize, docker_client: &DockerClient) -> anyhow::Result<Nodes> {
+pub async fn host(
+    MultichainConfig {
+        nodes,
+        triple_stockpile,
+    }: MultichainConfig,
+    docker_client: &DockerClient,
+) -> anyhow::Result<Nodes> {
     let ctx = setup(docker_client).await?;
 
     let accounts = futures::future::join_all((0..nodes).map(|_| ctx.worker.dev_create_account()))
@@ -177,6 +210,7 @@ pub async fn host(nodes: usize, docker_client: &DockerClient) -> anyhow::Result<
             i as u32,
             account.id(),
             account.secret_key(),
+            triple_stockpile,
         ));
     }
     let nodes = futures::future::join_all(node_futures)
@@ -214,10 +248,10 @@ pub async fn host(nodes: usize, docker_client: &DockerClient) -> anyhow::Result<
     Ok(Nodes::Local { ctx, nodes })
 }
 
-pub async fn run(nodes: usize, docker_client: &DockerClient) -> anyhow::Result<Nodes> {
+pub async fn run(cfg: MultichainConfig, docker_client: &DockerClient) -> anyhow::Result<Nodes> {
     #[cfg(feature = "docker-test")]
-    return docker(nodes, docker_client).await;
+    return docker(cfg, docker_client).await;
 
     #[cfg(not(feature = "docker-test"))]
-    return host(nodes, docker_client).await;
+    return host(cfg, docker_client).await;
 }

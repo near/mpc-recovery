@@ -36,6 +36,7 @@ pub trait ConsensusCtx {
     fn sign_pk(&self) -> near_crypto::PublicKey;
     fn sign_sk(&self) -> &near_crypto::SecretKey;
     fn secret_storage(&self) -> &SecretNodeStorageBox;
+    fn triple_stockpile(&self) -> &Option<usize>;
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -110,6 +111,7 @@ impl ConsensusProtocol for StartedState {
                                     ctx.me(),
                                     contract_state.threshold,
                                     epoch,
+                                    ctx.triple_stockpile().clone(),
                                 );
                                 // Start stockpiling triples in the background. This will wait until crypto loop to generate.
                                 if let Err(err) = triple_manager
@@ -330,6 +332,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                         ctx.me(),
                         self.threshold,
                         self.epoch,
+                        ctx.triple_stockpile().clone(),
                     );
                     // Start stockpiling triples in the background. This will wait until crypto loop to generate.
                     if let Err(err) =

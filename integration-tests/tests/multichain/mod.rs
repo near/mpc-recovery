@@ -1,6 +1,7 @@
 use crate::{wait_for, with_multichain_nodes};
 use k256::elliptic_curve::sec1::FromEncodedPoint;
 use k256::{AffinePoint, EncodedPoint, Scalar, Secp256k1};
+use mpc_recovery_integration_tests::multichain::MultichainConfig;
 use mpc_recovery_node::kdf;
 use mpc_recovery_node::util::ScalarExt;
 use near_crypto::InMemorySigner;
@@ -11,7 +12,7 @@ use test_log::test;
 
 #[test(tokio::test)]
 async fn test_multichain_reshare() -> anyhow::Result<()> {
-    with_multichain_nodes(3, |mut ctx| {
+    with_multichain_nodes(MultichainConfig::default(), |mut ctx| {
         Box::pin(async move {
             // Wait for network to complete key generation
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
@@ -19,7 +20,12 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
 
             let account = ctx.nodes.ctx().worker.dev_create_account().await?;
             ctx.nodes
-                .add_node(3, account.id(), account.secret_key())
+                .add_node(
+                    3,
+                    account.id(),
+                    account.secret_key(),
+                    ctx.cfg.triple_stockpile,
+                )
                 .await?;
 
             // Wait for network to complete key reshare
@@ -39,7 +45,7 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
 
 #[test(tokio::test)]
 async fn test_triples_and_presignatures() -> anyhow::Result<()> {
-    with_multichain_nodes(3, |ctx| {
+    with_multichain_nodes(MultichainConfig::default(), |ctx| {
         Box::pin(async move {
             // Wait for network to complete key generation
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
@@ -60,7 +66,7 @@ async fn test_triples_and_presignatures() -> anyhow::Result<()> {
 
 #[test(tokio::test)]
 async fn test_signature() -> anyhow::Result<()> {
-    with_multichain_nodes(3, |ctx| {
+    with_multichain_nodes(MultichainConfig::default(), |ctx| {
         Box::pin(async move {
             // Wait for network to complete key generation
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
