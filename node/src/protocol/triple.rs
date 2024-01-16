@@ -374,8 +374,8 @@ mod test {
         );
 
         triples.dedup_by_key(|kv| {
-            kv.into_iter()
-                .map(|(id, triple)| (id.clone(), (triple.id.clone(), triple.public.clone())))
+            kv.iter_mut()
+                .map(|(id, triple)| (*id, (triple.id, triple.public.clone())))
                 .collect::<HashMap<_, _>>()
         });
 
