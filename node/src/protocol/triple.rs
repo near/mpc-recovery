@@ -261,8 +261,11 @@ impl TripleManager {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
+
     use crate::protocol::message::TripleMessage;
     use cait_sith::protocol::{InitializationError, Participant, ProtocolError};
+    use itertools::multiunzip;
 
     use super::TripleManager;
 
@@ -314,6 +317,8 @@ mod test {
         }
     }
 
+    // TODO: This test currently takes 22 seconds on my machine, which is much slower than it should be
+    // Improve this before we make more similar tests
     #[test]
     fn happy_triple_generation() {
         let mut tm = TestManagers::new(5);
@@ -331,11 +336,13 @@ mod test {
 
         tm.poke_until_quiet().unwrap();
 
-        let (my_lens, lens): (Vec<_>, Vec<_>) = tm
+        let inputs = tm
             .managers
             .into_iter()
-            .map(|m| (m.my_len(), m.len()))
-            .unzip();
+            .map(|m| (m.my_len(), m.len(), m.generators, m.triples));
+
+        let (my_lens, lens, generators, mut triples): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) =
+            multiunzip(inputs);
 
         assert_eq!(
             my_lens.iter().sum::<usize>(),
@@ -349,10 +356,33 @@ mod test {
 
         // This passes, but we don't have deterministic entropy or enough triples
         // to ensure that it will no coincidentally fail
+        // TODO: deterministic entropy for testing
         // assert_ne!(
         //     my_lens,
         //     vec![M, 1, 1, 0, 1],
         //     "The nodes that started the triple don't own it"
         // );
+
+        for g in generators.iter() {
+            assert!(g.is_empty(), "There are no triples still being generated")
+        }
+
+        assert_ne!(
+            triples.len(),
+            1,
+            "The number of triples is not 1 before deduping"
+        );
+
+        triples.dedup_by_key(|kv| {
+            kv.into_iter()
+                .map(|(id, triple)| (id.clone(), (triple.id.clone(), triple.public.clone())))
+                .collect::<HashMap<_, _>>()
+        });
+
+        assert_eq!(
+            triples.len(),
+            1,
+            "All triple IDs and public parts are identical"
+        )
     }
 }

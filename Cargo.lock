@@ -3928,6 +3928,7 @@ dependencies = [
  "hex 0.4.3",
  "highway",
  "hkdf",
+ "itertools 0.12.0",
  "k256",
  "local-ip-address",
  "mpc-contract",
