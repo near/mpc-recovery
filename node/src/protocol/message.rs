@@ -277,12 +277,7 @@ impl MessageHandler for RunningState {
                     message.delta,
                     &mut presignature_manager,
                 )? {
-                    Some(protocol) => {
-                        let mut protocol = protocol
-                            .write()
-                            .map_err(|err| MessageHandleError::SyncError(err.to_string()))?;
-                        protocol.message(message.from, message.data)
-                    }
+                    Some(protocol) => protocol.message(message.from, message.data),
                     None => {
                         // Store the message until we are ready to process it
                         leftover_messages.push(message)

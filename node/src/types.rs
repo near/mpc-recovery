@@ -13,5 +13,4 @@ pub type ReshareProtocol = Arc<RwLock<dyn Protocol<Output = SecretKeyShare> + Se
 pub type TripleProtocol =
     Box<dyn Protocol<Output = TripleGenerationOutput<Secp256k1>> + Send + Sync>;
 pub type PresignatureProtocol = Box<dyn Protocol<Output = PresignOutput<Secp256k1>> + Send + Sync>;
-pub type SignatureProtocol =
-    Arc<std::sync::RwLock<dyn Protocol<Output = FullSignature<Secp256k1>> + Send + Sync>>;
+pub type SignatureProtocol = Box<dyn Protocol<Output = FullSignature<Secp256k1>> + Send + Sync>;
