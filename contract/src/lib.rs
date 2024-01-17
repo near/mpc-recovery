@@ -307,4 +307,13 @@ impl MpcContract {
             protocol_state: ProtocolContractState::NotInitialized,
         }
     }
+
+    /// This is the root public key combined from all the public keys of the participants.
+    pub fn public_key(&self) -> PublicKey {
+        match &self.protocol_state {
+            ProtocolContractState::Running(state) => state.public_key.clone(),
+            ProtocolContractState::Resharing(state) => state.public_key.clone(),
+            _ => env::panic_str("public key not available (protocol is not running or resharing)"),
+        }
+    }
 }
