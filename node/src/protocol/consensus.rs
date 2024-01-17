@@ -111,7 +111,7 @@ impl ConsensusProtocol for StartedState {
                                     ctx.me(),
                                     contract_state.threshold,
                                     epoch,
-                                    ctx.triple_stockpile().clone(),
+                                    *ctx.triple_stockpile(),
                                 );
                                 // Start stockpiling triples in the background. This will wait until crypto loop to generate.
                                 if let Err(err) = triple_manager
@@ -332,7 +332,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                         ctx.me(),
                         self.threshold,
                         self.epoch,
-                        ctx.triple_stockpile().clone(),
+                        *ctx.triple_stockpile(),
                     );
                     // Start stockpiling triples in the background. This will wait until crypto loop to generate.
                     if let Err(err) =
