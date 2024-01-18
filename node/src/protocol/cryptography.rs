@@ -73,7 +73,16 @@ impl CryptographicProtocol for GeneratingState {
         tracing::info!("progressing key generation");
         let mut protocol = self.protocol.write().await;
         loop {
-            let action = protocol.poke()?;
+            let action = match protocol.poke() {
+                Ok(action) => action,
+                Err(err) => {
+                    drop(protocol);
+                    if let Err(err) = self.protocol.refresh().await {
+                        tracing::warn!(?err, "unable to refresh keygen protocol");
+                    }
+                    return Err(err)?;
+                }
+            };
             match action {
                 Action::Wait => {
                     drop(protocol);

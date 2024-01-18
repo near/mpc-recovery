@@ -9,7 +9,7 @@ use crate::protocol::signature::SignatureManager;
 use crate::protocol::state::{GeneratingState, ResharingState};
 use crate::protocol::triple::TripleManager;
 use crate::storage::{SecretNodeStorageBox, SecretStorageError};
-use crate::types::SecretKeyShare;
+use crate::types::{SecretKeyShare, KeygenProtocol};
 use crate::util::AffinePointExt;
 use crate::{http_client, rpc_client};
 use async_trait::async_trait;
@@ -186,7 +186,7 @@ impl ConsensusProtocol for StartedState {
                                 "starting key generation as a part of the participant set"
                             );
                             let participants = contract_state.participants;
-                            let protocol = cait_sith::keygen::<Secp256k1>(
+                            let protocol = KeygenProtocol::new(
                                 &participants.keys().cloned().collect::<Vec<_>>(),
                                 me,
                                 contract_state.threshold,
@@ -194,7 +194,7 @@ impl ConsensusProtocol for StartedState {
                             Ok(NodeState::Generating(GeneratingState {
                                 participants,
                                 threshold: contract_state.threshold,
-                                protocol: Arc::new(RwLock::new(protocol)),
+                                protocol,
                                 messages: Default::default(),
                             }))
                         }
