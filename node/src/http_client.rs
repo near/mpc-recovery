@@ -1,8 +1,9 @@
+use crate::protocol::contract::primitives::ParticipantInfo;
 use crate::protocol::message::SignedMessage;
 use crate::protocol::MpcMessage;
-use crate::protocol::ParticipantInfo;
 use cait_sith::protocol::Participant;
 use mpc_keys::hpke;
+use near_primitives::types::AccountId;
 use reqwest::{Client, IntoUrl};
 use std::collections::VecDeque;
 use std::str::Utf8Error;
@@ -73,8 +74,12 @@ async fn send_encrypted<U: IntoUrl>(
     Retry::spawn(retry_strategy, action).await
 }
 
-pub async fn join<U: IntoUrl>(client: &Client, url: U, me: &Participant) -> Result<(), SendError> {
-    let _span = tracing::info_span!("join_request", ?me);
+pub async fn join<U: IntoUrl>(
+    client: &Client,
+    url: U,
+    account_id: &AccountId,
+) -> Result<(), SendError> {
+    let _span = tracing::info_span!("join_request", ?account_id);
     let mut url = url.into_url()?;
     url.set_path("join");
     tracing::debug!(%url, "making http request");
@@ -82,7 +87,7 @@ pub async fn join<U: IntoUrl>(client: &Client, url: U, me: &Participant) -> Resu
         let response = client
             .post(url.clone())
             .header("content-type", "application/json")
-            .json(&me)
+            .json(&account_id)
             .send()
             .await
             .map_err(SendError::ReqwestClientError)?;

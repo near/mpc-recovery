@@ -32,18 +32,16 @@ impl<'a> Node<'a> {
 
     pub async fn run(
         ctx: &super::Context<'a>,
-        node_id: u32,
-        account: &AccountId,
+        account_id: &AccountId,
         account_sk: &near_workspaces::types::SecretKey,
         triple_stockpile: usize,
     ) -> anyhow::Result<Node<'a>> {
-        tracing::info!(node_id, "running node container");
+        tracing::info!("running node container, account_id={}", account_id);
         let (cipher_sk, cipher_pk) = hpke::generate();
         let args = mpc_recovery_node::cli::Cli::Start {
-            node_id: node_id.into(),
             near_rpc: ctx.lake_indexer.rpc_host_address.clone(),
             mpc_contract_id: ctx.mpc_contract.id().clone(),
-            account: account.clone(),
+            account_id: account_id.clone(),
             account_sk: account_sk.to_string().parse()?,
             web_port: Self::CONTAINER_PORT,
             cipher_pk: hex::encode(cipher_pk.to_bytes()),
@@ -82,7 +80,11 @@ impl<'a> Node<'a> {
         });
 
         let full_address = format!("http://{ip_address}:{}", Self::CONTAINER_PORT);
-        tracing::info!(node_id, full_address, "node container is running");
+        tracing::info!(
+            full_address,
+            "node container is running, account_id={}",
+            account_id
+        );
         Ok(Node {
             container,
             address: full_address,

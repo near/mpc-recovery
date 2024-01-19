@@ -7,7 +7,6 @@ use cait_sith::{KeygenOutput, PresignArguments, PresignOutput};
 use k256::Secp256k1;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
-use std::sync::Arc;
 
 /// Unique number used to identify a specific ongoing presignature generation protocol.
 /// Without `PresignatureId` it would be unclear where to route incoming cait-sith presignature
@@ -99,7 +98,7 @@ impl PresignatureManager {
         private_share: &SecretKeyShare,
         mine: bool,
     ) -> Result<PresignatureGenerator, InitializationError> {
-        let protocol = Arc::new(std::sync::RwLock::new(cait_sith::presign(
+        let protocol = Box::new(cait_sith::presign(
             participants,
             me,
             PresignArguments {
@@ -111,7 +110,7 @@ impl PresignatureManager {
                 },
                 threshold,
             },
-        )?));
+        )?);
         Ok(PresignatureGenerator {
             protocol,
             triple0: triple0.id,
@@ -213,16 +212,7 @@ impl PresignatureManager {
         let mut result = Ok(());
         self.generators.retain(|id, generator| {
             loop {
-                let mut protocol = match generator.protocol.write() {
-                    Ok(protocol) => protocol,
-                    Err(err) => {
-                        tracing::error!(
-                            ?err,
-                            "failed to acquire lock on presignature generation protocol"
-                        );
-                        break false;
-                    }
-                };
+                let protocol = &mut generator.protocol;
                 let action = match protocol.poke() {
                     Ok(action) => action,
                     Err(e) => {

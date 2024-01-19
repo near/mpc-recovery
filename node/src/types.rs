@@ -11,8 +11,6 @@ pub type PublicKey = <Secp256k1 as CurveArithmetic>::AffinePoint;
 pub type KeygenProtocol = Arc<RwLock<dyn Protocol<Output = KeygenOutput<Secp256k1>> + Send + Sync>>;
 pub type ReshareProtocol = Arc<RwLock<dyn Protocol<Output = SecretKeyShare> + Send + Sync>>;
 pub type TripleProtocol =
-    Arc<std::sync::RwLock<dyn Protocol<Output = TripleGenerationOutput<Secp256k1>> + Send + Sync>>;
-pub type PresignatureProtocol =
-    Arc<std::sync::RwLock<dyn Protocol<Output = PresignOutput<Secp256k1>> + Send + Sync>>;
-pub type SignatureProtocol =
-    Arc<std::sync::RwLock<dyn Protocol<Output = FullSignature<Secp256k1>> + Send + Sync>>;
+    Box<dyn Protocol<Output = TripleGenerationOutput<Secp256k1>> + Send + Sync>;
+pub type PresignatureProtocol = Box<dyn Protocol<Output = PresignOutput<Secp256k1>> + Send + Sync>;
+pub type SignatureProtocol = Box<dyn Protocol<Output = FullSignature<Secp256k1>> + Send + Sync>;

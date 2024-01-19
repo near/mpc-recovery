@@ -15,8 +15,9 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+#[async_trait::async_trait]
 pub trait MessageCtx {
-    fn me(&self) -> Participant;
+    async fn me(&self) -> Participant;
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -193,7 +194,6 @@ impl MessageHandler for ResharingState {
         let q = queue.resharing_bins.entry(self.old_epoch).or_default();
         let mut protocol = self.protocol.write().await;
         while let Some(msg) = q.pop_front() {
-            tracing::debug!("handling new resharing message");
             protocol.message(msg.from, msg.data);
         }
         Ok(())
@@ -210,9 +210,6 @@ impl MessageHandler for RunningState {
         let mut triple_manager = self.triple_manager.write().await;
         for (id, queue) in queue.triple_bins.entry(self.epoch).or_default() {
             if let Some(protocol) = triple_manager.get_or_generate(*id)? {
-                let mut protocol = protocol
-                    .write()
-                    .map_err(|err| MessageHandleError::SyncError(err.to_string()))?;
                 while let Some(message) = queue.pop_front() {
                     protocol.message(message.from, message.data);
                 }
@@ -231,12 +228,7 @@ impl MessageHandler for RunningState {
                     &self.public_key,
                     &self.private_share,
                 ) {
-                    Ok(protocol) => {
-                        let mut protocol = protocol
-                            .write()
-                            .map_err(|err| MessageHandleError::SyncError(err.to_string()))?;
-                        protocol.message(message.from, message.data)
-                    }
+                    Ok(protocol) => protocol.message(message.from, message.data),
                     Err(presignature::GenerationError::AlreadyGenerated) => {
                         tracing::info!(id, "presignature already generated, nothing left to do")
                     }
@@ -285,12 +277,7 @@ impl MessageHandler for RunningState {
                     message.delta,
                     &mut presignature_manager,
                 )? {
-                    Some(protocol) => {
-                        let mut protocol = protocol
-                            .write()
-                            .map_err(|err| MessageHandleError::SyncError(err.to_string()))?;
-                        protocol.message(message.from, message.data)
-                    }
+                    Some(protocol) => protocol.message(message.from, message.data),
                     None => {
                         // Store the message until we are ready to process it
                         leftover_messages.push(message)

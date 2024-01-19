@@ -1,6 +1,5 @@
 use crate::protocol::{MpcSignProtocol, SignQueue};
 use crate::{indexer, storage, web};
-use cait_sith::protocol::Participant;
 use clap::Parser;
 use local_ip_address::local_ip;
 use near_crypto::{InMemorySigner, SecretKey};
@@ -16,9 +15,6 @@ use mpc_keys::hpke;
 #[derive(Parser, Debug)]
 pub enum Cli {
     Start {
-        /// Node ID
-        #[arg(long, value_parser = parse_participant, env("MPC_RECOVERY_NODE_ID"))]
-        node_id: Participant,
         /// NEAR RPC address
         #[arg(
             long,
@@ -30,8 +26,8 @@ pub enum Cli {
         #[arg(long, env("MPC_RECOVERY_CONTRACT_ID"))]
         mpc_contract_id: AccountId,
         /// This node's account id
-        #[arg(long, env("MPC_RECOVERY_ACCOUNT"))]
-        account: AccountId,
+        #[arg(long, env("MPC_RECOVERY_ACCOUNT_ID"))]
+        account_id: AccountId,
         /// This node's account ed25519 secret key
         #[arg(long, env("MPC_RECOVERY_ACCOUNT_SK"))]
         account_sk: SecretKey,
@@ -60,19 +56,13 @@ pub enum Cli {
     },
 }
 
-fn parse_participant(arg: &str) -> Result<Participant, std::num::ParseIntError> {
-    let participant_id: u32 = arg.parse()?;
-    Ok(participant_id.into())
-}
-
 impl Cli {
     pub fn into_str_args(self) -> Vec<String> {
         match self {
             Cli::Start {
-                node_id,
                 near_rpc,
+                account_id,
                 mpc_contract_id,
-                account,
                 account_sk,
                 web_port,
                 cipher_pk,
@@ -84,14 +74,12 @@ impl Cli {
             } => {
                 let mut args = vec![
                     "start".to_string(),
-                    "--node-id".to_string(),
-                    u32::from(node_id).to_string(),
                     "--near-rpc".to_string(),
                     near_rpc,
                     "--mpc-contract-id".to_string(),
                     mpc_contract_id.to_string(),
-                    "--account".to_string(),
-                    account.to_string(),
+                    "--account-id".to_string(),
+                    account_id.to_string(),
                     "--account-sk".to_string(),
                     account_sk.to_string(),
                     "--web-port".to_string(),
@@ -133,11 +121,10 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
 
     match cmd {
         Cli::Start {
-            node_id,
             near_rpc,
             web_port,
             mpc_contract_id,
-            account,
+            account_id,
             account_sk,
             cipher_pk,
             cipher_sk,
@@ -167,11 +154,11 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                     tracing::info!(%my_address, "address detected");
                     let rpc_client = near_fetch::Client::new(&near_rpc);
                     tracing::debug!(rpc_addr = rpc_client.rpc_addr(), "rpc client initialized");
-                    let signer = InMemorySigner::from_secret_key(account, account_sk);
+                    let signer = InMemorySigner::from_secret_key(account_id.clone(), account_sk);
                     let (protocol, protocol_state) = MpcSignProtocol::init(
-                        node_id,
                         my_address,
                         mpc_contract_id.clone(),
+                        account_id,
                         rpc_client.clone(),
                         signer.clone(),
                         receiver,
