@@ -88,7 +88,7 @@ impl ConsensusProtocol for StartedState {
                     match contract_state.epoch.cmp(&epoch) {
                         Ordering::Greater => {
                             tracing::warn!(
-                                "out current epoch is {} while contract state's is {}, trying to rejoin as a new participant",
+                                "started(running): our current epoch is {} while contract state's is {}, trying to rejoin as a new participant",
                                 epoch,
                                 contract_state.epoch
                             );
@@ -105,7 +105,7 @@ impl ConsensusProtocol for StartedState {
                             {
                                 Some(me) => {
                                     tracing::info!(
-                                        "contract state is running and we are already a participant"
+                                        "started: contract state is running and we are already a participant"
                                     );
                                     let participants_vec: Vec<Participant> =
                                         contract_state.participants.keys().cloned().collect();
@@ -156,7 +156,7 @@ impl ConsensusProtocol for StartedState {
                     match contract_state.old_epoch.cmp(&epoch) {
                         Ordering::Greater => {
                             tracing::warn!(
-                                "out current epoch is {} while contract state's is {}, trying to rejoin as a new participant",
+                                "started(resharing): our current epoch is {} while contract state's is {}, trying to rejoin as a new participant",
                                 epoch,
                                 contract_state.old_epoch
                             );
@@ -168,7 +168,7 @@ impl ConsensusProtocol for StartedState {
                         Ordering::Less => Err(ConsensusError::EpochRollback),
                         Ordering::Equal => {
                             tracing::info!(
-                                "contract state is resharing with us, joining as a participant"
+                                "started(resharing): contract state is resharing with us, joining as a participant"
                             );
                             start_resharing(Some(private_share), ctx, contract_state).await
                         }
@@ -183,7 +183,7 @@ impl ConsensusProtocol for StartedState {
                     {
                         Some(me) => {
                             tracing::info!(
-                                "starting key generation as a part of the participant set"
+                                "started(initializing): starting key generation as a part of the participant set"
                             );
                             let participants = contract_state.participants;
                             let protocol = KeygenProtocol::new(
@@ -199,7 +199,7 @@ impl ConsensusProtocol for StartedState {
                             }))
                         }
                         None => {
-                            tracing::info!("we are not a part of the initial participant set, waiting for key generation to complete");
+                            tracing::info!("started(initializing): we are not a part of the initial participant set, waiting for key generation to complete");
                             Ok(NodeState::Started(self))
                         }
                     }
@@ -226,18 +226,18 @@ impl ConsensusProtocol for GeneratingState {
     ) -> Result<NodeState, ConsensusError> {
         match contract_state {
             ProtocolState::Initializing(_) => {
-                tracing::debug!("continuing generation, contract state has not been finalized yet");
+                tracing::debug!("generating(initializing): continuing generation, contract state has not been finalized yet");
                 Ok(NodeState::Generating(self))
             }
             ProtocolState::Running(contract_state) => {
                 if contract_state.epoch > 0 {
-                    tracing::warn!("contract has already changed epochs, trying to rejoin as a new participant");
+                    tracing::warn!("generating(running): contract has already changed epochs, trying to rejoin as a new participant");
                     return Ok(NodeState::Joining(JoiningState {
                         participants: contract_state.participants,
                         public_key: contract_state.public_key,
                     }));
                 }
-                tracing::info!("contract state has finished key generation, trying to catch up");
+                tracing::info!("generating(running): contract state has finished key generation, trying to catch up");
                 if self.participants != contract_state.participants {
                     return Err(ConsensusError::MismatchedParticipants);
                 }
@@ -248,13 +248,13 @@ impl ConsensusProtocol for GeneratingState {
             }
             ProtocolState::Resharing(contract_state) => {
                 if contract_state.old_epoch > 0 {
-                    tracing::warn!("contract has already changed epochs, trying to rejoin as a new participant");
+                    tracing::warn!("generating(resharing): contract has already changed epochs, trying to rejoin as a new participant");
                     return Ok(NodeState::Joining(JoiningState {
                         participants: contract_state.old_participants,
                         public_key: contract_state.public_key,
                     }));
                 }
-                tracing::warn!("contract state is resharing without us, trying to catch up");
+                tracing::warn!("generating(resharing): contract state is resharing without us, trying to catch up");
                 if self.participants != contract_state.old_participants {
                     return Err(ConsensusError::MismatchedParticipants);
                 }
@@ -276,7 +276,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
     ) -> Result<NodeState, ConsensusError> {
         match contract_state {
             ProtocolState::Initializing(contract_state) => {
-                tracing::debug!("waiting for consensus, contract state has not been finalized yet");
+                tracing::debug!("waiting(initializing): waiting for consensus, contract state has not been finalized yet");
                 let public_key = self.public_key.into_near_public_key();
                 let has_voted = contract_state
                     .pk_votes
@@ -284,7 +284,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                     .map(|ps| ps.contains(ctx.my_account_id()))
                     .unwrap_or_default();
                 if !has_voted {
-                    tracing::info!("we haven't voted yet, voting for the generated public key");
+                    tracing::info!("waiting(initializing): we haven't voted yet, voting for the generated public key");
                     rpc_client::vote_for_public_key(
                         ctx.rpc_client(),
                         ctx.signer(),
@@ -299,7 +299,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
             ProtocolState::Running(contract_state) => match contract_state.epoch.cmp(&self.epoch) {
                 Ordering::Greater => {
                     tracing::warn!(
-                            "out current epoch is {} while contract state's is {}, trying to rejoin as a new participant",
+                            "waiting(running): our current epoch is {} while contract state's is {}, trying to rejoin as a new participant",
                             self.epoch,
                             contract_state.epoch
                         );
@@ -310,7 +310,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                 }
                 Ordering::Less => Err(ConsensusError::EpochRollback),
                 Ordering::Equal => {
-                    tracing::info!("contract state has reached consensus");
+                    tracing::info!("waiting(running): contract state has reached consensus");
                     if contract_state.participants != self.participants {
                         return Err(ConsensusError::MismatchedParticipants);
                     }
@@ -360,7 +360,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
             ProtocolState::Resharing(contract_state) => {
                 match (contract_state.old_epoch + 1).cmp(&self.epoch) {
                     Ordering::Greater if contract_state.old_epoch + 2 == self.epoch => {
-                        tracing::info!("contract state is resharing, joining");
+                        tracing::info!("waiting(resharing): contract state is resharing, joining");
                         if contract_state.old_participants != self.participants {
                             return Err(ConsensusError::MismatchedParticipants);
                         }
@@ -374,7 +374,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                     }
                     Ordering::Greater => {
                         tracing::warn!(
-                            "out current epoch is {} while contract state's is {}, trying to rejoin as a new participant",
+                            "waiting(resharing): our current epoch is {} while contract state's is {}, trying to rejoin as a new participant",
                             self.epoch,
                             contract_state.old_epoch
                         );
@@ -386,7 +386,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                     Ordering::Less => Err(ConsensusError::EpochRollback),
                     Ordering::Equal => {
                         tracing::debug!(
-                            "waiting for resharing consensus, contract state has not been finalized yet"
+                            "waiting(resharing): waiting for resharing consensus, contract state has not been finalized yet"
                         );
                         let has_voted = contract_state.finished_votes.contains(ctx.my_account_id());
                         match contract_state
@@ -397,7 +397,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                                 if !has_voted {
                                     tracing::info!(
                                         epoch = self.epoch,
-                                        "we haven't voted yet, voting for resharing to complete"
+                                        "waiting(resharing): we haven't voted yet, voting for resharing to complete"
                                     );
                                     rpc_client::vote_reshared(
                                         ctx.rpc_client(),
@@ -410,12 +410,12 @@ impl ConsensusProtocol for WaitingForConsensusState {
                                 } else {
                                     tracing::info!(
                                         epoch = self.epoch,
-                                        "we have voted for resharing to complete"
+                                        "waiting(resharing): we have voted for resharing to complete"
                                     );
                                 }
                             }
                             None => {
-                                tracing::info!("we are not a part of the old participant set");
+                                tracing::info!("waiting(resharing): we are not a part of the old participant set");
                             }
                         }
                         Ok(NodeState::WaitingForConsensus(self))
@@ -438,7 +438,7 @@ impl ConsensusProtocol for RunningState {
             ProtocolState::Running(contract_state) => match contract_state.epoch.cmp(&self.epoch) {
                 Ordering::Greater => {
                     tracing::warn!(
-                            "out current epoch is {} while contract state's is {}, trying to rejoin as a new participant",
+                            "running(running): our current epoch is {} while contract state's is {}, trying to rejoin as a new participant",
                             self.epoch,
                             contract_state.epoch
                         );
@@ -449,7 +449,7 @@ impl ConsensusProtocol for RunningState {
                 }
                 Ordering::Less => Err(ConsensusError::EpochRollback),
                 Ordering::Equal => {
-                    tracing::debug!("continuing to run as normal");
+                    tracing::debug!("running(running): continuing to run as normal");
                     if contract_state.participants != self.participants {
                         return Err(ConsensusError::MismatchedParticipants);
                     }
@@ -466,7 +466,7 @@ impl ConsensusProtocol for RunningState {
                 match contract_state.old_epoch.cmp(&self.epoch) {
                     Ordering::Greater => {
                         tracing::warn!(
-                            "out current epoch is {} while contract state's is {}, trying to rejoin as a new participant",
+                            "running(resharing): our current epoch is {} while contract state's is {}, trying to rejoin as a new participant",
                             self.epoch,
                             contract_state.old_epoch
                         );
@@ -477,7 +477,7 @@ impl ConsensusProtocol for RunningState {
                     }
                     Ordering::Less => Err(ConsensusError::EpochRollback),
                     Ordering::Equal => {
-                        tracing::info!("contract is resharing");
+                        tracing::info!("running(resharing): contract is resharing");
                         let is_in_old_participant_set = contract_state
                             .old_participants
                             .contains_account_id(ctx.my_account_id());
@@ -511,7 +511,7 @@ impl ConsensusProtocol for ResharingState {
                 match contract_state.epoch.cmp(&(self.old_epoch + 1)) {
                     Ordering::Greater => {
                         tracing::warn!(
-                            "expected epoch {} while contract state's is {}, trying to rejoin as a new participant",
+                            "resharing(running): expected epoch {} while contract state's is {}, trying to rejoin as a new participant",
                             self.old_epoch + 1,
                             contract_state.epoch
                         );
@@ -522,7 +522,7 @@ impl ConsensusProtocol for ResharingState {
                     }
                     Ordering::Less => Err(ConsensusError::EpochRollback),
                     Ordering::Equal => {
-                        tracing::info!("contract state has finished resharing, trying to catch up");
+                        tracing::info!("resharing(running): contract state has finished resharing, trying to catch up");
                         if contract_state.participants != self.new_participants {
                             return Err(ConsensusError::MismatchedParticipants);
                         }
@@ -540,7 +540,7 @@ impl ConsensusProtocol for ResharingState {
                 match contract_state.old_epoch.cmp(&self.old_epoch) {
                     Ordering::Greater => {
                         tracing::warn!(
-                            "expected resharing from epoch {} while contract is resharing from {}, trying to rejoin as a new participant",
+                            "resharing(resharing): expected resharing from epoch {} while contract is resharing from {}, trying to rejoin as a new participant",
                             self.old_epoch,
                             contract_state.old_epoch
                         );
@@ -551,7 +551,7 @@ impl ConsensusProtocol for ResharingState {
                     }
                     Ordering::Less => Err(ConsensusError::EpochRollback),
                     Ordering::Equal => {
-                        tracing::debug!("continue to reshare as normal");
+                        tracing::debug!("resharing(resharing): continue to reshare as normal");
                         if contract_state.old_participants != self.old_participants {
                             return Err(ConsensusError::MismatchedParticipants);
                         }
@@ -595,7 +595,7 @@ impl ConsensusProtocol for JoiningState {
                         tracing::info!(
                             already_voted = voted.len(),
                             votes_to_go = contract_state.threshold - voted.len(),
-                            "trying to get participants to vote for us"
+                            "joining(running): trying to get participants to vote for us"
                         );
                         for (_, info) in contract_state.participants {
                             if voted.contains(&info.account_id) {
@@ -612,7 +612,9 @@ impl ConsensusProtocol for JoiningState {
                         Ok(NodeState::Joining(self))
                     }
                     None => {
-                        tracing::info!("sending a transaction to join the participant set");
+                        tracing::info!(
+                            "joining(running): sending a transaction to join the participant set"
+                        );
                         let args = serde_json::json!({
                             "url": ctx.my_address(),
                             "cipher_pk": ctx.cipher_pk().to_bytes(),
@@ -640,10 +642,10 @@ impl ConsensusProtocol for JoiningState {
                     .new_participants
                     .contains_account_id(ctx.my_account_id())
                 {
-                    tracing::info!("joining as a new participant");
+                    tracing::info!("joining(resharing): joining as a new participant");
                     start_resharing(None, ctx, contract_state).await
                 } else {
-                    tracing::debug!("network is resharing without us, waiting for them to finish");
+                    tracing::debug!("joining(resharing): network is resharing without us, waiting for them to finish");
                     Ok(NodeState::Joining(self))
                 }
             }
