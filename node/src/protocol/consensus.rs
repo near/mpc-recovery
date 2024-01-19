@@ -9,7 +9,7 @@ use crate::protocol::signature::SignatureManager;
 use crate::protocol::state::{GeneratingState, ResharingState};
 use crate::protocol::triple::TripleManager;
 use crate::storage::{SecretNodeStorageBox, SecretStorageError};
-use crate::types::{SecretKeyShare, KeygenProtocol};
+use crate::types::{KeygenProtocol, SecretKeyShare};
 use crate::util::AffinePointExt;
 use crate::{http_client, rpc_client};
 use async_trait::async_trait;

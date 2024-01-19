@@ -34,7 +34,7 @@ impl KeygenProtocol {
             me,
             participants: participants.into(),
             protocol: Arc::new(RwLock::new(Box::new(cait_sith::keygen::<Secp256k1>(
-                &participants,
+                participants,
                 me,
                 threshold,
             )?))),
