@@ -59,6 +59,30 @@ impl From<mpc_contract::primitives::Participants> for Participants {
     }
 }
 
+impl From<Candidates> for Participants {
+    fn from(candidates: Candidates) -> Self {
+        Participants {
+            participants: candidates
+                .candidates
+                .into_iter()
+                .enumerate()
+                .map(|(participant_id, (account_id, candidate_info))| {
+                    (
+                        Participant::from(participant_id as ParticipantId),
+                        ParticipantInfo {
+                            id: participant_id as ParticipantId,
+                            account_id,
+                            url: candidate_info.url,
+                            cipher_pk: candidate_info.cipher_pk,
+                            sign_pk: candidate_info.sign_pk,
+                        },
+                    )
+                })
+                .collect(),
+        }
+    }
+}
+
 impl IntoIterator for Participants {
     type Item = (Participant, ParticipantInfo);
     type IntoIter = std::collections::btree_map::IntoIter<Participant, ParticipantInfo>;

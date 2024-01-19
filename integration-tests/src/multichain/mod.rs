@@ -3,7 +3,7 @@ pub mod local;
 
 use crate::env::containers::DockerClient;
 use crate::{initialize_lake_indexer, LakeIndexerCtx};
-use mpc_contract::primitives::ParticipantInfo;
+use mpc_contract::primitives::CandidateInfo;
 use near_workspaces::network::Sandbox;
 use near_workspaces::{AccountId, Contract, Worker};
 use serde_json::json;
@@ -131,14 +131,14 @@ pub async fn docker(nodes: usize, docker_client: &DockerClient) -> anyhow::Resul
         .await
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
-    let participants: HashMap<AccountId, ParticipantInfo> = accounts
+    let candidates: HashMap<AccountId, CandidateInfo> = accounts
         .iter()
         .cloned()
         .zip(&nodes)
         .map(|(account, node)| {
             (
                 account.id().clone(),
-                ParticipantInfo {
+                CandidateInfo {
                     account_id: account.id().to_string().parse().unwrap(),
                     url: node.address.clone(),
                     cipher_pk: node.cipher_pk.to_bytes(),
@@ -151,7 +151,7 @@ pub async fn docker(nodes: usize, docker_client: &DockerClient) -> anyhow::Resul
         .call("init")
         .args_json(json!({
             "threshold": 2,
-            "participants": participants
+            "candidates": candidates
         }))
         .transact()
         .await?
@@ -175,14 +175,14 @@ pub async fn host(nodes: usize, docker_client: &DockerClient) -> anyhow::Result<
         .await
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
-    let participants: HashMap<AccountId, ParticipantInfo> = accounts
+    let candidates: HashMap<AccountId, CandidateInfo> = accounts
         .iter()
         .cloned()
         .zip(&nodes)
         .map(|(account, node)| {
             (
                 account.id().clone(),
-                ParticipantInfo {
+                CandidateInfo {
                     account_id: account.id().to_string().parse().unwrap(),
                     url: node.address.clone(),
                     cipher_pk: node.cipher_pk.to_bytes(),
@@ -195,7 +195,7 @@ pub async fn host(nodes: usize, docker_client: &DockerClient) -> anyhow::Result<
         .call("init")
         .args_json(json!({
             "threshold": 2,
-            "participants": participants
+            "candidates": candidates
         }))
         .transact()
         .await?

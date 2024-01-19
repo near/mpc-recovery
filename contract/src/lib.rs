@@ -3,12 +3,12 @@ pub mod primitives;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault, PublicKey};
-use primitives::{CandidateInfo, Candidates, ParticipantInfo, Participants, PkVotes, Votes};
+use primitives::{CandidateInfo, Candidates, Participants, PkVotes, Votes};
 use std::collections::{BTreeMap, HashSet};
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
 pub struct InitializingContractState {
-    pub participants: Participants,
+    pub candidates: Candidates,
     pub threshold: usize,
     pub pk_votes: PkVotes,
 }
@@ -52,10 +52,10 @@ pub struct MpcContract {
 #[near_bindgen]
 impl MpcContract {
     #[init(ignore_state)]
-    pub fn init(threshold: usize, participants: BTreeMap<AccountId, ParticipantInfo>) -> Self {
+    pub fn init(threshold: usize, candidates: BTreeMap<AccountId, CandidateInfo>) -> Self {
         MpcContract {
             protocol_state: ProtocolContractState::Initializing(InitializingContractState {
-                participants: Participants { participants },
+                candidates: Candidates { candidates },
                 threshold,
                 pk_votes: PkVotes::new(),
             }),
@@ -181,12 +181,12 @@ impl MpcContract {
     pub fn vote_pk(&mut self, public_key: PublicKey) -> bool {
         match &mut self.protocol_state {
             ProtocolContractState::Initializing(InitializingContractState {
-                participants,
+                candidates,
                 threshold,
                 pk_votes,
             }) => {
                 let signer_account_id = env::signer_account_id();
-                if !participants.contains_key(&signer_account_id) {
+                if !candidates.contains_key(&signer_account_id) {
                     env::panic_str("calling account is not in the participant set");
                 }
                 let voted = pk_votes.entry(public_key.clone());
@@ -194,7 +194,7 @@ impl MpcContract {
                 if voted.len() >= *threshold {
                     self.protocol_state = ProtocolContractState::Running(RunningContractState {
                         epoch: 0,
-                        participants: participants.clone(),
+                        participants: candidates.clone().into(),
                         threshold: *threshold,
                         public_key,
                         candidates: Candidates::new(),

@@ -11,7 +11,7 @@ use self::primitives::{Candidates, Participants, PkVotes, Votes};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct InitializingContractState {
-    pub participants: Participants,
+    pub candidates: Candidates,
     pub threshold: usize,
     pub pk_votes: PkVotes,
 }
@@ -19,7 +19,7 @@ pub struct InitializingContractState {
 impl From<mpc_contract::InitializingContractState> for InitializingContractState {
     fn from(value: mpc_contract::InitializingContractState) -> Self {
         InitializingContractState {
-            participants: value.participants.into(),
+            candidates: value.candidates.into(),
             threshold: value.threshold,
             pk_votes: value.pk_votes.into(),
         }
@@ -86,18 +86,6 @@ pub enum ProtocolState {
 }
 
 impl ProtocolState {
-    pub fn participants(&self) -> &Participants {
-        match self {
-            ProtocolState::Initializing(InitializingContractState { participants, .. }) => {
-                participants
-            }
-            ProtocolState::Running(RunningContractState { participants, .. }) => participants,
-            ProtocolState::Resharing(ResharingContractState {
-                old_participants, ..
-            }) => old_participants,
-        }
-    }
-
     pub fn public_key(&self) -> Option<&PublicKey> {
         match self {
             ProtocolState::Initializing { .. } => None,

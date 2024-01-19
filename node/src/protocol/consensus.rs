@@ -4,6 +4,7 @@ use super::state::{
     WaitingForConsensusState,
 };
 use super::SignQueue;
+use crate::protocol::contract::primitives::Participants;
 use crate::protocol::presignature::PresignatureManager;
 use crate::protocol::signature::SignatureManager;
 use crate::protocol::state::{GeneratingState, ResharingState};
@@ -177,15 +178,12 @@ impl ConsensusProtocol for StartedState {
             },
             None => match contract_state {
                 ProtocolState::Initializing(contract_state) => {
-                    match contract_state
-                        .participants
-                        .find_participant(ctx.my_account_id())
-                    {
+                    let participants: Participants = contract_state.candidates.clone().into();
+                    match participants.find_participant(ctx.my_account_id()) {
                         Some(me) => {
                             tracing::info!(
                                 "starting key generation as a part of the participant set"
                             );
-                            let participants = contract_state.participants;
                             let protocol = cait_sith::keygen::<Secp256k1>(
                                 &participants.keys().cloned().collect::<Vec<_>>(),
                                 me,
