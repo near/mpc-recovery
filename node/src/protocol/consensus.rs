@@ -9,12 +9,11 @@ use crate::protocol::signature::SignatureManager;
 use crate::protocol::state::{GeneratingState, ResharingState};
 use crate::protocol::triple::TripleManager;
 use crate::storage::{SecretNodeStorageBox, SecretStorageError};
-use crate::types::{KeygenProtocol, SecretKeyShare};
+use crate::types::{KeygenProtocol, ReshareProtocol, SecretKeyShare};
 use crate::util::AffinePointExt;
 use crate::{http_client, rpc_client};
 use async_trait::async_trait;
 use cait_sith::protocol::{InitializationError, Participant};
-use k256::Secp256k1;
 use mpc_keys::hpke;
 use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
@@ -684,30 +683,14 @@ async fn start_resharing<C: ConsensusCtx>(
         .new_participants
         .find_participant(ctx.my_account_id())
         .unwrap();
-    let protocol = cait_sith::reshare::<Secp256k1>(
-        &contract_state
-            .old_participants
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>(),
-        contract_state.threshold,
-        &contract_state
-            .new_participants
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>(),
-        contract_state.threshold,
-        me,
-        private_share,
-        contract_state.public_key,
-    )?;
+    let protocol = ReshareProtocol::new(private_share, me, &contract_state)?;
     Ok(NodeState::Resharing(ResharingState {
         old_epoch: contract_state.old_epoch,
         old_participants: contract_state.old_participants,
         new_participants: contract_state.new_participants,
         threshold: contract_state.threshold,
         public_key: contract_state.public_key,
-        protocol: Arc::new(RwLock::new(protocol)),
+        protocol,
         messages: Default::default(),
     }))
 }
