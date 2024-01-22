@@ -111,7 +111,7 @@ module "node" {
   node_id         = count.index
   near_rpc        = local.workspace.near_rpc
   mpc_contract_id = var.mpc_contract_id
-  account         = var.node_configs[count.index].account
+  account_id      = var.node_configs[count.index].account_id
   cipher_pk       = var.node_configs[count.index].cipher_pk
   indexer_options = var.indexer_options
   my_address      = var.node_configs[count.index].address

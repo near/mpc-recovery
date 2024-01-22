@@ -30,8 +30,8 @@ resource "google_cloud_run_v2_service" "node" {
         value = var.mpc_contract_id
       }
       env {
-        name  = "MPC_RECOVERY_ACCOUNT"
-        value = var.account
+        name  = "MPC_RECOVERY_ACCOUNT_ID"
+        value = var.account_id
       }
       env {
         name  = "MPC_RECOVERY_CIPHER_PK"
