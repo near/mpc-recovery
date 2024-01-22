@@ -1,4 +1,4 @@
-mod contract;
+pub mod contract;
 mod cryptography;
 mod presignature;
 mod signature;
@@ -9,7 +9,8 @@ pub mod message;
 pub mod state;
 
 pub use consensus::ConsensusError;
-pub use contract::{ParticipantInfo, ProtocolState};
+pub use contract::primitives::ParticipantInfo;
+pub use contract::ProtocolState;
 pub use cryptography::CryptographicError;
 pub use message::MpcMessage;
 pub use signature::SignQueue;
@@ -36,8 +37,8 @@ use url::Url;
 use mpc_keys::hpke;
 
 struct Ctx {
-    me: Participant,
     my_address: Url,
+    account_id: AccountId,
     mpc_contract_id: AccountId,
     signer: InMemorySigner,
     rpc_client: near_fetch::Client,
@@ -48,89 +49,91 @@ struct Ctx {
     secret_storage: SecretNodeStorageBox,
 }
 
-impl ConsensusCtx for &Ctx {
-    fn me(&self) -> Participant {
-        self.me
+impl ConsensusCtx for &MpcSignProtocol {
+    fn my_account_id(&self) -> &AccountId {
+        &self.ctx.account_id
     }
 
     fn http_client(&self) -> &reqwest::Client {
-        &self.http_client
+        &self.ctx.http_client
     }
 
     fn rpc_client(&self) -> &near_fetch::Client {
-        &self.rpc_client
+        &self.ctx.rpc_client
     }
 
     fn signer(&self) -> &InMemorySigner {
-        &self.signer
+        &self.ctx.signer
     }
 
     fn mpc_contract_id(&self) -> &AccountId {
-        &self.mpc_contract_id
+        &self.ctx.mpc_contract_id
     }
 
     fn my_address(&self) -> &Url {
-        &self.my_address
+        &self.ctx.my_address
     }
 
     fn sign_queue(&self) -> Arc<RwLock<SignQueue>> {
-        self.sign_queue.clone()
+        self.ctx.sign_queue.clone()
     }
 
     fn cipher_pk(&self) -> &hpke::PublicKey {
-        &self.cipher_pk
+        &self.ctx.cipher_pk
     }
 
     fn sign_pk(&self) -> near_crypto::PublicKey {
-        self.sign_sk.public_key()
+        self.ctx.sign_sk.public_key()
     }
 
     fn sign_sk(&self) -> &near_crypto::SecretKey {
-        &self.sign_sk
+        &self.ctx.sign_sk
     }
 
     fn secret_storage(&self) -> &SecretNodeStorageBox {
-        &self.secret_storage
+        &self.ctx.secret_storage
     }
 }
 
-impl CryptographicCtx for &mut Ctx {
-    fn me(&self) -> Participant {
-        self.me
+#[async_trait::async_trait]
+impl CryptographicCtx for &mut MpcSignProtocol {
+    async fn me(&self) -> Participant {
+        get_my_participant(self).await
     }
 
     fn http_client(&self) -> &reqwest::Client {
-        &self.http_client
+        &self.ctx.http_client
     }
 
     fn rpc_client(&self) -> &near_fetch::Client {
-        &self.rpc_client
+        &self.ctx.rpc_client
     }
 
     fn signer(&self) -> &InMemorySigner {
-        &self.signer
+        &self.ctx.signer
     }
 
     fn mpc_contract_id(&self) -> &AccountId {
-        &self.mpc_contract_id
+        &self.ctx.mpc_contract_id
     }
 
     fn cipher_pk(&self) -> &hpke::PublicKey {
-        &self.cipher_pk
+        &self.ctx.cipher_pk
     }
 
     fn sign_sk(&self) -> &near_crypto::SecretKey {
-        &self.sign_sk
+        &self.ctx.sign_sk
     }
 
     fn secret_storage(&mut self) -> &mut SecretNodeStorageBox {
-        &mut self.secret_storage
+        &mut self.ctx.secret_storage
     }
 }
 
-impl MessageCtx for &Ctx {
-    fn me(&self) -> Participant {
-        self.me
+#[async_trait::async_trait]
+impl MessageCtx for &MpcSignProtocol {
+    async fn me(&self) -> Participant {
+        get_my_participant(self).await
     }
 }
 
@@ -143,9 +146,9 @@ pub struct MpcSignProtocol {
 impl MpcSignProtocol {
     #![allow(clippy::too_many_arguments)]
     pub fn init<U: IntoUrl>(
-        me: Participant,
         my_address: U,
         mpc_contract_id: AccountId,
+        account_id: AccountId,
         rpc_client: near_fetch::Client,
         signer: InMemorySigner,
         receiver: mpsc::Receiver<MpcMessage>,
@@ -155,8 +158,8 @@ impl MpcSignProtocol {
     ) -> (Self, Arc<RwLock<NodeState>>) {
         let state = Arc::new(RwLock::new(NodeState::Starting));
         let ctx = Ctx {
-            me,
             my_address: my_address.into_url().unwrap(),
+            account_id,
             mpc_contract_id,
             rpc_client,
             http_client: reqwest::Client::new(),
@@ -175,7 +178,7 @@ impl MpcSignProtocol {
     }
 
     pub async fn run(mut self) -> anyhow::Result<()> {
-        let _span = tracing::info_span!("running", me = u32::from(self.ctx.me));
+        let _span = tracing::info_span!("running", my_account_id = self.ctx.account_id.to_string());
         let mut queue = MpcMessageQueue::default();
         loop {
             tracing::debug!("trying to advance mpc recovery protocol");
@@ -215,21 +218,21 @@ impl MpcSignProtocol {
                 let guard = self.state.read().await;
                 guard.clone()
             };
-            let state = match state.progress(&mut self.ctx).await {
+            let state = match state.progress(&mut self).await {
                 Ok(state) => state,
                 Err(err) => {
                     tracing::info!("protocol unable to progress: {err:?}");
                     continue;
                 }
             };
-            let mut state = match state.advance(&self.ctx, contract_state).await {
+            let mut state = match state.advance(&self, contract_state).await {
                 Ok(state) => state,
                 Err(err) => {
                     tracing::info!("protocol unable to advance: {err:?}");
                     continue;
                 }
             };
-            if let Err(err) = state.handle(&self.ctx, &mut queue).await {
+            if let Err(err) = state.handle(&self, &mut queue).await {
                 tracing::info!("protocol unable to handle messages: {err:?}");
                 continue;
             }
@@ -241,4 +244,16 @@ impl MpcSignProtocol {
             tokio::time::sleep(Duration::from_millis(1000)).await;
         }
     }
+}
+
+async fn get_my_participant(protocol: &MpcSignProtocol) -> Participant {
+    let my_near_acc_id = protocol.ctx.account_id.clone();
+    let state = protocol.state.read().await;
+    let participant_info = state
+        .find_participant_info(&my_near_acc_id)
+        .unwrap_or_else(|| {
+            tracing::error!("could not find participant info for {my_near_acc_id}");
+            panic!("could not find participant info for {my_near_acc_id}");
+        });
+    participant_info.id.into()
 }

@@ -17,7 +17,6 @@ use rand::seq::{IteratorRandom, SliceRandom};
 use rand::SeedableRng;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::sync::Arc;
 
 pub struct SignRequest {
     pub receipt_id: CryptoHash,
@@ -145,13 +144,13 @@ impl SignatureManager {
             k: k * delta.invert().unwrap(),
             sigma: (sigma + epsilon * k) * delta.invert().unwrap(),
         };
-        let protocol = Arc::new(std::sync::RwLock::new(cait_sith::sign(
+        let protocol = Box::new(cait_sith::sign(
             participants,
             me,
             kdf::derive_key(public_key, epsilon),
             output,
             Scalar::from_bytes(&msg_hash),
-        )?));
+        )?);
         Ok(SignatureGenerator {
             protocol,
             proposer,
@@ -237,16 +236,7 @@ impl SignatureManager {
         let mut result = Ok(());
         self.generators.retain(|receipt_id, generator| {
             loop {
-                let mut protocol = match generator.protocol.write() {
-                    Ok(protocol) => protocol,
-                    Err(err) => {
-                        tracing::error!(
-                            ?err,
-                            "failed to acquire lock on signature generation protocol"
-                        );
-                        break false;
-                    }
-                };
+                let protocol = &mut generator.protocol;
                 let action = match protocol.poke() {
                     Ok(action) => action,
                     Err(e) => {

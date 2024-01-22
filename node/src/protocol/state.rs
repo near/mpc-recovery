@@ -1,14 +1,14 @@
+use super::contract::primitives::{ParticipantInfo, Participants};
 use super::cryptography::CryptographicError;
 use super::presignature::PresignatureManager;
 use super::signature::SignatureManager;
 use super::triple::TripleManager;
 use super::SignQueue;
 use crate::http_client::MessageQueue;
-use crate::protocol::ParticipantInfo;
 use crate::types::{KeygenProtocol, PublicKey, ReshareProtocol, SecretKeyShare};
 use cait_sith::protocol::Participant;
+use near_primitives::types::AccountId;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -24,7 +24,7 @@ pub struct StartedState(pub Option<PersistentNodeData>);
 
 #[derive(Clone)]
 pub struct GeneratingState {
-    pub participants: BTreeMap<Participant, ParticipantInfo>,
+    pub participants: Participants,
     pub threshold: usize,
     pub protocol: KeygenProtocol,
     pub messages: Arc<RwLock<MessageQueue>>,
@@ -42,7 +42,7 @@ impl GeneratingState {
 #[derive(Clone)]
 pub struct WaitingForConsensusState {
     pub epoch: u64,
-    pub participants: BTreeMap<Participant, ParticipantInfo>,
+    pub participants: Participants,
     pub threshold: usize,
     pub private_share: SecretKeyShare,
     pub public_key: PublicKey,
@@ -61,7 +61,7 @@ impl WaitingForConsensusState {
 #[derive(Clone)]
 pub struct RunningState {
     pub epoch: u64,
-    pub participants: BTreeMap<Participant, ParticipantInfo>,
+    pub participants: Participants,
     pub threshold: usize,
     pub private_share: SecretKeyShare,
     pub public_key: PublicKey,
@@ -84,8 +84,8 @@ impl RunningState {
 #[derive(Clone)]
 pub struct ResharingState {
     pub old_epoch: u64,
-    pub old_participants: BTreeMap<Participant, ParticipantInfo>,
-    pub new_participants: BTreeMap<Participant, ParticipantInfo>,
+    pub old_participants: Participants,
+    pub new_participants: Participants,
     pub threshold: usize,
     pub public_key: PublicKey,
     pub protocol: ReshareProtocol,
@@ -104,7 +104,7 @@ impl ResharingState {
 
 #[derive(Clone)]
 pub struct JoiningState {
-    pub participants: BTreeMap<Participant, ParticipantInfo>,
+    pub participants: Participants,
     pub public_key: PublicKey,
 }
 
@@ -144,11 +144,28 @@ impl NodeState {
             _ => Err(CryptographicError::UnknownParticipant(*p)),
         }
     }
+
+    pub fn find_participant_info(&self, account_id: &AccountId) -> Option<&ParticipantInfo> {
+        match self {
+            NodeState::Starting => None,
+            NodeState::Started(_) => None,
+            NodeState::Generating(state) => state.participants.find_participant_info(account_id),
+            NodeState::WaitingForConsensus(state) => {
+                state.participants.find_participant_info(account_id)
+            }
+            NodeState::Running(state) => state.participants.find_participant_info(account_id),
+            NodeState::Resharing(state) => state
+                .new_participants
+                .find_participant_info(account_id)
+                .or_else(|| state.old_participants.find_participant_info(account_id)),
+            NodeState::Joining(state) => state.participants.find_participant_info(account_id),
+        }
+    }
 }
 
 fn fetch_participant<'a>(
     p: &Participant,
-    participants: &'a BTreeMap<Participant, ParticipantInfo>,
+    participants: &'a Participants,
 ) -> Result<&'a ParticipantInfo, CryptographicError> {
     participants
         .get(p)
