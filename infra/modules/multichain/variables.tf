@@ -30,7 +30,7 @@ variable "mpc_contract_id" {
   type = string
 }
 
-variable "account" {
+variable "account_id" {
   type = string
 }
 
