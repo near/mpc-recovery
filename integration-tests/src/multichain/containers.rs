@@ -55,6 +55,7 @@ impl<'a> Node<'a> {
             storage_options: mpc_recovery_node::storage::Options {
                 gcp_project_id: None,
                 sk_share_secret_id: None,
+                env: ctx.env.clone(),
             },
         }
         .into_str_args();

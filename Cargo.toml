@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "gcp",
     "mpc-recovery",
     "contract",
     "node",

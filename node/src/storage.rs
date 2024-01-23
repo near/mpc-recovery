@@ -1,5 +1,13 @@
-use crate::protocol::state::PersistentNodeData;
+use crate::{
+    protocol::state::PersistentNodeData,
+    value::{FromValue, IntoValue},
+};
 use async_trait::async_trait;
+use google_datastore1::{
+    api::{CommitRequest, Entity, Mutation},
+    oauth2::AccessTokenAuthenticator,
+    Datastore,
+};
 use google_secretmanager1::{
     api::{AddSecretVersionRequest, SecretPayload},
     hyper::{self, client::HttpConnector},
@@ -126,6 +134,8 @@ impl SecretNodeStorage for SecretManagerNodeStorage {
 #[derive(Debug, Clone, clap::Parser)]
 #[group(id = "storage_options")]
 pub struct Options {
+    /// Environment name, e.g. `dev` or `prod`
+    pub env: String,
     /// GCP project ID.
     #[clap(long, env("MPC_RECOVERY_GCP_PROJECT_ID"))]
     pub gcp_project_id: Option<String>,
@@ -162,4 +172,97 @@ pub async fn init(opts: &Options) -> Result<SecretNodeStorageBox> {
         ) as SecretNodeStorageBox),
         None => Ok(Box::<MemoryNodeStorage>::default() as SecretNodeStorageBox),
     }
+}
+
+pub struct GcsDatastore {
+    env: String,
+    project_id: String,
+    datastore: Datastore<HttpsConnector<HttpConnector>>,
+}
+
+impl GcsDatastore {
+    pub async fn new(
+        env: String,
+        project_id: String,
+        gcp_datastore_url: Option<String>,
+    ) -> anyhow::Result<Self> {
+        let client = hyper::Client::builder().build(
+            hyper_rustls::HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .https_or_http()
+                .enable_http1()
+                .enable_http2()
+                .build(),
+        );
+
+        let datastore = if let Some(gcp_datastore_url) = gcp_datastore_url {
+            // Assuming custom GCP URL points to an emulator, so the token does not matter
+            let authenticator = AccessTokenAuthenticator::builder("TOKEN".to_string())
+                .build()
+                .await?;
+            let mut datastore = Datastore::new(client, authenticator);
+            datastore.base_url(gcp_datastore_url.clone());
+            datastore.root_url(gcp_datastore_url);
+            datastore
+        } else {
+            let opts = ApplicationDefaultCredentialsFlowOpts::default();
+            let authenticator = match ApplicationDefaultCredentialsAuthenticator::builder(opts)
+                .await
+            {
+                ApplicationDefaultCredentialsTypes::InstanceMetadata(auth) => auth.build().await?,
+                ApplicationDefaultCredentialsTypes::ServiceAccount(auth) => auth.build().await?,
+            };
+            Datastore::new(client, authenticator)
+        };
+        Ok(Self {
+            env,
+            project_id,
+            datastore,
+        })
+    }
+
+    #[tracing::instrument(level = "debug", skip_all)]
+    pub async fn upsert<T: IntoValue + KeyKind>(&self, value: T) -> anyhow::Result<()> {
+        let mut entity = Entity::from_value(value.into_value())?;
+        let path_element = entity
+            .key
+            .as_mut()
+            .and_then(|k| k.path.as_mut())
+            .and_then(|p| p.first_mut());
+        if let Some(path_element) = path_element {
+            // We can't create multiple datastore databases in GCP, so we have to suffix
+            // type kinds with env (`dev`, `prod`).
+            path_element.kind = Some(format!("{}-{}", T::kind(), self.env))
+        }
+
+        let request = CommitRequest {
+            database_id: Some("".to_string()),
+            mode: Some(String::from("NON_TRANSACTIONAL")),
+            mutations: Some(vec![Mutation {
+                insert: None,
+                delete: None,
+                update: None,
+                base_version: None,
+                upsert: Some(entity),
+                update_time: None,
+            }]),
+            single_use_transaction: None,
+            transaction: None,
+        };
+
+        tracing::debug!(?request);
+        let (_, response) = self
+            .datastore
+            .projects()
+            .commit(request, &self.project_id)
+            .doit()
+            .await?;
+        tracing::debug!(?response, "received response");
+
+        Ok(())
+    }
+}
+
+pub trait KeyKind {
+    fn kind() -> String;
 }

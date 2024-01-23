@@ -32,11 +32,12 @@ pub struct Options {
     pub s3_url: Option<String>,
 
     /// The block height to start indexing from.
-    // Defaults to the latest block on 2023-11-14 07:40:22 AM UTC
+    // Defaults to the latest block on Jan-22-2024 10:02:41 PM +UTC
+    // Tx hash: C9tPgoSf1KtXiJfNssuMs5PyMk8kydRzaJrLri2fSboU
     #[clap(
         long,
         env("MPC_RECOVERY_INDEXER_START_BLOCK_HEIGHT"),
-        default_value = "145964826"
+        default_value = "155658330"
     )]
     pub start_block_height: u64,
 }

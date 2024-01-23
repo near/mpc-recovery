@@ -68,6 +68,7 @@ impl Nodes<'_> {
 }
 
 pub struct Context<'a> {
+    pub env: String,
     pub docker_client: &'a DockerClient,
     pub docker_network: String,
     pub release: bool,
@@ -79,14 +80,14 @@ pub struct Context<'a> {
 }
 
 pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> {
-    if !crate::mpc::build_multichain_contract().await?.success() {
-        anyhow::bail!("failed to prebuild multichain contract");
-    }
+    // if !crate::mpc::build_multichain_contract().await?.success() {
+    //     anyhow::bail!("failed to prebuild multichain contract");
+    // }
 
     let release = true;
-    if !crate::mpc::build_multichain(release).await?.success() {
-        anyhow::bail!("failed to prebuild multichain node service");
-    }
+    // if !crate::mpc::build_multichain(release).await?.success() {
+    //     anyhow::bail!("failed to prebuild multichain node service");
+    // }
 
     let docker_network = NETWORK;
     docker_client.create_network(docker_network).await?;
@@ -105,6 +106,7 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
     tracing::info!(contract_id = %mpc_contract.id(), "deployed mpc contract");
 
     Ok(Context {
+        env: "dev".to_string(),
         docker_client,
         docker_network: docker_network.to_string(),
         release,

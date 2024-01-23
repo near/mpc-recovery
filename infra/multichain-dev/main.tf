@@ -51,6 +51,12 @@ resource "google_service_account_iam_binding" "serivce-account-iam" {
   ]
 }
 
+resource "google_project_iam_member" "service-account-datastore-user" {
+  project = var.project
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.service_account.email}"
+}
+
 /*
  * Ensure service account has access to Secret Manager variables
  */
