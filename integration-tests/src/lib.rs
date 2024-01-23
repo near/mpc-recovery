@@ -12,7 +12,6 @@ use near_workspaces::types::NearToken;
 use testcontainers::{Container, GenericImage};
 
 pub mod env;
-pub mod indexer;
 pub mod mpc;
 pub mod multichain;
 pub mod sandbox;

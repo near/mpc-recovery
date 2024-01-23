@@ -101,7 +101,7 @@ pub struct SignatureManager {
     /// Ongoing signature generation protocols.
     generators: HashMap<CryptoHash, SignatureGenerator>,
     /// Generated signatures assigned to the current node that are yet to be published.
-    signatures: Vec<(CryptoHash, FullSignature<Secp256k1>)>,
+    signatures: Vec<(CryptoHash, [u8; 32], FullSignature<Secp256k1>)>,
 
     participants: Vec<Participant>,
     me: Participant,
@@ -290,7 +290,8 @@ impl SignatureManager {
                             "completed signature generation"
                         );
                         if generator.proposer == self.me {
-                            self.signatures.push((*receipt_id, output));
+                            self.signatures
+                                .push((*receipt_id, generator.msg_hash, output));
                         }
                         // Do not retain the protocol
                         return false;
@@ -307,7 +308,7 @@ impl SignatureManager {
         signer: &T,
         mpc_contract_id: &AccountId,
     ) -> Result<(), near_fetch::Error> {
-        for (receipt_id, signature) in self.signatures.drain(..) {
+        for (receipt_id, payload, signature) in self.signatures.drain(..) {
             // TODO: Figure out how to properly serialize the signature
             // let r_s = signature.big_r.x().concat(signature.s.to_bytes());
             // let tag =
@@ -315,8 +316,7 @@ impl SignatureManager {
             // let signature = r_s.append(tag);
             // let signature = Secp256K1Signature::try_from(signature.as_slice()).unwrap();
             // let signature = Signature::SECP256K1(signature);
-            tracing::info!(%receipt_id, big_r = signature.big_r.to_base58(), s = ?signature.s, "publishing signature response");
-            rpc_client
+            let response = rpc_client
                 .send_tx(
                     signer,
                     mpc_contract_id,
@@ -324,7 +324,7 @@ impl SignatureManager {
                         FunctionCallAction {
                             method_name: "respond".to_string(),
                             args: serde_json::to_vec(&serde_json::json!({
-                                "receipt_id": receipt_id.as_bytes(),
+                                "payload": payload,
                                 "big_r": signature.big_r,
                                 "s": signature.s
                             }))
@@ -335,6 +335,7 @@ impl SignatureManager {
                     )],
                 )
                 .await?;
+            tracing::info!(%receipt_id, big_r = signature.big_r.to_base58(), s = ?signature.s, status = ?response.status, "published signature response");
         }
         Ok(())
     }
