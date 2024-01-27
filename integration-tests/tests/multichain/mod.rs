@@ -8,7 +8,6 @@ use test_log::test;
 async fn test_multichain_reshare() -> anyhow::Result<()> {
     with_multichain_nodes(3, |mut ctx| {
         Box::pin(async move {
-            // Wait for network to complete key generation
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
             assert_eq!(state_0.participants.len(), 3);
 
@@ -17,7 +16,6 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
                 .add_node(account.id(), account.secret_key())
                 .await?;
 
-            // Wait for network to complete key reshare
             let state_1 = wait_for::running_mpc(&ctx, 1).await?;
             assert_eq!(state_1.participants.len(), 4);
 
@@ -36,17 +34,10 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
 async fn test_triples_and_presignatures() -> anyhow::Result<()> {
     with_multichain_nodes(3, |ctx| {
         Box::pin(async move {
-            // Wait for network to complete key generation
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
             assert_eq!(state_0.participants.len(), 3);
-
-            for i in 0..ctx.nodes.len() {
-                wait_for::has_at_least_triples(&ctx, i, 2).await?;
-            }
-            for i in 0..ctx.nodes.len() {
-                wait_for::has_at_least_presignatures(&ctx, i, 2).await?;
-            }
-
+            wait_for::has_at_least_triples(&ctx, 2).await?;
+            wait_for::has_at_least_presignatures(&ctx, 2).await?;
             Ok(())
         })
     })
@@ -57,17 +48,10 @@ async fn test_triples_and_presignatures() -> anyhow::Result<()> {
 async fn test_signature() -> anyhow::Result<()> {
     with_multichain_nodes(3, |ctx| {
         Box::pin(async move {
-            // Wait for network to complete key generation
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
             assert_eq!(state_0.participants.len(), 3);
-
-            for i in 0..ctx.nodes.len() {
-                wait_for::has_at_least_triples(&ctx, i, 2).await?;
-            }
-            for i in 0..ctx.nodes.len() {
-                wait_for::has_at_least_presignatures(&ctx, i, 2).await?;
-            }
-
+            wait_for::has_at_least_triples(&ctx, 2).await?;
+            wait_for::has_at_least_presignatures(&ctx, 2).await?;
             actions::single_signature_production(&ctx, &state_0).await
         })
     })
