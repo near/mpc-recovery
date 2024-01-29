@@ -3,7 +3,7 @@ use super::presignature::{self, PresignatureId};
 use super::state::{GeneratingState, NodeState, ResharingState, RunningState};
 use super::triple::TripleId;
 use crate::http_client::SendError;
-use crate::storage::SecretStorageError;
+use crate::gcp::error::SecretStorageError;
 use async_trait::async_trait;
 use cait_sith::protocol::{InitializationError, MessageData, Participant, ProtocolError};
 use k256::Scalar;
@@ -227,7 +227,7 @@ impl MessageHandler for RunningState {
                     &mut triple_manager,
                     &self.public_key,
                     &self.private_share,
-                ) {
+                ).await {
                     Ok(protocol) => protocol.message(message.from, message.data),
                     Err(presignature::GenerationError::AlreadyGenerated) => {
                         tracing::info!(id, "presignature already generated, nothing left to do")

@@ -8,3 +8,4 @@ pub mod storage;
 pub mod types;
 pub mod util;
 pub mod web;
+pub mod gcp;
