@@ -78,8 +78,8 @@ pub async fn single_signature_production(
     ctx: &MultichainTestContext<'_>,
     state: &RunningContractState,
 ) -> anyhow::Result<()> {
-    let (payload, account, tx_hash) = request_sign(&ctx).await?;
-    let signature = wait_for::signature_responded(&ctx, tx_hash).await?;
+    let (payload, account, tx_hash) = request_sign(ctx).await?;
+    let signature = wait_for::signature_responded(ctx, tx_hash).await?;
 
     let mut pk_bytes = vec![0x04];
     pk_bytes.extend_from_slice(&state.public_key.as_bytes()[1..]);
