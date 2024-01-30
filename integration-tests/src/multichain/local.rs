@@ -40,8 +40,10 @@ impl Node {
             },
             my_address: None,
             storage_options: mpc_recovery_node::storage::Options {
-                gcp_project_id: None,
-                sk_share_secret_id: None,
+                gcp_project_id: Some("pagoda-discovery-platform-dev".to_string()),
+                sk_share_secret_id: Some("multichain-sk-share-dev-toy".to_string()),
+                gcp_datastore_database_id: Some("xiangyi-test".to_string()),
+                gcp_datastore_url: None
             },
         };
 

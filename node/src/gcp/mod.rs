@@ -232,6 +232,7 @@ impl DatastoreService {
             transaction: None,
         };
 
+        println!("request generated: {:?}", request);
         tracing::debug!(?request);
         let (_, response) = self
             .datastore

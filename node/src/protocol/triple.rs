@@ -267,8 +267,8 @@ impl TripleManager {
         let account_id = write_lock.account_id().clone();
         for triple in async_triples_to_insert {
             match write_lock.insert(&TripleData { account_id: account_id.clone(), triple }).await {
-                Ok(()) => tracing::info!("successfully inserted triple"),
-                Err(error) => tracing::info!(?error, "insert triple failed"),
+                Ok(()) => println!("successfully inserted triple"),
+                Err(error) => println!("failed: {}", error),
             }
         }
 
@@ -280,7 +280,7 @@ impl TripleManager {
 mod test {
     use std::{collections::HashMap, fs::OpenOptions, ops::Range};
 
-    use crate::{protocol::message::TripleMessage, storage::{triple_storage::{TripleNodeStorageBox, self}, self}};
+    use crate::{protocol::message::TripleMessage, storage::{triple_storage::{TripleNodeStorageBox, self}, self}, gcp::GcpService};
     use cait_sith::protocol::{InitializationError, Participant, ProtocolError};
     use itertools::multiunzip;
     use std::io::prelude::*;
@@ -299,10 +299,13 @@ mod test {
             let range = 0..number;
             // Self::wipe_mailboxes(range.clone());
             let participants: Vec<Participant> = range.clone().map(Participant::from).collect();
-            let storage_options = storage::Options{gcp_project_id: Some("pagoda-discovery-platform-dev".to_string()), sk_share_secret_id:Some("multichain-sk-share-dev-0".to_string()), gcp_datastore_url:None, gcp_datastore_database_id: Some("xiangyi-test".to_string())};
+            let project_id = Some("pagoda-discovery-platform-dev".to_string());
+            let database_id = Some("xiangyi-test".to_string());
+            let storage_options = storage::Options{gcp_project_id: project_id.clone(), sk_share_secret_id:Some("multichain-sk-share-dev-0".to_string()), gcp_datastore_url:None, gcp_datastore_database_id: database_id.clone()};
+            let gcp_service = GcpService::init(project_id.clone(), None).await.unwrap();
             let managers = range.clone()
                 .map(|num| {
-                    let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(storage::triple_storage::init(&None, &storage_options, num.to_string())));
+                    let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(storage::triple_storage::init(&gcp_service, &storage_options.clone(), num.to_string())));
                     TripleManager::new(participants.clone(), Participant::from(num), number as usize, 0, None, triple_storage)
                 })
                 .collect();

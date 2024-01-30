@@ -169,6 +169,7 @@ impl DataStoreTripleNodeStorage {
 #[async_trait]
 impl TripleNodeStorage for DataStoreTripleNodeStorage {
     async fn insert(&mut self, data: &TripleData) -> TripleResult<()> {
+        println!("using datastore");
         self.datastore
             .upsert(data.clone(), self.database_id.clone(), self.kind.clone())
             .await?;
