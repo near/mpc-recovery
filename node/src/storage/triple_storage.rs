@@ -216,3 +216,52 @@ pub fn init(gcp_service: &Option<GcpService>, opts: &Options, account_id: String
         _ => Box::new(MemoryTripleNodeStorage {triples: HashMap::new(), account_id}) as TripleNodeStorageBox,
     }
 }
+
+mod test {
+    use std::{collections::HashMap, fs::OpenOptions, ops::Range};
+
+    use crate::{protocol::message::TripleMessage, storage::{triple_storage::{TripleNodeStorageBox, self}, self}, gcp::GcpService};
+    use cait_sith::protocol::{InitializationError, Participant, ProtocolError};
+    use std::io::prelude::*;
+
+    use std::sync::Arc;
+    use crate::storage::triple_storage::LockTripleNodeStorageBox;
+    use tokio::sync::RwLock;
+
+    use super::{init, TripleData};
+
+    struct TestGcp {
+        options: storage::Options,
+        gcp_service: Option<GcpService>
+    }
+
+    impl TestGcp {
+        async fn new() -> Self {
+            let project_id = Some("pagoda-discovery-platform-dev".to_string());
+            let database_id = Some("xiangyi-test".to_string());
+            let storage_options = storage::Options{gcp_project_id: project_id.clone(), sk_share_secret_id:Some("multichain-sk-share-dev-0".to_string()), gcp_datastore_url:None, gcp_datastore_database_id: database_id.clone()};
+            let gcp_service = GcpService::init(project_id.clone(), None).await.unwrap();
+            Self {
+                options: storage_options,
+                gcp_service
+            }
+        }
+    }
+
+    // TODO: This test currently takes 22 seconds on my machine, which is much slower than it should be
+    // Improve this before we make more similar tests
+    #[test]
+    fn test_triple_upsert() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        // runtime.block_on(async {
+        //     let test_gcp = TestGcp::new().await;
+        //     let triple_node_storage = init(&test_gcp.gcp_service, &test_gcp.options, "123".to_string());
+        //     let write_lock = triple_node_storage.insert(&TripleData {accound_id: "123".to_string(), triple: Triple {
+
+        //     }})
+        // })
+        
+
+        
+    }
+}

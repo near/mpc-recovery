@@ -364,6 +364,7 @@ impl GcpService {
             };
             secret_manager = SecretManager::new(client.clone(), authenticator.clone());
             datastore = Datastore::new(client, authenticator);
+           // datastore = datastore.add_request_header("x-goog-request-params", "project_id=pagoda-discovery-platform-dev&database_id=xiangyi-test");
         }
 
         Ok(Some(Self {
