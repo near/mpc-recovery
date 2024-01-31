@@ -26,6 +26,8 @@ use crate::storage::secret_storage::SecretNodeStorageBox;
 use crate::gcp::error::SecretStorageError;
 use crate::gcp::error::DatastoreStorageError;
 use crate::storage::triple_storage::LockTripleNodeStorageBox;
+use std::collections::HashMap;
+use crate::protocol::triple::{TripleId, Triple};
 
 pub trait ConsensusCtx {
     fn my_account_id(&self) -> &AccountId;
@@ -686,9 +688,15 @@ impl ConsensusProtocol for NodeState {
                 let persistent_node_data = ctx.secret_storage().load().await?;
                 let triple_storage = ctx.triple_storage();
                 let write_lock = triple_storage.write().await;
-                let triples = Some(write_lock.load().await?);
+                let triples = write_lock.load().await;
                 drop(write_lock);
-                Ok(NodeState::Started(StartedState{persistent_node_data, triples}))
+                let triples_map: Option<HashMap<TripleId, Triple>> = match triples {
+                    Ok(vec_triple_data) => {
+                        Some(HashMap::new())
+                    }
+                    _ => None,
+                };
+                Ok(NodeState::Started(StartedState{persistent_node_data, triples: triples_map}))
             }
             NodeState::Started(state) => state.advance(ctx, contract_state).await,
             NodeState::Generating(state) => state.advance(ctx, contract_state).await,

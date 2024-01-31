@@ -13,7 +13,7 @@ use crate::storage::Options;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TripleData {
     pub account_id: String,
     pub triple: Triple,
@@ -69,7 +69,10 @@ impl FromValue for TripleData {
                 let (_, triple_id) = properties
                     .remove_entry("triple_id")
                     .ok_or_else(|| ConvertError::MissingProperty("triple_id".to_string()))?;
-                let triple_id = i64::from_value(triple_id)? as u64;
+                // let triple_id = String::from_value(triple_id)?.parse().ok_or_else(|| {
+                //     ConvertError::ParseInt("Could not parse triple_id to u64".to_string())
+                // });
+                let triple_id = i64::from_value(triple_id)?;
                 let (_, account_id) = properties
                     .remove_entry("account_id")
                     .ok_or_else(|| {
@@ -96,7 +99,7 @@ impl FromValue for TripleData {
                 Ok(Self {
                     account_id,
                     triple: Triple {
-                        id: triple_id,
+                        id: triple_id as u64,
                         share: triple_share,
                         public: triple_public
                     },
@@ -114,9 +117,9 @@ type TripleResult<T> = std::result::Result<T, error::DatastoreStorageError>;
 
 #[async_trait]
 pub trait TripleNodeStorage {
-    async fn insert(&mut self, data: &TripleData) -> TripleResult<()>;
-    async fn delete(&mut self, data: &TripleData) -> TripleResult<()>;
-    async fn load(&self) -> TripleResult<HashMap<TripleId, Triple>>;
+    async fn insert(&mut self, data: TripleData) -> TripleResult<()>;
+    async fn delete(&mut self, data: TripleData) -> TripleResult<()>;
+    async fn load(&self) -> TripleResult<Vec<TripleData>>;
     fn account_id(&self) -> String;
 }
 
@@ -128,18 +131,22 @@ struct MemoryTripleNodeStorage {
 
 #[async_trait]
 impl TripleNodeStorage for MemoryTripleNodeStorage {
-    async fn insert(&mut self, data: &TripleData) -> TripleResult<()> {
-        self.triples.insert(data.triple.id, data.triple.clone());
+    async fn insert(&mut self, data: TripleData) -> TripleResult<()> {
+        self.triples.insert(data.triple.id, data.triple);
         Ok(())
     }
 
-    async fn delete(&mut self, data: &TripleData) -> TripleResult<()> {
+    async fn delete(&mut self, data: TripleData) -> TripleResult<()> {
         self.triples.remove(&data.triple.id);
         Ok(())
     }
 
-    async fn load(&self) -> TripleResult<HashMap<TripleId, Triple>> {
-        Ok(self.triples.clone())
+    async fn load(&self) -> TripleResult<Vec<TripleData>> {
+        let mut res: Vec<TripleData> = vec!();
+        for (_, triple) in self.triples.clone() {
+            res.push(TripleData {account_id: self.account_id(), triple: triple});
+        }
+        Ok(res)
     }
 
     fn account_id(&self) -> String {
@@ -150,13 +157,13 @@ impl TripleNodeStorage for MemoryTripleNodeStorage {
 #[derive(Clone)]
 struct DataStoreTripleNodeStorage {
     datastore: DatastoreService,
-    database_id: String,
+    database_id: Option<String>,
     kind: String,
     account_id: String,
 }
 
 impl DataStoreTripleNodeStorage {
-    fn new(gcp_service: &GcpService, database_id: String, account_id: String) -> Self {
+    fn new(gcp_service: &GcpService, database_id: Option<String>, account_id: String) -> Self {
         Self {
             datastore: gcp_service.datastore.clone(),
             database_id,
@@ -168,27 +175,34 @@ impl DataStoreTripleNodeStorage {
 
 #[async_trait]
 impl TripleNodeStorage for DataStoreTripleNodeStorage {
-    async fn insert(&mut self, data: &TripleData) -> TripleResult<()> {
+    async fn insert(&mut self, data: TripleData) -> TripleResult<()> {
         println!("using datastore");
         self.datastore
-            .upsert(data.clone(), self.database_id.clone(), self.kind.clone())
+            .upsert(data)
             .await?;
         Ok(())
     }
 
-    async fn delete(&mut self, data: &TripleData) -> TripleResult<()> {
+    async fn delete(&mut self, data: TripleData) -> TripleResult<()> {
         self.datastore
-            .delete(data.clone(), self.database_id.clone(), self.kind.clone())
+            .delete(data)
             .await?;
         Ok(())
     }
 
-    async fn load(&self) -> TripleResult<HashMap<TripleId, Triple>> {
-        let _response = self.datastore
-            .fetch_entities(self.database_id.clone(), self.kind.clone(), None)
+    async fn load(&self) -> TripleResult<Vec<TripleData>> {
+        let response = self.datastore.fetch_entities::<TripleData>()
             .await?;
         // TODO:convert the response to hashmap
-        Ok(HashMap::new())
+        let mut res: Vec<TripleData> = vec!();
+        for entity_result in response {
+            let entity = entity_result.entity.unwrap();
+            let entity_value = entity.into_value();
+            let triple_data = TripleData::from_value(entity_value).unwrap();
+            //let res = gcp_service.datastore.delete(triple_data).await.unwrap();
+            res.push(triple_data);
+        }
+        Ok(res)
     }
 
     fn account_id(&self) -> String {
@@ -207,10 +221,10 @@ pub type LockTripleNodeStorageBox = Arc<RwLock<TripleNodeStorageBox>>;
 
 pub fn init(gcp_service: &Option<GcpService>, opts: &Options, account_id: String) -> TripleNodeStorageBox {
     match gcp_service {
-        Some(gcp) if opts.gcp_datastore_database_id.is_some() => Box::new(
+        Some(gcp) => Box::new(
             DataStoreTripleNodeStorage::new(
                 &gcp, 
-                opts.gcp_datastore_database_id.clone().unwrap(),
+                opts.gcp_datastore_database_id.clone(),
                 account_id
             )) as TripleNodeStorageBox ,
         _ => Box::new(MemoryTripleNodeStorage {triples: HashMap::new(), account_id}) as TripleNodeStorageBox,
@@ -229,37 +243,48 @@ mod test {
     use tokio::sync::RwLock;
 
     use super::{init, TripleData};
+    use crate::gcp::value::FromValue;
+    use crate::gcp::value::Value;
+    use crate::gcp::value::IntoValue;
 
-    struct TestGcp {
-        options: storage::Options,
-        gcp_service: Option<GcpService>
-    }
-
-    impl TestGcp {
-        async fn new() -> Self {
-            let project_id = Some("pagoda-discovery-platform-dev".to_string());
-            let database_id = Some("xiangyi-test".to_string());
-            let storage_options = storage::Options{gcp_project_id: project_id.clone(), sk_share_secret_id:Some("multichain-sk-share-dev-0".to_string()), gcp_datastore_url:None, gcp_datastore_database_id: database_id.clone()};
-            let gcp_service = GcpService::init(project_id.clone(), None).await.unwrap();
-            Self {
-                options: storage_options,
-                gcp_service
-            }
-        }
-    }
 
     // TODO: This test currently takes 22 seconds on my machine, which is much slower than it should be
     // Improve this before we make more similar tests
     #[test]
-    fn test_triple_upsert() {
+    fn test_triple_load_and_delete() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
-        // runtime.block_on(async {
-        //     let test_gcp = TestGcp::new().await;
-        //     let triple_node_storage = init(&test_gcp.gcp_service, &test_gcp.options, "123".to_string());
-        //     let write_lock = triple_node_storage.insert(&TripleData {accound_id: "123".to_string(), triple: Triple {
-
-        //     }})
-        // })
+        runtime.block_on(async {
+            let project_id = Some("pagoda-discovery-platform-dev".to_string());
+            let database_id = None;
+            let env = "xiangyi-dev".to_string();
+            let storage_options = storage::Options{gcp_project_id: project_id.clone(), sk_share_secret_id:Some("multichain-sk-share-dev-0".to_string()), gcp_datastore_url:None, gcp_datastore_database_id: database_id.clone()};
+            let gcp_service = GcpService::init(project_id.clone(), None, env).await.unwrap();
+            let mut triple_storage = triple_storage::init(&gcp_service, &storage_options, "4".to_string());
+            
+            //fetch_entities is working
+            //upsert is working
+            //let res = gcp_service.datastore.fetch_entities::<TripleData>().await.unwrap();
+            //let read_lock = triple_storage.read().await;
+            //let load_res = read_lock.load().await;
+            let load_res = triple_storage.load().await;
+            println!("res: {:?}", load_res);
+            //drop(read_lock);
+            
+            for entity_result in load_res.unwrap() {
+                //let entity = entity_result.entity.unwrap();
+                //let entity_value = entity.into_value();
+                //let triple_data = TripleData::from_value(entity_value).unwrap();
+                //let res = gcp_service.datastore.delete(triple_data).await.unwrap();
+                //let mut write_lock = triple_storage.write().await;
+                let triple_data = entity_result;
+                //let res = write_lock.delete(triple_data).await.unwrap();
+                //drop(write_lock);
+                //let res = write_lock.insert(&triple_data).await.unwrap();
+                let res = triple_storage.delete(triple_data).await;
+                println!("res: {:?}", res);
+            }
+            
+        })
         
 
         

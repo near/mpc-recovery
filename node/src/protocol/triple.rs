@@ -19,7 +19,7 @@ use crate::storage::triple_storage::{LockTripleNodeStorageBox, TripleData};
 pub type TripleId = u64;
 
 /// A completed triple.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Triple {
     pub id: TripleId,
     pub share: TripleShare<Secp256k1>,
@@ -106,11 +106,11 @@ impl TripleManager {
             let triple2 = self.triples.remove(&id1).unwrap();
             let mut write_lock = self.triple_storage.write().await;
             let account_id = &write_lock.account_id();
-            match write_lock.delete(&TripleData {account_id: account_id.clone(), triple: triple1.clone()}).await {
+            match write_lock.delete(TripleData {account_id: account_id.clone(), triple: triple1.clone()}).await {
                 Ok(()) => tracing::info!(id0, "successfully deleted triple"),
                 Err(error) => tracing::info!(id0, ?error, "delete triple failed"),
             }
-            match write_lock.delete(&TripleData {account_id: account_id.clone(), triple: triple2.clone()}).await {
+            match write_lock.delete(TripleData {account_id: account_id.clone(), triple: triple2.clone()}).await {
                 Ok(()) => tracing::info!(id1, "successfully deleted triple"),
                 Err(error) => tracing::info!(id1, ?error, "delete triple failed"),
             }
@@ -266,7 +266,7 @@ impl TripleManager {
         let mut write_lock = self.triple_storage.write().await;
         let account_id = write_lock.account_id().clone();
         for triple in async_triples_to_insert {
-            match write_lock.insert(&TripleData { account_id: account_id.clone(), triple }).await {
+            match write_lock.insert(TripleData { account_id: account_id.clone(), triple }).await {
                 Ok(()) => println!("successfully inserted triple"),
                 Err(error) => println!("failed: {}", error),
             }
@@ -300,9 +300,10 @@ mod test {
             // Self::wipe_mailboxes(range.clone());
             let participants: Vec<Participant> = range.clone().map(Participant::from).collect();
             let project_id = Some("pagoda-discovery-platform-dev".to_string());
-            let database_id = Some("xiangyi-test".to_string());
+            let database_id = None;
+            let env = "xiangyi-dev".to_string();
             let storage_options = storage::Options{gcp_project_id: project_id.clone(), sk_share_secret_id:Some("multichain-sk-share-dev-0".to_string()), gcp_datastore_url:None, gcp_datastore_database_id: database_id.clone()};
-            let gcp_service = GcpService::init(project_id.clone(), None).await.unwrap();
+            let gcp_service = GcpService::init(project_id.clone(), None, env).await.unwrap();
             let managers = range.clone()
                 .map(|num| {
                     let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(storage::triple_storage::init(&gcp_service, &storage_options.clone(), num.to_string())));

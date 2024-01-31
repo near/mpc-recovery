@@ -4367,6 +4367,7 @@ dependencies = [
  "local-ip-address",
  "mpc-contract",
  "mpc-keys",
+ "mpc-recovery",
  "near-crypto 0.17.0",
  "near-fetch",
  "near-lake-framework",

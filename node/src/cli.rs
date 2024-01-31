@@ -136,7 +136,8 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                 .build()?
                 .block_on(async {
                     let (sender, receiver) = mpsc::channel(16384);
-                    let gcp_service = GcpService::init(storage_options.gcp_project_id.clone(), storage_options.gcp_datastore_url.clone()).await?;
+                    let env = "xiangyi-dev".to_string();
+                    let gcp_service = GcpService::init(storage_options.gcp_project_id.clone(), storage_options.gcp_datastore_url.clone(), env).await?;
                     let key_storage = storage::secret_storage::init(&gcp_service, &storage_options);
                     let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(storage::triple_storage::init(&gcp_service, &storage_options, account_id.to_string())));
 

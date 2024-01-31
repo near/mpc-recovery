@@ -16,6 +16,7 @@ use google_secretmanager1::SecretManager;
 use google_secretmanager1::api::{AddSecretVersionRequest, SecretPayload};
 use hyper::client::HttpConnector;
 use hyper_rustls::HttpsConnector;
+use crate::gcp::error::DatastoreStorageError;
 
 pub type SecretResult<T> = std::result::Result<T, error::SecretStorageError>;
 
@@ -76,6 +77,7 @@ impl SecretManagerService {
 pub struct DatastoreService {
     datastore: Datastore<HttpsConnector<HttpConnector>>,
     project_id: String,
+    env: String
 }
 
 pub type DatastoreResult<T> = std::result::Result<T, error::DatastoreStorageError>;
@@ -89,22 +91,20 @@ impl DatastoreService {
     pub async fn get<K: ToString, T: FromValue + KeyKind>(
         &self,
         name_key: K,
-        database_id: String,
-        kind: String
     ) -> DatastoreResult<Option<T>> {
         let request = LookupRequest {
             keys: Some(vec![Key {
                 path: Some(vec![PathElement {
                     // We can't create multiple datastore databases in GCP, so we have to suffix
                     // type kinds with env (`dev`, `prod`).
-                    kind: Some(kind),
+                    kind: Some(format!("{}-{}", T::kind(), self.env)),
                     name: Some(name_key.to_string()),
                     id: None,
                 }]),
                 partition_id: None,
             }]),
             read_options: None,
-            database_id: Some(database_id),
+            database_id: Some("".to_string()),
         };
         tracing::debug!(?request);
         let (_, response) = self
@@ -125,7 +125,7 @@ impl DatastoreService {
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
-    pub async fn insert<T: IntoValue + KeyKind>(&self, value: T, database_id: String, kind: String) -> DatastoreResult<()> {
+    pub async fn insert<T: IntoValue + KeyKind>(&self, value: T) -> DatastoreResult<()> {
         let mut entity = Entity::from_value(value.into_value())?;
         let path_element = entity
             .key
@@ -135,11 +135,11 @@ impl DatastoreService {
         if let Some(path_element) = path_element {
             // We can't create multiple datastore databases in GCP, so we have to suffix
             // type kinds with env (`dev`, `prod`).
-            path_element.kind = Some(kind)
+            path_element.kind = Some(format!("{}-{}", T::kind(), self.env))
         }
 
         let request = CommitRequest {
-            database_id: Some(database_id),
+            database_id: Some("".to_string()),
             mode: Some(String::from("NON_TRANSACTIONAL")),
             mutations: Some(vec![Mutation {
                 insert: Some(entity),
@@ -165,7 +165,7 @@ impl DatastoreService {
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
-    pub async fn update<T: IntoValue + KeyKind>(&self, value: T, database_id: String, kind: String) -> DatastoreResult<()> {
+    pub async fn update<T: IntoValue + KeyKind>(&self, value: T) -> DatastoreResult<()> {
         let mut entity = Entity::from_value(value.into_value())?;
         let path_element = entity
             .key
@@ -175,11 +175,11 @@ impl DatastoreService {
         if let Some(path_element) = path_element {
             // We can't create multiple datastore databases in GCP, so we have to suffix
             // type kinds with env (`dev`, `prod`).
-            path_element.kind = Some(kind)
+            path_element.kind = Some(format!("{}-{}", T::kind(), self.env))
         }
 
         let request = CommitRequest {
-            database_id: Some(database_id),
+            database_id: Some("".to_string()),
             mode: Some(String::from("NON_TRANSACTIONAL")),
             mutations: Some(vec![Mutation {
                 insert: None,
@@ -204,7 +204,7 @@ impl DatastoreService {
         Ok(())
     }
 
-    pub async fn upsert<T: IntoValue + KeyKind>(&self, value: T, database_id: String, kind: String) -> DatastoreResult<()> {
+    pub async fn upsert<T: IntoValue + KeyKind>(&self, value: T) -> DatastoreResult<()> {
         let mut entity = Entity::from_value(value.into_value())?;
         let path_element = entity
             .key
@@ -214,11 +214,11 @@ impl DatastoreService {
         if let Some(path_element) = path_element {
             // We can't create multiple datastore databases in GCP, so we have to suffix
             // type kinds with env (`dev`, `prod`).
-            path_element.kind = Some(kind)
+            path_element.kind = Some(format!("{}-{}", T::kind(), self.env))
         }
 
         let request = CommitRequest {
-            database_id: Some(database_id),
+            database_id: Some("".to_string()),
             mode: Some(String::from("NON_TRANSACTIONAL")),
             mutations: Some(vec![Mutation {
                 insert: None,
@@ -232,7 +232,6 @@ impl DatastoreService {
             transaction: None,
         };
 
-        println!("request generated: {:?}", request);
         tracing::debug!(?request);
         let (_, response) = self
             .datastore
@@ -245,10 +244,10 @@ impl DatastoreService {
         Ok(())
     }
 
-    pub async fn fetch_entities(&self, database_id: String, kind: String, filter: Option<String>) -> DatastoreResult<Vec<EntityResult>> {
-        //let kind: String = format!("{}-{}", T::kind(), self.env);
+    pub async fn fetch_entities<T: KeyKind>(&self) -> DatastoreResult<Vec<EntityResult>> {
+        let kind: String = format!("{}-{}", T::kind(), self.env);
         let req = RunQueryRequest {
-            database_id: Some(database_id),
+            database_id: Some("".to_string()),
             partition_id: Default::default(),
             read_options: Default::default(),
             query: Some(Query {
@@ -273,15 +272,16 @@ impl DatastoreService {
             .await?;
         let batch = query_resp
             .batch
-            .ok_or_else(|| error::DatastoreStorageError::FetchEntitiesError(format!("Could not retrieve batch while fetching entities")))?;
+            .ok_or_else(|| DatastoreStorageError::FetchEntitiesError("Could not retrieve batch while fetching entities".to_string()))?;
 
         batch.entity_results.ok_or_else(|| {
-            error::DatastoreStorageError::FetchEntitiesError(format!("Could not retrieve entity results while fetching entities"))
+            DatastoreStorageError::FetchEntitiesError("Could not retrieve entity results while fetching entities".to_string())
         })
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
-    pub async fn delete<T: IntoValue + KeyKind>(&self, value: T, database_id: String, kind: String) -> DatastoreResult<()> {
+    pub async fn delete<T: IntoValue + KeyKind>(&self, value: T) -> DatastoreResult<()> {
+        let kind: String = format!("{}-{}", T::kind(), self.env);
         let mut entity = Entity::from_value(value.into_value())?;
         let path_element = entity
             .key
@@ -295,7 +295,7 @@ impl DatastoreService {
         }
 
         let request = CommitRequest {
-            database_id: Some(database_id),
+            database_id: Some("".to_string()),
             mode: Some(String::from("NON_TRANSACTIONAL")),
             mutations: Some(vec![Mutation {
                 insert: None,
@@ -332,6 +332,7 @@ impl GcpService {
     pub async fn init(
         project_id: Option<String>,
         gcp_datastore_url: Option<String>,
+        env: String
     ) -> anyhow::Result<Option<Self>> {
         match project_id {
             Some(project_id_non_empty) => {
@@ -372,6 +373,7 @@ impl GcpService {
             datastore: DatastoreService {
                 datastore,
                 project_id: project_id_non_empty.clone(),
+                env
             },
             secret_manager: SecretManagerService {
                 secret_manager,

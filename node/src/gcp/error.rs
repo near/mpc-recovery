@@ -6,6 +6,8 @@ pub enum ConvertError {
     UnexpectedPropertyType { expected: String, got: String },
     #[error("property `{0}` is malfored")]
     MalformedProperty(String),
+    #[error("parsing integar from string erred out: `{0}`")]
+    ParseInt(String),
 }
 
 #[derive(thiserror::Error, Debug)]
