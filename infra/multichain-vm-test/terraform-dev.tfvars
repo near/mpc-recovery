@@ -1,17 +1,17 @@
-env          = "dev"
-project      = "pagoda-discovery-platform-dev"
-docker_image = "us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/multichain/multichain-dev:latest"
+# env          = "dev"
+# project      = "pagoda-discovery-platform-dev"
+# docker_image = "us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/multichain/multichain-dev:latest"
 
-mpc_contract_id = "multichain0.testnet"
-indexer_options = {
-  s3_bucket          = "near-lake-data-testnet"
-  s3_region          = "eu-central-1"
-  s3_url             = null
-  start_block_height = 152754054
-}
+# mpc_contract_id = "multichain0.testnet"
+# indexer_options = {
+#   s3_bucket          = "near-lake-data-testnet"
+#   s3_region          = "eu-central-1"
+#   s3_url             = null
+#   start_block_height = 152754054
+# }
 
-aws_access_key_secret_id = "multichain-indexer-aws-access-key"
-aws_secret_key_secret_id = "multichain-indexer-aws-secret-key"
+# aws_access_key_secret_id = "multichain-indexer-aws-access-key"
+# aws_secret_key_secret_id = "multichain-indexer-aws-secret-key"
 node_configs = [
   {
     account              = "multichain-node-dev-0.testnet"
