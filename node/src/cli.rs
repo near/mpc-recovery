@@ -5,7 +5,7 @@ use clap::Parser;
 use local_ip_address::local_ip;
 use near_crypto::{InMemorySigner, SecretKey};
 use near_primitives::types::AccountId;
-use std::sync::{Arc, RwLock as StdRwLock};
+use std::sync::Arc;
 use std::thread;
 use tokio::sync::{mpsc, RwLock};
 use tracing_subscriber::EnvFilter;

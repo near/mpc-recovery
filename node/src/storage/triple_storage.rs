@@ -9,7 +9,6 @@ use crate::gcp::{
     };
 use google_datastore1::api::{Key, PathElement};
 use crate::gcp::error;
-use crate::storage::Options;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -157,7 +156,6 @@ impl TripleNodeStorage for MemoryTripleNodeStorage {
 #[derive(Clone)]
 struct DataStoreTripleNodeStorage {
     datastore: DatastoreService,
-    kind: String,
     account_id: String,
 }
 
@@ -165,7 +163,6 @@ impl DataStoreTripleNodeStorage {
     fn new(gcp_service: &GcpService, account_id: String) -> Self {
         Self {
             datastore: gcp_service.datastore.clone(),
-            kind: "triples".to_string(),
             account_id
         }
     }
@@ -232,9 +229,7 @@ mod test {
     use crate::storage;
     use crate::gcp::GcpService;
     use crate::storage::triple_storage;
-
-    // TODO: This test currently takes 22 seconds on my machine, which is much slower than it should be
-    // Improve this before we make more similar tests
+    
     #[test]
     fn test_triple_load_and_delete() {
         let runtime = tokio::runtime::Runtime::new().unwrap();

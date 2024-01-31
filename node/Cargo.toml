@@ -49,7 +49,6 @@ near-sdk = "5.0.0-alpha.1"
 
 mpc-contract = { path = "../contract" }
 mpc-keys = { path = "../keys" }
-mpc-recovery = { path = "../mpc-recovery" }
 
 [dev-dependencies]
 itertools = "0.12.0"

@@ -1815,9 +1815,9 @@ checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
 
 [[package]]
 name = "cookie"
-version = "0.16.2"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e859cd57d0710d9e06c381b550c06e76992472a8c6d527aecd2fc673dcc231fb"
+checksum = "7efb37c3e1ccb1ff97164ad95ac1606e8ccd35b3fa0a7d99a304c7f4a428cc24"
 dependencies = [
  "percent-encoding 2.3.1",
  "time",
@@ -1826,12 +1826,12 @@ dependencies = [
 
 [[package]]
 name = "cookie_store"
-version = "0.16.2"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d606d0fba62e13cf04db20536c05cb7f13673c161cb47a47a82b9b9e7d3f1daa"
+checksum = "387461abbc748185c3a6e1673d826918b450b87ff22639429c694619a83b6cf6"
 dependencies = [
  "cookie",
- "idna 0.2.3",
+ "idna 0.3.0",
  "log",
  "publicsuffix",
  "serde",
@@ -2151,12 +2151,12 @@ dependencies = [
 
 [[package]]
 name = "darling"
-version = "0.20.4"
+version = "0.20.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da01daa5f6d41c91358398e8db4dde38e292378da1f28300b59ef4732b879454"
+checksum = "fc5d6b04b3fd0ba9926f945895de7d806260a2d7431ba82e7edaecb043c4c6b8"
 dependencies = [
- "darling_core 0.20.4",
- "darling_macro 0.20.4",
+ "darling_core 0.20.5",
+ "darling_macro 0.20.5",
 ]
 
 [[package]]
@@ -2189,9 +2189,9 @@ dependencies = [
 
 [[package]]
 name = "darling_core"
-version = "0.20.4"
+version = "0.20.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f44f6238b948a3c6c3073cdf53bb0c2d5e024ee27e0f35bfe9d556a12395808a"
+checksum = "04e48a959bcd5c761246f5d090ebc2fbf7b9cd527a492b07a67510c108f1e7e3"
 dependencies = [
  "fnv",
  "ident_case",
@@ -2225,11 +2225,11 @@ dependencies = [
 
 [[package]]
 name = "darling_macro"
-version = "0.20.4"
+version = "0.20.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d2d88bd93979b1feb760a6b5c531ac5ba06bd63e74894c377af02faee07b9cd"
+checksum = "1d1545d67a2149e1d93b7e5c7752dce5a7426eb5d1357ddcfd89336b94444f77"
 dependencies = [
- "darling_core 0.20.4",
+ "darling_core 0.20.5",
  "quote",
  "syn 2.0.48",
 ]
@@ -2746,9 +2746,9 @@ dependencies = [
 
 [[package]]
 name = "eyre"
-version = "0.6.11"
+version = "0.6.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6267a1fa6f59179ea4afc8e50fd8612a3cc60bc858f786ff877a4a8cb042799"
+checksum = "7cd915d99f24784cdc19fd37ef22b97e3ff0ae756c7e492e9fbfe897d61e2aec"
 dependencies = [
  "indenter",
  "once_cell",
@@ -3638,17 +3638,6 @@ dependencies = [
 
 [[package]]
 name = "idna"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "418a0a6fab821475f634efe3ccc45c013f742efe03d853e8d3355d5cb850ecf8"
-dependencies = [
- "matches",
- "unicode-bidi",
- "unicode-normalization",
-]
-
-[[package]]
-name = "idna"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e14ddfc70884202db2244c223200c204c2bda1bc6e0998d11b5e024d657209e6"
@@ -3958,9 +3947,9 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "libc"
-version = "0.2.152"
+version = "0.2.153"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13e3bf6590cbc649f4d1a3eefc9d5d6eb746f5200ffb04e5e142700b8faa56e7"
+checksum = "9c198f91728a82281a64e1f4f9eeb25d82cb32a5de251c6bd1b5154d63a8e7bd"
 
 [[package]]
 name = "libloading"
@@ -4277,7 +4266,7 @@ dependencies = [
  "rsa",
  "serde",
  "serde_json",
- "serde_with 3.5.1",
+ "serde_with 3.6.0",
  "sha2 0.9.9",
  "thiserror",
  "tokio",
@@ -4336,7 +4325,7 @@ dependencies = [
  "testcontainers",
  "tokio",
  "tokio-util 0.7.10",
- "toml 0.8.8",
+ "toml 0.8.9",
  "tracing",
  "tracing-log 0.1.4",
  "tracing-subscriber",
@@ -4367,7 +4356,6 @@ dependencies = [
  "local-ip-address",
  "mpc-contract",
  "mpc-keys",
- "mpc-recovery",
  "near-crypto 0.17.0",
  "near-fetch",
  "near-lake-framework",
@@ -4925,7 +4913,7 @@ dependencies = [
  "reed-solomon-erasure",
  "serde",
  "serde_json",
- "serde_with 3.5.1",
+ "serde_with 3.6.0",
  "serde_yaml",
  "smart-default 0.6.0",
  "strum 0.24.1",
@@ -4966,7 +4954,7 @@ dependencies = [
  "reed-solomon-erasure",
  "serde",
  "serde_json",
- "serde_with 3.5.1",
+ "serde_with 3.6.0",
  "serde_yaml",
  "sha3 0.10.8",
  "smart-default 0.6.0",
@@ -4992,7 +4980,7 @@ dependencies = [
  "num-rational 0.3.2",
  "serde",
  "serde_repr",
- "serde_with 3.5.1",
+ "serde_with 3.6.0",
  "sha2 0.10.8",
  "strum 0.24.1",
  "thiserror",
@@ -5014,7 +5002,7 @@ dependencies = [
  "num-rational 0.3.2",
  "serde",
  "serde_repr",
- "serde_with 3.5.1",
+ "serde_with 3.6.0",
  "sha2 0.10.8",
  "strum 0.24.1",
  "thiserror",
@@ -5114,7 +5102,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0efa94eb99a64491323b71ba2c0591ce4649817f26339de56f110f00649ea908"
 dependencies = [
  "Inflector",
- "darling 0.20.4",
+ "darling 0.20.5",
  "proc-macro2",
  "quote",
  "serde",
@@ -5206,7 +5194,7 @@ dependencies = [
  "ripemd",
  "serde",
  "serde_repr",
- "serde_with 3.5.1",
+ "serde_with 3.6.0",
  "sha2 0.10.8",
  "sha3 0.10.8",
  "strum 0.24.1",
@@ -5575,9 +5563,9 @@ checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
 
 [[package]]
 name = "openssl-src"
-version = "300.2.1+3.2.0"
+version = "300.2.2+3.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fe476c29791a5ca0d1273c697e96085bbabbbea2ef7afd5617e78a4b40332d3"
+checksum = "8bbfad0063610ac26ee79f7484739e2b07555a75c42453b89263830b5c8103bc"
 dependencies = [
  "cc",
 ]
@@ -6198,7 +6186,7 @@ version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d37c51ca738a55da99dc0c4a34860fd675453b8b36209178c2249bb13651284"
 dependencies = [
- "toml_edit 0.21.0",
+ "toml_edit 0.21.1",
 ]
 
 [[package]]
@@ -6660,9 +6648,9 @@ checksum = "c08c74e62047bb2de4ff487b251e4a92e24f48745648451635cec7d591162d9f"
 
 [[package]]
 name = "reqwest"
-version = "0.11.23"
+version = "0.11.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37b1ae8d9ac08420c66222fb9096fc5de435c3c48542bc5336c51892cffafb41"
+checksum = "c6920094eb85afde5e4a138be3f2de8bbdf28000f0029e72c45025a56b042251"
 dependencies = [
  "async-compression",
  "base64 0.21.7",
@@ -6691,6 +6679,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
+ "sync_wrapper",
  "system-configuration",
  "tokio",
  "tokio-native-tls",
@@ -7291,9 +7280,9 @@ dependencies = [
 
 [[package]]
 name = "serde_with"
-version = "3.5.1"
+version = "3.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5c9fdb6b00a489875b22efd4b78fe2b363b72265cc5f6eb2e2b9ee270e6140c"
+checksum = "1b0ed1662c5a68664f45b76d18deb0e234aff37207086803165c961eb695e981"
 dependencies = [
  "base64 0.21.7",
  "chrono",
@@ -7302,7 +7291,7 @@ dependencies = [
  "indexmap 2.2.1",
  "serde",
  "serde_json",
- "serde_with_macros 3.5.1",
+ "serde_with_macros 3.6.0",
  "time",
 ]
 
@@ -7324,7 +7313,7 @@ version = "2.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "881b6f881b17d13214e5d494c939ebab463d01264ce1811e9d4ac3a882e7695f"
 dependencies = [
- "darling 0.20.4",
+ "darling 0.20.5",
  "proc-macro2",
  "quote",
  "syn 2.0.48",
@@ -7332,11 +7321,11 @@ dependencies = [
 
 [[package]]
 name = "serde_with_macros"
-version = "3.5.1"
+version = "3.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dbff351eb4b33600a2e138dfa0b10b65a238ea8ff8fb2387c422c5022a3e8298"
+checksum = "568577ff0ef47b879f736cd66740e022f3672788cdf002a05a4e609ea5a6fb15"
 dependencies = [
- "darling 0.20.4",
+ "darling 0.20.5",
  "proc-macro2",
  "quote",
  "syn 2.0.48",
@@ -8192,14 +8181,14 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "0.8.8"
+version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1a195ec8c9da26928f773888e0742ca3ca1040c6cd859c919c9f59c1954ab35"
+checksum = "c6a4b9e8023eb94392d3dca65d717c53abc5dad49c07cb65bb8fcd87115fa325"
 dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "toml_edit 0.21.0",
+ "toml_edit 0.21.1",
 ]
 
 [[package]]
@@ -8226,9 +8215,9 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d34d383cd00a163b4a5b85053df514d45bc330f6de7737edfe0a93311d1eaa03"
+checksum = "6a8534fd7f78b5405e860340ad6575217ce99f38d4d5c8f2442cb5ecb50090e1"
 dependencies = [
  "indexmap 2.2.1",
  "serde",
@@ -9116,9 +9105,9 @@ checksum = "dff9641d1cd4be8d1a070daf9e3773c5f67e78b4d9d42263020c057706765c04"
 
 [[package]]
 name = "winnow"
-version = "0.5.35"
+version = "0.5.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1931d78a9c73861da0134f453bb1f790ce49b2e30eba8410b4b79bac72b46a2d"
+checksum = "818ce546a11a9986bc24f93d0cdf38a8a1a400f1473ea8c82e59f6e0ffab9249"
 dependencies = [
  "memchr",
 ]
