@@ -687,12 +687,15 @@ impl ConsensusProtocol for NodeState {
             NodeState::Starting => {
                 let persistent_node_data = ctx.secret_storage().load().await?;
                 let triple_storage = ctx.triple_storage();
-                let write_lock = triple_storage.write().await;
-                let triples = write_lock.load().await;
-                drop(write_lock);
+                let read_lock = triple_storage.read().await;
+                let triples = read_lock.load().await;
+                drop(read_lock);
                 let triples_map: Option<HashMap<TripleId, Triple>> = match triples {
                     Ok(vec_triple_data) => {
-                        Some(HashMap::new())
+                        let triple_map = vec_triple_data.into_iter()
+                            .map(|triple_data| (triple_data.triple.id, triple_data.triple))
+                            .collect();
+                        Some(triple_map)
                     }
                     _ => None,
                 };
