@@ -43,7 +43,7 @@ impl Node {
                 gcp_project_id: Some("pagoda-discovery-platform-dev".to_string()),
                 sk_share_secret_id: Some("multichain-sk-share-dev-toy".to_string()),
                 gcp_datastore_url: None,
-                env: "xiangyi-dev",
+                env: Some("xiangyi-dev".to_string()),
             },
         };
 
