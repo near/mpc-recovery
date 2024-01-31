@@ -14,9 +14,9 @@ pub struct Options {
     /// GCP Datastore URL that will be used to load/store the node's triples and presignatures.
     #[arg(long, env("MPC_RECOVERY_GCP_DATASTORE_URL"))]
     pub gcp_datastore_url: Option<String>,
-    /// GCP Datastore database that will be used to load/store the node's triples and presignatures.
-    #[arg(long, env("MPC_RECOVERY_GCP_DATASTORE_DATABASE_ID"))]
-    pub gcp_datastore_database_id: Option<String>,
+    /// env used to suffix datastore table names to differentiate among environments.
+    #[clap(long, env("MPC_RECOVERY_ENV"))]
+    pub env: Option<String>,
 }
 
 impl Options {

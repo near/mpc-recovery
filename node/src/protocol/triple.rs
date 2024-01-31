@@ -280,7 +280,7 @@ impl TripleManager {
 mod test {
     use std::{collections::HashMap, fs::OpenOptions, ops::Range};
 
-    use crate::{protocol::message::TripleMessage, storage::{triple_storage::{TripleNodeStorageBox, self}, self}, gcp::GcpService};
+    use crate::{protocol::message::TripleMessage, storage, gcp::GcpService};
     use cait_sith::protocol::{InitializationError, Participant, ProtocolError};
     use itertools::multiunzip;
     use std::io::prelude::*;
@@ -300,13 +300,12 @@ mod test {
             // Self::wipe_mailboxes(range.clone());
             let participants: Vec<Participant> = range.clone().map(Participant::from).collect();
             let project_id = Some("pagoda-discovery-platform-dev".to_string());
-            let database_id = None;
             let env = "xiangyi-dev".to_string();
-            let storage_options = storage::Options{gcp_project_id: project_id.clone(), sk_share_secret_id:Some("multichain-sk-share-dev-0".to_string()), gcp_datastore_url:None, gcp_datastore_database_id: database_id.clone()};
-            let gcp_service = GcpService::init(project_id.clone(), None, env).await.unwrap();
+            let storage_options = storage::Options{gcp_project_id: project_id.clone(), sk_share_secret_id:Some("multichain-sk-share-dev-0".to_string()), gcp_datastore_url:None, env: Some(env)};
+            let gcp_service = GcpService::init(&storage_options).await.unwrap();
             let managers = range.clone()
                 .map(|num| {
-                    let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(storage::triple_storage::init(&gcp_service, &storage_options.clone(), num.to_string())));
+                    let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(storage::triple_storage::init(&gcp_service, num.to_string())));
                     TripleManager::new(participants.clone(), Participant::from(num), number as usize, 0, None, triple_storage)
                 })
                 .collect();

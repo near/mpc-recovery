@@ -17,6 +17,7 @@ use google_secretmanager1::api::{AddSecretVersionRequest, SecretPayload};
 use hyper::client::HttpConnector;
 use hyper_rustls::HttpsConnector;
 use crate::gcp::error::DatastoreStorageError;
+use crate::storage;
 
 pub type SecretResult<T> = std::result::Result<T, error::SecretStorageError>;
 
@@ -330,12 +331,10 @@ pub struct GcpService {
 
 impl GcpService {
     pub async fn init(
-        project_id: Option<String>,
-        gcp_datastore_url: Option<String>,
-        env: String
+        storage_options: &storage::Options,
     ) -> anyhow::Result<Option<Self>> {
-        match project_id {
-            Some(project_id_non_empty) => {
+        match storage_options.gcp_project_id.clone() {
+            Some(project_id_non_empty) if storage_options.env.is_some() => {
                 let mut datastore;
         let secret_manager;
         let client = hyper::Client::builder().build(
@@ -346,7 +345,7 @@ impl GcpService {
                 .enable_http2()
                 .build(),
         );
-        if let Some(gcp_datastore_url) = gcp_datastore_url {
+        if let Some(gcp_datastore_url) = storage_options.gcp_datastore_url.clone() {
             // Assuming custom GCP URL points to an emulator, so the token does not matter
             let authenticator = AccessTokenAuthenticator::builder("TOKEN".to_string())
                 .build()
@@ -365,7 +364,6 @@ impl GcpService {
             };
             secret_manager = SecretManager::new(client.clone(), authenticator.clone());
             datastore = Datastore::new(client, authenticator);
-           // datastore = datastore.add_request_header("x-goog-request-params", "project_id=pagoda-discovery-platform-dev&database_id=xiangyi-test");
         }
 
         Ok(Some(Self {
@@ -373,7 +371,7 @@ impl GcpService {
             datastore: DatastoreService {
                 datastore,
                 project_id: project_id_non_empty.clone(),
-                env
+                env: storage_options.env.clone().unwrap()
             },
             secret_manager: SecretManagerService {
                 secret_manager,
@@ -381,7 +379,7 @@ impl GcpService {
             },
         }))
             }
-            None => Ok(None)
+            _ => Ok(None)
         }
         
     }

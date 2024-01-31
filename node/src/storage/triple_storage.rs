@@ -157,16 +157,14 @@ impl TripleNodeStorage for MemoryTripleNodeStorage {
 #[derive(Clone)]
 struct DataStoreTripleNodeStorage {
     datastore: DatastoreService,
-    database_id: Option<String>,
     kind: String,
     account_id: String,
 }
 
 impl DataStoreTripleNodeStorage {
-    fn new(gcp_service: &GcpService, database_id: Option<String>, account_id: String) -> Self {
+    fn new(gcp_service: &GcpService, account_id: String) -> Self {
         Self {
             datastore: gcp_service.datastore.clone(),
-            database_id,
             kind: "triples".to_string(),
             account_id
         }
@@ -219,12 +217,11 @@ pub struct TripleStorage {
 
 pub type LockTripleNodeStorageBox = Arc<RwLock<TripleNodeStorageBox>>;
 
-pub fn init(gcp_service: &Option<GcpService>, opts: &Options, account_id: String) -> TripleNodeStorageBox {
+pub fn init(gcp_service: &Option<GcpService>, account_id: String) -> TripleNodeStorageBox {
     match gcp_service {
         Some(gcp) => Box::new(
             DataStoreTripleNodeStorage::new(
                 &gcp, 
-                opts.gcp_datastore_database_id.clone(),
                 account_id
             )) as TripleNodeStorageBox ,
         _ => Box::new(MemoryTripleNodeStorage {triples: HashMap::new(), account_id}) as TripleNodeStorageBox,
@@ -232,21 +229,9 @@ pub fn init(gcp_service: &Option<GcpService>, opts: &Options, account_id: String
 }
 
 mod test {
-    use std::{collections::HashMap, fs::OpenOptions, ops::Range};
-
-    use crate::{protocol::message::TripleMessage, storage::{triple_storage::{TripleNodeStorageBox, self}, self}, gcp::GcpService};
-    use cait_sith::protocol::{InitializationError, Participant, ProtocolError};
-    use std::io::prelude::*;
-
-    use std::sync::Arc;
-    use crate::storage::triple_storage::LockTripleNodeStorageBox;
-    use tokio::sync::RwLock;
-
-    use super::{init, TripleData};
-    use crate::gcp::value::FromValue;
-    use crate::gcp::value::Value;
-    use crate::gcp::value::IntoValue;
-
+    use crate::storage;
+    use crate::gcp::GcpService;
+    use crate::storage::triple_storage;
 
     // TODO: This test currently takes 22 seconds on my machine, which is much slower than it should be
     // Improve this before we make more similar tests
@@ -255,38 +240,18 @@ mod test {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async {
             let project_id = Some("pagoda-discovery-platform-dev".to_string());
-            let database_id = None;
             let env = "xiangyi-dev".to_string();
-            let storage_options = storage::Options{gcp_project_id: project_id.clone(), sk_share_secret_id:Some("multichain-sk-share-dev-0".to_string()), gcp_datastore_url:None, gcp_datastore_database_id: database_id.clone()};
-            let gcp_service = GcpService::init(project_id.clone(), None, env).await.unwrap();
-            let mut triple_storage = triple_storage::init(&gcp_service, &storage_options, "4".to_string());
+            let storage_options = storage::Options{gcp_project_id: project_id.clone(), sk_share_secret_id:Some("multichain-sk-share-dev-0".to_string()), gcp_datastore_url:None, env: Some(env)};
+            let gcp_service = GcpService::init(&storage_options).await.unwrap();
+            let mut triple_storage = triple_storage::init(&gcp_service,  "4".to_string());
             
-            //fetch_entities is working
-            //upsert is working
-            //let res = gcp_service.datastore.fetch_entities::<TripleData>().await.unwrap();
-            //let read_lock = triple_storage.read().await;
-            //let load_res = read_lock.load().await;
             let load_res = triple_storage.load().await;
             println!("res: {:?}", load_res);
-            //drop(read_lock);
             
-            for entity_result in load_res.unwrap() {
-                //let entity = entity_result.entity.unwrap();
-                //let entity_value = entity.into_value();
-                //let triple_data = TripleData::from_value(entity_value).unwrap();
-                //let res = gcp_service.datastore.delete(triple_data).await.unwrap();
-                //let mut write_lock = triple_storage.write().await;
-                let triple_data = entity_result;
-                //let res = write_lock.delete(triple_data).await.unwrap();
-                //drop(write_lock);
-                //let res = write_lock.insert(&triple_data).await.unwrap();
+            for triple_data in load_res.unwrap() {
                 let res = triple_storage.delete(triple_data).await;
                 println!("res: {:?}", res);
             }
-            
         })
-        
-
-        
     }
 }

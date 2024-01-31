@@ -2,6 +2,14 @@ variable "project" {
   type = string
 }
 
+variable "env" {
+  type = string
+}
+
+variable "datastore_url" {
+  type = string
+}
+
 variable "region" {
 }
 

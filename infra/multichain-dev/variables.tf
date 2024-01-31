@@ -4,6 +4,10 @@ variable "env" {
 variable "project" {
 }
 
+variable "datastore_url" {
+  default = null
+}
+
 variable "credentials_file" {
   default = null
 }
