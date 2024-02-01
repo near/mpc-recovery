@@ -91,7 +91,7 @@ async fn handle_block(
                             tracing::warn!("`sign` did not produce entropy");
                             continue;
                         }
-                        let Ok(entropy) = serde_json::from_str::<'_, [u8; 32]>(&receipt.logs()[0])
+                        let Ok(entropy) = serde_json::from_str::<'_, [u8; 32]>(&receipt.logs()[1])
                         else {
                             tracing::warn!(
                                 "`sign` did not produce entropy correctly: {:?}",
