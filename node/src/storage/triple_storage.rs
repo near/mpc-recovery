@@ -11,8 +11,6 @@ use google_datastore1::api::{Key, PathElement, Filter, PropertyFilter, PropertyR
 use crate::gcp::error;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use mpc_keys::hpke::{self, Ciphered};
-use crate::protocol::CryptographicError;
 
 #[derive(Clone, Debug)]
 pub struct TripleData {
@@ -20,45 +18,9 @@ pub struct TripleData {
     pub triple: Triple,
 }
 
-pub struct EncryptedTripleData {
-    pub account_id: String,
-    pub encrypted_triple: Ciphered,
-}
-
-impl EncryptedTripleData {
-    pub const ASSOCIATED_DATA: &'static [u8] = b"";
-    pub fn encrypt(
-        triple: Triple,
-        cipher_pk: &hpke::PublicKey,
-    ) -> Result<Ciphered, CryptographicError> {
-        let encrypted_tripe = serde_json::to_vec(&triple)?;
-        let ciphered = cipher_pk
-            .encrypt(&encrypted_tripe, EncryptedTripleData::ASSOCIATED_DATA)
-            .map_err(|e| CryptographicError::Encryption(e.to_string()))?;
-        Ok(ciphered)
-    }
-
-    pub async fn decrypt(
-        cipher_sk: &hpke::SecretKey,
-        encrypted: Ciphered,
-    ) -> Result<Triple, CryptographicError> {
-        let message = cipher_sk
-            .decrypt(&encrypted, EncryptedTripleData::ASSOCIATED_DATA)
-            .map_err(|err| CryptographicError::Encryption(err.to_string()))?;
-        let triple: Triple = serde_json::from_slice(&message)?;
-
-        Ok(triple)
-    }
-}
-
 impl KeyKind for TripleData {
     fn kind() -> String {
         "triples".to_string()
-    }
-}
-impl KeyKind for EncryptedTripleData {
-    fn kind() -> String {
-        "EncryptedTripleData".to_string()
     }
 }
 
@@ -99,31 +61,6 @@ impl IntoValue for TripleData {
     }
 }
 
-impl IntoValue for EncryptedTripleData {
-    fn into_value(self) -> Value {
-        let mut properties = HashMap::new();
-        properties.insert(
-            "account_id".to_string(),
-            Value::StringValue(self.account_id.clone()),
-        );
-        properties.insert(
-            "encrypted_triple".to_string(),
-            Value::StringValue(serde_json::to_string(&self.encrypted_triple).unwrap()),
-        );
-        Value::EntityValue {
-            key: Key {
-                path: Some(vec![PathElement {
-                    kind: Some(EncryptedTripleData::kind()),
-                    name: Some(format!("{}/{}", self.account_id, serde_json::to_string(&self.encrypted_triple).unwrap())),
-                    id: None,
-                }]),
-                partition_id: None,
-            },
-            properties,
-        }
-    }
-}
-
 impl FromValue for TripleData {
     fn from_value(value: Value) -> Result<Self, ConvertError> {
         match value {
@@ -131,9 +68,7 @@ impl FromValue for TripleData {
                 let (_, triple_id) = properties
                     .remove_entry("triple_id")
                     .ok_or_else(|| ConvertError::MissingProperty("triple_id".to_string()))?;
-                // let triple_id = String::from_value(triple_id)?.parse().ok_or_else(|| {
-                //     ConvertError::ParseInt("Could not parse triple_id to u64".to_string())
-                // });
+
                 let triple_id = i64::from_value(triple_id)?;
                 let (_, account_id) = properties
                     .remove_entry("account_id")
@@ -165,39 +100,6 @@ impl FromValue for TripleData {
                         share: triple_share,
                         public: triple_public
                     },
-                })
-            }
-            value => Err(ConvertError::UnexpectedPropertyType {
-                expected: "entity".to_string(),
-                got: format!("{:?}", value),
-            }),
-        }
-    }
-}
-
-impl FromValue for EncryptedTripleData {
-    fn from_value(value: Value) -> Result<Self, ConvertError> {
-        match value {
-            Value::EntityValue { mut properties, .. } => {
-                let (_, account_id) = properties
-                    .remove_entry("account_id")
-                    .ok_or_else(|| {
-                        ConvertError::MissingProperty("account_id".to_string())
-                    })?;
-                let account_id = String::from_value(account_id)?;
-
-                let (_, triple_public) = properties
-                    .remove_entry("encrypted_triple")
-                    .ok_or_else(|| {
-                        ConvertError::MissingProperty("encrypted_triple".to_string())
-                    })?;
-                let triple_public = String::from_value(triple_public)?;
-                let triple_public = serde_json::from_str(&triple_public)
-                    .map_err(|_| ConvertError::MalformedProperty("triple_public".to_string()))?;
-
-                Ok(Self {
-                    account_id,
-                    encrypted_triple,
                 })
             }
             value => Err(ConvertError::UnexpectedPropertyType {
@@ -256,9 +158,9 @@ struct DataStoreTripleNodeStorage {
 }
 
 impl DataStoreTripleNodeStorage {
-    fn new(gcp_service: &GcpService, account_id: String) -> Self {
+    fn new(datastore: DatastoreService, account_id: String) -> Self {
         Self {
-            datastore: gcp_service.datastore.clone(),
+            datastore: datastore,
             account_id
         }
     }
@@ -267,6 +169,7 @@ impl DataStoreTripleNodeStorage {
 #[async_trait]
 impl TripleNodeStorage for DataStoreTripleNodeStorage {
     async fn insert(&mut self, data: TripleData) -> TripleResult<()> {
+        tracing::info!("inserting triples using datastore");
         self.datastore
             .upsert(data)
             .await?;
@@ -274,6 +177,7 @@ impl TripleNodeStorage for DataStoreTripleNodeStorage {
     }
 
     async fn delete(&mut self, data: TripleData) -> TripleResult<()> {
+        tracing::info!("deleting triples using datastore");
         self.datastore
             .delete(data)
             .await?;
@@ -281,6 +185,7 @@ impl TripleNodeStorage for DataStoreTripleNodeStorage {
     }
 
     async fn load(&self) -> TripleResult<Vec<TripleData>> {
+        tracing::info!("loading triples using datastore");
         let account_id_val = DatastoreValue::from_value(self.account_id().into_value())?;
         let filter = Filter {
             composite_filter: None,
@@ -322,9 +227,9 @@ pub type LockTripleNodeStorageBox = Arc<RwLock<TripleNodeStorageBox>>;
 
 pub fn init(gcp_service: &Option<GcpService>, account_id: String) -> TripleNodeStorageBox {
     match gcp_service {
-        Some(gcp) => Box::new(
+        Some(gcp) if gcp.datastore.is_some() => Box::new(
             DataStoreTripleNodeStorage::new(
-                &gcp, 
+                gcp.datastore.clone().unwrap(), 
                 account_id
             )) as TripleNodeStorageBox ,
         _ => Box::new(MemoryTripleNodeStorage {triples: HashMap::new(), account_id}) as TripleNodeStorageBox,

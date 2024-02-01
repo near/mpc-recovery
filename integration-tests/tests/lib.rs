@@ -73,7 +73,7 @@ where
 {
     let docker_client = DockerClient::default();
     let nodes = mpc_recovery_integration_tests::multichain::run(nodes, &docker_client).await?;
-
+    
     let connector = JsonRpcClient::new_client();
     let jsonrpc_client = connector.connect(&nodes.ctx().lake_indexer.rpc_host_address);
     let rpc_client = near_fetch::Client::from_client(jsonrpc_client.clone());

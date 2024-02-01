@@ -38,6 +38,12 @@ async fn test_triples_and_presignatures() -> anyhow::Result<()> {
             assert_eq!(state_0.participants.len(), 3);
             wait_for::has_at_least_triples(&ctx, 2).await?;
             wait_for::has_at_least_presignatures(&ctx, 2).await?;
+            for account_id in state_0.participants.keys() {
+                let triple_storage = ctx.nodes.triple_storage(account_id.to_string()).await?;
+                let load_res = triple_storage.load().await;
+                print!("result is: {:?}", load_res);
+                //assert_eq!(load_res.len(), 6);
+            }
             Ok(())
         })
     })

@@ -1,15 +1,11 @@
 use crate::storage;
 use crate::gcp::GcpService;
-use crate::storage::triple_storage::TripleData;
-use cait_sith::protocol::Participant;
-use cait_sith::triples::TripleShare;
-use cait_sith::triples::TriplePub;
-use crate::protocol::triple::Triple;
 
+#[cfg(test)]
 impl GcpService {
     pub async fn test_init(env: String) -> Self {
         let project_id = Some("pagoda-discovery-platform-dev".to_string());
-        let storage_options = storage::Options{gcp_project_id: project_id.clone(), sk_share_secret_id:Some("multichain-sk-share-dev-0".to_string()), gcp_datastore_url:None, env: Some(env)};
+        let storage_options = storage::Options{gcp_project_id: project_id.clone(), sk_share_secret_id:Some("multichain-sk-share-dev-0".to_string()), gcp_datastore_url:None, env: Some(env), use_gcp_secret_manager: None};
         GcpService::init(&storage_options).await.unwrap().unwrap()
     }
 }

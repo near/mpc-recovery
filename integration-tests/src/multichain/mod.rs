@@ -4,10 +4,13 @@ pub mod local;
 use crate::env::containers::DockerClient;
 use crate::{initialize_lake_indexer, LakeIndexerCtx};
 use mpc_contract::primitives::CandidateInfo;
+use mpc_recovery_node::gcp::GcpService;
+use mpc_recovery_node::storage;
 use near_workspaces::network::Sandbox;
 use near_workspaces::{AccountId, Contract, Worker};
 use serde_json::json;
 use std::collections::HashMap;
+use mpc_recovery_node::storage::triple_storage::TripleNodeStorageBox;
 
 const NETWORK: &str = "mpc_it_network";
 
@@ -65,6 +68,11 @@ impl Nodes<'_> {
 
         Ok(())
     }
+
+    pub async fn triple_storage(&self, account_id: String) -> anyhow::Result<TripleNodeStorageBox> {
+        let gcp_service = GcpService::init(&self.ctx().storage_options).await?;
+        Ok(storage::triple_storage::init(&gcp_service, account_id))
+    }
 }
 
 pub struct Context<'a> {
@@ -76,6 +84,8 @@ pub struct Context<'a> {
     pub lake_indexer: crate::env::containers::LakeIndexer<'a>,
     pub worker: Worker<Sandbox>,
     pub mpc_contract: Contract,
+    pub datastore: crate::env::containers::Datastore<'a>,
+    pub storage_options: storage::Options,
 }
 
 pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> {
@@ -104,6 +114,17 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
         .await?;
     tracing::info!(contract_id = %mpc_contract.id(), "deployed mpc contract");
 
+    let gcp_project_id = "multichain-integration";
+    let datastore =
+        crate::env::containers::Datastore::run(docker_client, docker_network, gcp_project_id).await?;
+
+    let storage_options = mpc_recovery_node::storage::Options {
+        gcp_project_id: Some("multichain-integration".to_string()),
+        sk_share_secret_id: Some("multichain-sk-share-integration".to_string()),
+        gcp_datastore_url: Some(datastore.local_address.clone()),
+        use_gcp_secret_manager: None,
+        env: Some("multichain-integration".to_string()),
+    };
     Ok(Context {
         docker_client,
         docker_network: docker_network.to_string(),
@@ -112,6 +133,8 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
         lake_indexer,
         worker,
         mpc_contract,
+        datastore,
+        storage_options
     })
 }
 

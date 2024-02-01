@@ -267,8 +267,8 @@ impl TripleManager {
         let account_id = write_lock.account_id().clone();
         for triple in async_triples_to_insert {
             match write_lock.insert(TripleData { account_id: account_id.clone(), triple }).await {
-                Ok(()) => println!("successfully inserted triple"),
-                Err(error) => println!("failed: {}", error),
+                Ok(()) => tracing::info!("successfully inserted triple"),
+                Err(error) => tracing::info!("triple insertion failed: {}", error),
             }
         }
 
