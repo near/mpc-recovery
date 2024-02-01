@@ -18,6 +18,7 @@ use hyper::client::HttpConnector;
 use hyper_rustls::HttpsConnector;
 use crate::gcp::error::DatastoreStorageError;
 use crate::storage;
+use google_datastore1::api::Filter;
 
 pub type SecretResult<T> = std::result::Result<T, error::SecretStorageError>;
 
@@ -245,7 +246,7 @@ impl DatastoreService {
         Ok(())
     }
 
-    pub async fn fetch_entities<T: KeyKind>(&self) -> DatastoreResult<Vec<EntityResult>> {
+    pub async fn fetch_entities<T: KeyKind>(&self, filter: Option<Filter>) -> DatastoreResult<Vec<EntityResult>> {
         let kind: String = format!("{}-{}", T::kind(), self.env);
         let req = RunQueryRequest {
             database_id: Some("".to_string()),
@@ -254,7 +255,7 @@ impl DatastoreService {
             query: Some(Query {
                 projection: None,
                 kind: Some(vec![KindExpression { name: Some(kind) }]),
-                filter: None,
+                filter: filter,
                 order: None,
                 distinct_on: Some(vec![]),
                 start_cursor: None,

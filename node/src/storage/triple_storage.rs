@@ -7,10 +7,12 @@ use crate::gcp::{
         value::{FromValue, IntoValue, Value},
         KeyKind,
     };
-use google_datastore1::api::{Key, PathElement};
+use google_datastore1::api::{Key, PathElement, Filter, PropertyFilter, PropertyReference, Value as DatastoreValue};
 use crate::gcp::error;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use mpc_keys::hpke::{self, Ciphered};
+use crate::protocol::CryptographicError;
 
 #[derive(Clone, Debug)]
 pub struct TripleData {
@@ -18,9 +20,45 @@ pub struct TripleData {
     pub triple: Triple,
 }
 
+pub struct EncryptedTripleData {
+    pub account_id: String,
+    pub encrypted_triple: Ciphered,
+}
+
+impl EncryptedTripleData {
+    pub const ASSOCIATED_DATA: &'static [u8] = b"";
+    pub fn encrypt(
+        triple: Triple,
+        cipher_pk: &hpke::PublicKey,
+    ) -> Result<Ciphered, CryptographicError> {
+        let encrypted_tripe = serde_json::to_vec(&triple)?;
+        let ciphered = cipher_pk
+            .encrypt(&encrypted_tripe, EncryptedTripleData::ASSOCIATED_DATA)
+            .map_err(|e| CryptographicError::Encryption(e.to_string()))?;
+        Ok(ciphered)
+    }
+
+    pub async fn decrypt(
+        cipher_sk: &hpke::SecretKey,
+        encrypted: Ciphered,
+    ) -> Result<Triple, CryptographicError> {
+        let message = cipher_sk
+            .decrypt(&encrypted, EncryptedTripleData::ASSOCIATED_DATA)
+            .map_err(|err| CryptographicError::Encryption(err.to_string()))?;
+        let triple: Triple = serde_json::from_slice(&message)?;
+
+        Ok(triple)
+    }
+}
+
 impl KeyKind for TripleData {
     fn kind() -> String {
         "triples".to_string()
+    }
+}
+impl KeyKind for EncryptedTripleData {
+    fn kind() -> String {
+        "EncryptedTripleData".to_string()
     }
 }
 
@@ -52,6 +90,31 @@ impl IntoValue for TripleData {
                 path: Some(vec![PathElement {
                     kind: Some(TripleData::kind()),
                     name: Some(format!("{}/{}", self.account_id, &self.triple.id)),
+                    id: None,
+                }]),
+                partition_id: None,
+            },
+            properties,
+        }
+    }
+}
+
+impl IntoValue for EncryptedTripleData {
+    fn into_value(self) -> Value {
+        let mut properties = HashMap::new();
+        properties.insert(
+            "account_id".to_string(),
+            Value::StringValue(self.account_id.clone()),
+        );
+        properties.insert(
+            "encrypted_triple".to_string(),
+            Value::StringValue(serde_json::to_string(&self.encrypted_triple).unwrap()),
+        );
+        Value::EntityValue {
+            key: Key {
+                path: Some(vec![PathElement {
+                    kind: Some(EncryptedTripleData::kind()),
+                    name: Some(format!("{}/{}", self.account_id, serde_json::to_string(&self.encrypted_triple).unwrap())),
                     id: None,
                 }]),
                 partition_id: None,
@@ -102,6 +165,39 @@ impl FromValue for TripleData {
                         share: triple_share,
                         public: triple_public
                     },
+                })
+            }
+            value => Err(ConvertError::UnexpectedPropertyType {
+                expected: "entity".to_string(),
+                got: format!("{:?}", value),
+            }),
+        }
+    }
+}
+
+impl FromValue for EncryptedTripleData {
+    fn from_value(value: Value) -> Result<Self, ConvertError> {
+        match value {
+            Value::EntityValue { mut properties, .. } => {
+                let (_, account_id) = properties
+                    .remove_entry("account_id")
+                    .ok_or_else(|| {
+                        ConvertError::MissingProperty("account_id".to_string())
+                    })?;
+                let account_id = String::from_value(account_id)?;
+
+                let (_, triple_public) = properties
+                    .remove_entry("encrypted_triple")
+                    .ok_or_else(|| {
+                        ConvertError::MissingProperty("encrypted_triple".to_string())
+                    })?;
+                let triple_public = String::from_value(triple_public)?;
+                let triple_public = serde_json::from_str(&triple_public)
+                    .map_err(|_| ConvertError::MalformedProperty("triple_public".to_string()))?;
+
+                Ok(Self {
+                    account_id,
+                    encrypted_triple,
                 })
             }
             value => Err(ConvertError::UnexpectedPropertyType {
@@ -171,7 +267,6 @@ impl DataStoreTripleNodeStorage {
 #[async_trait]
 impl TripleNodeStorage for DataStoreTripleNodeStorage {
     async fn insert(&mut self, data: TripleData) -> TripleResult<()> {
-        println!("using datastore");
         self.datastore
             .upsert(data)
             .await?;
@@ -186,15 +281,26 @@ impl TripleNodeStorage for DataStoreTripleNodeStorage {
     }
 
     async fn load(&self) -> TripleResult<Vec<TripleData>> {
-        let response = self.datastore.fetch_entities::<TripleData>()
+        let account_id_val = DatastoreValue::from_value(self.account_id().into_value())?;
+        let filter = Filter {
+            composite_filter: None,
+            property_filter: Some(
+                PropertyFilter {
+                    op: Some("Equal".to_string()),
+                    property: Some(PropertyReference {
+                        name: Some("account_id".to_string())
+                    }),
+                    value: Some(account_id_val)
+                }
+            ),
+        };
+        let response = self.datastore.fetch_entities::<TripleData>(Some(filter))
             .await?;
-        // TODO:convert the response to hashmap
         let mut res: Vec<TripleData> = vec!();
         for entity_result in response {
             let entity = entity_result.entity.unwrap();
             let entity_value = entity.into_value();
             let triple_data = TripleData::from_value(entity_value).unwrap();
-            //let res = gcp_service.datastore.delete(triple_data).await.unwrap();
             res.push(triple_data);
         }
         Ok(res)
@@ -226,27 +332,48 @@ pub fn init(gcp_service: &Option<GcpService>, account_id: String) -> TripleNodeS
 }
 
 mod test {
-    use crate::storage;
     use crate::gcp::GcpService;
     use crate::storage::triple_storage;
-    
+
     #[test]
-    fn test_triple_load_and_delete() {
+    fn test_triple_storage() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async {
-            let project_id = Some("pagoda-discovery-platform-dev".to_string());
             let env = "xiangyi-dev".to_string();
-            let storage_options = storage::Options{gcp_project_id: project_id.clone(), sk_share_secret_id:Some("multichain-sk-share-dev-0".to_string()), gcp_datastore_url:None, env: Some(env)};
-            let gcp_service = GcpService::init(&storage_options).await.unwrap();
-            let mut triple_storage = triple_storage::init(&gcp_service,  "4".to_string());
+            let gcp_service = Some(GcpService::test_init(env).await);
+            let triple_storage = triple_storage::init(&gcp_service,  "4".to_string());
             
             let load_res = triple_storage.load().await;
-            println!("res: {:?}", load_res);
-            
-            for triple_data in load_res.unwrap() {
-                let res = triple_storage.delete(triple_data).await;
-                println!("res: {:?}", res);
+            assert!(load_res.is_ok());
+            let triple_data_vec = load_res.unwrap();
+            for triple_data in triple_data_vec.clone(){
+                assert_eq!(triple_data.account_id, "4".to_string());
             }
+
+            // upload these triples to env triple-storage-test
+            let env = "triple-storage-test".to_string();
+            let gcp_service = Some(GcpService::test_init(env).await);
+            let mut triple_storage = triple_storage::init(&gcp_service,  "4".to_string());
+            
+            for triple_data in triple_data_vec.clone() {
+                let insert_res = triple_storage.insert(triple_data).await;
+                assert!(insert_res.is_ok());
+            }
+
+            let load_res = triple_storage.load().await;
+            assert!(load_res.is_ok());
+            let load_data_vec = load_res.unwrap();
+            assert_eq!(load_data_vec.len(), triple_data_vec.len());
+
+            // delete these triples from env triple-storage-test
+            for load_data in load_data_vec {
+                let delete_res = triple_storage.delete(load_data).await;
+                assert!(delete_res.is_ok());
+            }
+
+            // check if there's anything left
+            let load_res = triple_storage.load().await;
+            assert!(load_res.is_err());
         })
     }
 }

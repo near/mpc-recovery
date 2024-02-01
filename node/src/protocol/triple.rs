@@ -299,10 +299,8 @@ mod test {
             let range = 0..number;
             // Self::wipe_mailboxes(range.clone());
             let participants: Vec<Participant> = range.clone().map(Participant::from).collect();
-            let project_id = Some("pagoda-discovery-platform-dev".to_string());
             let env = "xiangyi-dev".to_string();
-            let storage_options = storage::Options{gcp_project_id: project_id.clone(), sk_share_secret_id:Some("multichain-sk-share-dev-0".to_string()), gcp_datastore_url:None, env: Some(env)};
-            let gcp_service = GcpService::init(&storage_options).await.unwrap();
+            let gcp_service = Some(GcpService::test_init(env).await);
             let managers = range.clone()
                 .map(|num| {
                     let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(storage::triple_storage::init(&gcp_service, num.to_string())));
