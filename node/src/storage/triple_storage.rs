@@ -244,6 +244,7 @@ mod test {
     fn test_triple_storage() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async {
+            // TODO: change to use datastore emulator
             let env = "xiangyi-dev".to_string();
             let gcp_service = Some(GcpService::test_init(env).await);
             let triple_storage = triple_storage::init(&gcp_service,  "4".to_string());

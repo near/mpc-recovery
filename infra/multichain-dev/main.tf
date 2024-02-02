@@ -1,3 +1,4 @@
+# TODO: match the variables in terraform with the required Env variables in node/
 terraform {
   backend "gcs" {
     bucket = "multichain-terraform-dev"
