@@ -107,6 +107,8 @@ module "node" {
   region                = var.region
   service_account_email = google_service_account.service_account.email
   docker_image          = var.docker_image
+  env                   = var.env
+  datastore_url         = var.datastore_url
 
   node_id         = count.index
   near_rpc        = local.workspace.near_rpc
