@@ -17,11 +17,13 @@ struct MemoryNodeStorage {
 #[async_trait]
 impl SecretNodeStorage for MemoryNodeStorage {
     async fn store(&mut self, data: &PersistentNodeData) -> SecretResult<()> {
+        tracing::info!("storing PersistentNodeData using memory");
         self.node_data = Some(data.clone());
         Ok(())
     }
 
     async fn load(&self) -> SecretResult<Option<PersistentNodeData>> {
+        tracing::info!("loading PersistentNodeData using memory");
         Ok(self.node_data.clone())
     }
 }
@@ -43,6 +45,7 @@ impl SecretManagerNodeStorage {
 #[async_trait]
 impl SecretNodeStorage for SecretManagerNodeStorage {
     async fn store(&mut self, data: &PersistentNodeData) -> SecretResult<()> {
+        tracing::info!("storing PersistentNodeData using SecretNodeStorage");
         self.secret_manager
             .store_secret(&serde_json::to_vec(data)?, &self.sk_share_secret_id)
             .await?;
@@ -50,6 +53,7 @@ impl SecretNodeStorage for SecretManagerNodeStorage {
     }
 
     async fn load(&self) -> SecretResult<Option<PersistentNodeData>> {
+        tracing::info!("loading PersistentNodeData using SecretNodeStorage");
         let raw_data = self
             .secret_manager
             .load_secret(&self.sk_share_secret_id)
