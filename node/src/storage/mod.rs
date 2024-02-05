@@ -1,5 +1,5 @@
-pub mod triple_storage;
 pub mod secret_storage;
+pub mod triple_storage;
 
 /// Configures storage.
 #[derive(Debug, Clone, clap::Parser)]
@@ -38,7 +38,10 @@ impl Options {
             opts.extend(vec!["--gcp-datastore-url".to_string(), gcp_datastore_url]);
         }
         if let Some(use_gcp_secret_manager) = self.use_gcp_secret_manager {
-            opts.extend(vec!["--use-gcp-secret-manager".to_string(), use_gcp_secret_manager.to_string()]);
+            opts.extend(vec![
+                "--use-gcp-secret-manager".to_string(),
+                use_gcp_secret_manager.to_string(),
+            ]);
         }
         if let Some(env) = self.env {
             opts.extend(vec!["--env".to_string(), env]);

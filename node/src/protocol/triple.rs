@@ -1,5 +1,6 @@
 use super::cryptography::CryptographicError;
 use super::message::TripleMessage;
+use crate::storage::triple_storage::{LockTripleNodeStorageBox, TripleData};
 use crate::types::TripleProtocol;
 use crate::util::AffinePointExt;
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
@@ -7,11 +8,9 @@ use cait_sith::triples::{TriplePub, TripleShare};
 use highway::{HighwayHash, HighwayHasher};
 use k256::elliptic_curve::group::GroupEncoding;
 use k256::Secp256k1;
+use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
-use serde::{Deserialize, Serialize};
-use crate::storage::triple_storage::{LockTripleNodeStorageBox, TripleData};
-
 
 /// Unique number used to identify a specific ongoing triple generation protocol.
 /// Without `TripleId` it would be unclear where to route incoming cait-sith triple generation
@@ -39,7 +38,7 @@ pub struct TripleManager {
     pub me: Participant,
     pub threshold: usize,
     pub epoch: u64,
-    pub triple_storage: LockTripleNodeStorageBox
+    pub triple_storage: LockTripleNodeStorageBox,
 }
 
 impl TripleManager {
@@ -49,7 +48,7 @@ impl TripleManager {
         threshold: usize,
         epoch: u64,
         triples: Option<HashMap<TripleId, Triple>>,
-        triple_storage: LockTripleNodeStorageBox
+        triple_storage: LockTripleNodeStorageBox,
     ) -> Self {
         Self {
             triples: triples.unwrap_or(HashMap::new()),
@@ -59,7 +58,7 @@ impl TripleManager {
             me,
             threshold,
             epoch,
-            triple_storage
+            triple_storage,
         }
     }
 
@@ -96,7 +95,11 @@ impl TripleManager {
     /// if both of them are present.
     /// It is very important to NOT reuse the same triple twice for two different
     /// protocols.
-    pub async fn take_two(&mut self, id0: TripleId, id1: TripleId) -> Result<(Triple, Triple), TripleId> {
+    pub async fn take_two(
+        &mut self,
+        id0: TripleId,
+        id1: TripleId,
+    ) -> Result<(Triple, Triple), TripleId> {
         if !self.triples.contains_key(&id0) {
             Err(id0)
         } else if !self.triples.contains_key(&id1) {
@@ -106,18 +109,27 @@ impl TripleManager {
             let triple2 = self.triples.remove(&id1).unwrap();
             let mut write_lock = self.triple_storage.write().await;
             let account_id = &write_lock.account_id();
-            match write_lock.delete(TripleData {account_id: account_id.clone(), triple: triple1.clone()}).await {
+            match write_lock
+                .delete(TripleData {
+                    account_id: account_id.clone(),
+                    triple: triple1.clone(),
+                })
+                .await
+            {
                 Ok(()) => tracing::info!(id0, "successfully deleted triple"),
                 Err(error) => tracing::info!(id0, ?error, "delete triple failed"),
             }
-            match write_lock.delete(TripleData {account_id: account_id.clone(), triple: triple2.clone()}).await {
+            match write_lock
+                .delete(TripleData {
+                    account_id: account_id.clone(),
+                    triple: triple2.clone(),
+                })
+                .await
+            {
                 Ok(()) => tracing::info!(id1, "successfully deleted triple"),
                 Err(error) => tracing::info!(id1, ?error, "delete triple failed"),
             }
-            Ok((
-                triple1,
-                triple2
-            ))
+            Ok((triple1, triple2))
         }
     }
 
@@ -253,7 +265,7 @@ impl TripleManager {
 
                         self.triples.insert(*id, triple.clone());
                         //runtime.block_on(async {
-                            // perform async operations
+                        // perform async operations
                         //});
                         async_triples_to_insert.push(triple.clone());
                         // Do not retain the protocol
@@ -266,7 +278,13 @@ impl TripleManager {
         let mut write_lock = self.triple_storage.write().await;
         let account_id = write_lock.account_id().clone();
         for triple in async_triples_to_insert {
-            match write_lock.insert(TripleData { account_id: account_id.clone(), triple }).await {
+            match write_lock
+                .insert(TripleData {
+                    account_id: account_id.clone(),
+                    triple,
+                })
+                .await
+            {
                 Ok(()) => tracing::info!("successfully inserted triple"),
                 Err(error) => tracing::info!("triple insertion failed: {}", error),
             }
@@ -286,8 +304,8 @@ mod test {
     use std::io::prelude::*;
 
     use super::TripleManager;
-    use std::sync::Arc;
     use crate::storage::triple_storage::LockTripleNodeStorageBox;
+    use std::sync::Arc;
     use tokio::sync::RwLock;
 
     struct TestManagers {
@@ -299,10 +317,20 @@ mod test {
             let range = 0..number;
             // Self::wipe_mailboxes(range.clone());
             let participants: Vec<Participant> = range.clone().map(Participant::from).collect();
-            let managers = range.clone()
+            let managers = range
+                .clone()
                 .map(|num| {
-                    let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(storage::triple_storage::init(&None, num.to_string())));
-                    TripleManager::new(participants.clone(), Participant::from(num), number as usize, 0, None, triple_storage)
+                    let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(
+                        storage::triple_storage::init(&None, num.to_string()),
+                    ));
+                    TripleManager::new(
+                        participants.clone(),
+                        Participant::from(num),
+                        number as usize,
+                        0,
+                        None,
+                        triple_storage,
+                    )
                 })
                 .collect();
             TestManagers { managers }
@@ -378,7 +406,6 @@ mod test {
     // Improve this before we make more similar tests
     #[test]
     fn happy_triple_generation() {
-
         const M: usize = 2;
         const N: usize = M + 3;
         // Generate 5 triples
@@ -392,57 +419,57 @@ mod test {
             tm.generate(1).unwrap();
             tm.generate(2).unwrap();
             tm.generate(4).unwrap();
-    
+
             tm.poke_until_quiet().await.unwrap();
-    
+
             let inputs = tm
                 .managers
                 .into_iter()
                 .map(|m| (m.my_len(), m.len(), m.generators, m.triples));
-    
+
             let (my_lens, lens, generators, mut triples): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) =
                 multiunzip(inputs);
-            
-                assert_eq!(
-                    my_lens.iter().sum::<usize>(),
-                    N,
-                    "There should be {N} owned completed triples in total",
-                );
-        
-                for l in lens {
-                    assert_eq!(l, N, "All nodes should have {N} completed triples")
-                }
-            
+
+            assert_eq!(
+                my_lens.iter().sum::<usize>(),
+                N,
+                "There should be {N} owned completed triples in total",
+            );
+
+            for l in lens {
+                assert_eq!(l, N, "All nodes should have {N} completed triples")
+            }
+
             // This passes, but we don't have deterministic entropy or enough triples
-        // to ensure that it will no coincidentally fail
-        // TODO: deterministic entropy for testing
-        // assert_ne!(
-        //     my_lens,
-        //     vec![M, 1, 1, 0, 1],
-        //     "The nodes that started the triple don't own it"
-        // );
+            // to ensure that it will no coincidentally fail
+            // TODO: deterministic entropy for testing
+            // assert_ne!(
+            //     my_lens,
+            //     vec![M, 1, 1, 0, 1],
+            //     "The nodes that started the triple don't own it"
+            // );
 
-        for g in generators.iter() {
-            assert!(g.is_empty(), "There are no triples still being generated")
-        }
+            for g in generators.iter() {
+                assert!(g.is_empty(), "There are no triples still being generated")
+            }
 
-        assert_ne!(
-            triples.len(),
-            1,
-            "The number of triples is not 1 before deduping"
-        );
+            assert_ne!(
+                triples.len(),
+                1,
+                "The number of triples is not 1 before deduping"
+            );
 
-        triples.dedup_by_key(|kv| {
-            kv.iter_mut()
-                .map(|(id, triple)| (*id, (triple.id, triple.public.clone())))
-                .collect::<HashMap<_, _>>()
-        });
+            triples.dedup_by_key(|kv| {
+                kv.iter_mut()
+                    .map(|(id, triple)| (*id, (triple.id, triple.public.clone())))
+                    .collect::<HashMap<_, _>>()
+            });
 
-        assert_eq!(
-            triples.len(),
-            1,
-            "All triple IDs and public parts are identical"
-        )
+            assert_eq!(
+                triples.len(),
+                1,
+                "All triple IDs and public parts are identical"
+            )
         });
     }
 }

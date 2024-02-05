@@ -34,8 +34,8 @@ use tokio::sync::mpsc::{self, error::TryRecvError};
 use tokio::sync::RwLock;
 use url::Url;
 
-use mpc_keys::hpke;
 use crate::storage::triple_storage::LockTripleNodeStorageBox;
+use mpc_keys::hpke;
 
 struct Ctx {
     my_address: Url,
@@ -175,7 +175,7 @@ impl MpcSignProtocol {
             sign_sk: signer.secret_key.clone(),
             signer,
             secret_storage,
-            triple_storage
+            triple_storage,
         };
         let protocol = MpcSignProtocol {
             ctx,

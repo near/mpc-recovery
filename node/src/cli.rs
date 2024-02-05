@@ -1,6 +1,7 @@
-use crate::protocol::{MpcSignProtocol, SignQueue};
-use crate::{indexer, storage, web};
 use crate::gcp::GcpService;
+use crate::protocol::{MpcSignProtocol, SignQueue};
+use crate::storage::triple_storage::LockTripleNodeStorageBox;
+use crate::{indexer, storage, web};
 use clap::Parser;
 use local_ip_address::local_ip;
 use near_crypto::{InMemorySigner, SecretKey};
@@ -10,7 +11,6 @@ use std::thread;
 use tokio::sync::{mpsc, RwLock};
 use tracing_subscriber::EnvFilter;
 use url::Url;
-use crate::storage::triple_storage::LockTripleNodeStorageBox;
 
 use mpc_keys::hpke;
 
@@ -138,7 +138,9 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                     let (sender, receiver) = mpsc::channel(16384);
                     let gcp_service = GcpService::init(&storage_options).await?;
                     let key_storage = storage::secret_storage::init(&gcp_service, &storage_options);
-                    let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(storage::triple_storage::init(&gcp_service, account_id.to_string())));
+                    let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(
+                        storage::triple_storage::init(&gcp_service, account_id.to_string()),
+                    ));
 
                     let my_address = my_address.unwrap_or_else(|| {
                         let my_ip = local_ip().unwrap();
@@ -158,7 +160,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                         sign_queue.clone(),
                         hpke::PublicKey::try_from_bytes(&hex::decode(cipher_pk)?)?,
                         key_storage,
-                        triple_storage
+                        triple_storage,
                     );
                     tracing::debug!("protocol initialized");
                     let protocol_handle = tokio::spawn(async move { protocol.run().await });

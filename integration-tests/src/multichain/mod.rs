@@ -6,11 +6,11 @@ use crate::{initialize_lake_indexer, LakeIndexerCtx};
 use mpc_contract::primitives::CandidateInfo;
 use mpc_recovery_node::gcp::GcpService;
 use mpc_recovery_node::storage;
+use mpc_recovery_node::storage::triple_storage::TripleNodeStorageBox;
 use near_workspaces::network::Sandbox;
 use near_workspaces::{AccountId, Contract, Worker};
 use serde_json::json;
 use std::collections::HashMap;
-use mpc_recovery_node::storage::triple_storage::TripleNodeStorageBox;
 
 const NETWORK: &str = "mpc_it_network";
 
@@ -116,7 +116,8 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
 
     let gcp_project_id = "multichain-integration";
     let datastore =
-        crate::env::containers::Datastore::run(docker_client, docker_network, gcp_project_id).await?;
+        crate::env::containers::Datastore::run(docker_client, docker_network, gcp_project_id)
+            .await?;
 
     let storage_options = mpc_recovery_node::storage::Options {
         gcp_project_id: Some("multichain-integration".to_string()),
@@ -134,7 +135,7 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
         worker,
         mpc_contract,
         datastore,
-        storage_options
+        storage_options,
     })
 }
 

@@ -2,23 +2,23 @@ pub mod error;
 pub mod value;
 
 use self::value::{FromValue, IntoValue};
+use crate::gcp::error::DatastoreStorageError;
+use crate::storage;
+use google_datastore1::api::Filter;
 use google_datastore1::api::{
     CommitRequest, Entity, EntityResult, Key, KindExpression, LookupRequest, Mutation, PathElement,
     Query, RunQueryRequest,
 };
 use google_datastore1::oauth2::AccessTokenAuthenticator;
 use google_datastore1::Datastore;
+use google_secretmanager1::api::{AddSecretVersionRequest, SecretPayload};
 use google_secretmanager1::oauth2::authenticator::ApplicationDefaultCredentialsTypes;
 use google_secretmanager1::oauth2::{
     ApplicationDefaultCredentialsAuthenticator, ApplicationDefaultCredentialsFlowOpts,
 };
 use google_secretmanager1::SecretManager;
-use google_secretmanager1::api::{AddSecretVersionRequest, SecretPayload};
 use hyper::client::HttpConnector;
 use hyper_rustls::HttpsConnector;
-use crate::gcp::error::DatastoreStorageError;
-use crate::storage;
-use google_datastore1::api::Filter;
 
 pub type SecretResult<T> = std::result::Result<T, error::SecretStorageError>;
 
@@ -54,7 +54,11 @@ impl SecretManagerService {
         }
     }
 
-    pub async fn store_secret<T: AsRef<str>>(&mut self, data: &Vec<u8>, name: T) -> SecretResult<()> {
+    pub async fn store_secret<T: AsRef<str>>(
+        &mut self,
+        data: &Vec<u8>,
+        name: T,
+    ) -> SecretResult<()> {
         self.secret_manager
             .projects()
             .secrets_add_version(
@@ -64,10 +68,7 @@ impl SecretManagerService {
                         ..Default::default()
                     }),
                 },
-                &format!(
-                    "projects/{}/secrets/{}",
-                    self.project_id, name.as_ref()
-                ),
+                &format!("projects/{}/secrets/{}", self.project_id, name.as_ref()),
             )
             .doit()
             .await?;
@@ -79,7 +80,7 @@ impl SecretManagerService {
 pub struct DatastoreService {
     datastore: Datastore<HttpsConnector<HttpConnector>>,
     project_id: String,
-    env: String
+    env: String,
 }
 
 pub type DatastoreResult<T> = std::result::Result<T, error::DatastoreStorageError>;
@@ -246,7 +247,10 @@ impl DatastoreService {
         Ok(())
     }
 
-    pub async fn fetch_entities<T: KeyKind>(&self, filter: Option<Filter>) -> DatastoreResult<Vec<EntityResult>> {
+    pub async fn fetch_entities<T: KeyKind>(
+        &self,
+        filter: Option<Filter>,
+    ) -> DatastoreResult<Vec<EntityResult>> {
         let kind: String = format!("{}-{}", T::kind(), self.env);
         let req = RunQueryRequest {
             database_id: Some("".to_string()),
@@ -271,12 +275,16 @@ impl DatastoreService {
             .run_query(req, &self.project_id)
             .doit()
             .await?;
-        let batch = query_resp
-            .batch
-            .ok_or_else(|| DatastoreStorageError::FetchEntitiesError("Could not retrieve batch while fetching entities".to_string()))?;
+        let batch = query_resp.batch.ok_or_else(|| {
+            DatastoreStorageError::FetchEntitiesError(
+                "Could not retrieve batch while fetching entities".to_string(),
+            )
+        })?;
 
         batch.entity_results.ok_or_else(|| {
-            DatastoreStorageError::FetchEntitiesError("Could not retrieve entity results while fetching entities".to_string())
+            DatastoreStorageError::FetchEntitiesError(
+                "Could not retrieve entity results while fetching entities".to_string(),
+            )
         })
     }
 
@@ -330,28 +338,27 @@ pub struct GcpService {
 }
 
 impl GcpService {
-    pub async fn init(
-        storage_options: &storage::Options,
-    ) -> anyhow::Result<Option<Self>> {
+    pub async fn init(storage_options: &storage::Options) -> anyhow::Result<Option<Self>> {
         match storage_options.gcp_project_id.clone() {
             Some(project_id_non_empty) if storage_options.env.is_some() => {
                 let mut datastore;
                 let secret_manager;
                 let client = hyper::Client::builder().build(
-            hyper_rustls::HttpsConnectorBuilder::new()
-                    .with_native_roots()
-                    .https_or_http()
-                    .enable_http1()
-                    .enable_http2()
-                    .build(),
+                    hyper_rustls::HttpsConnectorBuilder::new()
+                        .with_native_roots()
+                        .https_or_http()
+                        .enable_http1()
+                        .enable_http2()
+                        .build(),
                 );
                 if let Some(gcp_datastore_url) = storage_options.gcp_datastore_url.clone() {
-                // Assuming custom GCP URL points to an emulator, so the token does not matter
+                    // Assuming custom GCP URL points to an emulator, so the token does not matter
                     let authenticator = AccessTokenAuthenticator::builder("TOKEN".to_string())
                         .build()
                         .await?;
                     if let Some(true) = storage_options.use_gcp_secret_manager {
-                        secret_manager = Some(SecretManager::new(client.clone(), authenticator.clone()));
+                        secret_manager =
+                            Some(SecretManager::new(client.clone(), authenticator.clone()));
                     } else {
                         secret_manager = None;
                     }
@@ -360,14 +367,18 @@ impl GcpService {
                     datastore.root_url(gcp_datastore_url);
                 } else {
                     let opts = ApplicationDefaultCredentialsFlowOpts::default();
-                    let authenticator = match ApplicationDefaultCredentialsAuthenticator::builder(opts)
-                        .await
-                    {
-                        ApplicationDefaultCredentialsTypes::InstanceMetadata(auth) => auth.build().await?,
-                        ApplicationDefaultCredentialsTypes::ServiceAccount(auth) => auth.build().await?,
-                    };
+                    let authenticator =
+                        match ApplicationDefaultCredentialsAuthenticator::builder(opts).await {
+                            ApplicationDefaultCredentialsTypes::InstanceMetadata(auth) => {
+                                auth.build().await?
+                            }
+                            ApplicationDefaultCredentialsTypes::ServiceAccount(auth) => {
+                                auth.build().await?
+                            }
+                        };
                     if let Some(true) = storage_options.use_gcp_secret_manager {
-                        secret_manager = Some(SecretManager::new(client.clone(), authenticator.clone()));
+                        secret_manager =
+                            Some(SecretManager::new(client.clone(), authenticator.clone()));
                     } else {
                         secret_manager = None;
                     }
@@ -378,7 +389,7 @@ impl GcpService {
                 if let Some(sm) = secret_manager {
                     secret_manager_service = Some(SecretManagerService {
                         secret_manager: sm,
-                        project_id: project_id_non_empty.clone()
+                        project_id: project_id_non_empty.clone(),
                     });
                 } else {
                     secret_manager_service = None;
@@ -389,13 +400,12 @@ impl GcpService {
                     datastore: Some(DatastoreService {
                         datastore,
                         project_id: project_id_non_empty.clone(),
-                        env: storage_options.env.clone().unwrap()
+                        env: storage_options.env.clone().unwrap(),
                     }),
                     secret_manager: secret_manager_service,
-                    }))
-                }
-            _ => Ok(None)
+                }))
+            }
+            _ => Ok(None),
         }
-        
     }
 }

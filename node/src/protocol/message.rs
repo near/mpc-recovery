@@ -2,8 +2,8 @@ use super::cryptography::CryptographicError;
 use super::presignature::{self, PresignatureId};
 use super::state::{GeneratingState, NodeState, ResharingState, RunningState};
 use super::triple::TripleId;
-use crate::http_client::SendError;
 use crate::gcp::error::SecretStorageError;
+use crate::http_client::SendError;
 use async_trait::async_trait;
 use cait_sith::protocol::{InitializationError, MessageData, Participant, ProtocolError};
 use k256::Scalar;
@@ -220,14 +220,17 @@ impl MessageHandler for RunningState {
         for (id, queue) in queue.presignature_bins.entry(self.epoch).or_default() {
             let mut leftover_messages = Vec::new();
             while let Some(message) = queue.pop_front() {
-                match presignature_manager.get_or_generate(
-                    *id,
-                    message.triple0,
-                    message.triple1,
-                    &mut triple_manager,
-                    &self.public_key,
-                    &self.private_share,
-                ).await {
+                match presignature_manager
+                    .get_or_generate(
+                        *id,
+                        message.triple0,
+                        message.triple1,
+                        &mut triple_manager,
+                        &self.public_key,
+                        &self.private_share,
+                    )
+                    .await
+                {
                     Ok(protocol) => protocol.message(message.from, message.data),
                     Err(presignature::GenerationError::AlreadyGenerated) => {
                         tracing::info!(id, "presignature already generated, nothing left to do")

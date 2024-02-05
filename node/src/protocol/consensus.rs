@@ -4,11 +4,16 @@ use super::state::{
     WaitingForConsensusState,
 };
 use super::SignQueue;
+use crate::gcp::error::DatastoreStorageError;
+use crate::gcp::error::SecretStorageError;
 use crate::protocol::contract::primitives::Participants;
 use crate::protocol::presignature::PresignatureManager;
 use crate::protocol::signature::SignatureManager;
 use crate::protocol::state::{GeneratingState, ResharingState};
 use crate::protocol::triple::TripleManager;
+use crate::protocol::triple::{Triple, TripleId};
+use crate::storage::secret_storage::SecretNodeStorageBox;
+use crate::storage::triple_storage::LockTripleNodeStorageBox;
 use crate::types::{KeygenProtocol, ReshareProtocol, SecretKeyShare};
 use crate::util::AffinePointExt;
 use crate::{http_client, rpc_client};
@@ -19,15 +24,10 @@ use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
 use near_primitives::types::AccountId;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use url::Url;
-use crate::storage::secret_storage::SecretNodeStorageBox;
-use crate::gcp::error::SecretStorageError;
-use crate::gcp::error::DatastoreStorageError;
-use crate::storage::triple_storage::LockTripleNodeStorageBox;
-use std::collections::HashMap;
-use crate::protocol::triple::{TripleId, Triple};
 
 pub trait ConsensusCtx {
     fn my_account_id(&self) -> &AccountId;
@@ -121,10 +121,7 @@ impl ConsensusProtocol for StartedState {
                         Ordering::Equal => {
                             let account_id = ctx.my_account_id();
                             let sign_queue = ctx.sign_queue();
-                            match contract_state
-                                .participants
-                                .find_participant(account_id)
-                            {
+                            match contract_state.participants.find_participant(account_id) {
                                 Some(me) => {
                                     tracing::info!(
                                         "started: contract state is running and we are already a participant"
@@ -144,7 +141,7 @@ impl ConsensusProtocol for StartedState {
                                             contract_state.threshold,
                                             epoch,
                                             self.triples,
-                                            ctx.triple_storage()
+                                            ctx.triple_storage(),
                                         ))),
                                         presignature_manager: Arc::new(RwLock::new(
                                             PresignatureManager::new(
@@ -362,7 +359,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                             self.threshold,
                             self.epoch,
                             None,
-                            ctx.triple_storage()
+                            ctx.triple_storage(),
                         ))),
                         presignature_manager: Arc::new(RwLock::new(PresignatureManager::new(
                             participants_vec.clone(),
@@ -692,14 +689,18 @@ impl ConsensusProtocol for NodeState {
                 drop(read_lock);
                 let triples_map: Option<HashMap<TripleId, Triple>> = match triples {
                     Ok(vec_triple_data) => {
-                        let triple_map = vec_triple_data.into_iter()
+                        let triple_map = vec_triple_data
+                            .into_iter()
                             .map(|triple_data| (triple_data.triple.id, triple_data.triple))
                             .collect();
                         Some(triple_map)
                     }
                     _ => None,
                 };
-                Ok(NodeState::Started(StartedState{persistent_node_data, triples: triples_map}))
+                Ok(NodeState::Started(StartedState {
+                    persistent_node_data,
+                    triples: triples_map,
+                }))
             }
             NodeState::Started(state) => state.advance(ctx, contract_state).await,
             NodeState::Generating(state) => state.advance(ctx, contract_state).await,
