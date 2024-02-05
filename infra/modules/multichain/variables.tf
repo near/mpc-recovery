@@ -6,14 +6,6 @@ variable "env" {
   type = string
 }
 
-variable "datastore_url" {
-  type = string
-}
-
-variable "use_gcp_secret_manager" {
-  default = true
-}
-
 variable "region" {
 }
 

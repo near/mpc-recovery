@@ -114,16 +114,8 @@ resource "google_cloud_run_v2_service" "node" {
         value = var.env
       }
       env {
-        name  = "MPC_RECOVERY_GCP_DATASTORE_URL"
-        value = var.datastore_url
-      }
-      env {
         name  = "MPC_RECOVERY_WEB_PORT"
         value = "3000"
-      }
-      env {
-        name = "MPC_RECOVERY_USE_GCP_SECRET_MANAGER"
-        value = var.use_gcp_secret_manager
       }
       env {
         name  = "RUST_LOG"

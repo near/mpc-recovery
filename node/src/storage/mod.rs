@@ -15,10 +15,6 @@ pub struct Options {
     /// GCP Datastore URL that will be used to load/store the node's triples and presignatures.
     #[arg(long, env("MPC_RECOVERY_GCP_DATASTORE_URL"))]
     pub gcp_datastore_url: Option<String>,
-    /// Mostly for integration tests.
-    /// whether to use in memory secret manager.
-    #[arg(long, env("MPC_RECOVERY_USE_GCP_SECRET_MANAGER"))]
-    pub use_gcp_secret_manager: Option<bool>,
     /// env used to suffix datastore table names to differentiate among environments.
     #[clap(long, env("MPC_RECOVERY_ENV"))]
     pub env: Option<String>,
@@ -36,12 +32,6 @@ impl Options {
         }
         if let Some(gcp_datastore_url) = self.gcp_datastore_url {
             opts.extend(vec!["--gcp-datastore-url".to_string(), gcp_datastore_url]);
-        }
-        if let Some(use_gcp_secret_manager) = self.use_gcp_secret_manager {
-            opts.extend(vec![
-                "--use-gcp-secret-manager".to_string(),
-                use_gcp_secret_manager.to_string(),
-            ]);
         }
         if let Some(env) = self.env {
             opts.extend(vec!["--env".to_string(), env]);

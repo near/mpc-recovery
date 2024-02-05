@@ -356,12 +356,7 @@ impl GcpService {
                     let authenticator = AccessTokenAuthenticator::builder("TOKEN".to_string())
                         .build()
                         .await?;
-                    if let Some(true) = storage_options.use_gcp_secret_manager {
-                        secret_manager =
-                            Some(SecretManager::new(client.clone(), authenticator.clone()));
-                    } else {
-                        secret_manager = None;
-                    }
+                    secret_manager = None;
                     datastore = Datastore::new(client, authenticator);
                     datastore.base_url(gcp_datastore_url.clone());
                     datastore.root_url(gcp_datastore_url);
@@ -376,12 +371,7 @@ impl GcpService {
                                 auth.build().await?
                             }
                         };
-                    if let Some(true) = storage_options.use_gcp_secret_manager {
-                        secret_manager =
-                            Some(SecretManager::new(client.clone(), authenticator.clone()));
-                    } else {
-                        secret_manager = None;
-                    }
+                    secret_manager = Some(SecretManager::new(client.clone(), authenticator.clone()));
                     datastore = Datastore::new(client, authenticator);
                 }
 

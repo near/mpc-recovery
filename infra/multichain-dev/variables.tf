@@ -4,14 +4,6 @@ variable "env" {
 variable "project" {
 }
 
-variable "datastore_url" {
-  default = null
-}
-
-variable "use_gcp_secret_manager" {
-  default = true
-}
-
 variable "credentials_file" {
   default = null
 }
