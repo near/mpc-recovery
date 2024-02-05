@@ -43,10 +43,6 @@ resource "google_cloud_run_v2_service" "signer" {
         value = var.env
       }
       env {
-        name = "MPC_RECOVERY_USE_GCP_SECRET_MANAGER"
-        value = var.use_gcp_secret_manager
-      }
-      env {
         name = "MPC_RECOVERY_CIPHER_KEY"
         value_source {
           secret_key_ref {

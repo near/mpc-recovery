@@ -122,6 +122,10 @@ resource "google_cloud_run_v2_service" "node" {
         value = "3000"
       }
       env {
+        name = "MPC_RECOVERY_USE_GCP_SECRET_MANAGER"
+        value = var.use_gcp_secret_manager
+      }
+      env {
         name  = "RUST_LOG"
         value = "mpc_recovery_node=debug"
       }
