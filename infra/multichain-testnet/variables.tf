@@ -8,6 +8,10 @@ variable "datastore_url" {
   default = null
 }
 
+variale "use_gcp_secret_manager {
+  default = true
+}
+
 variable "credentials_file" {
   default = null
 }

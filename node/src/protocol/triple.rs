@@ -280,7 +280,7 @@ impl TripleManager {
 mod test {
     use std::{collections::HashMap, fs::OpenOptions, ops::Range};
 
-    use crate::{protocol::message::TripleMessage, storage, gcp::GcpService};
+    use crate::{protocol::message::TripleMessage, storage};
     use cait_sith::protocol::{InitializationError, Participant, ProtocolError};
     use itertools::multiunzip;
     use std::io::prelude::*;
@@ -299,11 +299,9 @@ mod test {
             let range = 0..number;
             // Self::wipe_mailboxes(range.clone());
             let participants: Vec<Participant> = range.clone().map(Participant::from).collect();
-            let env = "xiangyi-dev".to_string();
-            let gcp_service = Some(GcpService::test_init(env).await);
             let managers = range.clone()
                 .map(|num| {
-                    let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(storage::triple_storage::init(&gcp_service, num.to_string())));
+                    let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(storage::triple_storage::init(&None, num.to_string())));
                     TripleManager::new(participants.clone(), Participant::from(num), number as usize, 0, None, triple_storage)
                 })
                 .collect();
