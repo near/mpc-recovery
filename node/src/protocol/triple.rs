@@ -51,9 +51,28 @@ impl TripleManager {
         triple_storage: LockTripleNodeStorageBox,
     ) -> Self {
         let mut mine: VecDeque<TripleId> = VecDeque::new();
+        let num_participants = participants.len();
         if let Some(triple_map) = triples.clone() {
-            for key in triple_map.keys() {
-                mine.push_back(key.clone());
+            for (key, triple) in triple_map {
+                let triple_is_mine = {
+                    // This is an entirely unpredictable value to all participants because it's a combination of big_c_i
+                    // It is the same value across all participants
+                    let big_c = triple.public.big_c;
+
+                    // We turn this into a u64 in a way not biased to the structure of the byte serialisation so we hash it
+                    // We use Highway Hash because the DefaultHasher doesn't guarantee a consistent output across versions
+                    let entropy =
+                        HighwayHasher::default().hash64(&big_c.to_bytes()) as usize;
+
+                    // This has a *tiny* bias towards lower indexed participants, they're up to (1 + num_participants / u64::MAX)^2 times more likely to be selected
+                    // This is acceptably small that it will likely never result in a biased selection happening
+                    let triple_owner = participants[entropy % num_participants];
+
+                    triple_owner == me
+                };
+                if triple_is_mine {
+                    mine.push_back(key.clone());
+                }
             }
         }
         Self {
@@ -270,9 +289,7 @@ impl TripleManager {
                         }
 
                         self.triples.insert(*id, triple.clone());
-                        //runtime.block_on(async {
-                        // perform async operations
-                        //});
+
                         async_triples_to_insert.push(triple.clone());
                         // Do not retain the protocol
                         break false;
