@@ -60,7 +60,10 @@ impl SecretNodeStorage for SecretManagerNodeStorage {
             .await?;
         match raw_data {
             Some(data) if data.len() > 1 => Ok(Some(serde_json::from_slice(&data)?)),
-            _ => Ok(None),
+            _ => {
+                tracing::info!("failed to load existing key share, presuming it is missing");
+                Ok(None)
+            }
         }
     }
 }

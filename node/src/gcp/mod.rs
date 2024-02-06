@@ -64,7 +64,7 @@ impl SecretManagerService {
             .secrets_add_version(
                 AddSecretVersionRequest {
                     payload: Some(SecretPayload {
-                        data: Some(serde_json::to_vec(data)?),
+                        data: Some(data.clone()),
                         ..Default::default()
                     }),
                 },
