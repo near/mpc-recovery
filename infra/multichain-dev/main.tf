@@ -98,6 +98,13 @@ resource "google_secret_manager_secret_iam_member" "sk_share_secret_manager" {
   member    = "serviceAccount:${google_service_account.service_account.email}"
 }
 
+resource "google_project_iam_member" "datastore_iam_member" {
+  count = length(var.node_configs)
+  project   = var.project
+  role      = "roles/datastore.user"
+  member    = "serviceAccount:${google_service_account.service_account.email}"
+}
+
 module "node" {
   count  = length(var.node_configs)
   source = "../modules/multichain"
