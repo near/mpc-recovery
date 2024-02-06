@@ -50,10 +50,16 @@ impl TripleManager {
         triples: Option<HashMap<TripleId, Triple>>,
         triple_storage: LockTripleNodeStorageBox,
     ) -> Self {
+        let mut mine: VecDeque<TripleId> = VecDeque::new();
+        if let Some(triple_map) = triples.clone() {
+            for key in triple_map.keys() {
+                mine.push_back(key.clone());
+            }
+        }
         Self {
             triples: triples.unwrap_or(HashMap::new()),
             generators: HashMap::new(),
-            mine: VecDeque::new(),
+            mine,
             participants,
             me,
             threshold,
