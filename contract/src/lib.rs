@@ -317,16 +317,22 @@ impl MpcContract {
         payload: [u8; 32],
         depth: usize,
     ) -> PromiseOrValue<(String, String)> {
-        log!("sign_helper: payload={:?} depth={}", payload, depth);
         if let Some(signature) = self.pending_requests.get(&payload) {
             match signature {
                 Some(signature) => {
-                    log!("signature ready: {:?}, depth: {:?}", signature, depth);
+                    log!(
+                        "sign_helper: signature ready: {:?}, depth: {:?}",
+                        signature,
+                        depth
+                    );
                     self.pending_requests.remove(&payload);
                     PromiseOrValue::Value(signature)
                 }
                 None => {
-                    log!(&format!("signature not ready yet (depth={})", depth));
+                    log!(&format!(
+                        "sign_helper: signature not ready yet (depth={})",
+                        depth
+                    ));
                     let account_id = env::current_account_id();
                     PromiseOrValue::Promise(Self::ext(account_id).sign_helper(payload, depth + 1))
                 }
