@@ -61,8 +61,7 @@ impl TripleManager {
 
                     // We turn this into a u64 in a way not biased to the structure of the byte serialisation so we hash it
                     // We use Highway Hash because the DefaultHasher doesn't guarantee a consistent output across versions
-                    let entropy =
-                        HighwayHasher::default().hash64(&big_c.to_bytes()) as usize;
+                    let entropy = HighwayHasher::default().hash64(&big_c.to_bytes()) as usize;
 
                     // This has a *tiny* bias towards lower indexed participants, they're up to (1 + num_participants / u64::MAX)^2 times more likely to be selected
                     // This is acceptably small that it will likely never result in a biased selection happening

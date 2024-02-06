@@ -371,7 +371,8 @@ impl GcpService {
                                 auth.build().await?
                             }
                         };
-                    secret_manager = Some(SecretManager::new(client.clone(), authenticator.clone()));
+                    secret_manager =
+                        Some(SecretManager::new(client.clone(), authenticator.clone()));
                     datastore = Datastore::new(client, authenticator);
                 }
 
