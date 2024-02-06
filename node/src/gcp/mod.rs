@@ -54,11 +54,7 @@ impl SecretManagerService {
         }
     }
 
-    pub async fn store_secret<T: AsRef<str>>(
-        &mut self,
-        data: &[u8],
-        name: T,
-    ) -> SecretResult<()> {
+    pub async fn store_secret<T: AsRef<str>>(&mut self, data: &[u8], name: T) -> SecretResult<()> {
         self.secret_manager
             .projects()
             .secrets_add_version(
