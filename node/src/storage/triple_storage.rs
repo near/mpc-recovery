@@ -137,7 +137,7 @@ impl TripleNodeStorage for MemoryTripleNodeStorage {
         for (_, triple) in self.triples.clone() {
             res.push(TripleData {
                 account_id: self.account_id(),
-                triple: triple,
+                triple,
             });
         }
         Ok(res)
@@ -157,7 +157,7 @@ struct DataStoreTripleNodeStorage {
 impl DataStoreTripleNodeStorage {
     fn new(datastore: DatastoreService, account_id: String) -> Self {
         Self {
-            datastore: datastore,
+            datastore,
             account_id,
         }
     }

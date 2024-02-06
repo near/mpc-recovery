@@ -134,7 +134,7 @@ impl ConsensusProtocol for StartedState {
                                         threshold: contract_state.threshold,
                                         private_share,
                                         public_key,
-                                        sign_queue: sign_queue,
+                                        sign_queue,
                                         triple_manager: Arc::new(RwLock::new(TripleManager::new(
                                             participants_vec.clone(),
                                             me,

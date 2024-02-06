@@ -56,7 +56,7 @@ impl SecretManagerService {
 
     pub async fn store_secret<T: AsRef<str>>(
         &mut self,
-        data: &Vec<u8>,
+        data: &[u8],
         name: T,
     ) -> SecretResult<()> {
         self.secret_manager
@@ -64,7 +64,7 @@ impl SecretManagerService {
             .secrets_add_version(
                 AddSecretVersionRequest {
                     payload: Some(SecretPayload {
-                        data: Some(data.clone()),
+                        data: Some(data.to_owned()),
                         ..Default::default()
                     }),
                 },
@@ -259,7 +259,7 @@ impl DatastoreService {
             query: Some(Query {
                 projection: None,
                 kind: Some(vec![KindExpression { name: Some(kind) }]),
-                filter: filter,
+                filter,
                 order: None,
                 distinct_on: Some(vec![]),
                 start_cursor: None,

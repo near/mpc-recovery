@@ -70,12 +70,12 @@ impl TripleManager {
                     triple_owner == me
                 };
                 if triple_is_mine {
-                    mine.push_back(key.clone());
+                    mine.push_back(key);
                 }
             }
         }
         Self {
-            triples: triples.unwrap_or(HashMap::new()),
+            triples: triples.unwrap_or_default(),
             generators: HashMap::new(),
             mine,
             participants,
@@ -89,6 +89,11 @@ impl TripleManager {
     /// Returns the number of unspent triples available in the manager.
     pub fn len(&self) -> usize {
         self.triples.len()
+    }
+
+    /// Returns if there's any unspent triple in the manager.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     /// Returns the number of unspent triples assigned to this node.
