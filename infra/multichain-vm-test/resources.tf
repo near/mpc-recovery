@@ -13,21 +13,21 @@ terraform {
 }
 
 data "google_secret_manager_secret_version" "account_sk_secret_id" {
-  count     = length(var.node_configs)
-  secret    = "multichain-account-sk-dev-${count.index}"
-  project   = var.project_id
+  count   = length(var.node_configs)
+  secret  = "multichain-account-sk-dev-${count.index}"
+  project = var.project_id
 }
 
 data "google_secret_manager_secret_version" "cipher_sk_secret_id" {
-  count     = length(var.node_configs)
-  secret = "multichain-cipher-sk-dev-${count.index}"
-  project   = var.project_id
+  count   = length(var.node_configs)
+  secret  = "multichain-cipher-sk-dev-${count.index}"
+  project = var.project_id
 }
 
 data "google_secret_manager_secret_version" "sk_share_secret_id" {
-  count     = length(var.node_configs)
-  secret    = "multichain-sk-share-dev-${count.index}"
-  project   = var.project_id
+  count   = length(var.node_configs)
+  secret  = "multichain-sk-share-dev-${count.index}"
+  project = var.project_id
 }
 
 data "google_secret_manager_secret_version" "aws_access_key_secret_id" {

@@ -73,6 +73,11 @@ variable "node_configs" {
   }))
 }
 
+variable "env" {
+  type = string
+  default = "dev"
+}
+
 variable "static_env" {
   type = list(object({
     name  = string

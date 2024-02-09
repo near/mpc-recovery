@@ -1,4 +1,4 @@
-# env          = "dev"
+env          = "dev"
 # project      = "pagoda-discovery-platform-dev"
 # docker_image = "us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/multichain/multichain-dev:latest"
 
