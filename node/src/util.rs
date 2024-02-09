@@ -7,14 +7,15 @@ pub trait NearPublicKeyExt {
     fn into_affine_point(self) -> PublicKey;
 }
 
-impl NearPublicKeyExt for near_sdk::PublicKey {
-    fn into_affine_point(self) -> PublicKey {
-        let mut bytes = self.into_bytes();
-        bytes[0] = 0x04;
-        let point = EncodedPoint::from_bytes(bytes).unwrap();
-        PublicKey::from_encoded_point(&point).unwrap()
-    }
-}
+// TODO: fix this when we update all near dependencies
+// impl NearPublicKeyExt for near_sdk::PublicKey {
+//     fn into_affine_point(self) -> PublicKey {
+//         let mut bytes = self.into_bytes();
+//         bytes[0] = 0x04;
+//         let point = EncodedPoint::from_bytes(bytes).unwrap();
+//         PublicKey::from_encoded_point(&point).unwrap()
+//     }
+// }
 
 impl NearPublicKeyExt for near_crypto::Secp256K1PublicKey {
     fn into_affine_point(self) -> PublicKey {

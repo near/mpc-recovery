@@ -1,7 +1,7 @@
 pub mod primitives;
 
 use crate::types::PublicKey;
-use crate::util::NearPublicKeyExt;
+use k256::elliptic_curve::sec1::FromEncodedPoint;
 use mpc_contract::ProtocolContractState;
 use near_primitives::types::AccountId;
 use serde::{Deserialize, Serialize};
@@ -39,11 +39,16 @@ pub struct RunningContractState {
 
 impl From<mpc_contract::RunningContractState> for RunningContractState {
     fn from(value: mpc_contract::RunningContractState) -> Self {
+        let mut bytes = value.public_key.into_bytes();
+        bytes[0] = 0x04;
+        let point = k256::EncodedPoint::from_bytes(bytes).unwrap();
+        let public_key = PublicKey::from_encoded_point(&point).unwrap();
+
         RunningContractState {
             epoch: value.epoch,
             participants: value.participants.into(),
             threshold: value.threshold,
-            public_key: value.public_key.into_affine_point(),
+            public_key,
             candidates: value.candidates.into(),
             join_votes: value.join_votes.into(),
             leave_votes: value.leave_votes.into(),
@@ -63,12 +68,17 @@ pub struct ResharingContractState {
 
 impl From<mpc_contract::ResharingContractState> for ResharingContractState {
     fn from(contract_state: mpc_contract::ResharingContractState) -> Self {
+        let mut bytes = contract_state.public_key.into_bytes();
+        bytes[0] = 0x04;
+        let point = k256::EncodedPoint::from_bytes(bytes).unwrap();
+        let public_key = PublicKey::from_encoded_point(&point).unwrap();
+
         ResharingContractState {
             old_epoch: contract_state.old_epoch,
             old_participants: contract_state.old_participants.into(),
             new_participants: contract_state.new_participants.into(),
             threshold: contract_state.threshold,
-            public_key: contract_state.public_key.into_affine_point(),
+            public_key,
             finished_votes: contract_state
                 .finished_votes
                 .into_iter()

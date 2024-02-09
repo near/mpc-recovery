@@ -223,9 +223,7 @@ impl From<mpc_contract::primitives::PkVotes> for PkVotes {
                         ),
                         participants
                             .into_iter()
-                            .map(|acc_id: near_sdk::AccountId| {
-                                AccountId::from_str(acc_id.as_ref()).unwrap()
-                            })
+                            .map(|acc_id| AccountId::from_str(acc_id.as_ref()).unwrap())
                             .collect(),
                     )
                 })
@@ -256,9 +254,7 @@ impl From<mpc_contract::primitives::Votes> for Votes {
                         AccountId::from_str(account_id.as_ref()).unwrap(),
                         participants
                             .into_iter()
-                            .map(|acc_id: near_sdk::AccountId| {
-                                AccountId::from_str(acc_id.as_ref()).unwrap()
-                            })
+                            .map(|acc_id| AccountId::from_str(acc_id.as_ref()).unwrap())
                             .collect(),
                     )
                 })
