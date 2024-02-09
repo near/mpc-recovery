@@ -47,35 +47,21 @@ impl TripleManager {
         me: Participant,
         threshold: usize,
         epoch: u64,
-        triples: Option<HashMap<TripleId, Triple>>,
+        triples: Option<Vec<TripleData>>,
         triple_storage: LockTripleNodeStorageBox,
     ) -> Self {
         let mut mine: VecDeque<TripleId> = VecDeque::new();
-        let num_participants = participants.len();
-        if let Some(triple_map) = triples.clone() {
-            for (key, triple) in triple_map {
-                let triple_is_mine = {
-                    // This is an entirely unpredictable value to all participants because it's a combination of big_c_i
-                    // It is the same value across all participants
-                    let big_c = triple.public.big_c;
-
-                    // We turn this into a u64 in a way not biased to the structure of the byte serialisation so we hash it
-                    // We use Highway Hash because the DefaultHasher doesn't guarantee a consistent output across versions
-                    let entropy = HighwayHasher::default().hash64(&big_c.to_bytes()) as usize;
-
-                    // This has a *tiny* bias towards lower indexed participants, they're up to (1 + num_participants / u64::MAX)^2 times more likely to be selected
-                    // This is acceptably small that it will likely never result in a biased selection happening
-                    let triple_owner = participants[entropy % num_participants];
-
-                    triple_owner == me
-                };
-                if triple_is_mine {
-                    mine.push_back(key);
+        let mut all_triples = HashMap::new();
+        if let Some(triple_data_vec) = triples.clone() {
+            for triple_data in triple_data_vec {
+                if triple_data.mine {
+                    mine.push_back(triple_data.triple.id);
                 }
+                all_triples.insert(triple_data.triple.id, triple_data.triple);
             }
         }
         Self {
-            triples: triples.unwrap_or_default(),
+            triples: all_triples,
             generators: HashMap::new(),
             mine,
             participants,
@@ -136,12 +122,15 @@ impl TripleManager {
         } else {
             let triple1 = self.triples.remove(&id0).unwrap();
             let triple2 = self.triples.remove(&id1).unwrap();
+            let mine1 = self.mine.contains(&triple1.id);
+            let mine2 = self.mine.contains(&triple2.id);
             let mut write_lock = self.triple_storage.write().await;
             let account_id = &write_lock.account_id();
             match write_lock
                 .delete(TripleData {
                     account_id: account_id.clone(),
                     triple: triple1.clone(),
+                    mine: mine1,
                 })
                 .await
             {
@@ -152,6 +141,7 @@ impl TripleManager {
                 .delete(TripleData {
                     account_id: account_id.clone(),
                     triple: triple2.clone(),
+                    mine: mine2,
                 })
                 .await
             {
@@ -305,10 +295,12 @@ impl TripleManager {
         let mut write_lock = self.triple_storage.write().await;
         let account_id = write_lock.account_id().clone();
         for triple in async_triples_to_insert {
+            let mine = self.mine.contains(&triple.id);
             match write_lock
                 .insert(TripleData {
                     account_id: account_id.clone(),
                     triple,
+                    mine,
                 })
                 .await
             {

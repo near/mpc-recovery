@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use google_datastore1::api::{
     Filter, Key, PathElement, PropertyFilter, PropertyReference, Value as DatastoreValue,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -18,6 +18,7 @@ use tokio::sync::RwLock;
 pub struct TripleData {
     pub account_id: String,
     pub triple: Triple,
+    pub mine: bool,
 }
 
 impl KeyKind for TripleData {
@@ -45,6 +46,7 @@ impl IntoValue for TripleData {
             "triple_public".to_string(),
             Value::StringValue(serde_json::to_string(&self.triple.public).unwrap()),
         );
+        properties.insert("mine".to_string(), Value::BooleanValue(self.mine));
         Value::EntityValue {
             key: Key {
                 path: Some(vec![PathElement {
@@ -87,6 +89,11 @@ impl FromValue for TripleData {
                 let triple_public = serde_json::from_str(&triple_public)
                     .map_err(|_| ConvertError::MalformedProperty("triple_public".to_string()))?;
 
+                let (_, mine) = properties
+                    .remove_entry("mine")
+                    .ok_or_else(|| ConvertError::MissingProperty("mine".to_string()))?;
+                let mine = bool::from_value(mine)?;
+
                 Ok(Self {
                     account_id,
                     triple: Triple {
@@ -94,6 +101,7 @@ impl FromValue for TripleData {
                         share: triple_share,
                         public: triple_public,
                     },
+                    mine,
                 })
             }
             value => Err(ConvertError::UnexpectedPropertyType {
@@ -117,27 +125,38 @@ pub trait TripleNodeStorage {
 #[derive(Default, Clone)]
 struct MemoryTripleNodeStorage {
     triples: HashMap<TripleId, Triple>,
+    mine: HashSet<TripleId>,
     account_id: String,
 }
 
 #[async_trait]
 impl TripleNodeStorage for MemoryTripleNodeStorage {
     async fn insert(&mut self, data: TripleData) -> TripleResult<()> {
-        self.triples.insert(data.triple.id, data.triple);
+        let triple = data.triple.clone();
+        let triple_id = data.triple.id;
+        self.triples.insert(triple_id, triple);
+        if data.mine {
+            self.mine.insert(triple_id);
+        }
         Ok(())
     }
 
     async fn delete(&mut self, data: TripleData) -> TripleResult<()> {
         self.triples.remove(&data.triple.id);
+        if data.mine {
+            self.mine.remove(&data.triple.id);
+        }
         Ok(())
     }
 
     async fn load(&self) -> TripleResult<Vec<TripleData>> {
         let mut res: Vec<TripleData> = vec![];
-        for (_, triple) in self.triples.clone() {
+        for (triple_id, triple) in self.triples.clone() {
+            let mine = self.mine.contains(&triple_id);
             res.push(TripleData {
                 account_id: self.account_id(),
                 triple,
+                mine,
             });
         }
         Ok(res)
@@ -225,6 +244,7 @@ pub fn init(gcp_service: &Option<GcpService>, account_id: String) -> TripleNodeS
         )) as TripleNodeStorageBox,
         _ => Box::new(MemoryTripleNodeStorage {
             triples: HashMap::new(),
+            mine: HashSet::new(),
             account_id,
         }) as TripleNodeStorageBox,
     }

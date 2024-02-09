@@ -5,12 +5,11 @@ use super::signature::SignatureManager;
 use super::triple::TripleManager;
 use super::SignQueue;
 use crate::http_client::MessageQueue;
-use crate::protocol::triple::{Triple, TripleId};
+use crate::storage::triple_storage::TripleData;
 use crate::types::{KeygenProtocol, PublicKey, ReshareProtocol, SecretKeyShare};
 use cait_sith::protocol::Participant;
 use near_primitives::types::AccountId;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -24,7 +23,7 @@ pub struct PersistentNodeData {
 #[derive(Clone)]
 pub struct StartedState {
     pub persistent_node_data: Option<PersistentNodeData>,
-    pub triples: Option<HashMap<TripleId, Triple>>,
+    pub triple_data: Option<Vec<TripleData>>,
 }
 
 #[derive(Clone)]

@@ -11,7 +11,6 @@ use crate::protocol::presignature::PresignatureManager;
 use crate::protocol::signature::SignatureManager;
 use crate::protocol::state::{GeneratingState, ResharingState};
 use crate::protocol::triple::TripleManager;
-use crate::protocol::triple::{Triple, TripleId};
 use crate::storage::secret_storage::SecretNodeStorageBox;
 use crate::storage::triple_storage::LockTripleNodeStorageBox;
 use crate::types::{KeygenProtocol, ReshareProtocol, SecretKeyShare};
@@ -24,7 +23,6 @@ use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
 use near_primitives::types::AccountId;
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use url::Url;
@@ -140,7 +138,7 @@ impl ConsensusProtocol for StartedState {
                                             me,
                                             contract_state.threshold,
                                             epoch,
-                                            self.triples,
+                                            self.triple_data,
                                             ctx.triple_storage(),
                                         ))),
                                         presignature_manager: Arc::new(RwLock::new(
@@ -685,21 +683,15 @@ impl ConsensusProtocol for NodeState {
                 let persistent_node_data = ctx.secret_storage().load().await?;
                 let triple_storage = ctx.triple_storage();
                 let read_lock = triple_storage.read().await;
-                let triples = read_lock.load().await;
+                let triple_data_result = read_lock.load().await;
                 drop(read_lock);
-                let triples_map: Option<HashMap<TripleId, Triple>> = match triples {
-                    Ok(vec_triple_data) => {
-                        let triple_map = vec_triple_data
-                            .into_iter()
-                            .map(|triple_data| (triple_data.triple.id, triple_data.triple))
-                            .collect();
-                        Some(triple_map)
-                    }
+                let triple_data = match triple_data_result {
+                    Ok(vec_triple_data) => Some(vec_triple_data),
                     _ => None,
                 };
                 Ok(NodeState::Started(StartedState {
                     persistent_node_data,
-                    triples: triples_map,
+                    triple_data,
                 }))
             }
             NodeState::Started(state) => state.advance(ctx, contract_state).await,
