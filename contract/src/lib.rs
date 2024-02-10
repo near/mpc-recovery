@@ -384,6 +384,7 @@ impl MpcContract {
     /// Key versions refer new versions of the root key that we may choose to generate on cohort changes
     /// Older key versions will always work but newer key versions were never held by older signers
     /// Newer key versions may also add new security features, like only existing within a secure enclave
+    /// Currently only 0 is a valid key version
     pub const fn latest_key_version(&self) -> u32 {
         0
     }
