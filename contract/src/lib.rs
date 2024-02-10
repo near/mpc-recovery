@@ -295,9 +295,6 @@ impl MpcContract {
 
     #[allow(unused_variables)]
     pub fn sign(&mut self, payload: [u8; 32], path: String, key_version: u32) -> Promise {
-        // Key versions refer new versions of the root key that we may choose to generate on cohort changes
-        // Older key versions will always work but newer key versions were never held by older signers
-        // Newer key versions may also add new security features, like only existing within a secure enclave
         let latest_key_version: u32 = self.latest_key_version();
         assert!(
             key_version <= latest_key_version,
@@ -384,6 +381,9 @@ impl MpcContract {
         }
     }
 
+    /// Key versions refer new versions of the root key that we may choose to generate on cohort changes
+    /// Older key versions will always work but newer key versions were never held by older signers
+    /// Newer key versions may also add new security features, like only existing within a secure enclave
     pub const fn latest_key_version(&self) -> u32 {
         0
     }
