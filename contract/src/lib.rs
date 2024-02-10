@@ -294,6 +294,7 @@ impl MpcContract {
     }
 
     #[allow(unused_variables)]
+    /// `key_version` must be less than or equal to the value at `latest_key_version`
     pub fn sign(&mut self, payload: [u8; 32], path: String, key_version: u32) -> Promise {
         let latest_key_version: u32 = self.latest_key_version();
         assert!(
