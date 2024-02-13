@@ -4,6 +4,7 @@ use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::LookupMap;
 use near_sdk::log;
 use near_sdk::serde::{Deserialize, Serialize};
+use near_sdk::store::key;
 use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault, Promise, PromiseOrValue, PublicKey};
 use primitives::{CandidateInfo, Candidates, Participants, PkVotes, Votes};
 use std::collections::{BTreeMap, HashSet};
@@ -295,7 +296,8 @@ impl MpcContract {
 
     #[allow(unused_variables)]
     /// `key_version` must be less than or equal to the value at `latest_key_version`
-    pub fn sign(&mut self, payload: [u8; 32], path: String, key_version: u32) -> Promise {
+    pub fn sign(&mut self, payload: [u8; 32], path: String, key_version: Option<u32>) -> Promise {
+        let key_version = key_version.unwrap_or(0);
         let latest_key_version: u32 = self.latest_key_version();
         assert!(
             key_version <= latest_key_version,
