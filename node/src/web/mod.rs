@@ -150,7 +150,7 @@ pub enum StateView {
         triple_potential_count: usize,
         presignature_count: usize,
         presignature_mine_count: usize,
-        presignature_potential_count: usize
+        presignature_potential_count: usize,
     },
     NotRunning,
 }
@@ -178,7 +178,7 @@ async fn state(Extension(state): Extension<Arc<AxumState>>) -> Result<Json<State
                 triple_potential_count,
                 presignature_count,
                 presignature_mine_count,
-                presignature_potential_count
+                presignature_potential_count,
             }))
         }
         _ => {
