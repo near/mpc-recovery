@@ -2,7 +2,7 @@ pub mod contract;
 mod cryptography;
 mod presignature;
 mod signature;
-mod triple;
+pub mod triple;
 
 pub mod consensus;
 pub mod message;
@@ -24,7 +24,7 @@ use crate::protocol::consensus::ConsensusProtocol;
 use crate::protocol::cryptography::CryptographicProtocol;
 use crate::protocol::message::{MessageHandler, MpcMessageQueue};
 use crate::rpc_client::{self};
-use crate::storage::SecretNodeStorageBox;
+use crate::storage::secret_storage::SecretNodeStorageBox;
 use cait_sith::protocol::Participant;
 use near_crypto::InMemorySigner;
 use near_primitives::types::AccountId;
@@ -34,6 +34,7 @@ use tokio::sync::mpsc::{self, error::TryRecvError};
 use tokio::sync::RwLock;
 use url::Url;
 
+use crate::storage::triple_storage::LockTripleNodeStorageBox;
 use mpc_keys::hpke;
 
 struct Ctx {
@@ -47,9 +48,10 @@ struct Ctx {
     cipher_pk: hpke::PublicKey,
     sign_sk: near_crypto::SecretKey,
     secret_storage: SecretNodeStorageBox,
+    triple_storage: LockTripleNodeStorageBox,
 }
 
-impl ConsensusCtx for &MpcSignProtocol {
+impl ConsensusCtx for &mut MpcSignProtocol {
     fn my_account_id(&self) -> &AccountId {
         &self.ctx.account_id
     }
@@ -92,6 +94,10 @@ impl ConsensusCtx for &MpcSignProtocol {
 
     fn secret_storage(&self) -> &SecretNodeStorageBox {
         &self.ctx.secret_storage
+    }
+
+    fn triple_storage(&mut self) -> LockTripleNodeStorageBox {
+        self.ctx.triple_storage.clone()
     }
 }
 
@@ -155,6 +161,7 @@ impl MpcSignProtocol {
         sign_queue: Arc<RwLock<SignQueue>>,
         cipher_pk: hpke::PublicKey,
         secret_storage: SecretNodeStorageBox,
+        triple_storage: LockTripleNodeStorageBox,
     ) -> (Self, Arc<RwLock<NodeState>>) {
         let state = Arc::new(RwLock::new(NodeState::Starting));
         let ctx = Ctx {
@@ -168,6 +175,7 @@ impl MpcSignProtocol {
             sign_sk: signer.secret_key.clone(),
             signer,
             secret_storage,
+            triple_storage,
         };
         let protocol = MpcSignProtocol {
             ctx,
@@ -225,7 +233,7 @@ impl MpcSignProtocol {
                     continue;
                 }
             };
-            let mut state = match state.advance(&self, contract_state).await {
+            let mut state = match state.advance(&mut self, contract_state).await {
                 Ok(state) => state,
                 Err(err) => {
                     tracing::info!("protocol unable to advance: {err:?}");

@@ -149,7 +149,7 @@ impl PresignatureManager {
     /// 3) Has never been seen by the manager in which case start a new protocol and returns `Some(protocol)`, or
     /// 4) Depends on triples (`triple0`/`triple1`) that are unknown to the node
     // TODO: What if the presignature completed generation and is already spent?
-    pub fn get_or_generate(
+    pub async fn get_or_generate(
         &mut self,
         id: PresignatureId,
         triple0: TripleId,
@@ -164,17 +164,18 @@ impl PresignatureManager {
             match self.generators.entry(id) {
                 Entry::Vacant(entry) => {
                     tracing::info!(id, "joining protocol to generate a new presignature");
-                    let (triple0, triple1) = match triple_manager.take_two(triple0, triple1) {
-                        Ok(result) => result,
-                        Err(missing_triple_id) => {
-                            tracing::warn!(
-                                triple0,
-                                triple1,
-                                "one of the triples is missing, can't join"
-                            );
-                            return Err(GenerationError::TripleIsMissing(missing_triple_id));
-                        }
-                    };
+                    let (triple0, triple1) =
+                        match triple_manager.take_two(triple0, triple1, false).await {
+                            Ok(result) => result,
+                            Err(missing_triple_id) => {
+                                tracing::warn!(
+                                    triple0,
+                                    triple1,
+                                    "one of the triples is missing, can't join"
+                                );
+                                return Err(GenerationError::TripleIsMissing(missing_triple_id));
+                            }
+                        };
                     let generator = Self::generate_internal(
                         &self.participants,
                         self.me,
