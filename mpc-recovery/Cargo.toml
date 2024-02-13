@@ -50,7 +50,7 @@ tracing-opentelemetry = "0.21.0"
 near-fetch = "0.0.12"
 near-jsonrpc-client = "0.6"
 near-jsonrpc-primitives = "0.17"
-near-primitives = "0.17"
+near-primitives = "0.17.0"
 near-crypto = "0.17"
 tower-http = { version = "0.4.0", features = ["cors"] }
 yup-oauth2 = "8"

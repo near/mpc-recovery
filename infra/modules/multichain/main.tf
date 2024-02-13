@@ -109,7 +109,10 @@ resource "google_cloud_run_v2_service" "node" {
         name  = "MPC_RECOVERY_SK_SHARE_SECRET_ID"
         value = var.sk_share_secret_id
       }
-
+      env {
+        name  = "MPC_RECOVERY_ENV"
+        value = var.env
+      }
       env {
         name  = "MPC_RECOVERY_WEB_PORT"
         value = "3000"
