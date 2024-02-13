@@ -7,6 +7,7 @@ use cait_sith::{KeygenOutput, PresignArguments, PresignOutput};
 use k256::Secp256k1;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
+use std::time::Instant;
 
 /// Unique number used to identify a specific ongoing presignature generation protocol.
 /// Without `PresignatureId` it would be unclear where to route incoming cait-sith presignature
@@ -25,6 +26,40 @@ pub struct PresignatureGenerator {
     pub triple0: TripleId,
     pub triple1: TripleId,
     pub mine: bool,
+    pub timestamp: Instant,
+}
+
+impl PresignatureGenerator {
+    pub fn new(
+        protocol: PresignatureProtocol,
+        triple0: TripleId,
+        triple1: TripleId,
+        mine: bool,
+    ) -> Self {
+        Self {
+            protocol,
+            triple0,
+            triple1,
+            mine,
+            timestamp: Instant::now(),
+        }
+    }
+
+    pub fn poke(&mut self) -> Result<Action<PresignOutput<Secp256k1>>, ProtocolError> {
+        if self.timestamp.elapsed() > crate::types::PROTOCOL_TIMEOUT {
+            tracing::info!(
+                self.triple0,
+                self.triple1,
+                self.mine,
+                "presignature protocol timed out"
+            );
+            return Err(ProtocolError::Other(
+                anyhow::anyhow!("presignature protocol timed out").into(),
+            ));
+        }
+
+        self.protocol.poke()
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -111,12 +146,9 @@ impl PresignatureManager {
                 threshold,
             },
         )?);
-        Ok(PresignatureGenerator {
-            protocol,
-            triple0: triple0.id,
-            triple1: triple1.id,
-            mine,
-        })
+        Ok(PresignatureGenerator::new(
+            protocol, triple0.id, triple1.id, mine,
+        ))
     }
 
     /// Starts a new presignature generation protocol.
@@ -212,8 +244,7 @@ impl PresignatureManager {
         let mut result = Ok(());
         self.generators.retain(|id, generator| {
             loop {
-                let protocol = &mut generator.protocol;
-                let action = match protocol.poke() {
+                let action = match generator.poke() {
                     Ok(action) => action,
                     Err(e) => {
                         result = Err(e);

@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use cait_sith::protocol::{InitializationError, Participant};
 use cait_sith::triples::TripleGenerationOutput;
@@ -8,6 +9,9 @@ use k256::{elliptic_curve::CurveArithmetic, Secp256k1};
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
 use crate::protocol::contract::ResharingContractState;
+
+/// Default timeout for triple generation protocols. Times out after 5 minutes of being alive.
+pub const PROTOCOL_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 pub type SecretKeyShare = <Secp256k1 as CurveArithmetic>::Scalar;
 pub type PublicKey = <Secp256k1 as CurveArithmetic>::AffinePoint;
