@@ -23,7 +23,7 @@ pub struct PersistentNodeData {
 #[derive(Clone)]
 pub struct StartedState {
     pub persistent_node_data: Option<PersistentNodeData>,
-    pub triple_data: Option<Vec<TripleData>>,
+    pub triple_data: Vec<TripleData>,
 }
 
 #[derive(Clone)]

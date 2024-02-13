@@ -45,7 +45,7 @@ impl SecretManagerNodeStorage {
 #[async_trait]
 impl SecretNodeStorage for SecretManagerNodeStorage {
     async fn store(&mut self, data: &PersistentNodeData) -> SecretResult<()> {
-        tracing::info!("storing PersistentNodeData using SecretNodeStorage");
+        tracing::debug!("storing PersistentNodeData using SecretNodeStorage");
         self.secret_manager
             .store_secret(&serde_json::to_vec(data)?, &self.sk_share_secret_id)
             .await?;
@@ -53,7 +53,7 @@ impl SecretNodeStorage for SecretManagerNodeStorage {
     }
 
     async fn load(&self) -> SecretResult<Option<PersistentNodeData>> {
-        tracing::info!("loading PersistentNodeData using SecretNodeStorage");
+        tracing::debug!("loading PersistentNodeData using SecretNodeStorage");
         let raw_data = self
             .secret_manager
             .load_secret(&self.sk_share_secret_id)
@@ -72,12 +72,10 @@ pub type SecretNodeStorageBox = Box<dyn SecretNodeStorage + Send + Sync>;
 
 pub fn init(gcp_service: &Option<GcpService>, opts: &Options) -> SecretNodeStorageBox {
     match gcp_service {
-        Some(gcp) if gcp.secret_manager.is_some() & opts.sk_share_secret_id.is_some() => {
-            Box::new(SecretManagerNodeStorage::new(
-                &gcp.secret_manager.clone().unwrap(),
-                opts.clone().sk_share_secret_id.unwrap().clone(),
-            )) as SecretNodeStorageBox
-        }
+        Some(gcp) if opts.sk_share_secret_id.is_some() => Box::new(SecretManagerNodeStorage::new(
+            &gcp.secret_manager.clone(),
+            opts.clone().sk_share_secret_id.unwrap().clone(),
+        )) as SecretNodeStorageBox,
         _ => Box::<MemoryNodeStorage>::default() as SecretNodeStorageBox,
     }
 }

@@ -356,7 +356,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                             me,
                             self.threshold,
                             self.epoch,
-                            None,
+                            vec![],
                             ctx.triple_storage(),
                         ))),
                         presignature_manager: Arc::new(RwLock::new(PresignatureManager::new(
@@ -685,10 +685,7 @@ impl ConsensusProtocol for NodeState {
                 let read_lock = triple_storage.read().await;
                 let triple_data_result = read_lock.load().await;
                 drop(read_lock);
-                let triple_data = match triple_data_result {
-                    Ok(vec_triple_data) => Some(vec_triple_data),
-                    _ => None,
-                };
+                let triple_data = triple_data_result.ok().unwrap_or_default();
                 Ok(NodeState::Started(StartedState {
                     persistent_node_data,
                     triple_data,

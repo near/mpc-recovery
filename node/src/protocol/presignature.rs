@@ -164,17 +164,18 @@ impl PresignatureManager {
             match self.generators.entry(id) {
                 Entry::Vacant(entry) => {
                     tracing::info!(id, "joining protocol to generate a new presignature");
-                    let (triple0, triple1) = match triple_manager.take_two(triple0, triple1).await {
-                        Ok(result) => result,
-                        Err(missing_triple_id) => {
-                            tracing::warn!(
-                                triple0,
-                                triple1,
-                                "one of the triples is missing, can't join"
-                            );
-                            return Err(GenerationError::TripleIsMissing(missing_triple_id));
-                        }
-                    };
+                    let (triple0, triple1) =
+                        match triple_manager.take_two(triple0, triple1, false).await {
+                            Ok(result) => result,
+                            Err(missing_triple_id) => {
+                                tracing::warn!(
+                                    triple0,
+                                    triple1,
+                                    "one of the triples is missing, can't join"
+                                );
+                                return Err(GenerationError::TripleIsMissing(missing_triple_id));
+                            }
+                        };
                     let generator = Self::generate_internal(
                         &self.participants,
                         self.me,

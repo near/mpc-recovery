@@ -329,8 +329,8 @@ impl DatastoreService {
 #[derive(Clone)]
 pub struct GcpService {
     pub project_id: String,
-    pub datastore: Option<DatastoreService>,
-    pub secret_manager: Option<SecretManagerService>,
+    pub datastore: DatastoreService,
+    pub secret_manager: SecretManagerService,
 }
 
 impl GcpService {
@@ -352,7 +352,7 @@ impl GcpService {
                     let authenticator = AccessTokenAuthenticator::builder("TOKEN".to_string())
                         .build()
                         .await?;
-                    secret_manager = None;
+                    secret_manager = SecretManager::new(client.clone(), authenticator.clone());
                     datastore = Datastore::new(client, authenticator);
                     datastore.base_url(gcp_datastore_url.clone());
                     datastore.root_url(gcp_datastore_url);
@@ -367,29 +367,21 @@ impl GcpService {
                                 auth.build().await?
                             }
                         };
-                    secret_manager =
-                        Some(SecretManager::new(client.clone(), authenticator.clone()));
+                    secret_manager = SecretManager::new(client.clone(), authenticator.clone());
                     datastore = Datastore::new(client, authenticator);
-                }
-
-                let secret_manager_service;
-                if let Some(sm) = secret_manager {
-                    secret_manager_service = Some(SecretManagerService {
-                        secret_manager: sm,
-                        project_id: project_id_non_empty.clone(),
-                    });
-                } else {
-                    secret_manager_service = None;
                 }
 
                 Ok(Some(Self {
                     project_id: project_id_non_empty.clone(),
-                    datastore: Some(DatastoreService {
+                    datastore: DatastoreService {
                         datastore,
                         project_id: project_id_non_empty.clone(),
                         env: storage_options.env.clone().unwrap(),
-                    }),
-                    secret_manager: secret_manager_service,
+                    },
+                    secret_manager: SecretManagerService {
+                        secret_manager,
+                        project_id: project_id_non_empty.clone(),
+                    },
                 }))
             }
             _ => Ok(None),

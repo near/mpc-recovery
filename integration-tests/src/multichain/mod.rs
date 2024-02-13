@@ -121,7 +121,7 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
 
     let storage_options = mpc_recovery_node::storage::Options {
         gcp_project_id: Some("multichain-integration".to_string()),
-        sk_share_secret_id: Some("multichain-sk-share-integration".to_string()),
+        sk_share_secret_id: None,
         gcp_datastore_url: Some(datastore.local_address.clone()),
         env: Some("multichain-integration".to_string()),
     };
