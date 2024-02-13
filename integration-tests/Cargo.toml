@@ -39,7 +39,7 @@ sha2 = "0.10.8"
 near-crypto = "0.17"
 near-fetch = "0.0.12"
 near-jsonrpc-client = "0.6"
-near-primitives = "0.17"
+near-primitives = "0.17.0"
 near-lake-framework = { git = "https://github.com/near/near-lake-framework-rs.git", branch = "daniyar/upgrade-sdk" }
 near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs.git", branch = "daniyar/upgrade-sdk" }
 

@@ -37,6 +37,7 @@ impl<'a> Node<'a> {
     ) -> anyhow::Result<Node<'a>> {
         tracing::info!("running node container, account_id={}", account_id);
         let (cipher_sk, cipher_pk) = hpke::generate();
+        let storage_options = ctx.storage_options.clone();
         let args = mpc_recovery_node::cli::Cli::Start {
             near_rpc: ctx.lake_indexer.rpc_host_address.clone(),
             mpc_contract_id: ctx.mpc_contract.id().clone(),
@@ -52,10 +53,7 @@ impl<'a> Node<'a> {
                 start_block_height: 0,
             },
             my_address: None,
-            storage_options: mpc_recovery_node::storage::Options {
-                gcp_project_id: None,
-                sk_share_secret_id: None,
-            },
+            storage_options: storage_options.clone(),
         }
         .into_str_args();
         let image: GenericImage = GenericImage::new("near/mpc-recovery-node", "latest")

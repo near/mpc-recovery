@@ -19,10 +19,13 @@ cait-sith = { git = "https://github.com/LIT-Protocol/cait-sith.git", features = 
     "k256",
 ] }
 clap = { version = "4.2", features = ["derive", "env"] }
+google-datastore1 = "5"
 google-secretmanager1 = "5"
 hex = "0.4.3"
 hkdf = "0.12.4"
 highway = "1.1.0"
+hyper = { version = "0.14", features = ["full"] }
+hyper-rustls = { version = "=0.23", features = ["http2"] }
 k256 = { version = "0.13.1", features = ["sha256", "ecdsa", "serde"] }
 local-ip-address = "0.5.4"
 rand = "0.8"
@@ -41,7 +44,7 @@ near-crypto = "0.17"
 near-fetch = "0.0.12"
 near-lake-framework = { git = "https://github.com/near/near-lake-framework-rs.git", branch = "daniyar/upgrade-sdk" }
 near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs.git", branch = "daniyar/upgrade-sdk" }
-near-primitives = "0.17"
+near-primitives = "0.17.0"
 near-sdk = "5.0.0-alpha.1"
 
 mpc-contract = { path = "../contract" }
