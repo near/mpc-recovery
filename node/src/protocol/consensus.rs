@@ -4,12 +4,15 @@ use super::state::{
     WaitingForConsensusState,
 };
 use super::SignQueue;
+use crate::gcp::error::DatastoreStorageError;
+use crate::gcp::error::SecretStorageError;
 use crate::protocol::contract::primitives::Participants;
 use crate::protocol::presignature::PresignatureManager;
 use crate::protocol::signature::SignatureManager;
 use crate::protocol::state::{GeneratingState, ResharingState};
 use crate::protocol::triple::TripleManager;
-use crate::storage::{SecretNodeStorageBox, SecretStorageError};
+use crate::storage::secret_storage::SecretNodeStorageBox;
+use crate::storage::triple_storage::LockTripleNodeStorageBox;
 use crate::types::{KeygenProtocol, ReshareProtocol, SecretKeyShare};
 use crate::util::AffinePointExt;
 use crate::{http_client, rpc_client};
@@ -36,6 +39,7 @@ pub trait ConsensusCtx {
     fn sign_pk(&self) -> near_crypto::PublicKey;
     fn sign_sk(&self) -> &near_crypto::SecretKey;
     fn secret_storage(&self) -> &SecretNodeStorageBox;
+    fn triple_storage(&mut self) -> LockTripleNodeStorageBox;
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -55,7 +59,21 @@ pub enum ConsensusError {
     #[error("cait-sith initialization error: {0}")]
     CaitSithInitializationError(#[from] InitializationError),
     #[error("secret storage error: {0}")]
-    SecretStorageError(#[from] SecretStorageError),
+    SecretStorageError(SecretStorageError),
+    #[error("datastore storage error: {0}")]
+    DatastoreStorageError(DatastoreStorageError),
+}
+
+impl From<SecretStorageError> for ConsensusError {
+    fn from(err: SecretStorageError) -> Self {
+        ConsensusError::SecretStorageError(err)
+    }
+}
+
+impl From<DatastoreStorageError> for ConsensusError {
+    fn from(err: DatastoreStorageError) -> Self {
+        ConsensusError::DatastoreStorageError(err)
+    }
 }
 
 #[async_trait]
@@ -71,10 +89,10 @@ pub trait ConsensusProtocol {
 impl ConsensusProtocol for StartedState {
     async fn advance<C: ConsensusCtx + Send + Sync>(
         self,
-        ctx: C,
+        mut ctx: C,
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
-        match self.0 {
+        match self.persistent_node_data {
             Some(PersistentNodeData {
                 epoch,
                 private_share,
@@ -99,10 +117,9 @@ impl ConsensusProtocol for StartedState {
                         }
                         Ordering::Less => Err(ConsensusError::EpochRollback),
                         Ordering::Equal => {
-                            match contract_state
-                                .participants
-                                .find_participant(ctx.my_account_id())
-                            {
+                            let account_id = ctx.my_account_id();
+                            let sign_queue = ctx.sign_queue();
+                            match contract_state.participants.find_participant(account_id) {
                                 Some(me) => {
                                     tracing::info!(
                                         "started: contract state is running and we are already a participant"
@@ -115,12 +132,14 @@ impl ConsensusProtocol for StartedState {
                                         threshold: contract_state.threshold,
                                         private_share,
                                         public_key,
-                                        sign_queue: ctx.sign_queue(),
+                                        sign_queue,
                                         triple_manager: Arc::new(RwLock::new(TripleManager::new(
                                             participants_vec.clone(),
                                             me,
                                             contract_state.threshold,
                                             epoch,
+                                            self.triple_data,
+                                            ctx.triple_storage(),
                                         ))),
                                         presignature_manager: Arc::new(RwLock::new(
                                             PresignatureManager::new(
@@ -268,7 +287,7 @@ impl ConsensusProtocol for GeneratingState {
 impl ConsensusProtocol for WaitingForConsensusState {
     async fn advance<C: ConsensusCtx + Send + Sync>(
         self,
-        ctx: C,
+        mut ctx: C,
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
         match contract_state {
@@ -337,6 +356,8 @@ impl ConsensusProtocol for WaitingForConsensusState {
                             me,
                             self.threshold,
                             self.epoch,
+                            vec![],
+                            ctx.triple_storage(),
                         ))),
                         presignature_manager: Arc::new(RwLock::new(PresignatureManager::new(
                             participants_vec.clone(),
@@ -654,13 +675,21 @@ impl ConsensusProtocol for JoiningState {
 impl ConsensusProtocol for NodeState {
     async fn advance<C: ConsensusCtx + Send + Sync>(
         self,
-        ctx: C,
+        mut ctx: C,
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
         match self {
             NodeState::Starting => {
-                let node_data = ctx.secret_storage().load().await?;
-                Ok(NodeState::Started(StartedState(node_data)))
+                let persistent_node_data = ctx.secret_storage().load().await?;
+                let triple_storage = ctx.triple_storage();
+                let read_lock = triple_storage.read().await;
+                let triple_data_result = read_lock.load().await;
+                drop(read_lock);
+                let triple_data = triple_data_result.ok().unwrap_or_default();
+                Ok(NodeState::Started(StartedState {
+                    persistent_node_data,
+                    triple_data,
+                }))
             }
             NodeState::Started(state) => state.advance(ctx, contract_state).await,
             NodeState::Generating(state) => state.advance(ctx, contract_state).await,

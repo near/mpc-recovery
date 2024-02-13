@@ -294,7 +294,15 @@ impl MpcContract {
     }
 
     #[allow(unused_variables)]
-    pub fn sign(&mut self, payload: [u8; 32], path: String) -> Promise {
+    /// `key_version` must be less than or equal to the value at `latest_key_version`
+    pub fn sign(&mut self, payload: [u8; 32], path: String, key_version: Option<u32>) -> Promise {
+        let key_version = key_version.unwrap_or(0);
+        let latest_key_version: u32 = self.latest_key_version();
+        assert!(
+            key_version <= latest_key_version,
+            "This version of the signer contract doesn't support versions greater than {}",
+            latest_key_version,
+        );
         log!(
             "sign: signer={}, payload={:?} path={:?}",
             env::signer_account_id(),
@@ -373,5 +381,13 @@ impl MpcContract {
             ProtocolContractState::Resharing(state) => state.public_key.clone(),
             _ => env::panic_str("public key not available (protocol is not running or resharing)"),
         }
+    }
+
+    /// Key versions refer new versions of the root key that we may choose to generate on cohort changes
+    /// Older key versions will always work but newer key versions were never held by older signers
+    /// Newer key versions may also add new security features, like only existing within a secure enclave
+    /// Currently only 0 is a valid key version
+    pub const fn latest_key_version(&self) -> u32 {
+        0
     }
 }
