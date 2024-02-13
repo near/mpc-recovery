@@ -333,12 +333,22 @@ impl CryptographicProtocol for RunningState {
         sign_queue.organize(&self, ctx.me().await);
         let my_requests = sign_queue.my_requests(ctx.me().await);
         while presignature_manager.my_len() > 0 {
+            if signature_manager.failed_len() > 0 {
+                let Some(presignature) = presignature_manager.take_mine() else {
+                    break;
+                };
+                signature_manager.retry_failed_generation(presignature);
+                break;
+            }
+
             let Some((receipt_id, _)) = my_requests.iter().next() else {
                 break;
             };
+
             let Some(presignature) = presignature_manager.take_mine() else {
                 break;
             };
+
             let receipt_id = *receipt_id;
             let my_request = my_requests.remove(&receipt_id).unwrap();
             signature_manager.generate(
@@ -352,7 +362,7 @@ impl CryptographicProtocol for RunningState {
         }
         drop(sign_queue);
         drop(presignature_manager);
-        for (p, msg) in signature_manager.poke()? {
+        for (p, msg) in signature_manager.poke() {
             let info = self.participants.get(&p).unwrap();
             messages.push(info.clone(), MpcMessage::Signature(msg));
         }

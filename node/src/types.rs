@@ -10,8 +10,11 @@ use tokio::sync::{RwLock, RwLockWriteGuard};
 
 use crate::protocol::contract::ResharingContractState;
 
-/// Default timeout for triple generation protocols. Times out after 5 minutes of being alive.
+/// Default timeout for triple/presig generation protocols. Times out after 5 minutes of being alive.
 pub const PROTOCOL_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+
+/// Default timeout for signature generation protocol. Times out after 10 minutes of being alive.
+pub const PROTOCOL_SIGNATURE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 pub type SecretKeyShare = <Secp256k1 as CurveArithmetic>::Scalar;
 pub type PublicKey = <Secp256k1 as CurveArithmetic>::AffinePoint;

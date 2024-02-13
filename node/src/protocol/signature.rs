@@ -16,7 +16,8 @@ use rand::rngs::StdRng;
 use rand::seq::{IteratorRandom, SliceRandom};
 use rand::SeedableRng;
 use std::collections::hash_map::Entry;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+use std::time::Instant;
 
 pub struct SignRequest {
     pub receipt_id: CryptoHash,
@@ -95,11 +96,56 @@ pub struct SignatureGenerator {
     pub msg_hash: [u8; 32],
     pub epsilon: Scalar,
     pub delta: Scalar,
+    pub timestamp: Instant,
+}
+
+impl SignatureGenerator {
+    pub fn new(
+        protocol: SignatureProtocol,
+        proposer: Participant,
+        presignature_id: PresignatureId,
+        msg_hash: [u8; 32],
+        epsilon: Scalar,
+        delta: Scalar,
+    ) -> Self {
+        Self {
+            protocol,
+            proposer,
+            presignature_id,
+            msg_hash,
+            epsilon,
+            delta,
+            timestamp: Instant::now(),
+        }
+    }
+
+    pub fn poke(&mut self) -> Result<Action<FullSignature<Secp256k1>>, ProtocolError> {
+        if self.timestamp.elapsed() > crate::types::PROTOCOL_SIGNATURE_TIMEOUT {
+            tracing::info!(self.presignature_id, "signature protocol timed out");
+            return Err(ProtocolError::Other(
+                anyhow::anyhow!("signature protocol timed out").into(),
+            ));
+        }
+
+        self.protocol.poke()
+    }
+}
+
+/// Generator for signature thas has failed. Only retains essential information
+/// for starting up this failed signature once again.
+pub struct FailedGenerator {
+    pub proposer: Participant,
+    pub msg_hash: [u8; 32],
+    pub epsilon: Scalar,
+    pub delta: Scalar,
+    pub timestamp: Instant,
 }
 
 pub struct SignatureManager {
     /// Ongoing signature generation protocols.
     generators: HashMap<CryptoHash, SignatureGenerator>,
+    /// Failed signatures awaiting to be retried.
+    failed_generators: VecDeque<(CryptoHash, FailedGenerator)>,
     /// Generated signatures assigned to the current node that are yet to be published.
     signatures: Vec<(CryptoHash, [u8; 32], FullSignature<Secp256k1>)>,
 
@@ -118,12 +164,17 @@ impl SignatureManager {
     ) -> Self {
         Self {
             generators: HashMap::new(),
+            failed_generators: VecDeque::new(),
             signatures: Vec::new(),
             participants,
             me,
             public_key,
             epoch,
         }
+    }
+
+    pub fn failed_len(&self) -> usize {
+        self.failed_generators.len()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -151,14 +202,31 @@ impl SignatureManager {
             output,
             Scalar::from_bytes(&msg_hash),
         )?);
-        Ok(SignatureGenerator {
+        Ok(SignatureGenerator::new(
             protocol,
             proposer,
-            presignature_id: presignature.id,
+            presignature.id,
             msg_hash,
             epsilon,
             delta,
-        })
+        ))
+    }
+
+    pub fn retry_failed_generation(&mut self, presignature: Presignature) -> Option<()> {
+        let (hash, failed_generator) = self.failed_generators.pop_front()?;
+        let generator = Self::generate_internal(
+            &self.participants,
+            self.me,
+            self.public_key,
+            failed_generator.proposer,
+            presignature,
+            failed_generator.msg_hash,
+            failed_generator.epsilon,
+            failed_generator.delta,
+        )
+        .unwrap();
+        self.generators.insert(hash, generator);
+        Some(())
     }
 
     /// Starts a new presignature generation protocol.
@@ -231,16 +299,24 @@ impl SignatureManager {
     /// messages to be sent to the respective participant.
     ///
     /// An empty vector means we cannot progress until we receive a new message.
-    pub fn poke(&mut self) -> Result<Vec<(Participant, SignatureMessage)>, ProtocolError> {
+    pub fn poke(&mut self) -> Vec<(Participant, SignatureMessage)> {
         let mut messages = Vec::new();
-        let mut result = Ok(());
         self.generators.retain(|receipt_id, generator| {
             loop {
-                let protocol = &mut generator.protocol;
-                let action = match protocol.poke() {
+                let action = match generator.poke() {
                     Ok(action) => action,
-                    Err(e) => {
-                        result = Err(e);
+                    Err(err) => {
+                        tracing::warn!(?err, "signature failed to be produced; pushing request back into failed queue");
+                        self.failed_generators.push_back((
+                            *receipt_id,
+                            FailedGenerator {
+                                proposer: generator.proposer,
+                                msg_hash: generator.msg_hash,
+                                epsilon: generator.epsilon,
+                                delta: generator.delta,
+                                timestamp: generator.timestamp,
+                            },
+                        ));
                         break false;
                     }
                 };
@@ -299,7 +375,7 @@ impl SignatureManager {
                 }
             }
         });
-        result.map(|_| messages)
+        messages
     }
 
     pub async fn publish<T: Signer + ExposeAccountId>(
