@@ -164,15 +164,21 @@ impl TripleManager {
     async fn delete_triple_from_storage(&mut self, triple: &Triple, mine: bool) {
         let mut write_lock = self.triple_storage.write().await;
         let account_id = &write_lock.account_id();
-        if let Err(error) = write_lock
-            .delete(TripleData {
-                account_id: account_id.clone(),
-                triple: triple.clone(),
-                mine,
+        let mut retries = 3;
+        while retries > 0 {
+            if let Err(error) = write_lock
+                .delete(TripleData {
+                    account_id: account_id.clone(),
+                    triple: triple.clone(),
+                    mine,
             })
-            .await
-        {
-            tracing::info!("triple insertion failed: {}", error)
+            .await {
+                tracing::warn!(?error, "triple deletion failed.");
+                retries -= 1;
+            } else {
+                tracing::debug!("triple deletion success.");
+                break;
+            }
         }
         drop(write_lock);
     }
@@ -325,16 +331,23 @@ impl TripleManager {
         let account_id = write_lock.account_id().clone();
         for triple in triples_to_insert {
             let mine = self.mine.contains(&triple.id);
-            if let Err(error) = write_lock
-                .insert(TripleData {
-                    account_id: account_id.clone(),
-                    triple,
-                    mine,
-                })
-                .await
-            {
-                tracing::info!("triple insertion failed: {}", error)
+            let mut retries = 3;
+            while retries > 0 {
+                if let Err(error) = write_lock
+                    .insert(TripleData {
+                        account_id: account_id.clone(),
+                        triple: triple.clone(),
+                        mine,
+                    })
+                .await {
+                    tracing::warn!(?error, "triple insertion failed.");
+                    retries -= 1;
+                } else {
+                    tracing::debug!("triple insertion success.");
+                    break;
+                }
             }
+            
         }
         drop(write_lock)
     }
