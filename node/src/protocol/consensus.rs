@@ -685,7 +685,15 @@ impl ConsensusProtocol for NodeState {
                 let read_lock = triple_storage.read().await;
                 let triple_data_result = read_lock.load().await;
                 drop(read_lock);
+                tracing::info!(
+                    "triple data result: {:?}",
+                    triple_data_result
+                );
                 let triple_data = triple_data_result.ok().unwrap_or_default();
+                tracing::info!(
+                    "triple_data size is {}",
+                    triple_data.len()
+                );
                 Ok(NodeState::Started(StartedState {
                     persistent_node_data,
                     triple_data,
