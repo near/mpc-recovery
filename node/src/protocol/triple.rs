@@ -81,7 +81,12 @@ impl TripleManager {
         let mut mine: VecDeque<TripleId> = VecDeque::new();
         let mut all_triples = HashMap::new();
         for entry in triple_data {
+            tracing::info!(
+                "the triple data loaded is {:?}",
+                entry
+            );
             if entry.mine {
+                tracing::info!("pushed tripleId = {} into mine.", entry.triple.id);
                 mine.push_back(entry.triple.id);
             }
             all_triples.insert(entry.triple.id, entry.triple);
