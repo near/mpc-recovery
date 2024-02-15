@@ -26,6 +26,7 @@ use std::cmp::Ordering;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use url::Url;
+use crate::storage::triple_storage::TripleData;
 
 pub trait ConsensusCtx {
     fn my_account_id(&self) -> &AccountId;
@@ -675,20 +676,13 @@ impl ConsensusProtocol for JoiningState {
 impl ConsensusProtocol for NodeState {
     async fn advance<C: ConsensusCtx + Send + Sync>(
         self,
-        mut ctx: C,
+        ctx: C,
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
         match self {
             NodeState::Starting => {
                 let persistent_node_data = ctx.secret_storage().load().await?;
-                let triple_storage = ctx.triple_storage();
-                let read_lock = triple_storage.read().await;
-                let triple_data_result = read_lock.load().await;
-                drop(read_lock);
-                tracing::debug!(
-                    ?triple_data_result
-                );
-                let triple_data = triple_data_result.ok().unwrap_or_default();
+                let triple_data = load_triples(ctx).await.ok().unwrap_or_default();
                 Ok(NodeState::Started(StartedState {
                     persistent_node_data,
                     triple_data,
@@ -702,6 +696,30 @@ impl ConsensusProtocol for NodeState {
             NodeState::Joining(state) => state.advance(ctx, contract_state).await,
         }
     }
+}
+
+async fn load_triples<C: ConsensusCtx + Send + Sync>(
+    mut ctx: C
+) -> Result<Vec<TripleData>, ConsensusError> {
+    let triple_storage = ctx.triple_storage();
+    let read_lock = triple_storage.read().await;
+    let mut retries = 3;
+    let mut error = None;
+    while retries > 0 {
+        match read_lock.load().await {
+            Err(e) => {
+                retries -= 1;
+                tracing::warn!(?e, "triple load failed.");
+                error = Some(e);
+            }
+            Ok(loaded_triples) => {
+                drop(read_lock);
+                return Ok(loaded_triples)
+            }
+        }
+    }
+    drop(read_lock);
+    Err(ConsensusError::DatastoreStorageError(error.unwrap()))
 }
 
 async fn start_resharing<C: ConsensusCtx>(
