@@ -361,7 +361,7 @@ mod test {
             let managers = range
                 .map(|num| {
                     let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(
-                        storage::triple_storage::init(&None, num.to_string()),
+                        storage::triple_storage::init(None, num.to_string()),
                     ));
                     TripleManager::new(
                         participants.clone(),

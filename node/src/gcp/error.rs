@@ -32,6 +32,8 @@ pub enum DatastoreStorageError {
     ConvertError(ConvertError),
     #[error("fetch_entities error: `{0}`")]
     FetchEntitiesError(String),
+    #[error("could not find entity: {0}")]
+    EntityNotFound(String),
 }
 
 impl From<ConvertError> for DatastoreStorageError {

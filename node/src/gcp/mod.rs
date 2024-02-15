@@ -90,7 +90,7 @@ impl DatastoreService {
     pub async fn get<K: ToString, T: FromValue + KeyKind>(
         &self,
         name_key: K,
-    ) -> DatastoreResult<Option<T>> {
+    ) -> DatastoreResult<T> {
         let request = LookupRequest {
             keys: Some(vec![Key {
                 path: Some(vec![PathElement {
@@ -118,8 +118,8 @@ impl DatastoreService {
             .and_then(|mut results| results.pop())
             .and_then(|result| result.entity)
         {
-            Some(found_entity) => Ok(Some(T::from_value(found_entity.into_value())?)),
-            None => Ok(None),
+            Some(found_entity) => Ok(T::from_value(found_entity.into_value())?),
+            None => Err(DatastoreStorageError::EntityNotFound(name_key.to_string())),
         }
     }
 
@@ -334,57 +334,50 @@ pub struct GcpService {
 }
 
 impl GcpService {
-    pub async fn init(storage_options: &storage::Options) -> anyhow::Result<Option<Self>> {
-        match storage_options.gcp_project_id.clone() {
-            Some(project_id_non_empty) if storage_options.env.is_some() => {
-                let mut datastore;
-                let secret_manager;
-                let client = hyper::Client::builder().build(
-                    hyper_rustls::HttpsConnectorBuilder::new()
-                        .with_native_roots()
-                        .https_or_http()
-                        .enable_http1()
-                        .enable_http2()
-                        .build(),
-                );
-                if let Some(gcp_datastore_url) = storage_options.gcp_datastore_url.clone() {
-                    // Assuming custom GCP URL points to an emulator, so the token does not matter
-                    let authenticator = AccessTokenAuthenticator::builder("TOKEN".to_string())
-                        .build()
-                        .await?;
-                    secret_manager = SecretManager::new(client.clone(), authenticator.clone());
-                    datastore = Datastore::new(client, authenticator);
-                    datastore.base_url(gcp_datastore_url.clone());
-                    datastore.root_url(gcp_datastore_url);
-                } else {
-                    let opts = ApplicationDefaultCredentialsFlowOpts::default();
-                    let authenticator =
-                        match ApplicationDefaultCredentialsAuthenticator::builder(opts).await {
-                            ApplicationDefaultCredentialsTypes::InstanceMetadata(auth) => {
-                                auth.build().await?
-                            }
-                            ApplicationDefaultCredentialsTypes::ServiceAccount(auth) => {
-                                auth.build().await?
-                            }
-                        };
-                    secret_manager = SecretManager::new(client.clone(), authenticator.clone());
-                    datastore = Datastore::new(client, authenticator);
-                }
+    pub async fn init(storage_options: &storage::Options) -> anyhow::Result<Self> {
+        let project_id = storage_options.gcp_project_id.clone();
+        let secret_manager;
+        let client = hyper::Client::builder().build(
+            hyper_rustls::HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .https_or_http()
+                .enable_http1()
+                .enable_http2()
+                .build(),
+        );
+        let datastore = if let Some(gcp_datastore_url) = storage_options.gcp_datastore_url.clone() {
+            // Assuming custom GCP URL points to an emulator, so the token does not matter
+            let authenticator = AccessTokenAuthenticator::builder("TOKEN".to_string())
+                .build()
+                .await?;
+            secret_manager = SecretManager::new(client.clone(), authenticator.clone());
+            let mut datastore = Datastore::new(client, authenticator);
+            datastore.base_url(gcp_datastore_url.clone());
+            datastore.root_url(gcp_datastore_url);
+            datastore
+        } else {
+            let opts = ApplicationDefaultCredentialsFlowOpts::default();
+            let authenticator = match ApplicationDefaultCredentialsAuthenticator::builder(opts)
+                .await
+            {
+                ApplicationDefaultCredentialsTypes::InstanceMetadata(auth) => auth.build().await?,
+                ApplicationDefaultCredentialsTypes::ServiceAccount(auth) => auth.build().await?,
+            };
+            secret_manager = SecretManager::new(client.clone(), authenticator.clone());
+            Datastore::new(client, authenticator)
+        };
 
-                Ok(Some(Self {
-                    project_id: project_id_non_empty.clone(),
-                    datastore: DatastoreService {
-                        datastore,
-                        project_id: project_id_non_empty.clone(),
-                        env: storage_options.env.clone().unwrap(),
-                    },
-                    secret_manager: SecretManagerService {
-                        secret_manager,
-                        project_id: project_id_non_empty.clone(),
-                    },
-                }))
-            }
-            _ => Ok(None),
-        }
+        Ok(Self {
+            datastore: DatastoreService {
+                datastore,
+                project_id: project_id.clone(),
+                env: storage_options.env.clone(),
+            },
+            secret_manager: SecretManagerService {
+                secret_manager,
+                project_id: project_id.clone(),
+            },
+            project_id,
+        })
     }
 }

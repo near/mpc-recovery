@@ -70,7 +70,7 @@ impl SecretNodeStorage for SecretManagerNodeStorage {
 
 pub type SecretNodeStorageBox = Box<dyn SecretNodeStorage + Send + Sync>;
 
-pub fn init(gcp_service: &Option<GcpService>, opts: &Options) -> SecretNodeStorageBox {
+pub fn init(gcp_service: Option<&GcpService>, opts: &Options) -> SecretNodeStorageBox {
     match gcp_service {
         Some(gcp) if opts.sk_share_secret_id.is_some() => Box::new(SecretManagerNodeStorage::new(
             &gcp.secret_manager.clone(),

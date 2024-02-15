@@ -8,6 +8,9 @@ use cait_sith::{FullSignature, PresignOutput};
 use k256::{elliptic_curve::CurveArithmetic, Secp256k1};
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
+use crate::gcp::error::ConvertError;
+use crate::gcp::value::{FromValue, IntoValue, Value};
+use crate::gcp::{DatastoreResult, GcpService, KeyKind};
 use crate::protocol::contract::ResharingContractState;
 
 /// Default timeout for triple/presig generation protocols. Times out after 5 minutes of being alive.
@@ -131,5 +134,54 @@ impl ReshareProtocol {
         &self,
     ) -> RwLockWriteGuard<'_, Box<dyn Protocol<Output = SecretKeyShare> + Send + Sync>> {
         self.protocol.write().await
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct LatestBlockHeight(pub near_primitives::types::BlockHeight);
+
+impl LatestBlockHeight {
+    pub async fn fetch(gcp: &GcpService) -> DatastoreResult<Self> {
+        gcp.datastore.get("latest").await
+    }
+
+    pub async fn store(&self, gcp: &GcpService) -> DatastoreResult<()> {
+        gcp.datastore.upsert(self).await
+    }
+}
+
+impl IntoValue for LatestBlockHeight {
+    fn into_value(self) -> Value {
+        Value::IntegerValue(self.0 as i64)
+    }
+}
+
+impl IntoValue for &LatestBlockHeight {
+    fn into_value(self) -> Value {
+        Value::IntegerValue(self.0 as i64)
+    }
+}
+
+impl FromValue for LatestBlockHeight {
+    fn from_value(value: Value) -> Result<Self, ConvertError> {
+        match value {
+            Value::IntegerValue(value) => Ok(Self(value as u64)),
+            _ => Err(ConvertError::UnexpectedPropertyType {
+                expected: String::from("integer"),
+                got: String::from(value.type_name()),
+            }),
+        }
+    }
+}
+
+impl KeyKind for LatestBlockHeight {
+    fn kind() -> String {
+        "LatestBlockHeight".to_string()
+    }
+}
+
+impl KeyKind for &LatestBlockHeight {
+    fn kind() -> String {
+        "LatestBlockHeight".to_string()
     }
 }

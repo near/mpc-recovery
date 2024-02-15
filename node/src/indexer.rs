@@ -1,5 +1,7 @@
+use crate::gcp::GcpService;
 use crate::kdf;
 use crate::protocol::{SignQueue, SignRequest};
+use crate::types::LatestBlockHeight;
 use near_lake_framework::{LakeBuilder, LakeContext};
 use near_lake_primitives::actions::ActionMetaDataExt;
 use near_lake_primitives::{receipts::ExecutionStatus, AccountId};
@@ -69,6 +71,7 @@ struct SignPayload {
 #[derive(LakeContext)]
 struct Context {
     mpc_contract_id: AccountId,
+    gcp_service: GcpService,
     queue: Arc<RwLock<SignQueue>>,
 }
 
@@ -123,8 +126,13 @@ async fn handle_block(
             }
         }
     }
+
+    LatestBlockHeight(block.block_height())
+        .store(&ctx.gcp_service)
+        .await?;
+
     if block.block_height() % 1000 == 0 {
-        tracing::info!(block_height = block.block_height(), "indexed block")
+        tracing::info!(block_height = block.block_height(), "indexed block");
     }
     Ok(())
 }
@@ -133,6 +141,7 @@ pub fn run(
     options: Options,
     mpc_contract_id: AccountId,
     queue: Arc<RwLock<SignQueue>>,
+    gcp_service: crate::gcp::GcpService,
 ) -> anyhow::Result<()> {
     tracing::info!(
         s3_bucket = options.s3_bucket,
@@ -142,26 +151,38 @@ pub fn run(
         %mpc_contract_id,
         "starting indexer"
     );
-    let mut lake_builder = LakeBuilder::default()
-        .s3_bucket_name(options.s3_bucket)
-        .s3_region_name(options.s3_region)
-        .start_block_height(options.start_block_height);
-    let lake = tokio::runtime::Builder::new_multi_thread()
+
+    let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
-        .unwrap()
-        .block_on(async {
-            if let Some(s3_url) = options.s3_url {
-                let aws_config = aws_config::from_env().load().await;
-                let s3_config = aws_sdk_s3::config::Builder::from(&aws_config)
-                    .endpoint_url(s3_url)
-                    .build();
-                lake_builder = lake_builder.s3_config(s3_config);
+        .unwrap();
+
+    let lake = rt.block_on(async {
+        let latest_block_height = match LatestBlockHeight::fetch(&gcp_service).await {
+            Ok(latest_block_height) => latest_block_height,
+            Err(err) => {
+                tracing::error!(%err, "failed to fetch latest block height; using start_block_height={} instead", options.start_block_height);
+                LatestBlockHeight(options.start_block_height)
             }
-            lake_builder.build()
-        })?;
+        };
+
+        let mut lake_builder = LakeBuilder::default()
+            .s3_bucket_name(options.s3_bucket)
+            .s3_region_name(options.s3_region)
+            .start_block_height(latest_block_height.0);
+
+        if let Some(s3_url) = options.s3_url {
+            let aws_config = aws_config::from_env().load().await;
+            let s3_config = aws_sdk_s3::config::Builder::from(&aws_config)
+                .endpoint_url(s3_url)
+                .build();
+            lake_builder = lake_builder.s3_config(s3_config);
+        }
+        lake_builder.build()
+    })?;
     let context = Context {
         mpc_contract_id,
+        gcp_service,
         queue,
     };
     lake.run_with_context(handle_block, &context)?;

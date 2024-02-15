@@ -7,7 +7,6 @@ use local_ip_address::local_ip;
 use near_crypto::{InMemorySigner, SecretKey};
 use near_primitives::types::AccountId;
 use std::sync::Arc;
-use std::thread;
 use tokio::sync::{mpsc, RwLock};
 use tracing_subscriber::EnvFilter;
 use url::Url;
@@ -125,21 +124,23 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
             storage_options,
         } => {
             let sign_queue = Arc::new(RwLock::new(SignQueue::new()));
-            let a = indexer_options.clone();
-            let b = mpc_contract_id.clone();
-            let c = sign_queue.clone();
-            let indexer_handler = thread::spawn(move || {
-                indexer::run(a, b, c).unwrap();
-            });
             tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()?
                 .block_on(async {
                     let (sender, receiver) = mpsc::channel(16384);
                     let gcp_service = GcpService::init(&storage_options).await?;
-                    let key_storage = storage::secret_storage::init(&gcp_service, &storage_options);
+
+                    let a = indexer_options.clone();
+                    let b = mpc_contract_id.clone();
+                    let c = sign_queue.clone();
+                    let d = gcp_service.clone();
+                    let join_handle = std::thread::spawn(move || indexer::run(a, b, c, d).unwrap());
+
+                    let key_storage =
+                        storage::secret_storage::init(Some(&gcp_service), &storage_options);
                     let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(
-                        storage::triple_storage::init(&gcp_service, account_id.to_string()),
+                        storage::triple_storage::init(Some(&gcp_service), account_id.to_string()),
                     ));
 
                     let my_address = my_address.unwrap_or_else(|| {
@@ -185,9 +186,9 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                     web_handle.await??;
                     tracing::debug!("spinning down");
 
+                    join_handle.join().unwrap();
                     anyhow::Ok(())
                 })?;
-            indexer_handler.join().unwrap();
         }
     }
 
