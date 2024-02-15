@@ -682,7 +682,7 @@ impl ConsensusProtocol for NodeState {
         match self {
             NodeState::Starting => {
                 let persistent_node_data = ctx.secret_storage().load().await?;
-                let triple_data = load_triples(ctx).await.ok().unwrap_or_default();
+                let triple_data = load_triples(ctx).await?;
                 Ok(NodeState::Started(StartedState {
                     persistent_node_data,
                     triple_data,
@@ -711,6 +711,7 @@ async fn load_triples<C: ConsensusCtx + Send + Sync>(
                 retries -= 1;
                 tracing::warn!(?e, "triple load failed.");
                 error = Some(e);
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
             Ok(loaded_triples) => {
                 drop(read_lock);

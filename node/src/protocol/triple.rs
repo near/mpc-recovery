@@ -176,6 +176,7 @@ impl TripleManager {
             .await {
                 tracing::warn!(?e, retries, "triple deletion failed.");
                 retries -= 1;
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             } else {
                 tracing::debug!("triple deletion success.");
                 drop(write_lock);
@@ -352,6 +353,7 @@ impl TripleManager {
                 .await {
                     tracing::warn!(?error, "triple insertion failed.");
                     retries -= 1;
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                 } else {
                     tracing::debug!("triple insertion success.");
                     break;
