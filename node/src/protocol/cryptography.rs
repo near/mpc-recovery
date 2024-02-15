@@ -297,7 +297,7 @@ impl CryptographicProtocol for RunningState {
         }
 
         let mut triple_manager = self.triple_manager.write().await;
-        if triple_manager.my_len() < 2 && triple_manager.potential_len() < 30 {
+        if triple_manager.my_len() < 2 && triple_manager.potential_len() < 10 {
             triple_manager.generate()?;
         }
         for (p, msg) in triple_manager.poke().await? {
@@ -306,7 +306,7 @@ impl CryptographicProtocol for RunningState {
         }
 
         let mut presignature_manager = self.presignature_manager.write().await;
-        if presignature_manager.my_len() < 2 && presignature_manager.potential_len() < 30  {
+        if presignature_manager.my_len() < 2 && presignature_manager.potential_len() < 10  {
             // To ensure there is no contention between different nodes we are only using triples
             // that we proposed. This way in a non-BFT environment we are guaranteed to never try
             // to use the same triple as any other node.
