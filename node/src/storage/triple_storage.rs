@@ -199,6 +199,7 @@ impl TripleNodeStorage for DataStoreTripleNodeStorage {
     async fn load(&self) -> TripleResult<Vec<TripleData>> {
         tracing::info!("loading triples using datastore");
         let account_id_val = DatastoreValue::from_value(self.account_id().into_value())?;
+        tracing::info!(?account_id_val, "triple storage load account_id");
         let filter = Filter {
             composite_filter: None,
             property_filter: Some(PropertyFilter {
@@ -220,6 +221,7 @@ impl TripleNodeStorage for DataStoreTripleNodeStorage {
             let triple_data = TripleData::from_value(entity_value).unwrap();
             res.push(triple_data);
         }
+        tracing::info!("loading triples success");
         Ok(res)
     }
 

@@ -27,6 +27,7 @@ pub struct TestContext {
 
 impl TestContext {
     pub async fn gcp_service(&self) -> anyhow::Result<GcpService> {
+        println!("datastore url: {}", self.gcp_datastore_url.clone());
         GcpService::new(
             self.env.clone(),
             self.gcp_project_id.clone(),
