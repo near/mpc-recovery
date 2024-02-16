@@ -185,13 +185,13 @@ impl DataStoreTripleNodeStorage {
 #[async_trait]
 impl TripleNodeStorage for DataStoreTripleNodeStorage {
     async fn insert(&mut self, data: TripleData) -> TripleResult<()> {
-        tracing::info!("inserting triples using datastore");
+        tracing::debug!("inserting triples using datastore");
         self.datastore.upsert(data).await?;
         Ok(())
     }
 
     async fn delete(&mut self, data: TripleData) -> TripleResult<()> {
-        tracing::info!("deleting triples using datastore");
+        tracing::debug!("deleting triples using datastore");
         self.datastore.delete(data).await?;
         Ok(())
     }

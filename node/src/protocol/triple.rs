@@ -213,11 +213,9 @@ impl TripleManager {
                 tracing::warn!(?error, "take_two failed in take_two_mine.");
                 self.mine.push_front(id1);
                 self.mine.push_front(id0);
-                return None;
+                None
             }
-            Ok(val) => {
-                return Some(val);
-            }
+            Ok(val) => Some(val),
         }
     }
 
@@ -380,6 +378,11 @@ mod test {
     // Improve this before we make more similar tests
     #[tokio::test]
     async fn test_happy_triple_generation_locally() {
-        crate::test_utils::happy_triple_generation(None).await
+        crate::test_utils::test_triple_generation(None).await
+    }
+
+    #[tokio::test]
+    async fn test_triple_deletion_locally() {
+        crate::test_utils::test_triple_deletion(None).await
     }
 }

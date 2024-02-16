@@ -1,6 +1,6 @@
 pub mod contract;
 mod cryptography;
-mod presignature;
+pub mod presignature;
 mod signature;
 pub mod triple;
 

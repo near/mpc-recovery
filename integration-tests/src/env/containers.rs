@@ -477,6 +477,7 @@ impl<'a> Datastore<'a> {
                 "--host-port".to_string(),
                 format!("0.0.0.0:{}", Self::CONTAINER_PORT),
                 "--no-store-on-disk".to_string(),
+                "--consistency=1.0".to_string(),
             ],
         )
             .into();

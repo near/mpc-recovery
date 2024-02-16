@@ -125,6 +125,11 @@ impl PresignatureManager {
         self.presignatures.len() + self.generators.len()
     }
 
+    /// Returns if there are unspent presignatures available in the manager.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn generate_internal(
         participants: &[Participant],
