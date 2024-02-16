@@ -1,5 +1,6 @@
 use super::message::PresignatureMessage;
 use super::triple::{Triple, TripleId, TripleManager};
+use crate::gcp::error::DatastoreStorageError;
 use crate::types::{PresignatureProtocol, PublicKey, SecretKeyShare};
 use crate::util::AffinePointExt;
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
@@ -8,7 +9,6 @@ use k256::Secp256k1;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
 use std::time::Instant;
-use crate::gcp::error::DatastoreStorageError;
 
 /// Unique number used to identify a specific ongoing presignature generation protocol.
 /// Without `PresignatureId` it would be unclear where to route incoming cait-sith presignature
@@ -203,11 +203,7 @@ impl PresignatureManager {
                         match triple_manager.take_two(triple0, triple1, false).await {
                             Ok(result) => result,
                             Err(error) => {
-                                tracing::warn!(
-                                    ?error,
-                                    triple0,
-                                    triple1,
-                                );
+                                tracing::warn!(?error, triple0, triple1,);
                                 return Err(error);
                             }
                         };

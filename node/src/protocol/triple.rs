@@ -1,6 +1,7 @@
 use super::cryptography::CryptographicError;
 use super::message::TripleMessage;
 use super::presignature::GenerationError;
+use crate::gcp::error;
 use crate::storage::triple_storage::{LockTripleNodeStorageBox, TripleData};
 use crate::types::TripleProtocol;
 use crate::util::AffinePointExt;
@@ -13,7 +14,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
 use std::time::Instant;
-use crate::gcp::error;
 
 /// Unique number used to identify a specific ongoing triple generation protocol.
 /// Without `TripleId` it would be unclear where to route incoming cait-sith triple generation
@@ -83,10 +83,7 @@ impl TripleManager {
         let mut mine: VecDeque<TripleId> = VecDeque::new();
         let mut all_triples = HashMap::new();
         for entry in triple_data {
-            tracing::debug!(
-                "the triple data loaded is {:?}",
-                entry
-            );
+            tracing::debug!("the triple data loaded is {:?}", entry);
             if entry.mine {
                 tracing::debug!("pushed tripleId = {} into mine.", entry.triple.id);
                 mine.push_back(entry.triple.id);
@@ -160,11 +157,18 @@ impl TripleManager {
             self.delete_triple_from_storage(&triple1, mine).await?;
             self.delete_triple_from_storage(&triple2, mine).await?;
             // only remove the triples locally when the datastore removal was successful
-            Ok((self.triples.remove(&id0).unwrap(), self.triples.remove(&id1).unwrap()))
+            Ok((
+                self.triples.remove(&id0).unwrap(),
+                self.triples.remove(&id1).unwrap(),
+            ))
         }
     }
 
-    async fn delete_triple_from_storage(&mut self, triple: &Triple, mine: bool) -> Result<(), error::DatastoreStorageError> {
+    async fn delete_triple_from_storage(
+        &mut self,
+        triple: &Triple,
+        mine: bool,
+    ) -> Result<(), error::DatastoreStorageError> {
         let mut write_lock = self.triple_storage.write().await;
         let account_id = &write_lock.account_id();
         let mut retries = 3;
@@ -175,8 +179,9 @@ impl TripleManager {
                     account_id: account_id.clone(),
                     triple: triple.clone(),
                     mine,
-            })
-            .await {
+                })
+                .await
+            {
                 tracing::warn!(?e, retries, "triple deletion failed.");
                 retries -= 1;
                 error = Some(e);
@@ -354,7 +359,8 @@ impl TripleManager {
                         triple: triple.clone(),
                         mine,
                     })
-                .await {
+                    .await
+                {
                     tracing::warn!(?error, "triple insertion failed.");
                     retries -= 1;
                     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
@@ -363,7 +369,6 @@ impl TripleManager {
                     break;
                 }
             }
-            
         }
         drop(write_lock)
     }
@@ -371,176 +376,10 @@ impl TripleManager {
 
 #[cfg(test)]
 mod test {
-    use std::{collections::HashMap, fs::OpenOptions, ops::Range};
-
-    use crate::{protocol::message::TripleMessage, storage};
-    use cait_sith::protocol::{InitializationError, Participant, ProtocolError};
-    use itertools::multiunzip;
-    use std::io::prelude::*;
-
-    use super::TripleManager;
-    use crate::storage::triple_storage::LockTripleNodeStorageBox;
-    use std::sync::Arc;
-    use tokio::sync::RwLock;
-
-    struct TestManagers {
-        managers: Vec<TripleManager>,
-    }
-
-    impl TestManagers {
-        async fn new(number: u32) -> Self {
-            let range = 0..number;
-            // Self::wipe_mailboxes(range.clone());
-            let participants: Vec<Participant> = range.clone().map(Participant::from).collect();
-            let managers = range
-                .map(|num| {
-                    let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(
-                        storage::triple_storage::init(&None, num.to_string()),
-                    ));
-                    TripleManager::new(
-                        participants.clone(),
-                        Participant::from(num),
-                        number as usize,
-                        0,
-                        vec![],
-                        triple_storage,
-                    )
-                })
-                .collect();
-            TestManagers { managers }
-        }
-
-        fn generate(&mut self, index: usize) -> Result<(), InitializationError> {
-            self.managers[index].generate()
-        }
-
-        async fn poke(&mut self, index: usize) -> Result<bool, ProtocolError> {
-            let mut quiet = true;
-            let messages = self.managers[index].poke().await?;
-            for (
-                participant,
-                ref tm @ TripleMessage {
-                    id, from, ref data, ..
-                },
-            ) in messages
-            {
-                // Self::debug_mailbox(participant.into(), &tm);
-                quiet = false;
-                let participant_i: u32 = participant.into();
-                let manager = &mut self.managers[participant_i as usize];
-                if let Some(protocol) = manager.get_or_generate(id).unwrap() {
-                    protocol.message(from, data.to_vec());
-                } else {
-                    println!("Tried to write to completed mailbox {:?}", tm);
-                }
-            }
-            Ok(quiet)
-        }
-
-        #[allow(unused)]
-        fn wipe_mailboxes(mailboxes: Range<u32>) {
-            for m in mailboxes {
-                let mut file = OpenOptions::new()
-                    .write(true)
-                    .append(false)
-                    .create(true)
-                    .open(format!("{}.csv", m))
-                    .unwrap();
-                write!(file, "").unwrap();
-            }
-        }
-
-        // This allows you to see what each node is recieving and when
-        #[allow(unused)]
-        fn debug_mailbox(participant: u32, TripleMessage { id, from, data, .. }: &TripleMessage) {
-            let mut file = OpenOptions::new()
-                .write(true)
-                .append(true)
-                .open(format!("{}.csv", participant))
-                .unwrap();
-
-            writeln!(file, "'{id}, {from:?}, {}", hex::encode(data)).unwrap();
-        }
-
-        async fn poke_until_quiet(&mut self) -> Result<(), ProtocolError> {
-            loop {
-                let mut quiet = true;
-                for i in 0..self.managers.len() {
-                    let poke = self.poke(i).await?;
-                    quiet = quiet && poke;
-                }
-                if quiet {
-                    return Ok(());
-                }
-            }
-        }
-    }
-
     // TODO: This test currently takes 22 seconds on my machine, which is much slower than it should be
     // Improve this before we make more similar tests
     #[tokio::test]
-    async fn happy_triple_generation() {
-        const M: usize = 2;
-        const N: usize = M + 3;
-        // Generate 5 triples
-        let mut tm = TestManagers::new(5).await;
-        for _ in 0..M {
-            Arc::new(tm.generate(0));
-        }
-        tm.poke_until_quiet().await.unwrap();
-        tm.generate(1).unwrap();
-        tm.generate(2).unwrap();
-        tm.generate(4).unwrap();
-
-        tm.poke_until_quiet().await.unwrap();
-
-        let inputs = tm
-            .managers
-            .into_iter()
-            .map(|m| (m.my_len(), m.len(), m.generators, m.triples));
-
-        let (my_lens, lens, generators, mut triples): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) =
-            multiunzip(inputs);
-
-        assert_eq!(
-            my_lens.iter().sum::<usize>(),
-            N,
-            "There should be {N} owned completed triples in total",
-        );
-
-        for l in lens {
-            assert_eq!(l, N, "All nodes should have {N} completed triples")
-        }
-
-        // This passes, but we don't have deterministic entropy or enough triples
-        // to ensure that it will no coincidentally fail
-        // TODO: deterministic entropy for testing
-        // assert_ne!(
-        //     my_lens,
-        //     vec![M, 1, 1, 0, 1],
-        //     "The nodes that started the triple don't own it"
-        // );
-
-        for g in generators.iter() {
-            assert!(g.is_empty(), "There are no triples still being generated")
-        }
-
-        assert_ne!(
-            triples.len(),
-            1,
-            "The number of triples is not 1 before deduping"
-        );
-
-        triples.dedup_by_key(|kv| {
-            kv.iter_mut()
-                .map(|(id, triple)| (*id, (triple.id, triple.public.clone())))
-                .collect::<HashMap<_, _>>()
-        });
-
-        assert_eq!(
-            triples.len(),
-            1,
-            "All triple IDs and public parts are identical"
-        )
+    async fn test_happy_triple_generation_locally() {
+        crate::test_utils::happy_triple_generation(None).await
     }
 }

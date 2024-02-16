@@ -13,6 +13,7 @@ use crate::protocol::state::{GeneratingState, ResharingState};
 use crate::protocol::triple::TripleManager;
 use crate::storage::secret_storage::SecretNodeStorageBox;
 use crate::storage::triple_storage::LockTripleNodeStorageBox;
+use crate::storage::triple_storage::TripleData;
 use crate::types::{KeygenProtocol, ReshareProtocol, SecretKeyShare};
 use crate::util::AffinePointExt;
 use crate::{http_client, rpc_client};
@@ -26,7 +27,6 @@ use std::cmp::Ordering;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use url::Url;
-use crate::storage::triple_storage::TripleData;
 
 pub trait ConsensusCtx {
     fn my_account_id(&self) -> &AccountId;
@@ -699,7 +699,7 @@ impl ConsensusProtocol for NodeState {
 }
 
 async fn load_triples<C: ConsensusCtx + Send + Sync>(
-    mut ctx: C
+    mut ctx: C,
 ) -> Result<Vec<TripleData>, ConsensusError> {
     let triple_storage = ctx.triple_storage();
     let read_lock = triple_storage.read().await;
@@ -707,6 +707,11 @@ async fn load_triples<C: ConsensusCtx + Send + Sync>(
     let mut error = None;
     while retries > 0 {
         match read_lock.load().await {
+            Err(DatastoreStorageError::FetchEntitiesError(_)) => {
+                tracing::info!("There are no triples persisted.");
+                drop(read_lock);
+                return Ok(vec![]);
+            }
             Err(e) => {
                 retries -= 1;
                 tracing::warn!(?e, "triple load failed.");
@@ -715,7 +720,7 @@ async fn load_triples<C: ConsensusCtx + Send + Sync>(
             }
             Ok(loaded_triples) => {
                 drop(read_lock);
-                return Ok(loaded_triples)
+                return Ok(loaded_triples);
             }
         }
     }
