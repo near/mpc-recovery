@@ -340,7 +340,6 @@ pub struct GcpService {
 
 impl GcpService {
     pub async fn init(storage_options: &storage::Options) -> anyhow::Result<Option<Self>> {
-        tracing::info!(?storage_options);
         match storage_options.gcp_project_id.clone() {
             Some(project_id_non_empty) if storage_options.env.is_some() => {
                 let mut datastore;
@@ -354,7 +353,6 @@ impl GcpService {
                         .build(),
                 );
                 if let Some(gcp_datastore_url) = storage_options.gcp_datastore_url.clone() {
-                    tracing::info!(gcp_datastore_url);
                     // Assuming custom GCP URL points to an emulator, so the token does not matter
                     let authenticator = AccessTokenAuthenticator::builder("TOKEN".to_string())
                         .build()
