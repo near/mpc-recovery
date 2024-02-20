@@ -13,6 +13,3 @@ rustflags = [
   "-C", "link-arg=-undefined",
   "-C", "link-arg=dynamic_lookup",
 ]
-
-[build]
-rustc-wrapper = "sccache"

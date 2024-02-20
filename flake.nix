@@ -18,6 +18,11 @@
       in {
         devShell = pkgs.mkShell {
 
+          env = {
+            SCCACHE_GHA_ENABLED = true;
+            RUSTC_WRAPPER = "sccache";
+          };
+
           # Everything in this list is added to your path
           buildInputs =
             with pkgs;
