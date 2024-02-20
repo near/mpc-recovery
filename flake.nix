@@ -30,6 +30,7 @@
               # Development
               cargo-watch
               cargo-audit
+              sccache
             ] ++
 
             pkgs.lib.optionals pkgs.stdenv.isDarwin
