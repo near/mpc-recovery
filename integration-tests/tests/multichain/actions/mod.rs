@@ -7,7 +7,7 @@ use k256::elliptic_curve::sec1::FromEncodedPoint;
 use k256::{AffinePoint, EncodedPoint, Scalar, Secp256k1};
 use mpc_contract::RunningContractState;
 use mpc_recovery_node::kdf;
-use mpc_recovery_node::util::ScalarExt;
+use mpc_recovery_node::util::{NearPublicKeyExt, ScalarExt};
 use near_crypto::InMemorySigner;
 use near_jsonrpc_client::methods::broadcast_tx_async::RpcBroadcastTxAsyncRequest;
 use near_lake_primitives::CryptoHash;
@@ -95,17 +95,17 @@ fn test_proposition() {
     let big_r = EncodedPoint::from_bytes(big_r).unwrap();
     let big_r = AffinePoint::from_encoded_point(&big_r).unwrap();
 
-    let s: Scalar  = k256::Scalar::from_bytes(&hex::decode("4c94690437e7ee537a2c2238cb303f4218319266e9d3a074acdebf3ec39e9ecf").unwrap());
-
+    let s: Scalar = k256::Scalar::from_bytes(
+        &hex::decode("4c94690437e7ee537a2c2238cb303f4218319266e9d3a074acdebf3ec39e9ecf").unwrap(),
+    );
 
     let signature = cait_sith::FullSignature::<Secp256k1> { big_r, s };
-
     let public_key =
-        hex::decode("024106C78BF2FD1DF1C9F2F75D7D98E4C107475CAEA8AAFC0CDD27BA9BBA929D49").unwrap();
-
-    let public_key = EncodedPoint::from_bytes(public_key).unwrap();
-
-    let public_key = AffinePoint::from_encoded_point(&public_key).unwrap();
+        "024106C78BF2FD1DF1C9F2F75D7D98E4C107475CAEA8AAFC0CDD27BA9BBA929D49".to_string();
+    let mut pk_bytes = vec![0x04];
+    pk_bytes.extend_from_slice(&public_key.as_bytes()[1..]);
+    let point = EncodedPoint::from_bytes(pk_bytes).unwrap();
+    let public_key = AffinePoint::from_encoded_point(&point).unwrap();
 
     let mut msg_hash = [0u8; 32];
     for i in 0..32 {
