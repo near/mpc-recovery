@@ -4,12 +4,12 @@ use crate::{account, MultichainTestContext};
 
 use anyhow::Ok;
 use curv::arithmetic::Converter;
-use k256::ecdsa::{Signature, VerifyingKey, RecoveryId};
 use k256::ecdsa::hazmat::VerifyPrimitive;
-use k256::elliptic_curve::Field;
+use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
 use k256::elliptic_curve::point::AffineCoordinates;
 use k256::elliptic_curve::sec1::ToEncodedPoint;
-use k256::{ecdsa, AffinePoint, Scalar, Secp256k1, FieldBytes, PublicKey};
+use k256::elliptic_curve::Field;
+use k256::{ecdsa, AffinePoint, FieldBytes, PublicKey, Scalar, Secp256k1};
 use mpc_contract::RunningContractState;
 use mpc_recovery_node::kdf;
 use mpc_recovery_node::util::{NearPublicKeyExt, ScalarExt};
@@ -34,8 +34,14 @@ pub async fn request_sign(
         true => Account::from_secret_key(account_id, sk, worker),
         false => worker.create_tla(account_id, sk).await?.unwrap(),
     };
-    let payload = rand::thread_rng().gen();
+    // let payload = rand::thread_rng().gen();
     // let payload: [u8; 32] = [5u8; 32];
+    // let payload: Vec<u8> = (0..32).into_iter().collect();
+    let mut payload = [0u8; 32];
+    for i in 0..32 {
+        payload[i] = i as u8;
+    }
+
     let signer = InMemorySigner {
         account_id: account.id().clone(),
         public_key: account.secret_key().public_key().clone().into(),
@@ -68,7 +74,7 @@ pub async fn request_sign(
         })
         .await?;
     tokio::time::sleep(Duration::from_secs(1)).await;
-    Ok((payload, account, tx_hash))
+    Ok((payload.into(), account, tx_hash))
 }
 
 pub async fn single_signature_production(
@@ -120,11 +126,17 @@ fn check_signature_cait_sith(
 
     let sig = Signature::from_scalars(signature_big_r.x(), signature_s).unwrap();
 
-    println!("Expected Public Key {:?}", VerifyingKey::from_affine(user_pk));
+    println!(
+        "Expected Public Key {:?}",
+        VerifyingKey::from_affine(user_pk)
+    );
     for i in 0u8..=3 {
         let recovery_id = RecoveryId::from_byte(i).unwrap();
         let res = VerifyingKey::recover_from_prehash(payload, &sig, recovery_id);
-        println!("Execution index: {}, v? : {}, res: {:?}", execution_index, i, res);
+        println!(
+            "Execution index: {}, v? : {}, res: {:?}",
+            execution_index, i, res
+        );
     }
 
     let payload2: [u8; 32] = rand::thread_rng().gen();
