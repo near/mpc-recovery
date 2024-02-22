@@ -87,3 +87,31 @@ pub async fn single_signature_production(
 
     Ok(())
 }
+
+#[test]
+fn test_proposition() {
+    let big_r = "0478986e65711a4dc50d542a4217362739bf81487fb85109b04cee98bbbe6208d6bccf7e3d0a80186ce189e5cde17f38ae90c5ce8d763ba66fc5519b09ece2898e";
+    let big_r = hex::decode(big_r).unwrap();
+    let big_r = EncodedPoint::from_bytes(big_r).unwrap();
+    let big_r = AffinePoint::from_encoded_point(&big_r).unwrap();
+
+    let s: Scalar  = k256::Scalar::from_bytes(&hex::decode("4c94690437e7ee537a2c2238cb303f4218319266e9d3a074acdebf3ec39e9ecf").unwrap());
+
+
+    let signature = cait_sith::FullSignature::<Secp256k1> { big_r, s };
+
+    let public_key =
+        hex::decode("024106C78BF2FD1DF1C9F2F75D7D98E4C107475CAEA8AAFC0CDD27BA9BBA929D49").unwrap();
+
+    let public_key = EncodedPoint::from_bytes(public_key).unwrap();
+
+    let public_key = AffinePoint::from_encoded_point(&public_key).unwrap();
+
+    let mut msg_hash = [0u8; 32];
+    for i in 0..32 {
+        msg_hash[i] = i as u8;
+    }
+    let msg_hash = Scalar::from_bytes(&msg_hash);
+
+    assert!(signature.verify(&public_key, &msg_hash), "Signature failed");
+}
