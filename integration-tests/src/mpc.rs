@@ -1,4 +1,4 @@
-use std::{path::{Path, PathBuf}, fs};
+use std::{path::{Path, PathBuf}};
 
 use anyhow::Context;
 use async_process::{Child, Command, ExitStatus, Stdio};
