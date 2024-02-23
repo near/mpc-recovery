@@ -3,9 +3,10 @@ pub mod wait_for;
 use crate::MultichainTestContext;
 
 use cait_sith::FullSignature;
+use k256::elliptic_curve::group::GroupEncoding;
 use k256::elliptic_curve::scalar::FromUintUnchecked;
 use k256::elliptic_curve::sec1::FromEncodedPoint;
-use k256::{AffinePoint, EncodedPoint, Scalar, Secp256k1};
+use k256::{AffinePoint, EncodedPoint, Scalar, Secp256k1, U256};
 use mpc_contract::RunningContractState;
 use mpc_recovery_node::kdf;
 use mpc_recovery_node::util::{NearPublicKeyExt, ScalarExt};
@@ -16,6 +17,7 @@ use near_primitives::transaction::{Action, FunctionCallAction, Transaction};
 use near_workspaces::Account;
 use rand::Rng;
 
+use std::str::FromStr;
 use std::time::Duration;
 
 pub async fn request_sign(
@@ -89,8 +91,10 @@ pub async fn single_signature_production(
     Ok(())
 }
 
-#[test]
-fn test_proposition() {
+#[tokio::test]
+async fn test_proposition() {
+    use k256::ecdsa::Signature;
+
     // let big_r = "0478986e65711a4dc50d542a4217362739bf81487fb85109b04cee98bbbe6208d6bccf7e3d0a80186ce189e5cde17f38ae90c5ce8d763ba66fc5519b09ece2898e";
     let big_r = "043f8fdd413b470a3333beaddf39dcad0850563262f52f8c8b4e7cdb512b92ce7f1ede039a3fb68707ee58aed75f0def763a82308937f62d83f0da5db66033222f";
     // let s = "4c94690437e7ee537a2c2238cb303f4218319266e9d3a074acdebf3ec39e9ecf";
@@ -99,9 +103,17 @@ fn test_proposition() {
     // let public_key = "032628FCF372DCF6F36FFD478A2C33D99B61D599B0539481F33CA8E165CA8D15DB";
     let mpc_key = "032628FCF372DCF6F36FFD478A2C33D99B61D599B0539481F33CA8E165CA8D15DB";
 
-    let mpc_pk = mpc_key.to_string().into_affine_point();
+    let mpc_pk =
+        hex::decode(mpc_key).unwrap();
+
+    let mpc_pk = EncodedPoint::from_bytes(mpc_pk).unwrap();
+
+    let mpc_pk = AffinePoint::from_encoded_point(&mpc_pk).unwrap();
+
+    let account_id = "acc_mc.test.near".parse().unwrap();
+
     let derivation_epsilon: k256::Scalar =
-        kdf::derive_epsilon(&"acc_mc.test.near".parse().unwrap(), "test");
+        kdf::derive_epsilon(&account_id, "test");
     let user_pk: AffinePoint = kdf::derive_key(mpc_pk, derivation_epsilon);
 
     let big_r = hex::decode(big_r).unwrap();
@@ -114,6 +126,7 @@ fn test_proposition() {
     println!("R: {big_r:#?}");
     println!("S: {s:#?}");
 
+
     let signature = cait_sith::FullSignature::<Secp256k1> { big_r, s };
     // let mut pk_bytes = vec![0x04];
     // pk_bytes.extend_from_slice(&public_key.as_bytes()[1..]);
@@ -125,6 +138,8 @@ fn test_proposition() {
     for i in 0..32 {
         msg_hash[i] = i as u8;
     }
+    assert_signature(&account_id, &mpc_pk.to_bytes(), &msg_hash, &signature).await;
+
     let msg_hash = k256::Scalar::from_bytes(&msg_hash);
     assert!(signature.verify(&user_pk, &msg_hash), "Signature failed");
 }
