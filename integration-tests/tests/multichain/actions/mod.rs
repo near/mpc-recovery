@@ -90,28 +90,40 @@ pub async fn single_signature_production(
 
 #[test]
 fn test_proposition() {
-    let big_r = "0478986e65711a4dc50d542a4217362739bf81487fb85109b04cee98bbbe6208d6bccf7e3d0a80186ce189e5cde17f38ae90c5ce8d763ba66fc5519b09ece2898e";
+    // let big_r = "0478986e65711a4dc50d542a4217362739bf81487fb85109b04cee98bbbe6208d6bccf7e3d0a80186ce189e5cde17f38ae90c5ce8d763ba66fc5519b09ece2898e";
+    let big_r = "043f8fdd413b470a3333beaddf39dcad0850563262f52f8c8b4e7cdb512b92ce7f1ede039a3fb68707ee58aed75f0def763a82308937f62d83f0da5db66033222f";
+    // let s = "4c94690437e7ee537a2c2238cb303f4218319266e9d3a074acdebf3ec39e9ecf";
+    let s = "79e3c20191b1b32f5177f12346de442acd46bab29b07c46470cbcc8b2930e7bf";
+    // let public_key = "024106C78BF2FD1DF1C9F2F75D7D98E4C107475CAEA8AAFC0CDD27BA9BBA929D49";
+    // let public_key = "032628FCF372DCF6F36FFD478A2C33D99B61D599B0539481F33CA8E165CA8D15DB";
+    let mpc_key = "032628FCF372DCF6F36FFD478A2C33D99B61D599B0539481F33CA8E165CA8D15DB";
+
+    let mpc_pk = mpc_key.to_string().into_affine_point();
+    let derivation_epsilon: k256::Scalar =
+        kdf::derive_epsilon(&"acc_mc.test.near".parse().unwrap(), "test");
+    let user_pk: AffinePoint = kdf::derive_key(mpc_pk, derivation_epsilon);
+
     let big_r = hex::decode(big_r).unwrap();
     let big_r = EncodedPoint::from_bytes(big_r).unwrap();
     let big_r = AffinePoint::from_encoded_point(&big_r).unwrap();
 
-    let s: Scalar = k256::Scalar::from_bytes(
-        &hex::decode("4c94690437e7ee537a2c2238cb303f4218319266e9d3a074acdebf3ec39e9ecf").unwrap(),
-    );
+    let s = hex::decode(s).unwrap();
+    let s = k256::Scalar::from_uint_unchecked(U256::from_be_slice(s.as_slice()));
+
+    println!("R: {big_r:#?}");
+    println!("S: {s:#?}");
 
     let signature = cait_sith::FullSignature::<Secp256k1> { big_r, s };
-    let public_key =
-        "024106C78BF2FD1DF1C9F2F75D7D98E4C107475CAEA8AAFC0CDD27BA9BBA929D49".to_string();
-    let mut pk_bytes = vec![0x04];
-    pk_bytes.extend_from_slice(&public_key.as_bytes()[1..]);
-    let point = EncodedPoint::from_bytes(pk_bytes).unwrap();
-    let public_key = AffinePoint::from_encoded_point(&point).unwrap();
+    // let mut pk_bytes = vec![0x04];
+    // pk_bytes.extend_from_slice(&public_key.as_bytes()[1..]);
+    // let point = EncodedPoint::from_bytes(pk_bytes).unwrap();
+    // let public_key = AffinePoint::from_encoded_point(&point).unwrap();
+    // let public_key: AffinePoint = public_key.to_string().into_affine_point();
 
     let mut msg_hash = [0u8; 32];
     for i in 0..32 {
         msg_hash[i] = i as u8;
     }
-    let msg_hash = Scalar::from_bytes(&msg_hash);
-
-    assert!(signature.verify(&public_key, &msg_hash), "Signature failed");
+    let msg_hash = k256::Scalar::from_bytes(&msg_hash);
+    assert!(signature.verify(&user_pk, &msg_hash), "Signature failed");
 }
