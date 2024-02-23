@@ -1,4 +1,4 @@
-use std::{path::{Path, PathBuf}};
+use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use async_process::{Child, Command, ExitStatus, Stdio};
@@ -50,7 +50,8 @@ async fn build_package(
         .output()
         .await
         .expect("Failed to execute which command")
-        .status.success();
+        .status
+        .success();
 
     let mut cmd = if has_direnv {
         // If so use the same compiler you always use
