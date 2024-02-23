@@ -123,12 +123,14 @@ async fn test_proposition() {
     let user_pk_x: XOnlyPublicKey = XOnlyPublicKey::from_slice(&user_pk_x.to_bytes()).unwrap();
     let user_pk_x: secp256k1::PublicKey =
         secp256k1::PublicKey::from_x_only_public_key(user_pk_x, user_pk_y_parity);
-    let user_address = public_key_to_address(&user_pk_x.into());
+    let user_address_from_pk = public_key_to_address(&user_pk_x.into());
 
     // Prepare R ans s signature values
     let big_r = hex::decode(big_r).unwrap();
     let big_r = EncodedPoint::from_bytes(big_r).unwrap();
     let big_r = AffinePoint::from_encoded_point(&big_r).unwrap();
+    let big_r_y_parity = big_r.y_is_odd().unwrap_u8() as i32;
+    assert!(big_r_y_parity == 0 || big_r_y_parity == 1);
 
     let s = hex::decode(s).unwrap();
     let s = k256::Scalar::from_uint_unchecked(k256::U256::from_be_slice(s.as_slice()));
@@ -136,7 +138,7 @@ async fn test_proposition() {
 
     println!("R: {big_r:#?}");
     println!("r: {r:#?}");
-    println!("y parity: {}", big_r.y_is_odd().unwrap_u8());
+    println!("y parity: {}", big_r_y_parity);
     println!("s: {s:#?}");
 
     // Check signature using cait-sith tooling
@@ -152,20 +154,44 @@ async fn test_proposition() {
     // Check signature using ecdsa tooling
     let ecdsa_signature: ecdsa::Signature<Secp256k1> =
         ecdsa::Signature::from_scalars(r, s).unwrap();
+    let user_pk_k256 = k256::PublicKey::from_affine(user_pk).unwrap();
     let ecdsa_verify_result = ecdsa::signature::Verifier::verify(
-        &k256::ecdsa::VerifyingKey::from(&k256::PublicKey::from_affine(user_pk).unwrap()),
+        &k256::ecdsa::VerifyingKey::from(&user_pk_k256),
         &payload,
         &ecdsa_signature,
     );
     // assert!(ecdsa_verify_result.is_ok()); // TODO: Fix
 
-    // Check if recovered address is the same as expected user address
+    // Check signature using etheres tooling
+    let ethers_r = ethers_core::types::U256::from_little_endian(big_r.x().as_slice());
+    let ethers_s = ethers_core::types::U256::from_little_endian(s.to_bytes().as_slice());
+    let chain_id = 1;
+    // let ethers_v = (big_r_y_parity + chain_id * 2 + 35) as u64;
+    let ethers_v = big_r_y_parity as u64;
+
+    let signature = ethers_core::types::Signature {
+        r: ethers_r,
+        s: ethers_s,
+        v: ethers_v,
+    };
+
+    let verifying_user_pk = ecdsa::VerifyingKey::from(&user_pk_k256);
+    let user_address_ethers: ethers_core::types::H160 =
+        ethers_core::utils::public_key_to_address(&verifying_user_pk);
+    // assert!(signature.verify(payload, user_address_ethers).is_ok()); // TODO: fix
+
+    // Check if recovered address is the same as the user address
     let ecdsa_signature_bytes = ecdsa_signature.to_bytes();
-    let recovery_id: i32 = big_r.y_is_odd().unwrap_u8() as i32;
-    assert!(recovery_id == 0 || recovery_id == 1);
-    let recovered_address =
-        web3::signing::recover(&payload, &ecdsa_signature_bytes, recovery_id).unwrap();
-    // assert_eq!(user_address, recovered_address); // TODO: fix
+    let recovered_from_signature_address_web3 =
+        web3::signing::recover(&payload, &ecdsa_signature_bytes, big_r_y_parity).unwrap();
+    // assert_eq!(user_address_from_pk, recovered_from_signature_address_web3); // TODO: fix
+
+    let recovered_from_signature_address_ethers = signature.recover(payload).unwrap();
+
+    println!("user_address_from_pk: {user_address_from_pk:#?}");
+    println!("recovered_from_signature_address_ethers: {recovered_from_signature_address_ethers:#?}");
+    println!("recovered_from_signature_address_web3: {recovered_from_signature_address_web3:#?}");
+
 }
 
 /// Get the x coordinate of a point, as a scalar
