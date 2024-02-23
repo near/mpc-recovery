@@ -3,6 +3,7 @@ pub mod wait_for;
 use crate::MultichainTestContext;
 
 use cait_sith::FullSignature;
+use k256::elliptic_curve::point::AffineCoordinates;
 use k256::elliptic_curve::scalar::FromUintUnchecked;
 use k256::elliptic_curve::sec1::FromEncodedPoint;
 use k256::{AffinePoint, EncodedPoint, Scalar, Secp256k1};
@@ -15,6 +16,7 @@ use near_lake_primitives::CryptoHash;
 use near_primitives::transaction::{Action, FunctionCallAction, Transaction};
 use near_workspaces::Account;
 use rand::Rng;
+use secp256k1::XOnlyPublicKey;
 
 use std::time::Duration;
 
@@ -96,13 +98,24 @@ fn test_proposition() {
     // let s = "4c94690437e7ee537a2c2238cb303f4218319266e9d3a074acdebf3ec39e9ecf";
     let s = "79e3c20191b1b32f5177f12346de442acd46bab29b07c46470cbcc8b2930e7bf";
     // let public_key = "024106C78BF2FD1DF1C9F2F75D7D98E4C107475CAEA8AAFC0CDD27BA9BBA929D49";
-    // let public_key = "032628FCF372DCF6F36FFD478A2C33D99B61D599B0539481F33CA8E165CA8D15DB";
     let mpc_key = "032628FCF372DCF6F36FFD478A2C33D99B61D599B0539481F33CA8E165CA8D15DB";
 
     let mpc_pk = mpc_key.to_string().into_affine_point();
     let derivation_epsilon: k256::Scalar =
         kdf::derive_epsilon(&"acc_mc.test.near".parse().unwrap(), "test");
-    let user_pk: AffinePoint = kdf::derive_key(mpc_pk, derivation_epsilon);
+
+    let user_pk: AffinePoint = kdf::derive_key(mpc_pk.clone(), derivation_epsilon);
+    let y_parity = match user_pk.y_is_odd().unwrap_u8() {
+        0 => secp256k1::Parity::Even,
+        1 => secp256k1::Parity::Odd,
+        _ => unreachable!(),
+    };
+
+    let user_xpk = x_coordinate::<k256::Secp256k1>(&user_pk);
+    let user_xpk: XOnlyPublicKey = XOnlyPublicKey::from_slice(&user_xpk.to_bytes()).unwrap();
+    let user_xpk: secp256k1::PublicKey =
+        secp256k1::PublicKey::from_x_only_public_key(user_xpk, y_parity);
+    let user_address = public_key_to_address(&user_xpk.into());
 
     let big_r = hex::decode(big_r).unwrap();
     let big_r = EncodedPoint::from_bytes(big_r).unwrap();
@@ -110,21 +123,52 @@ fn test_proposition() {
 
     let s = hex::decode(s).unwrap();
     let s = k256::Scalar::from_uint_unchecked(k256::U256::from_be_slice(s.as_slice()));
+    let r = x_coordinate::<k256::Secp256k1>(&big_r);
 
     println!("R: {big_r:#?}");
     println!("S: {s:#?}");
 
     let signature = cait_sith::FullSignature::<Secp256k1> { big_r, s };
-    // let mut pk_bytes = vec![0x04];
-    // pk_bytes.extend_from_slice(&public_key.as_bytes()[1..]);
-    // let point = EncodedPoint::from_bytes(pk_bytes).unwrap();
-    // let public_key = AffinePoint::from_encoded_point(&point).unwrap();
-    // let public_key: AffinePoint = public_key.to_string().into_affine_point();
 
-    let mut msg_hash = [0u8; 32];
+    let mut payload = [0u8; 32];
     for i in 0..32 {
-        msg_hash[i] = i as u8;
+        payload[i] = i as u8;
     }
-    let msg_hash = k256::Scalar::from_bytes(&msg_hash);
-    assert!(signature.verify(&user_pk, &msg_hash), "Signature failed");
+    let msg_hash = k256::Scalar::from_bytes(&payload);
+
+    let sig: ecdsa::Signature<Secp256k1> = ecdsa::Signature::from_scalars(r, s).unwrap();
+    let signature_for_recovery = sig.to_bytes();
+    let recovery_id: i32 = big_r.y_is_odd().unwrap_u8() as i32; // TODO: should it be 0/1 or 27/28, or formula?
+    let recovered_address =
+        web3::signing::recover(&payload, &signature_for_recovery, recovery_id).unwrap();
+
+    println!(
+        "ADDR:\n  USER: {}\n  RECV: {}",
+        user_address, recovered_address
+    );
+
+    let x = signature.verify(&user_pk, &msg_hash);
+    let y = signature.verify(&mpc_pk, &msg_hash);
+
+    let verify = ecdsa::signature::Verifier::verify(
+        &k256::ecdsa::VerifyingKey::from(&k256::PublicKey::from_affine(user_pk).unwrap()),
+        &payload,
+        &sig,
+    );
+
+    println!("SIGNATURE VERIFY: {:?}", (x, y, verify));
+}
+
+/// Get the x coordinate of a point, as a scalar
+pub(crate) fn x_coordinate<C: cait_sith::CSCurve>(point: &C::AffinePoint) -> C::Scalar {
+    <C::Scalar as k256::elliptic_curve::ops::Reduce<<C as k256::elliptic_curve::Curve>::Uint>>::reduce_bytes(&point.x())
+}
+
+pub fn public_key_to_address(public_key: &secp256k1::PublicKey) -> web3::types::Address {
+    let public_key = public_key.serialize_uncompressed();
+
+    debug_assert_eq!(public_key[0], 0x04);
+    let hash = web3::signing::keccak256(&public_key[1..]);
+
+    web3::types::Address::from_slice(&hash[12..])
 }
