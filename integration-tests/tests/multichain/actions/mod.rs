@@ -163,9 +163,9 @@ async fn test_proposition() {
     // assert!(ecdsa_verify_result.is_ok()); // TODO: Fix
 
     // Check signature using etheres tooling
-    let ethers_r = ethers_core::types::U256::from_little_endian(big_r.x().as_slice());
-    let ethers_s = ethers_core::types::U256::from_little_endian(s.to_bytes().as_slice());
-    let chain_id = 1;
+    let ethers_r = ethers_core::types::U256::from_big_endian(r.to_bytes().as_slice());
+    let ethers_s = ethers_core::types::U256::from_big_endian(s.to_bytes().as_slice());
+    // let chain_id = 1;
     // let ethers_v = (big_r_y_parity + chain_id * 2 + 35) as u64;
     let ethers_v = big_r_y_parity as u64;
 
@@ -189,9 +189,11 @@ async fn test_proposition() {
     let recovered_from_signature_address_ethers = signature.recover(payload).unwrap();
 
     println!("user_address_from_pk: {user_address_from_pk:#?}");
-    println!("recovered_from_signature_address_ethers: {recovered_from_signature_address_ethers:#?}");
+    println!("user_address_ethers: {user_address_ethers:#?}");
+    println!(
+        "recovered_from_signature_address_ethers: {recovered_from_signature_address_ethers:#?}"
+    );
     println!("recovered_from_signature_address_web3: {recovered_from_signature_address_web3:#?}");
-
 }
 
 /// Get the x coordinate of a point, as a scalar
