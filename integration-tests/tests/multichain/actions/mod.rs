@@ -3,6 +3,7 @@ pub mod wait_for;
 use crate::MultichainTestContext;
 
 use cait_sith::FullSignature;
+use k256::elliptic_curve::scalar::FromUintUnchecked;
 use k256::elliptic_curve::sec1::FromEncodedPoint;
 use k256::{AffinePoint, EncodedPoint, Scalar, Secp256k1};
 use mpc_contract::RunningContractState;
@@ -108,7 +109,7 @@ fn test_proposition() {
     let big_r = AffinePoint::from_encoded_point(&big_r).unwrap();
 
     let s = hex::decode(s).unwrap();
-    let s = k256::Scalar::from_uint_unchecked(U256::from_be_slice(s.as_slice()));
+    let s = k256::Scalar::from_uint_unchecked(k256::U256::from_be_slice(s.as_slice()));
 
     println!("R: {big_r:#?}");
     println!("S: {s:#?}");
