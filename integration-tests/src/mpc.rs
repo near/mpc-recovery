@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::{path::{Path, PathBuf}, fs};
 
 use anyhow::Context;
 use async_process::{Child, Command, ExitStatus, Stdio};
@@ -44,7 +44,18 @@ async fn build_package(
     package: &str,
     target: Option<&str>,
 ) -> anyhow::Result<ExitStatus> {
-    let mut cmd = Command::new("cargo");
+    let has_direnv = Command::new("which")
+        .arg("direnv")
+        .output()
+        .await
+        .expect("Failed to execute which command")
+        .status.success();
+
+    let mut cmd = if has_direnv {
+        Command::new("direnv exec cargo")
+    } else {
+        Command::new("cargo")
+    };
     cmd.arg("build")
         .arg("--package")
         .arg(package)
