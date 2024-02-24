@@ -41,6 +41,9 @@ pub async fn request_sign(
     for i in 0..32 {
         payload[i] = i as u8;
     }
+    let msg_hash: [u8; 32] =
+        sha2::Digest::finalize(<sha2::Sha256 as sha2::Digest>::new_with_prefix(payload)).into();
+    println!("MSG_HASH: {msg_hash:?}");
 
     let signer = InMemorySigner {
         account_id: account.id().clone(),
@@ -63,7 +66,7 @@ pub async fn request_sign(
                 actions: vec![Action::FunctionCall(FunctionCallAction {
                     method_name: "sign".to_string(),
                     args: serde_json::to_vec(&serde_json::json!({
-                        "payload": payload,
+                        "payload": msg_hash,
                         "path": "test",
                     }))?,
                     gas: 300_000_000_000_000,
@@ -74,7 +77,7 @@ pub async fn request_sign(
         })
         .await?;
     tokio::time::sleep(Duration::from_secs(1)).await;
-    Ok((payload.into(), account, tx_hash))
+    Ok((msg_hash.into(), account, tx_hash))
 }
 
 pub async fn single_signature_production(

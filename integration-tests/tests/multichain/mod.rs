@@ -155,9 +155,15 @@ async fn _do_sign(public_key: &String, ctx: &MultichainTestContext<'_>) -> anyho
         signature
     };
 
+    let mut message = [0u8; 32];
+    for i in 0..32 {
+        message[i] = i as u8;
+    }
+    message.reverse();
+
     let recovery_id: i32 = signature_big_r.y_is_odd().unwrap_u8() as i32; // TODO: should it be 0/1 or 27/28, or formula?
     let recovered_address =
-        web3::signing::recover(&payload, &signature_for_recovery, recovery_id).unwrap();
+        web3::signing::recover(&message, &signature_for_recovery, recovery_id).unwrap();
     println!("  RECV ADDR: {:?}", recovered_address);
 
     Ok(())
@@ -173,7 +179,7 @@ async fn test_pk_recovery() -> anyhow::Result<()> {
             wait_for::has_at_least_presignatures(&ctx, 2).await?;
 
             // for _ in 0..2 {
-            // println!("state 0 pk: {:?}", state_0.public_key);
+            println!("MPC_KEY: {:?}", state_0.public_key);
             _do_sign(&state_0.public_key, &ctx).await?;
             // }
 
