@@ -49,6 +49,9 @@ mpc-keys = { path = "../keys" }
 mpc-recovery = { path = "../mpc-recovery" }
 mpc-recovery-node = { path = "../node" }
 
+elliptic-curve = { version = "0.13.5", default-features = false }
+generic-array = { version = "0.14.7", default-features = false }
+
 [dev-dependencies]
 backon = "0.4"
 rand = "0.7"

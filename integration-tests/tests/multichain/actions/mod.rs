@@ -20,8 +20,11 @@ use near_primitives::transaction::{Action, FunctionCallAction, Transaction};
 use near_workspaces::Account;
 use rand::Rng;
 use secp256k1::XOnlyPublicKey;
+use elliptic_curve::sec1::ToEncodedPoint;
 
 use std::time::Duration;
+
+use k256::{ecdsa::{Signature as RecoverableSignature, Signature as K256Signature}, PublicKey as K256PublicKey};
 
 pub async fn request_sign(
     ctx: &MultichainTestContext<'_>,
@@ -117,6 +120,10 @@ async fn test_proposition() {
     ];
     let msg_hash = k256::Scalar::from_bytes(&hashed);
     hashed.reverse();
+    
+
+    // println!("hashed {hashed:#?}");
+    // println!("hashed_not_reverse {hashed_not_reverse:#?}");
 
     // Derive and convert user pk
     let mpc_pk = hex::decode(mpc_key).unwrap();
@@ -151,7 +158,7 @@ async fn test_proposition() {
     let big_r = hex::decode(big_r).unwrap();
     let big_r = EncodedPoint::from_bytes(big_r).unwrap();
     let big_r = AffinePoint::from_encoded_point(&big_r).unwrap();
-    let big_r_y_parity = big_r.y_is_odd().unwrap_u8() as i32;
+    let big_r_y_parity = 1 - big_r.y_is_odd().unwrap_u8() as i32;
     assert!(big_r_y_parity == 0 || big_r_y_parity == 1);
 
     let s = hex::decode(s).unwrap();
@@ -212,6 +219,7 @@ async fn test_proposition() {
     let verifying_user_pk = ecdsa::VerifyingKey::from(&user_pk_k256);
     let user_address_ethers: ethers_core::types::H160 =
         ethers_core::utils::public_key_to_address(&verifying_user_pk);
+
     // assert!(signature.verify(payload, user_address_ethers).is_ok()); // TODO: fix
 
     // Check if recovered address is the same as the user address
@@ -225,9 +233,11 @@ async fn test_proposition() {
     // let ecdsa_signature_bytes = k256_sig.to_bytes();
     let recovered_from_signature_address_web3 =
         web3::signing::recover(&hashed, &signature_for_recovery, big_r_y_parity).unwrap();
-    // assert_eq!(user_address_from_pk, recovered_from_signature_address_web3); // TODO: fix
+    assert_eq!(user_address_from_pk, recovered_from_signature_address_web3); // TODO: fix
 
     let recovered_from_signature_address_ethers = signature.recover(hashed).unwrap();
+
+    //let recovered_from_signature_address_ethers = recover(signature, hashed).unwrap();
 
     println!("                      {mpc_pk_addr:#?}");
     println!("user_address_from_pk: {user_address_from_pk:#?}");
@@ -241,6 +251,64 @@ async fn test_proposition() {
 /// Get the x coordinate of a point, as a scalar
 pub(crate) fn x_coordinate<C: cait_sith::CSCurve>(point: &C::AffinePoint) -> C::Scalar {
     <C::Scalar as k256::elliptic_curve::ops::Reduce<<C as k256::elliptic_curve::Curve>::Uint>>::reduce_bytes(&point.x())
+}
+
+pub fn recover<M>(signature: ethers_core::types::Signature, message: M) -> Result<ethers_core::types::Address, ethers_core::types::SignatureError>
+    where
+        M: Into<ethers_core::types::RecoveryMessage>,
+{
+        let message_hash = match message.into() {
+            ethers_core::types::RecoveryMessage::Data(ref message) => {
+                println!("identified as data");
+                ethers_core::utils::hash_message(message)
+            }
+            ethers_core::types::RecoveryMessage::Hash(hash) => hash,
+        };
+        println!("message_hash {message_hash:#?}");
+
+        let (recoverable_sig, recovery_id) = as_signature(signature)?;
+        let verifying_key = VerifyingKey::recover_from_prehash(
+            message_hash.as_ref(),
+            &recoverable_sig,
+            recovery_id,
+        )?;
+        println!("verifying_key {verifying_key:#?}");
+
+        let public_key = K256PublicKey::from(&verifying_key);
+        //println!("ethercore public key from verifying key {public_key:#?}");
+
+        let public_key = public_key.to_encoded_point(/* compress = */ false);
+        println!("ethercore recover encoded point pk {public_key:#?}");
+        let public_key = public_key.as_bytes();
+        debug_assert_eq!(public_key[0], 0x04);
+        let hash = ethers_core::utils::keccak256(&public_key[1..]);
+        let result = ethers_core::types::Address::from_slice(&hash[12..]);
+        println!("ethercore recover result {result:#?}");
+        Ok(ethers_core::types::Address::from_slice(&hash[12..]))
+}
+
+/// Retrieves the recovery signature.
+fn as_signature(signature: ethers_core::types::Signature) -> Result<(RecoverableSignature, k256::ecdsa::RecoveryId), ethers_core::types::SignatureError> {
+    let mut recovery_id = signature.recovery_id()?;
+    let mut signature = {
+        let mut r_bytes = [0u8; 32];
+        let mut s_bytes = [0u8; 32];
+        signature.r.to_big_endian(&mut r_bytes);
+        signature.s.to_big_endian(&mut s_bytes);
+        let gar: &generic_array::GenericArray<u8, elliptic_curve::consts::U32> = generic_array::GenericArray::from_slice(&r_bytes);
+        let gas: &generic_array::GenericArray<u8, elliptic_curve::consts::U32> = generic_array::GenericArray::from_slice(&s_bytes);
+        K256Signature::from_scalars(*gar, *gas)?
+    };
+
+    // Normalize into "low S" form. See:
+    // - https://github.com/RustCrypto/elliptic-curves/issues/988
+    // - https://github.com/bluealloy/revm/pull/870
+    if let Some(normalized) = signature.normalize_s() {
+        signature = normalized;
+        recovery_id = k256::ecdsa::RecoveryId::from_byte(recovery_id.to_byte() ^ 1).unwrap();
+    }
+
+    Ok((signature, recovery_id))
 }
 
 pub fn public_key_to_address(public_key: &secp256k1::PublicKey) -> web3::types::Address {
@@ -279,23 +347,23 @@ fn verify_prehashed(
     let reproduced = lincomb(&ProjectivePoint::<Secp256k1>::generator(), &u1, q, &u2).to_affine();
     let x = reproduced.x();
 
-    println!("------------- verify_prehashed[beg] -------------");
-    println!("z: {z:#?}");
-    // println!("r: {r:#?}");
-    // println!("s: {s:#?}");
-    println!("s_inv {s_inv:#?}");
-    println!("u1 {u1:#?}");
-    println!("u2 {u2:#?}");
+    // println!("------------- verify_prehashed[beg] -------------");
+    // println!("z: {z:#?}");
+    // // println!("r: {r:#?}");
+    // // println!("s: {s:#?}");
+    // println!("s_inv {s_inv:#?}");
+    // println!("u1 {u1:#?}");
+    // println!("u2 {u2:#?}");
     println!("reproduced {reproduced:#?}");
     println!("reproduced_x {x:#?}");
-    println!("------------- verify_prehashed[end] -------------");
+    // println!("------------- verify_prehashed[end] -------------");
 
     let reduced =
         <Scalar as Reduce<<k256::Secp256k1 as k256::elliptic_curve::Curve>::Uint>>::reduce_bytes(
             &x,
         );
 
-    println!("reduced {reduced:#?}");
+    //println!("reduced {reduced:#?}");
 
     if *r == reduced {
         Ok(())
