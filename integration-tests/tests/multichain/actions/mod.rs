@@ -41,8 +41,9 @@ pub async fn request_sign(
     for i in 0..32 {
         payload[i] = i as u8;
     }
-    let msg_hash: [u8; 32] =
-        sha2::Digest::finalize(<sha2::Sha256 as sha2::Digest>::new_with_prefix(payload)).into();
+    // let msg_hash: [u8; 32] =
+    //     sha2::Digest::finalize(<sha2::Sha256 as sha2::Digest>::new_with_prefix(payload)).into();
+    let msg_hash = web3::signing::keccak256(&payload);
     println!("MSG_HASH: {msg_hash:?}");
 
     let signer = InMemorySigner {
