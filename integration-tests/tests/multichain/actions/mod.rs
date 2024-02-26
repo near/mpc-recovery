@@ -120,10 +120,6 @@ async fn test_proposition() {
     ];
     let msg_hash = k256::Scalar::from_bytes(&hashed);
     hashed.reverse();
-    
-
-    // println!("hashed {hashed:#?}");
-    // println!("hashed_not_reverse {hashed_not_reverse:#?}");
 
     // Derive and convert user pk
     let mpc_pk = hex::decode(mpc_key).unwrap();
@@ -220,7 +216,7 @@ async fn test_proposition() {
     let user_address_ethers: ethers_core::types::H160 =
         ethers_core::utils::public_key_to_address(&verifying_user_pk);
 
-    // assert!(signature.verify(payload, user_address_ethers).is_ok()); // TODO: fix
+    assert!(signature.verify(hashed, user_address_ethers).is_ok());
 
     // Check if recovered address is the same as the user address
     let signature_for_recovery: [u8; 64] = {
@@ -233,7 +229,7 @@ async fn test_proposition() {
     // let ecdsa_signature_bytes = k256_sig.to_bytes();
     let recovered_from_signature_address_web3 =
         web3::signing::recover(&hashed, &signature_for_recovery, big_r_y_parity).unwrap();
-    assert_eq!(user_address_from_pk, recovered_from_signature_address_web3); // TODO: fix
+    assert_eq!(user_address_from_pk, recovered_from_signature_address_web3); 
 
     let recovered_from_signature_address_ethers = signature.recover(hashed).unwrap();
 
