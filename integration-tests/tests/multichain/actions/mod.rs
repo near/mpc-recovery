@@ -112,14 +112,19 @@ async fn test_proposition() {
     for i in 0..32 {
         payload[i] = i as u8;
     }
-
-    let mut hashed: [u8; 32] = [
-        // TODO: get hashed values on the flight
+    
+    // TODO: get hashed values on the flight
+    let payload_hash: [u8; 32] = [
         99, 13, 205, 41, 102, 196, 51, 102, 145, 18, 84, 72, 187, 178, 91, 79, 244, 18, 164, 156,
         115, 45, 178, 200, 171, 193, 184, 88, 27, 215, 16, 221,
     ];
-    let msg_hash = k256::Scalar::from_bytes(&hashed); // TODO: why do we need both of them?
-    hashed.reverse();
+    let payload_hash_scallar = k256::Scalar::from_bytes(&payload_hash); // TODO: why do we need both reversed and not reversed versions?
+    let mut payload_hash_reversed: [u8; 32] = payload_hash.clone();
+    payload_hash_reversed.reverse();
+
+    println!("payload_hash: {payload_hash:#?}");
+    println!("payload_hash_scallar: {payload_hash_scallar:#?}");
+    println!("payload_hash_reversed: {payload_hash_reversed:#?}");
 
     // Derive and convert user pk
     let mpc_pk = hex::decode(mpc_key).unwrap();
@@ -159,10 +164,10 @@ async fn test_proposition() {
 
     // Check signature using cait-sith tooling
     let signature = cait_sith::FullSignature::<Secp256k1> { big_r, s };
-    let is_signature_valid_for_user_pk = signature.verify(&user_pk, &msg_hash);
-    let is_signature_valid_for_mpc_pk = signature.verify(&mpc_pk, &msg_hash);
+    let is_signature_valid_for_user_pk = signature.verify(&user_pk, &payload_hash_scallar);
+    let is_signature_valid_for_mpc_pk = signature.verify(&mpc_pk, &payload_hash_scallar);
     let another_user_pk = kdf::derive_key(mpc_pk.clone(), derivation_epsilon + k256::Scalar::ONE);
-    let is_signature_valid_for_another_user_pk = signature.verify(&another_user_pk, &msg_hash);
+    let is_signature_valid_for_another_user_pk = signature.verify(&another_user_pk, &payload_hash_scallar);
     assert!(is_signature_valid_for_user_pk);
     assert_eq!(is_signature_valid_for_mpc_pk, false);
     assert_eq!(is_signature_valid_for_another_user_pk, false);
@@ -176,20 +181,20 @@ async fn test_proposition() {
 
     let ecdsa_local_verify_result = verify(
         &k256::ecdsa::VerifyingKey::from(&user_pk_k256),
-        &hashed,
+        &payload_hash_reversed,
         &k256_sig,
     );
     assert!(ecdsa_local_verify_result.is_ok());
 
     let ecdsa_verify_result = ecdsa::signature::Verifier::verify(
         &k256::ecdsa::VerifyingKey::from(&user_pk_k256),
-        &hashed,
+        &payload_hash_reversed,
         &ecdsa_signature,
     );
     // assert!(ecdsa_verify_result.is_ok()); // TODO: fix
 
     let k256_verify_key = k256::ecdsa::VerifyingKey::from(&user_pk_k256);
-    let k256_verify_result = k256_verify_key.verify(&hashed, &k256_sig);
+    let k256_verify_result = k256_verify_key.verify(&payload_hash_reversed, &k256_sig);
     // assert!(k256_verify_result.is_ok()); // TODO: fix
 
     // Check signature using etheres tooling
@@ -207,7 +212,7 @@ async fn test_proposition() {
     let user_address_ethers: ethers_core::types::H160 =
         ethers_core::utils::public_key_to_address(&verifying_user_pk);
 
-    assert!(signature.verify(hashed, user_address_ethers).is_ok());
+    assert!(signature.verify(payload_hash_reversed, user_address_ethers).is_ok());
 
     // Check if recovered address is the same as the user address
     let signature_for_recovery: [u8; 64] = {
@@ -218,18 +223,18 @@ async fn test_proposition() {
     };
 
     let recovered_from_signature_address_web3 =
-        web3::signing::recover(&hashed, &signature_for_recovery, big_r_y_parity_flipped).unwrap();
+        web3::signing::recover(&payload_hash_reversed, &signature_for_recovery, big_r_y_parity_flipped).unwrap();
 
     assert_eq!(user_address_from_pk, recovered_from_signature_address_web3);
 
-    let recovered_from_signature_address_ethers = signature.recover(hashed).unwrap();
+    let recovered_from_signature_address_ethers = signature.recover(payload_hash_reversed).unwrap();
 
     assert_eq!(
         user_address_from_pk,
         recovered_from_signature_address_ethers
     );
 
-    let recovered_from_signature_address_local_function = recover(signature, hashed).unwrap();
+    let recovered_from_signature_address_local_function = recover(signature, payload_hash_reversed).unwrap();
     assert_eq!(
         user_address_from_pk,
         recovered_from_signature_address_local_function
@@ -338,7 +343,7 @@ fn verify_prehashed(
     let s_inv = *s.invert_vartime();
     let u1 = z * s_inv;
     let u2 = *r * s_inv;
-    let reproduced = lincomb(&ProjectivePoint::<Secp256k1>::generator(), &u1, q, &u2).to_affine();
+    let reproduced = lincomb(&ProjectivePoint::<Secp256k1>::GENERATOR, &u1, q, &u2).to_affine();
     let x = reproduced.x();
 
     // println!("------------- verify_prehashed[beg] -------------");
