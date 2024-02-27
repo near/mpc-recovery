@@ -112,7 +112,7 @@ async fn test_proposition() {
     for i in 0..32 {
         payload[i] = i as u8;
     }
-    
+
     // TODO: get hashed values on the flight
     let payload_hash: [u8; 32] = [
         99, 13, 205, 41, 102, 196, 51, 102, 145, 18, 84, 72, 187, 178, 91, 79, 244, 18, 164, 156,
@@ -167,7 +167,8 @@ async fn test_proposition() {
     let is_signature_valid_for_user_pk = signature.verify(&user_pk, &payload_hash_scallar);
     let is_signature_valid_for_mpc_pk = signature.verify(&mpc_pk, &payload_hash_scallar);
     let another_user_pk = kdf::derive_key(mpc_pk.clone(), derivation_epsilon + k256::Scalar::ONE);
-    let is_signature_valid_for_another_user_pk = signature.verify(&another_user_pk, &payload_hash_scallar);
+    let is_signature_valid_for_another_user_pk =
+        signature.verify(&another_user_pk, &payload_hash_scallar);
     assert!(is_signature_valid_for_user_pk);
     assert_eq!(is_signature_valid_for_mpc_pk, false);
     assert_eq!(is_signature_valid_for_another_user_pk, false);
@@ -212,7 +213,9 @@ async fn test_proposition() {
     let user_address_ethers: ethers_core::types::H160 =
         ethers_core::utils::public_key_to_address(&verifying_user_pk);
 
-    assert!(signature.verify(payload_hash_reversed, user_address_ethers).is_ok());
+    assert!(signature
+        .verify(payload_hash_reversed, user_address_ethers)
+        .is_ok());
 
     // Check if recovered address is the same as the user address
     let signature_for_recovery: [u8; 64] = {
@@ -222,8 +225,12 @@ async fn test_proposition() {
         signature
     };
 
-    let recovered_from_signature_address_web3 =
-        web3::signing::recover(&payload_hash_reversed, &signature_for_recovery, big_r_y_parity_flipped).unwrap();
+    let recovered_from_signature_address_web3 = web3::signing::recover(
+        &payload_hash_reversed,
+        &signature_for_recovery,
+        big_r_y_parity_flipped,
+    )
+    .unwrap();
 
     assert_eq!(user_address_from_pk, recovered_from_signature_address_web3);
 
@@ -234,7 +241,8 @@ async fn test_proposition() {
         recovered_from_signature_address_ethers
     );
 
-    let recovered_from_signature_address_local_function = recover(signature, payload_hash_reversed).unwrap();
+    let recovered_from_signature_address_local_function =
+        recover(signature, payload_hash_reversed).unwrap();
     assert_eq!(
         user_address_from_pk,
         recovered_from_signature_address_local_function
