@@ -3,7 +3,6 @@ pub mod wait_for;
 use crate::MultichainTestContext;
 
 use cait_sith::FullSignature;
-use ecdsa::signature::Verifier;
 use elliptic_curve::sec1::ToEncodedPoint;
 use k256::ecdsa::VerifyingKey;
 use k256::elliptic_curve::ops::{Invert, Reduce};
@@ -32,10 +31,12 @@ use k256::{
 
 pub async fn request_sign(
     ctx: &MultichainTestContext<'_>,
-) -> anyhow::Result<([u8; 32], Account, CryptoHash)> {
+) -> anyhow::Result<([u8; 32], [u8; 32], Account, CryptoHash)> {
     let worker = &ctx.nodes.ctx().worker;
     let account = worker.dev_create_account().await?;
     let payload: [u8; 32] = rand::thread_rng().gen();
+    let payload_hashed = web3::signing::keccak256(&payload);
+
     let signer = InMemorySigner {
         account_id: account.id().clone(),
         public_key: account.secret_key().public_key().clone().into(),
@@ -57,7 +58,7 @@ pub async fn request_sign(
                 actions: vec![Action::FunctionCall(FunctionCallAction {
                     method_name: "sign".to_string(),
                     args: serde_json::to_vec(&serde_json::json!({
-                        "payload": payload,
+                        "payload": payload_hashed,
                         "path": "test",
                     }))?,
                     gas: 300_000_000_000_000,
@@ -68,7 +69,7 @@ pub async fn request_sign(
         })
         .await?;
     tokio::time::sleep(Duration::from_secs(1)).await;
-    Ok((payload, account, tx_hash))
+    Ok((payload, payload_hashed, account, tx_hash))
 }
 
 pub async fn assert_signature(
@@ -91,7 +92,7 @@ pub async fn single_signature_production(
     ctx: &MultichainTestContext<'_>,
     state: &RunningContractState,
 ) -> anyhow::Result<()> {
-    let (payload, account, tx_hash) = request_sign(ctx).await?;
+    let (payload, _, account, tx_hash) = request_sign(ctx).await?;
     let signature = wait_for::signature_responded(ctx, tx_hash).await?;
 
     let mut pk_bytes = vec![0x04];
@@ -118,13 +119,13 @@ async fn test_proposition() {
         99, 13, 205, 41, 102, 196, 51, 102, 145, 18, 84, 72, 187, 178, 91, 79, 244, 18, 164, 156,
         115, 45, 178, 200, 171, 193, 184, 88, 27, 215, 16, 221,
     ];
-    let payload_hash_scallar = k256::Scalar::from_bytes(&payload_hash); // TODO: why do we need both reversed and not reversed versions?
+    let payload_hash_scalar = k256::Scalar::from_bytes(&payload_hash); // TODO: why do we need both reversed and not reversed versions?
     let mut payload_hash_reversed: [u8; 32] = payload_hash.clone();
     payload_hash_reversed.reverse();
 
-    println!("payload_hash: {payload_hash:#?}");
-    println!("payload_hash_scallar: {payload_hash_scallar:#?}");
-    println!("payload_hash_reversed: {payload_hash_reversed:#?}");
+    println!("payload_hash: {payload_hash:?}");
+    println!("payload_hash_scallar: {payload_hash_scalar:#?}");
+    println!("payload_hash_reversed: {payload_hash_reversed:?}");
 
     // Derive and convert user pk
     let mpc_pk = hex::decode(mpc_key).unwrap();
@@ -150,34 +151,31 @@ async fn test_proposition() {
     let big_r = AffinePoint::from_encoded_point(&big_r).unwrap();
     let big_r_y_parity = big_r.y_is_odd().unwrap_u8() as i32;
     assert!(big_r_y_parity == 0 || big_r_y_parity == 1);
-    let big_r_y_parity_flipped = 1 - big_r_y_parity; // TODO: why do we need to flip the parity?
 
     let s = hex::decode(s).unwrap();
     let s = k256::Scalar::from_uint_unchecked(k256::U256::from_be_slice(s.as_slice()));
     let r = x_coordinate::<k256::Secp256k1>(&big_r);
 
     let signature = cait_sith::FullSignature::<Secp256k1> { big_r, s };
-    // let big_r_y_parity_flipped = kdf::recovery_id(&signature);
+    let multichain_sig = kdf::into_eth_sig(&user_pk, &signature, payload_hash_scalar).unwrap();
 
+    println!("{multichain_sig:#?}");
     println!("R: {big_r:#?}");
     println!("r: {r:#?}");
     println!("y parity: {}", big_r_y_parity);
-    print!("Reversed y parity: {}", big_r_y_parity_flipped);
     println!("s: {s:#?}");
 
     // Check signature using cait-sith tooling
-    let is_signature_valid_for_user_pk = signature.verify(&user_pk, &payload_hash_scallar);
-    let is_signature_valid_for_mpc_pk = signature.verify(&mpc_pk, &payload_hash_scallar);
+    let is_signature_valid_for_user_pk = signature.verify(&user_pk, &payload_hash_scalar);
+    let is_signature_valid_for_mpc_pk = signature.verify(&mpc_pk, &payload_hash_scalar);
     let another_user_pk = kdf::derive_key(mpc_pk.clone(), derivation_epsilon + k256::Scalar::ONE);
     let is_signature_valid_for_another_user_pk =
-        signature.verify(&another_user_pk, &payload_hash_scallar);
+        signature.verify(&another_user_pk, &payload_hash_scalar);
     assert!(is_signature_valid_for_user_pk);
     assert_eq!(is_signature_valid_for_mpc_pk, false);
     assert_eq!(is_signature_valid_for_another_user_pk, false);
 
     // Check signature using ecdsa tooling
-    let ecdsa_signature: ecdsa::Signature<Secp256k1> =
-        ecdsa::Signature::from_scalars(r, s).unwrap();
     let k256_sig = k256::ecdsa::Signature::from_scalars(r, s).unwrap();
     let user_pk_k256: k256::elliptic_curve::PublicKey<Secp256k1> =
         k256::PublicKey::from_affine(user_pk).unwrap();
@@ -189,21 +187,23 @@ async fn test_proposition() {
     );
     assert!(ecdsa_local_verify_result.is_ok());
 
-    let ecdsa_verify_result = ecdsa::signature::Verifier::verify(
-        &k256::ecdsa::VerifyingKey::from(&user_pk_k256),
-        &payload_hash_reversed,
-        &ecdsa_signature,
-    );
-    // assert!(ecdsa_verify_result.is_ok()); // TODO: fix
-
-    let k256_verify_key = k256::ecdsa::VerifyingKey::from(&user_pk_k256);
-    let k256_verify_result = k256_verify_key.verify(&payload_hash_reversed, &k256_sig);
-    // assert!(k256_verify_result.is_ok()); // TODO: fix
+    // TODO: fix
+    // let ecdsa_signature: ecdsa::Signature<Secp256k1> =
+    //     ecdsa::Signature::from_scalars(r, s).unwrap();
+    // let ecdsa_verify_result = ecdsa::signature::Verifier::verify(
+    //     &k256::ecdsa::VerifyingKey::from(&user_pk_k256),
+    //     &payload_hash_reversed,
+    //     &ecdsa_signature,
+    // );
+    // assert!(ecdsa_verify_result.is_ok());
+    // let k256_verify_key = k256::ecdsa::VerifyingKey::from(&user_pk_k256);
+    // let k256_verify_result = k256_verify_key.verify(&payload_hash_reversed, &k256_sig);
+    // assert!(k256_verify_result.is_ok());
 
     // Check signature using etheres tooling
     let ethers_r = ethers_core::types::U256::from_big_endian(r.to_bytes().as_slice());
     let ethers_s = ethers_core::types::U256::from_big_endian(s.to_bytes().as_slice());
-    let ethers_v = big_r_y_parity_flipped as u64;
+    let ethers_v = to_eip155_v(multichain_sig.recovery_id, 31337);
 
     let signature = ethers_core::types::Signature {
         r: ethers_r,
@@ -230,14 +230,12 @@ async fn test_proposition() {
     let recovered_from_signature_address_web3 = web3::signing::recover(
         &payload_hash_reversed,
         &signature_for_recovery,
-        big_r_y_parity_flipped,
+        multichain_sig.recovery_id as i32,
     )
     .unwrap();
-
     assert_eq!(user_address_from_pk, recovered_from_signature_address_web3);
 
     let recovered_from_signature_address_ethers = signature.recover(payload_hash_reversed).unwrap();
-
     assert_eq!(
         user_address_from_pk,
         recovered_from_signature_address_ethers
@@ -363,8 +361,8 @@ fn verify_prehashed(
     // println!("s_inv {s_inv:#?}");
     // println!("u1 {u1:#?}");
     // println!("u2 {u2:#?}");
-    println!("reproduced {reproduced:#?}");
-    println!("reproduced_x {x:#?}");
+    // println!("reproduced {reproduced:#?}");
+    // println!("reproduced_x {x:?}");
     // println!("------------- verify_prehashed[end] -------------");
 
     let reduced =
@@ -388,4 +386,8 @@ fn lincomb(
     l: &Scalar,
 ) -> ProjectivePoint<Secp256k1> {
     (*x * k) + (*y * l)
+}
+
+pub fn to_eip155_v(recovery_id: u8, chain_id: u64) -> u64 {
+    (recovery_id as u64) + 35 + chain_id * 2
 }
