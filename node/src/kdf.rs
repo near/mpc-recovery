@@ -41,3 +41,13 @@ pub fn derive_delta(receipt_id: CryptoHash, entropy: [u8; 32]) -> Scalar {
 pub fn derive_key(public_key: PublicKey, epsilon: Scalar) -> PublicKey {
     (<Secp256k1 as CurveArithmetic>::ProjectivePoint::GENERATOR * epsilon + public_key).to_affine()
 }
+
+pub fn recovery_id(sig: &FullSignature<Secp256k1>) -> u8 {
+    let two = NonZero::<U256>::new(U256::from_u32(2)).unwrap();
+    let recovery_id = sig.big_r.y_is_odd().unwrap_u8();
+    if sig.s > Scalar::from_uint_unchecked(Secp256k1::ORDER / two) {
+        1 - recovery_id
+    } else {
+        recovery_id
+    }
+}

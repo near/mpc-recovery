@@ -156,6 +156,9 @@ async fn test_proposition() {
     let s = k256::Scalar::from_uint_unchecked(k256::U256::from_be_slice(s.as_slice()));
     let r = x_coordinate::<k256::Secp256k1>(&big_r);
 
+    let signature = cait_sith::FullSignature::<Secp256k1> { big_r, s };
+    // let big_r_y_parity_flipped = kdf::recovery_id(&signature);
+
     println!("R: {big_r:#?}");
     println!("r: {r:#?}");
     println!("y parity: {}", big_r_y_parity);
@@ -163,7 +166,6 @@ async fn test_proposition() {
     println!("s: {s:#?}");
 
     // Check signature using cait-sith tooling
-    let signature = cait_sith::FullSignature::<Secp256k1> { big_r, s };
     let is_signature_valid_for_user_pk = signature.verify(&user_pk, &payload_hash_scallar);
     let is_signature_valid_for_mpc_pk = signature.verify(&mpc_pk, &payload_hash_scallar);
     let another_user_pk = kdf::derive_key(mpc_pk.clone(), derivation_epsilon + k256::Scalar::ONE);
