@@ -13,6 +13,7 @@ use crate::protocol::state::{GeneratingState, ResharingState};
 use crate::protocol::triple::TripleManager;
 use crate::storage::secret_storage::SecretNodeStorageBox;
 use crate::storage::triple_storage::LockTripleNodeStorageBox;
+use crate::storage::triple_storage::TripleData;
 use crate::types::{KeygenProtocol, ReshareProtocol, SecretKeyShare};
 use crate::util::AffinePointExt;
 use crate::{http_client, rpc_client};
@@ -675,17 +676,13 @@ impl ConsensusProtocol for JoiningState {
 impl ConsensusProtocol for NodeState {
     async fn advance<C: ConsensusCtx + Send + Sync>(
         self,
-        mut ctx: C,
+        ctx: C,
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
         match self {
             NodeState::Starting => {
                 let persistent_node_data = ctx.secret_storage().load().await?;
-                let triple_storage = ctx.triple_storage();
-                let read_lock = triple_storage.read().await;
-                let triple_data_result = read_lock.load().await;
-                drop(read_lock);
-                let triple_data = triple_data_result.ok().unwrap_or_default();
+                let triple_data = load_triples(ctx).await?;
                 Ok(NodeState::Started(StartedState {
                     persistent_node_data,
                     triple_data,
@@ -699,6 +696,36 @@ impl ConsensusProtocol for NodeState {
             NodeState::Joining(state) => state.advance(ctx, contract_state).await,
         }
     }
+}
+
+async fn load_triples<C: ConsensusCtx + Send + Sync>(
+    mut ctx: C,
+) -> Result<Vec<TripleData>, ConsensusError> {
+    let triple_storage = ctx.triple_storage();
+    let read_lock = triple_storage.read().await;
+    let mut retries = 3;
+    let mut error = None;
+    while retries > 0 {
+        match read_lock.load().await {
+            Err(DatastoreStorageError::FetchEntitiesError(_)) => {
+                tracing::info!("There are no triples persisted.");
+                drop(read_lock);
+                return Ok(vec![]);
+            }
+            Err(e) => {
+                retries -= 1;
+                tracing::warn!(?e, "triple load failed.");
+                error = Some(e);
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
+            Ok(loaded_triples) => {
+                drop(read_lock);
+                return Ok(loaded_triples);
+            }
+        }
+    }
+    drop(read_lock);
+    Err(ConsensusError::DatastoreStorageError(error.unwrap()))
 }
 
 async fn start_resharing<C: ConsensusCtx>(

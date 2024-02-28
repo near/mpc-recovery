@@ -242,6 +242,10 @@ impl MessageHandler for RunningState {
                     Err(presignature::GenerationError::CaitSithInitializationError(error)) => {
                         return Err(error.into())
                     }
+                    Err(presignature::GenerationError::DatastoreStorageError(_)) => {
+                        // Store the message until we are ready to process it
+                        leftover_messages.push(message)
+                    }
                 }
             }
             if !leftover_messages.is_empty() {
