@@ -76,30 +76,28 @@ pub async fn request_sign(
 
 pub async fn assert_signature(
     account_id: &near_workspaces::AccountId,
-    pk_bytes: &[u8],
+    mpc_pk_bytes: &[u8],
     payload: &[u8; 32],
     signature: &FullSignature<Secp256k1>,
 ) {
-    let point = EncodedPoint::from_bytes(pk_bytes).unwrap();
-    let public_key = AffinePoint::from_encoded_point(&point).unwrap();
+    let mpc_point = EncodedPoint::from_bytes(mpc_pk_bytes).unwrap();
+    let mpc_pk = AffinePoint::from_encoded_point(&mpc_point).unwrap();
     let epsilon = kdf::derive_epsilon(account_id, "test");
+    let user_pk = kdf::derive_key(mpc_pk, epsilon);
 
-    assert!(signature.verify(
-        &kdf::derive_key(public_key, epsilon),
-        &Scalar::from_bytes(payload),
-    ));
+    assert!(signature.verify(&user_pk, &Scalar::from_bytes(payload),));
 }
 
 pub async fn single_signature_production(
     ctx: &MultichainTestContext<'_>,
     state: &RunningContractState,
 ) -> anyhow::Result<()> {
-    let (payload, _, account, tx_hash) = request_sign(ctx).await?;
+    let (_, payload_hash, account, tx_hash) = request_sign(ctx).await?;
     let signature = wait_for::signature_responded(ctx, tx_hash).await?;
 
-    let mut pk_bytes = vec![0x04];
-    pk_bytes.extend_from_slice(&state.public_key.as_bytes()[1..]);
-    assert_signature(account.id(), &pk_bytes, &payload, &signature).await;
+    let mut mpc_pk_bytes = vec![0x04];
+    mpc_pk_bytes.extend_from_slice(&state.public_key.as_bytes()[1..]);
+    assert_signature(account.id(), &mpc_pk_bytes, &payload_hash, &signature).await;
 
     Ok(())
 }
