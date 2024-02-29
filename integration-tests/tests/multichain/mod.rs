@@ -76,7 +76,7 @@ async fn test_key_derivation() -> anyhow::Result<()> {
                 let mpc_pk: k256::AffinePoint = state_0.public_key.clone().into_affine_point();
                 let (_, payload_hashed, account, tx_hash) = actions::request_sign(&ctx).await?;
                 let payload_hashed_rev = {
-                    let mut rev = payload_hashed.clone();
+                    let mut rev = payload_hashed;
                     rev.reverse();
                     rev
                 };
@@ -84,7 +84,7 @@ async fn test_key_derivation() -> anyhow::Result<()> {
 
                 let hd_path = "test";
                 let derivation_epsilon = kdf::derive_epsilon(account.id(), hd_path);
-                let user_pk = kdf::derive_key(mpc_pk.clone(), derivation_epsilon);
+                let user_pk = kdf::derive_key(mpc_pk, derivation_epsilon);
                 let multichain_sig =
                     kdf::into_eth_sig(&user_pk, &sig, k256::Scalar::from_bytes(&payload_hashed))
                         .unwrap();
