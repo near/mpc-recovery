@@ -24,6 +24,8 @@ use secp256k1::XOnlyPublicKey;
 
 use std::time::Duration;
 
+const CHAIN_ID_ETH: u64 = 31337;
+
 use k256::{
     ecdsa::{Signature as RecoverableSignature, Signature as K256Signature},
     PublicKey as K256PublicKey,
@@ -110,8 +112,8 @@ async fn test_proposition() {
 
     // Create payload
     let mut payload = [0u8; 32];
-    for i in 0..32 {
-        payload[i] = i as u8;
+    for (i, item) in payload.iter_mut().enumerate() {
+        *item = i as u8;
     }
 
     // TODO: get hashed values on the flight
@@ -120,7 +122,7 @@ async fn test_proposition() {
         115, 45, 178, 200, 171, 193, 184, 88, 27, 215, 16, 221,
     ];
     let payload_hash_scalar = k256::Scalar::from_bytes(&payload_hash); // TODO: why do we need both reversed and not reversed versions?
-    let mut payload_hash_reversed: [u8; 32] = payload_hash.clone();
+    let mut payload_hash_reversed: [u8; 32] = payload_hash;
     payload_hash_reversed.reverse();
 
     println!("payload_hash: {payload_hash:?}");
@@ -133,7 +135,7 @@ async fn test_proposition() {
     let mpc_pk = AffinePoint::from_encoded_point(&mpc_pk).unwrap();
     let account_id = "acc_mc.test.near".parse().unwrap();
     let derivation_epsilon: k256::Scalar = kdf::derive_epsilon(&account_id, "test");
-    let user_pk: AffinePoint = kdf::derive_key(mpc_pk.clone(), derivation_epsilon);
+    let user_pk: AffinePoint = kdf::derive_key(mpc_pk, derivation_epsilon);
     let user_pk_y_parity = match user_pk.y_is_odd().unwrap_u8() {
         0 => secp256k1::Parity::Even,
         1 => secp256k1::Parity::Odd,
@@ -143,7 +145,7 @@ async fn test_proposition() {
     let user_pk_x: XOnlyPublicKey = XOnlyPublicKey::from_slice(&user_pk_x.to_bytes()).unwrap();
     let user_secp_pk: secp256k1::PublicKey =
         secp256k1::PublicKey::from_x_only_public_key(user_pk_x, user_pk_y_parity);
-    let user_address_from_pk = public_key_to_address(&user_secp_pk.into());
+    let user_address_from_pk = public_key_to_address(&user_secp_pk);
 
     // Prepare R ans s signature values
     let big_r = hex::decode(big_r).unwrap();
@@ -168,12 +170,12 @@ async fn test_proposition() {
     // Check signature using cait-sith tooling
     let is_signature_valid_for_user_pk = signature.verify(&user_pk, &payload_hash_scalar);
     let is_signature_valid_for_mpc_pk = signature.verify(&mpc_pk, &payload_hash_scalar);
-    let another_user_pk = kdf::derive_key(mpc_pk.clone(), derivation_epsilon + k256::Scalar::ONE);
+    let another_user_pk = kdf::derive_key(mpc_pk, derivation_epsilon + k256::Scalar::ONE);
     let is_signature_valid_for_another_user_pk =
         signature.verify(&another_user_pk, &payload_hash_scalar);
     assert!(is_signature_valid_for_user_pk);
-    assert_eq!(is_signature_valid_for_mpc_pk, false);
-    assert_eq!(is_signature_valid_for_another_user_pk, false);
+    assert!(!is_signature_valid_for_mpc_pk);
+    assert!(!is_signature_valid_for_another_user_pk);
 
     // Check signature using ecdsa tooling
     let k256_sig = k256::ecdsa::Signature::from_scalars(r, s).unwrap();
@@ -203,7 +205,7 @@ async fn test_proposition() {
     // Check signature using etheres tooling
     let ethers_r = ethers_core::types::U256::from_big_endian(r.to_bytes().as_slice());
     let ethers_s = ethers_core::types::U256::from_big_endian(s.to_bytes().as_slice());
-    let ethers_v = to_eip155_v(multichain_sig.recovery_id, 31337);
+    let ethers_v = to_eip155_v(multichain_sig.recovery_id, CHAIN_ID_ETH);
 
     let signature = ethers_core::types::Signature {
         r: ethers_r,

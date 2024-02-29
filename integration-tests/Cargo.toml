@@ -15,7 +15,6 @@ bollard = "0.13"
 cait-sith = { git = "https://github.com/LIT-Protocol/cait-sith.git", features = [
     "k256",
 ] }
-# cait-sith = { path = "../../cait-sith", features = ["k256"] }
 clap = { version = "4.2", features = ["derive", "env"] }
 curv = { package = "curv-kzen", version = "0.9", default-features = false }
 ed25519-dalek = { version = "1.0.1", features = ["serde"] }
