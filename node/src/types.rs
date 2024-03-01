@@ -152,7 +152,25 @@ impl LatestBlockHeight {
 
 impl IntoValue for LatestBlockHeight {
     fn into_value(self) -> Value {
-        Value::IntegerValue(self.0 as i64)
+        let properties = {
+            let mut properties = std::collections::HashMap::new();
+            properties.insert(
+                "block_height".to_string(),
+                Value::IntegerValue(self.0 as i64),
+            );
+            properties
+        };
+        Value::EntityValue {
+            key: google_datastore1::api::Key {
+                path: Some(vec![google_datastore1::api::PathElement {
+                    kind: Some(LatestBlockHeight::kind()),
+                    name: Some(format!("latest")),
+                    id: None,
+                }]),
+                partition_id: None,
+            },
+            properties,
+        }
     }
 }
 
@@ -165,7 +183,20 @@ impl IntoValue for &LatestBlockHeight {
 impl FromValue for LatestBlockHeight {
     fn from_value(value: Value) -> Result<Self, ConvertError> {
         match value {
-            Value::IntegerValue(value) => Ok(Self(value as u64)),
+            Value::EntityValue { key, properties } => {
+                let block_height = properties
+                    .get("block_height")
+                    .ok_or_else(|| ConvertError::MissingProperty("block_height".to_string()))?;
+                match block_height {
+                    Value::IntegerValue(block_height) => {
+                        Ok(LatestBlockHeight(*block_height as u64))
+                    }
+                    _ => Err(ConvertError::UnexpectedPropertyType {
+                        expected: String::from("integer"),
+                        got: String::from(block_height.type_name()),
+                    }),
+                }
+            }
             _ => Err(ConvertError::UnexpectedPropertyType {
                 expected: String::from("integer"),
                 got: String::from(value.type_name()),
