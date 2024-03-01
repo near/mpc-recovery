@@ -456,7 +456,7 @@ impl<'a> Datastore<'a> {
         tracing::info!("Running datastore container...");
         let image = GenericImage::new(
             "gcr.io/google.com/cloudsdktool/google-cloud-cli",
-            "436.0.0-emulators",
+            "464.0.0-emulators",
         )
         .with_wait_for(WaitFor::message_on_stderr("Dev App Server is now running."))
         .with_exposed_port(Self::CONTAINER_PORT)
@@ -477,6 +477,7 @@ impl<'a> Datastore<'a> {
                 "--host-port".to_string(),
                 format!("0.0.0.0:{}", Self::CONTAINER_PORT),
                 "--no-store-on-disk".to_string(),
+                "--consistency=1.0".to_string(),
             ],
         )
             .into();
@@ -719,7 +720,6 @@ impl SignerNode<'_> {
             container,
             address: full_address,
             local_address: format!("http://127.0.0.1:{host_port}"),
-
             env: ctx.env.clone(),
             node_id,
             sk_share: sk_share.clone(),

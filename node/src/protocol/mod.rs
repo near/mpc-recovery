@@ -1,6 +1,6 @@
 pub mod contract;
 mod cryptography;
-mod presignature;
+pub mod presignature;
 mod signature;
 pub mod triple;
 
@@ -230,6 +230,7 @@ impl MpcSignProtocol {
                 Ok(state) => state,
                 Err(err) => {
                     tracing::info!("protocol unable to progress: {err:?}");
+                    tokio::time::sleep(Duration::from_millis(1000)).await;
                     continue;
                 }
             };
@@ -237,11 +238,13 @@ impl MpcSignProtocol {
                 Ok(state) => state,
                 Err(err) => {
                     tracing::info!("protocol unable to advance: {err:?}");
+                    tokio::time::sleep(Duration::from_millis(1000)).await;
                     continue;
                 }
             };
             if let Err(err) = state.handle(&self, &mut queue).await {
                 tracing::info!("protocol unable to handle messages: {err:?}");
+                tokio::time::sleep(Duration::from_millis(1000)).await;
                 continue;
             }
 

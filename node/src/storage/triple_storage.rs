@@ -185,41 +185,45 @@ impl DataStoreTripleNodeStorage {
 #[async_trait]
 impl TripleNodeStorage for DataStoreTripleNodeStorage {
     async fn insert(&mut self, data: TripleData) -> TripleResult<()> {
-        tracing::info!("inserting triples using datastore");
+        tracing::debug!("inserting triples using datastore");
         self.datastore.upsert(data).await?;
         Ok(())
     }
 
     async fn delete(&mut self, data: TripleData) -> TripleResult<()> {
-        tracing::info!("deleting triples using datastore");
+        tracing::debug!("deleting triples using datastore");
         self.datastore.delete(data).await?;
         Ok(())
     }
 
     async fn load(&self) -> TripleResult<Vec<TripleData>> {
-        tracing::info!("loading triples using datastore");
+        tracing::debug!("loading triples using datastore");
         let account_id_val = DatastoreValue::from_value(self.account_id().into_value())?;
-        let filter = Filter {
-            composite_filter: None,
-            property_filter: Some(PropertyFilter {
-                op: Some("Equal".to_string()),
-                property: Some(PropertyReference {
-                    name: Some("account_id".to_string()),
+        let filter = if self.datastore.is_emulator() {
+            None
+        } else {
+            Some(Filter {
+                composite_filter: None,
+                property_filter: Some(PropertyFilter {
+                    op: Some("Equal".to_string()),
+                    property: Some(PropertyReference {
+                        name: Some("account_id".to_string()),
+                    }),
+                    value: Some(account_id_val),
                 }),
-                value: Some(account_id_val),
-            }),
+            })
         };
-        let response = self
-            .datastore
-            .fetch_entities::<TripleData>(Some(filter))
-            .await?;
+        let response = self.datastore.fetch_entities::<TripleData>(filter).await?;
         let mut res: Vec<TripleData> = vec![];
         for entity_result in response {
             let entity = entity_result.entity.unwrap();
             let entity_value = entity.into_value();
             let triple_data = TripleData::from_value(entity_value).unwrap();
-            res.push(triple_data);
+            if triple_data.account_id == self.account_id() {
+                res.push(triple_data);
+            }
         }
+        tracing::debug!("loading triples success");
         Ok(res)
     }
 

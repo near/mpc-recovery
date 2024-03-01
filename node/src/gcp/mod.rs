@@ -77,6 +77,7 @@ pub struct DatastoreService {
     datastore: Datastore<HttpsConnector<HttpConnector>>,
     project_id: String,
     env: String,
+    is_emulator: bool,
 }
 
 pub type DatastoreResult<T> = std::result::Result<T, error::DatastoreStorageError>;
@@ -86,6 +87,10 @@ pub trait KeyKind {
 }
 
 impl DatastoreService {
+    pub fn is_emulator(&self) -> bool {
+        self.is_emulator
+    }
+
     #[tracing::instrument(level = "debug", skip_all, fields(key = name_key.to_string()))]
     pub async fn get<K: ToString, T: FromValue + KeyKind>(
         &self,
@@ -372,6 +377,7 @@ impl GcpService {
                 datastore,
                 project_id: project_id.clone(),
                 env: storage_options.env.clone(),
+                is_emulator: storage_options.gcp_datastore_url.is_some(),
             },
             secret_manager: SecretManagerService {
                 secret_manager,

@@ -183,7 +183,7 @@ impl IntoValue for &LatestBlockHeight {
 impl FromValue for LatestBlockHeight {
     fn from_value(value: Value) -> Result<Self, ConvertError> {
         match value {
-            Value::EntityValue { key, properties } => {
+            Value::EntityValue { key: _, properties } => {
                 let block_height = properties
                     .get("block_height")
                     .ok_or_else(|| ConvertError::MissingProperty("block_height".to_string()))?;
