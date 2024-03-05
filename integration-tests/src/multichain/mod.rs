@@ -76,6 +76,27 @@ impl Nodes<'_> {
             account_id,
         ))
     }
+
+    pub async fn gcp_services(&self) -> anyhow::Result<Vec<GcpService>> {
+        let mut gcp_services = Vec::new();
+        match self {
+            Nodes::Local { nodes, .. } => {
+                for node in nodes {
+                    gcp_services.push(
+                        GcpService::init(&node.account_id, &self.ctx().storage_options).await?,
+                    );
+                }
+            }
+            Nodes::Docker { nodes, .. } => {
+                for node in nodes {
+                    gcp_services.push(
+                        GcpService::init(&node.account_id, &self.ctx().storage_options).await?,
+                    );
+                }
+            }
+        }
+        Ok(gcp_services)
+    }
 }
 
 pub struct Context<'a> {

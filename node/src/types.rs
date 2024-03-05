@@ -146,10 +146,7 @@ pub struct LatestBlockHeight {
 impl LatestBlockHeight {
     pub async fn fetch(gcp: &GcpService) -> DatastoreResult<Self> {
         gcp.datastore
-            .get(format!(
-                "{}/latest-block-height",
-                gcp.account_id.to_string()
-            ))
+            .get(format!("{}/latest-block-height", gcp.account_id))
             .await
     }
 

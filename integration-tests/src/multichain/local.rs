@@ -7,7 +7,7 @@ use near_workspaces::AccountId;
 #[allow(dead_code)]
 pub struct Node {
     pub address: String,
-    account_id: AccountId,
+    pub account_id: AccountId,
     pub account_sk: near_workspaces::types::SecretKey,
     pub cipher_pk: hpke::PublicKey,
     cipher_sk: hpke::SecretKey,
