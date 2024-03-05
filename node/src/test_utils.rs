@@ -30,7 +30,11 @@ impl TestTripleManagers {
                 gcp_datastore_url: Some(url),
                 env: "triple-test".to_string(),
             };
-            Some(GcpService::init(&storage_options).await.unwrap())
+            Some(
+                GcpService::init("mpc.near", &storage_options)
+                    .await
+                    .unwrap(),
+            )
         } else {
             None
         };

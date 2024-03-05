@@ -129,13 +129,16 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                 .build()?
                 .block_on(async {
                     let (sender, receiver) = mpsc::channel(16384);
-                    let gcp_service = GcpService::init(&storage_options).await?;
+                    let gcp_service = GcpService::init(&account_id, &storage_options).await?;
 
-                    let a = indexer_options.clone();
-                    let b = mpc_contract_id.clone();
-                    let c = sign_queue.clone();
-                    let d = gcp_service.clone();
-                    let join_handle = std::thread::spawn(move || indexer::run(a, b, c, d).unwrap());
+                    let join_handle = std::thread::spawn({
+                        let options = indexer_options.clone();
+                        let mpc_id = mpc_contract_id.clone();
+                        let account_id = account_id.clone();
+                        let sign_queue = sign_queue.clone();
+                        let gcp = gcp_service.clone();
+                        move || indexer::run(options, mpc_id, account_id, sign_queue, gcp).unwrap()
+                    });
 
                     let key_storage =
                         storage::secret_storage::init(Some(&gcp_service), &storage_options);

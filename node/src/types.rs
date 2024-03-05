@@ -137,12 +137,25 @@ impl ReshareProtocol {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct LatestBlockHeight(pub near_primitives::types::BlockHeight);
+#[derive(Clone, Debug)]
+pub struct LatestBlockHeight {
+    pub account_id: String,
+    pub block_height: near_primitives::types::BlockHeight,
+}
 
 impl LatestBlockHeight {
     pub async fn fetch(gcp: &GcpService) -> DatastoreResult<Self> {
-        gcp.datastore.get("latest").await
+        gcp.datastore
+            .get(format!(
+                "{}/latest-block-height",
+                gcp.account_id.to_string()
+            ))
+            .await
+    }
+
+    pub fn set(&mut self, block_height: near_primitives::types::BlockHeight) -> &mut Self {
+        self.block_height = block_height;
+        self
     }
 
     pub async fn store(&self, gcp: &GcpService) -> DatastoreResult<()> {
@@ -152,11 +165,21 @@ impl LatestBlockHeight {
 
 impl IntoValue for LatestBlockHeight {
     fn into_value(self) -> Value {
+        (&self).into_value()
+    }
+}
+
+impl IntoValue for &LatestBlockHeight {
+    fn into_value(self) -> Value {
         let properties = {
             let mut properties = std::collections::HashMap::new();
             properties.insert(
+                "account_id".to_string(),
+                Value::StringValue(self.account_id.clone()),
+            );
+            properties.insert(
                 "block_height".to_string(),
-                Value::IntegerValue(self.0 as i64),
+                Value::IntegerValue(self.block_height as i64),
             );
             properties
         };
@@ -164,7 +187,7 @@ impl IntoValue for LatestBlockHeight {
             key: google_datastore1::api::Key {
                 path: Some(vec![google_datastore1::api::PathElement {
                     kind: Some(LatestBlockHeight::kind()),
-                    name: Some(format!("latest")),
+                    name: Some(format!("{}/latest-block-height", self.account_id)),
                     id: None,
                 }]),
                 partition_id: None,
@@ -174,28 +197,27 @@ impl IntoValue for LatestBlockHeight {
     }
 }
 
-impl IntoValue for &LatestBlockHeight {
-    fn into_value(self) -> Value {
-        Value::IntegerValue(self.0 as i64)
-    }
-}
-
 impl FromValue for LatestBlockHeight {
     fn from_value(value: Value) -> Result<Self, ConvertError> {
         match value {
-            Value::EntityValue { key: _, properties } => {
+            Value::EntityValue {
+                key: _,
+                mut properties,
+            } => {
+                let account_id = properties
+                    .remove("account_id")
+                    .ok_or_else(|| ConvertError::MissingProperty("account_id".to_string()))?;
+                let account_id = String::from_value(account_id)?;
+
                 let block_height = properties
-                    .get("block_height")
+                    .remove("block_height")
                     .ok_or_else(|| ConvertError::MissingProperty("block_height".to_string()))?;
-                match block_height {
-                    Value::IntegerValue(block_height) => {
-                        Ok(LatestBlockHeight(*block_height as u64))
-                    }
-                    _ => Err(ConvertError::UnexpectedPropertyType {
-                        expected: String::from("integer"),
-                        got: String::from(block_height.type_name()),
-                    }),
-                }
+                let block_height = i64::from_value(block_height)? as u64;
+
+                Ok(LatestBlockHeight {
+                    account_id,
+                    block_height,
+                })
             }
             _ => Err(ConvertError::UnexpectedPropertyType {
                 expected: String::from("integer"),

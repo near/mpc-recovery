@@ -336,10 +336,14 @@ pub struct GcpService {
     pub project_id: String,
     pub datastore: DatastoreService,
     pub secret_manager: SecretManagerService,
+    pub account_id: String,
 }
 
 impl GcpService {
-    pub async fn init(storage_options: &storage::Options) -> anyhow::Result<Self> {
+    pub async fn init(
+        account_id: &str,
+        storage_options: &storage::Options,
+    ) -> anyhow::Result<Self> {
         let project_id = storage_options.gcp_project_id.clone();
         let secret_manager;
         let client = hyper::Client::builder().build(
@@ -373,6 +377,7 @@ impl GcpService {
         };
 
         Ok(Self {
+            account_id: account_id.to_string(),
             datastore: DatastoreService {
                 datastore,
                 project_id: project_id.clone(),
