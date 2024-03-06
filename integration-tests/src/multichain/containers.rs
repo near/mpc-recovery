@@ -11,6 +11,7 @@ use tracing;
 pub struct Node<'a> {
     pub container: Container<'a, GenericImage>,
     pub address: String,
+    pub account_id: AccountId,
     pub local_address: String,
     pub cipher_pk: hpke::PublicKey,
     pub cipher_sk: hpke::SecretKey,
@@ -84,6 +85,7 @@ impl<'a> Node<'a> {
         Ok(Node {
             container,
             address: full_address,
+            account_id: account_id.clone(),
             local_address: format!("http://localhost:{host_port}"),
             cipher_pk,
             cipher_sk,

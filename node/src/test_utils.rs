@@ -25,21 +25,24 @@ impl TestTripleManagers {
         let participants: Vec<Participant> = range.clone().map(Participant::from).collect();
         let gcp_service = if let Some(url) = datastore_url {
             let storage_options = storage::Options {
-                gcp_project_id: Some("triple-test".to_string()),
+                gcp_project_id: "triple-test".to_string(),
                 sk_share_secret_id: None,
                 gcp_datastore_url: Some(url),
-                env: Some("triple-test".to_string()),
+                env: "triple-test".to_string(),
             };
-            GcpService::init(&storage_options).await.unwrap()
+            Some(
+                GcpService::init("mpc.near", &storage_options)
+                    .await
+                    .unwrap(),
+            )
         } else {
             None
         };
 
         let managers = range
-            .clone()
             .map(|num| {
                 let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(
-                    storage::triple_storage::init(&gcp_service, num.to_string()),
+                    storage::triple_storage::init(gcp_service.as_ref(), num.to_string()),
                 ));
                 TripleManager::new(
                     participants.clone(),

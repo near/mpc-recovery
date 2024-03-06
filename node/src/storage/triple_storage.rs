@@ -240,7 +240,7 @@ pub struct TripleStorage {
 
 pub type LockTripleNodeStorageBox = Arc<RwLock<TripleNodeStorageBox>>;
 
-pub fn init(gcp_service: &Option<GcpService>, account_id: String) -> TripleNodeStorageBox {
+pub fn init(gcp_service: Option<&GcpService>, account_id: String) -> TripleNodeStorageBox {
     match gcp_service {
         Some(gcp) => Box::new(DataStoreTripleNodeStorage::new(
             gcp.datastore.clone(),

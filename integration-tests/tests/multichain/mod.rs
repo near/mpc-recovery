@@ -7,6 +7,7 @@ use mpc_recovery_integration_tests::env::containers::DockerClient;
 use mpc_recovery_node::kdf::{self, x_coordinate};
 use mpc_recovery_node::test_utils;
 use mpc_recovery_node::util::{NearPublicKeyExt, ScalarExt};
+use mpc_recovery_node::types::LatestBlockHeight;
 use test_log::test;
 
 #[test(tokio::test)]
@@ -152,4 +153,35 @@ async fn test_triples_persistence_for_deletion() -> anyhow::Result<()> {
     // verifies that @triple deletion, the datastore is working as expected
     test_utils::test_triple_deletion(Some(datastore_url)).await;
     Ok(())
+}
+
+#[test(tokio::test)]
+async fn test_latest_block_height() -> anyhow::Result<()> {
+    with_multichain_nodes(3, |ctx| {
+        Box::pin(async move {
+            let state_0 = wait_for::running_mpc(&ctx, 0).await?;
+            assert_eq!(state_0.participants.len(), 3);
+            wait_for::has_at_least_triples(&ctx, 2).await?;
+            wait_for::has_at_least_presignatures(&ctx, 2).await?;
+
+            let gcp_services = ctx.nodes.gcp_services().await?;
+            for gcp_service in &gcp_services {
+                let latest = LatestBlockHeight::fetch(gcp_service).await?;
+                assert!(latest.block_height > 10);
+            }
+
+            // test manually updating the latest block height
+            let gcp_service = gcp_services[0].clone();
+            let latest = LatestBlockHeight {
+                account_id: gcp_service.account_id.to_string(),
+                block_height: 1000,
+            };
+            latest.store(&gcp_service).await?;
+            let new_latest = LatestBlockHeight::fetch(&gcp_service).await?;
+            assert_eq!(new_latest.block_height, latest.block_height);
+
+            Ok(())
+        })
+    })
+    .await
 }
