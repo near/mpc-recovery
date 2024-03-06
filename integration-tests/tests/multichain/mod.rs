@@ -6,8 +6,8 @@ use k256::elliptic_curve::point::AffineCoordinates;
 use mpc_recovery_integration_tests::env::containers::DockerClient;
 use mpc_recovery_node::kdf::{self, x_coordinate};
 use mpc_recovery_node::test_utils;
-use mpc_recovery_node::util::{NearPublicKeyExt, ScalarExt};
 use mpc_recovery_node::types::LatestBlockHeight;
+use mpc_recovery_node::util::{NearPublicKeyExt, ScalarExt};
 use test_log::test;
 
 #[test(tokio::test)]
