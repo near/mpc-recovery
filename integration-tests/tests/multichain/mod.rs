@@ -125,6 +125,21 @@ async fn test_key_derivation() -> anyhow::Result<()> {
 }
 
 #[test(tokio::test)]
+async fn test_triples_persistence_for_generation() -> anyhow::Result<()> {
+    let docker_client = DockerClient::default();
+    let gcp_project_id = "test-triple-persistence";
+    let docker_network = "test-triple-persistence";
+    docker_client.create_network(docker_network).await?;
+    let datastore =
+        crate::env::containers::Datastore::run(&docker_client, docker_network, gcp_project_id)
+            .await?;
+    let datastore_url = datastore.local_address.clone();
+    // verifies that @triple generation, the datastore triples are in sync with local generated triples
+    test_utils::test_triple_generation(Some(datastore_url.clone())).await;
+    Ok(())
+}
+
+#[test(tokio::test)]
 async fn test_triples_persistence_for_deletion() -> anyhow::Result<()> {
     let docker_client = DockerClient::default();
     let gcp_project_id = "test-triple-persistence";
