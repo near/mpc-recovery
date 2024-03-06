@@ -13,9 +13,9 @@ terraform {
 }
 
 locals {
-  credentials  = var.credentials != null ? var.credentials : file(var.credentials_file)
-  client_email = jsondecode(local.credentials).client_email
-  client_id    = jsondecode(local.credentials).client_id
+  # credentials  = var.credentials != null ? var.credentials : file(var.credentials_file)
+  # client_email = jsondecode(local.credentials).client_email
+  # client_id    = jsondecode(local.credentials).client_id
 
   env = {
     defaults = {
@@ -38,8 +38,8 @@ data "external" "git_checkout" {
 }
 
 provider "google" {
-  credentials = local.credentials
-  # credentials = file("~/.config/gcloud/application_default_credentials.json")
+  # credentials = local.credentials
+  credentials = file("~/.config/gcloud/application_default_credentials.json")
 
   project = var.project
   region  = var.region
@@ -59,8 +59,8 @@ resource "google_service_account_iam_binding" "serivce-account-iam" {
   role               = "roles/iam.serviceAccountUser"
 
   members = [
-    "serviceAccount:${local.client_email}",
-    # "serviceAccount:mpc-recovery@pagoda-discovery-platform-dev.iam.gserviceaccount.com"
+    # "serviceAccount:${local.client_email}",
+    "serviceAccount:mpc-recovery@pagoda-discovery-platform-dev.iam.gserviceaccount.com"
   ]
 }
 
