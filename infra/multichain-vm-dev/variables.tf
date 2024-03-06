@@ -66,7 +66,6 @@ variable "node_configs" {
   type = list(object({
     account              = string
     cipher_pk            = string
-    address              = string
     account_sk_secret_id = string
     cipher_sk_secret_id  = string
     sk_share_secret_id   = string
@@ -98,7 +97,7 @@ variable "static_env" {
     },
     {
       name  = "MPC_RECOVERY_INDEXER_START_BLOCK_HEIGHT"
-      value = 152754054
+      value = 158767549
     },
     {
       name  = "AWS_DEFAULT_REGION"
