@@ -118,10 +118,6 @@ variable "static_env" {
     {
       name  = "MPC_RECOVERY_INDEXER_S3_REGION"
       value = "eu-central-1"
-    },
-    {
-      name  = "MPC_RECOVERY_INDEXER_S3_URL"
-      value = ""
     }
   ]
 }
