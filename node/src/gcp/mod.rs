@@ -110,14 +110,12 @@ impl DatastoreService {
             read_options: None,
             database_id: Some("".to_string()),
         };
-        tracing::debug!(?request);
         let (_, response) = self
             .datastore
             .projects()
             .lookup(request, &self.project_id)
             .doit()
             .await?;
-        tracing::debug!(?response, "received response");
         match response
             .found
             .and_then(|mut results| results.pop())
@@ -156,15 +154,12 @@ impl DatastoreService {
             single_use_transaction: None,
             transaction: None,
         };
-        tracing::debug!(?request);
-        let (_, response) = self
+        let (_, _) = self
             .datastore
             .projects()
             .commit(request, &self.project_id)
             .doit()
             .await?;
-        tracing::debug!(?response, "received response");
-
         Ok(())
     }
 
@@ -196,14 +191,12 @@ impl DatastoreService {
             single_use_transaction: None,
             transaction: None,
         };
-        tracing::debug!(?request);
-        let (_, response) = self
+        let (_, _) = self
             .datastore
             .projects()
             .commit(request, &self.project_id)
             .doit()
             .await?;
-        tracing::debug!(?response, "received response");
 
         Ok(())
     }
@@ -237,13 +230,12 @@ impl DatastoreService {
         };
 
         tracing::debug!(?request);
-        let (_, response) = self
+        let (_, _) = self
             .datastore
             .projects()
             .commit(request, &self.project_id)
             .doit()
             .await?;
-        tracing::debug!(?response, "received response");
 
         Ok(())
     }
@@ -318,15 +310,12 @@ impl DatastoreService {
             single_use_transaction: None,
             transaction: None,
         };
-        tracing::debug!(?request);
-        let (_, response) = self
+        let (_, _) = self
             .datastore
             .projects()
             .commit(request, &self.project_id)
             .doit()
             .await?;
-        tracing::debug!(?response, "received response");
-
         Ok(())
     }
 }
