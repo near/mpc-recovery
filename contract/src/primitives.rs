@@ -73,6 +73,16 @@ impl Default for Participants {
     }
 }
 
+impl From<Candidates> for Participants {
+    fn from(candidates: Candidates) -> Self {
+        let mut participants = Participants::new();
+        for (account_id, candidate_info) in candidates.iter() {
+            participants.insert(account_id.clone(), candidate_info.clone().into());
+        }
+        participants
+    }
+}
+
 impl Participants {
     pub fn new() -> Self {
         Participants {

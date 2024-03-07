@@ -3,7 +3,10 @@ pub mod local;
 
 use crate::env::containers::DockerClient;
 use crate::{initialize_lake_indexer, LakeIndexerCtx};
-use mpc_contract::primitives::ParticipantInfo;
+use mpc_contract::primitives::CandidateInfo;
+use mpc_recovery_node::gcp::GcpService;
+use mpc_recovery_node::storage;
+use mpc_recovery_node::storage::triple_storage::TripleNodeStorageBox;
 use near_workspaces::network::Sandbox;
 use near_workspaces::{AccountId, Contract, Worker};
 use serde_json::json;
@@ -81,6 +84,35 @@ impl Nodes<'_> {
 
         Ok(())
     }
+
+    pub async fn triple_storage(&self, account_id: String) -> anyhow::Result<TripleNodeStorageBox> {
+        let gcp_service = GcpService::init(&account_id, &self.ctx().storage_options).await?;
+        Ok(storage::triple_storage::init(
+            Some(&gcp_service),
+            account_id,
+        ))
+    }
+
+    pub async fn gcp_services(&self) -> anyhow::Result<Vec<GcpService>> {
+        let mut gcp_services = Vec::new();
+        match self {
+            Nodes::Local { nodes, .. } => {
+                for node in nodes {
+                    gcp_services.push(
+                        GcpService::init(&node.account_id, &self.ctx().storage_options).await?,
+                    );
+                }
+            }
+            Nodes::Docker { nodes, .. } => {
+                for node in nodes {
+                    gcp_services.push(
+                        GcpService::init(&node.account_id, &self.ctx().storage_options).await?,
+                    );
+                }
+            }
+        }
+        Ok(gcp_services)
+    }
 }
 
 pub struct Context<'a> {
@@ -92,6 +124,8 @@ pub struct Context<'a> {
     pub lake_indexer: crate::env::containers::LakeIndexer<'a>,
     pub worker: Worker<Sandbox>,
     pub mpc_contract: Contract,
+    pub datastore: crate::env::containers::Datastore<'a>,
+    pub storage_options: storage::Options,
 }
 
 pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> {
@@ -120,6 +154,17 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
         .await?;
     tracing::info!(contract_id = %mpc_contract.id(), "deployed mpc contract");
 
+    let gcp_project_id = "multichain-integration";
+    let datastore =
+        crate::env::containers::Datastore::run(docker_client, docker_network, gcp_project_id)
+            .await?;
+
+    let storage_options = mpc_recovery_node::storage::Options {
+        env: "local-test".to_string(),
+        gcp_project_id: "multichain-integration".to_string(),
+        sk_share_secret_id: None,
+        gcp_datastore_url: Some(datastore.local_address.clone()),
+    };
     Ok(Context {
         docker_client,
         docker_network: docker_network.to_string(),
@@ -128,6 +173,8 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
         lake_indexer,
         worker,
         mpc_contract,
+        datastore,
+        storage_options,
     })
 }
 
@@ -154,14 +201,14 @@ pub async fn docker(
         .await
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
-    let participants: HashMap<AccountId, ParticipantInfo> = accounts
+    let candidates: HashMap<AccountId, CandidateInfo> = accounts
         .iter()
         .cloned()
         .zip(&nodes)
         .map(|(account, node)| {
             (
                 account.id().clone(),
-                ParticipantInfo {
+                CandidateInfo {
                     account_id: account.id().to_string().parse().unwrap(),
                     url: node.address.clone(),
                     cipher_pk: node.cipher_pk.to_bytes(),
@@ -174,7 +221,7 @@ pub async fn docker(
         .call("init")
         .args_json(json!({
             "threshold": 2,
-            "participants": participants
+            "candidates": candidates
         }))
         .transact()
         .await?
@@ -209,14 +256,14 @@ pub async fn host(
         .await
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
-    let participants: HashMap<AccountId, ParticipantInfo> = accounts
+    let candidates: HashMap<AccountId, CandidateInfo> = accounts
         .iter()
         .cloned()
         .zip(&nodes)
         .map(|(account, node)| {
             (
                 account.id().clone(),
-                ParticipantInfo {
+                CandidateInfo {
                     account_id: account.id().to_string().parse().unwrap(),
                     url: node.address.clone(),
                     cipher_pk: node.cipher_pk.to_bytes(),
@@ -229,7 +276,7 @@ pub async fn host(
         .call("init")
         .args_json(json!({
             "threshold": 2,
-            "participants": participants
+            "candidates": candidates
         }))
         .transact()
         .await?

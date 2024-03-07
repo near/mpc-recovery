@@ -1,11 +1,12 @@
+use crate::gcp::GcpService;
 use crate::protocol::{MpcSignProtocol, SignQueue};
+use crate::storage::triple_storage::LockTripleNodeStorageBox;
 use crate::{indexer, storage, web};
 use clap::Parser;
 use local_ip_address::local_ip;
 use near_crypto::{InMemorySigner, SecretKey};
 use near_primitives::types::AccountId;
 use std::sync::Arc;
-use std::thread;
 use tokio::sync::{mpsc, RwLock};
 use tracing_subscriber::EnvFilter;
 use url::Url;
@@ -134,18 +135,27 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
             triple_stockpile,
         } => {
             let sign_queue = Arc::new(RwLock::new(SignQueue::new()));
-            let a = indexer_options.clone();
-            let b = mpc_contract_id.clone();
-            let c = sign_queue.clone();
-            let indexer_handler = thread::spawn(move || {
-                indexer::run(a, b, c).unwrap();
-            });
             tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()?
                 .block_on(async {
                     let (sender, receiver) = mpsc::channel(16384);
-                    let key_storage = storage::init(&storage_options).await?;
+                    let gcp_service = GcpService::init(&account_id, &storage_options).await?;
+
+                    let join_handle = std::thread::spawn({
+                        let options = indexer_options.clone();
+                        let mpc_id = mpc_contract_id.clone();
+                        let account_id = account_id.clone();
+                        let sign_queue = sign_queue.clone();
+                        let gcp = gcp_service.clone();
+                        move || indexer::run(options, mpc_id, account_id, sign_queue, gcp).unwrap()
+                    });
+
+                    let key_storage =
+                        storage::secret_storage::init(Some(&gcp_service), &storage_options);
+                    let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(
+                        storage::triple_storage::init(Some(&gcp_service), account_id.to_string()),
+                    ));
 
                     let my_address = my_address.unwrap_or_else(|| {
                         let my_ip = local_ip().unwrap();
@@ -166,6 +176,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                         hpke::PublicKey::try_from_bytes(&hex::decode(cipher_pk)?)?,
                         key_storage,
                         triple_stockpile,
+                        triple_storage,
                     );
                     tracing::debug!("protocol initialized");
                     let protocol_handle = tokio::spawn(async move { protocol.run().await });
@@ -190,9 +201,9 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                     web_handle.await??;
                     tracing::debug!("spinning down");
 
+                    join_handle.join().unwrap();
                     anyhow::Ok(())
                 })?;
-            indexer_handler.join().unwrap();
         }
     }
 

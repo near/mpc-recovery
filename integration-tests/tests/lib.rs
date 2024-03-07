@@ -10,15 +10,10 @@ use mpc_recovery::{
         ClaimOidcResponse, MpcPkResponse, NewAccountResponse, SignResponse, UserCredentialsResponse,
     },
 };
-use mpc_recovery_integration_tests::indexer::FullSignature;
-use mpc_recovery_integration_tests::{env, indexer};
+use mpc_recovery_integration_tests::env;
 use mpc_recovery_integration_tests::{env::containers::DockerClient, multichain::MultichainConfig};
-use near_primitives::hash::CryptoHash;
+use near_jsonrpc_client::JsonRpcClient;
 use near_workspaces::{network::Sandbox, Worker};
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::thread;
-use tokio::sync::RwLock;
 
 pub struct TestContext {
     env: String,
@@ -68,8 +63,8 @@ where
 pub struct MultichainTestContext<'a> {
     nodes: mpc_recovery_integration_tests::multichain::Nodes<'a>,
     rpc_client: near_fetch::Client,
+    jsonrpc_client: JsonRpcClient,
     http_client: reqwest::Client,
-    responses: Arc<RwLock<HashMap<CryptoHash, FullSignature>>>,
     cfg: MultichainConfig,
 }
 
@@ -81,30 +76,14 @@ where
     let nodes =
         mpc_recovery_integration_tests::multichain::run(cfg.clone(), &docker_client).await?;
 
-    let s3_bucket = nodes.ctx().localstack.s3_bucket.clone();
-    let s3_region = nodes.ctx().localstack.s3_region.clone();
-    let s3_url = nodes.ctx().localstack.s3_host_address.clone();
-    let mpc_contract_id = nodes.ctx().mpc_contract.id().clone();
-    let responses = Arc::new(RwLock::new(HashMap::new()));
-    let responses_clone = responses.clone();
-    thread::spawn(move || {
-        indexer::run(
-            &s3_bucket,
-            &s3_region,
-            0,
-            &s3_url,
-            mpc_contract_id,
-            responses_clone,
-        )
-        .unwrap();
-    });
-
-    let rpc_client = near_fetch::Client::new(&nodes.ctx().lake_indexer.rpc_host_address);
+    let connector = JsonRpcClient::new_client();
+    let jsonrpc_client = connector.connect(&nodes.ctx().lake_indexer.rpc_host_address);
+    let rpc_client = near_fetch::Client::from_client(jsonrpc_client.clone());
     f(MultichainTestContext {
         nodes,
         rpc_client,
+        jsonrpc_client,
         http_client: reqwest::Client::default(),
-        responses,
         cfg,
     })
     .await?;
@@ -210,122 +189,6 @@ mod check {
         } else {
             Ok(())
         }
-    }
-}
-
-mod wait_for {
-    use crate::MultichainTestContext;
-    use anyhow::Context;
-    use backon::ExponentialBuilder;
-    use backon::Retryable;
-    use mpc_contract::ProtocolContractState;
-    use mpc_contract::RunningContractState;
-    use mpc_recovery_integration_tests::indexer::FullSignature;
-    use mpc_recovery_node::web::StateView;
-    use near_primitives::hash::CryptoHash;
-
-    pub async fn running_mpc<'a>(
-        ctx: &MultichainTestContext<'a>,
-        epoch: u64,
-    ) -> anyhow::Result<RunningContractState> {
-        let is_running = || async {
-            let state: ProtocolContractState = ctx
-                .rpc_client
-                .view(ctx.nodes.ctx().mpc_contract.id(), "state", ())
-                .await?;
-
-            match state {
-                ProtocolContractState::Running(running) if running.epoch >= epoch => Ok(running),
-                ProtocolContractState::Running(running) => {
-                    anyhow::bail!("running with an older epoch: {}", running.epoch)
-                }
-                _ => anyhow::bail!("not running"),
-            }
-        };
-        is_running
-            .retry(&ExponentialBuilder::default().with_max_times(6))
-            .await
-            .with_context(|| format!("mpc nodes did not reach epoch '{epoch}' before deadline"))
-    }
-
-    pub async fn has_at_least_triples<'a>(
-        ctx: &MultichainTestContext<'a>,
-        id: usize,
-        expected_triple_count: usize,
-    ) -> anyhow::Result<StateView> {
-        let is_enough_triples = || async {
-            let state_view: StateView = ctx
-                .http_client
-                .get(format!("{}/state", ctx.nodes.url(id)))
-                .send()
-                .await?
-                .json()
-                .await?;
-
-            match state_view {
-                StateView::Running { triple_count, .. }
-                    if triple_count >= expected_triple_count =>
-                {
-                    Ok(state_view)
-                }
-                StateView::Running { .. } => anyhow::bail!("node does not have enough triples yet"),
-                StateView::NotRunning => anyhow::bail!("node is not running"),
-            }
-        };
-        is_enough_triples
-            .retry(&ExponentialBuilder::default().with_max_times(6))
-            .await
-            .with_context(|| format!("mpc node '{id}' failed to generate '{expected_triple_count}' triples before deadline"))
-    }
-
-    pub async fn has_at_least_presignatures<'a>(
-        ctx: &MultichainTestContext<'a>,
-        id: usize,
-        expected_presignature_count: usize,
-    ) -> anyhow::Result<StateView> {
-        let is_enough_presignatures = || async {
-            let state_view: StateView = ctx
-                .http_client
-                .get(format!("{}/state", ctx.nodes.url(id)))
-                .send()
-                .await?
-                .json()
-                .await?;
-
-            match state_view {
-                StateView::Running {
-                    presignature_count, ..
-                } if presignature_count >= expected_presignature_count => Ok(state_view),
-                StateView::Running { .. } => {
-                    anyhow::bail!("node does not have enough presignatures yet")
-                }
-                StateView::NotRunning => anyhow::bail!("node is not running"),
-            }
-        };
-        is_enough_presignatures
-            .retry(&ExponentialBuilder::default().with_max_times(6))
-            .await
-            .with_context(|| format!("mpc node '{id}' failed to generate '{expected_presignature_count}' presignatures before deadline"))
-    }
-
-    pub async fn has_response<'a>(
-        ctx: &MultichainTestContext<'a>,
-        receipt_id: CryptoHash,
-    ) -> anyhow::Result<FullSignature> {
-        let is_enough_presignatures = || async {
-            let mut responses = ctx.responses.write().await;
-            if let Some(signature) = responses.remove(&receipt_id) {
-                return Ok(signature);
-            }
-            drop(responses);
-            anyhow::bail!("mpc has not responded yet")
-        };
-        is_enough_presignatures
-            .retry(&ExponentialBuilder::default().with_max_times(8))
-            .await
-            .with_context(|| {
-                format!("mpc failed to respond to receipt id '{receipt_id}' before deadline")
-            })
     }
 }
 

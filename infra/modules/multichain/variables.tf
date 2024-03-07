@@ -2,6 +2,10 @@ variable "project" {
   type = string
 }
 
+variable "env" {
+  type = string
+}
+
 variable "region" {
 }
 
@@ -30,7 +34,7 @@ variable "mpc_contract_id" {
   type = string
 }
 
-variable "account" {
+variable "account_id" {
   type = string
 }
 

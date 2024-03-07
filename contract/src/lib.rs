@@ -1,14 +1,16 @@
 pub mod primitives;
 
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use near_sdk::collections::LookupMap;
+use near_sdk::log;
 use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault, PublicKey};
-use primitives::{CandidateInfo, Candidates, ParticipantInfo, Participants, PkVotes, Votes};
+use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault, Promise, PromiseOrValue, PublicKey};
+use primitives::{CandidateInfo, Candidates, Participants, PkVotes, Votes};
 use std::collections::{BTreeMap, HashSet};
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
 pub struct InitializingContractState {
-    pub participants: Participants,
+    pub candidates: Candidates,
     pub threshold: usize,
     pub pk_votes: PkVotes,
 }
@@ -47,18 +49,26 @@ pub enum ProtocolContractState {
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct MpcContract {
     protocol_state: ProtocolContractState,
+    pending_requests: LookupMap<[u8; 32], Option<(String, String)>>,
 }
 
 #[near_bindgen]
 impl MpcContract {
     #[init(ignore_state)]
-    pub fn init(threshold: usize, participants: BTreeMap<AccountId, ParticipantInfo>) -> Self {
+    pub fn init(threshold: usize, candidates: BTreeMap<AccountId, CandidateInfo>) -> Self {
+        log!(
+            "init: signer={}, treshhold={}, candidates={}",
+            env::signer_account_id(),
+            threshold,
+            serde_json::to_string(&candidates).unwrap()
+        );
         MpcContract {
             protocol_state: ProtocolContractState::Initializing(InitializingContractState {
-                participants: Participants { participants },
+                candidates: Candidates { candidates },
                 threshold,
                 pk_votes: PkVotes::new(),
             }),
+            pending_requests: LookupMap::new(b"m"),
         }
     }
 
@@ -72,6 +82,13 @@ impl MpcContract {
         cipher_pk: primitives::hpke::PublicKey,
         sign_pk: PublicKey,
     ) {
+        log!(
+            "join: signer={}, url={}, cipher_pk={:?}, sign_pk={:?}",
+            env::signer_account_id(),
+            url,
+            cipher_pk,
+            sign_pk
+        );
         match &mut self.protocol_state {
             ProtocolContractState::Running(RunningContractState {
                 participants,
@@ -97,6 +114,11 @@ impl MpcContract {
     }
 
     pub fn vote_join(&mut self, candidate_account_id: AccountId) -> bool {
+        log!(
+            "vote_join: signer={}, candidate_account_id={}",
+            env::signer_account_id(),
+            candidate_account_id
+        );
         match &mut self.protocol_state {
             ProtocolContractState::Running(RunningContractState {
                 epoch,
@@ -139,6 +161,11 @@ impl MpcContract {
     }
 
     pub fn vote_leave(&mut self, acc_id_to_leave: AccountId) -> bool {
+        log!(
+            "vote_leave: signer={}, acc_id_to_leave={}",
+            env::signer_account_id(),
+            acc_id_to_leave
+        );
         match &mut self.protocol_state {
             ProtocolContractState::Running(RunningContractState {
                 epoch,
@@ -179,14 +206,19 @@ impl MpcContract {
     }
 
     pub fn vote_pk(&mut self, public_key: PublicKey) -> bool {
+        log!(
+            "vote_pk: signer={}, public_key={:?}",
+            env::signer_account_id(),
+            public_key
+        );
         match &mut self.protocol_state {
             ProtocolContractState::Initializing(InitializingContractState {
-                participants,
+                candidates,
                 threshold,
                 pk_votes,
             }) => {
                 let signer_account_id = env::signer_account_id();
-                if !participants.contains_key(&signer_account_id) {
+                if !candidates.contains_key(&signer_account_id) {
                     env::panic_str("calling account is not in the participant set");
                 }
                 let voted = pk_votes.entry(public_key.clone());
@@ -194,7 +226,7 @@ impl MpcContract {
                 if voted.len() >= *threshold {
                     self.protocol_state = ProtocolContractState::Running(RunningContractState {
                         epoch: 0,
-                        participants: participants.clone(),
+                        participants: candidates.clone().into(),
                         threshold: *threshold,
                         public_key,
                         candidates: Candidates::new(),
@@ -213,6 +245,11 @@ impl MpcContract {
     }
 
     pub fn vote_reshared(&mut self, epoch: u64) -> bool {
+        log!(
+            "vote_reshared: signer={}, epoch={}",
+            env::signer_account_id(),
+            epoch
+        );
         match &mut self.protocol_state {
             ProtocolContractState::Resharing(ResharingContractState {
                 old_epoch,
@@ -257,21 +294,83 @@ impl MpcContract {
     }
 
     #[allow(unused_variables)]
-    pub fn sign(&mut self, payload: [u8; 32], path: String) -> [u8; 32] {
-        near_sdk::env::random_seed_array()
+    /// `key_version` must be less than or equal to the value at `latest_key_version`
+    pub fn sign(&mut self, payload: [u8; 32], path: String, key_version: Option<u32>) -> Promise {
+        let key_version = key_version.unwrap_or(0);
+        let latest_key_version: u32 = self.latest_key_version();
+        assert!(
+            key_version <= latest_key_version,
+            "This version of the signer contract doesn't support versions greater than {}",
+            latest_key_version,
+        );
+        log!(
+            "sign: signer={}, payload={:?} path={:?}",
+            env::signer_account_id(),
+            payload,
+            path
+        );
+        match self.pending_requests.get(&payload) {
+            None => {
+                self.pending_requests.insert(&payload, &None);
+                log!(&serde_json::to_string(&near_sdk::env::random_seed_array()).unwrap());
+                Self::ext(env::current_account_id()).sign_helper(payload, 0)
+            }
+            Some(_) => env::panic_str("Signature for this payload already requested"),
+        }
     }
 
-    #[allow(unused_variables)]
-    pub fn respond(&mut self, receipt_id: [u8; 32], big_r: String, s: String) {}
+    #[private]
+    pub fn sign_helper(
+        &mut self,
+        payload: [u8; 32],
+        depth: usize,
+    ) -> PromiseOrValue<(String, String)> {
+        if let Some(signature) = self.pending_requests.get(&payload) {
+            match signature {
+                Some(signature) => {
+                    log!(
+                        "sign_helper: signature ready: {:?}, depth: {:?}",
+                        signature,
+                        depth
+                    );
+                    self.pending_requests.remove(&payload);
+                    PromiseOrValue::Value(signature)
+                }
+                None => {
+                    log!(&format!(
+                        "sign_helper: signature not ready yet (depth={})",
+                        depth
+                    ));
+                    let account_id = env::current_account_id();
+                    PromiseOrValue::Promise(Self::ext(account_id).sign_helper(payload, depth + 1))
+                }
+            }
+        } else {
+            env::panic_str("unexpected request");
+        }
+    }
+
+    pub fn respond(&mut self, payload: [u8; 32], big_r: String, s: String) {
+        log!(
+            "respond: signer={}, payload={:?} big_r={} s={}",
+            env::signer_account_id(),
+            payload,
+            big_r,
+            s
+        );
+        self.pending_requests.insert(&payload, &Some((big_r, s)));
+    }
 
     #[private]
     #[init(ignore_state)]
     pub fn clean(keys: Vec<near_sdk::json_types::Base64VecU8>) -> Self {
+        log!("clean: keys={:?}", keys);
         for key in keys.iter() {
             env::storage_remove(&key.0);
         }
         Self {
             protocol_state: ProtocolContractState::NotInitialized,
+            pending_requests: LookupMap::new(b"m"),
         }
     }
 
@@ -282,5 +381,13 @@ impl MpcContract {
             ProtocolContractState::Resharing(state) => state.public_key.clone(),
             _ => env::panic_str("public key not available (protocol is not running or resharing)"),
         }
+    }
+
+    /// Key versions refer new versions of the root key that we may choose to generate on cohort changes
+    /// Older key versions will always work but newer key versions were never held by older signers
+    /// Newer key versions may also add new security features, like only existing within a secure enclave
+    /// Currently only 0 is a valid key version
+    pub const fn latest_key_version(&self) -> u32 {
+        0
     }
 }

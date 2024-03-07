@@ -44,7 +44,22 @@ async fn build_package(
     package: &str,
     target: Option<&str>,
 ) -> anyhow::Result<ExitStatus> {
-    let mut cmd = Command::new("cargo");
+    // Do you have direnv installed?
+    let has_direnv = Command::new("which")
+        .arg("direnv")
+        .output()
+        .await
+        .expect("Failed to execute which command")
+        .status
+        .success();
+
+    let mut cmd = if has_direnv {
+        // If so use the same compiler you always use
+        Command::new("direnv exec cargo")
+    } else {
+        // Otherwise give up and face the pain of constant recompilation
+        Command::new("cargo")
+    };
     cmd.arg("build")
         .arg("--package")
         .arg(package)

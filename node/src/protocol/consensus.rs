@@ -4,17 +4,21 @@ use super::state::{
     WaitingForConsensusState,
 };
 use super::SignQueue;
+use crate::gcp::error::DatastoreStorageError;
+use crate::gcp::error::SecretStorageError;
+use crate::protocol::contract::primitives::Participants;
 use crate::protocol::presignature::PresignatureManager;
 use crate::protocol::signature::SignatureManager;
 use crate::protocol::state::{GeneratingState, ResharingState};
 use crate::protocol::triple::TripleManager;
-use crate::storage::{SecretNodeStorageBox, SecretStorageError};
-use crate::types::SecretKeyShare;
+use crate::storage::secret_storage::SecretNodeStorageBox;
+use crate::storage::triple_storage::LockTripleNodeStorageBox;
+use crate::storage::triple_storage::TripleData;
+use crate::types::{KeygenProtocol, ReshareProtocol, SecretKeyShare};
 use crate::util::AffinePointExt;
 use crate::{http_client, rpc_client};
 use async_trait::async_trait;
 use cait_sith::protocol::{InitializationError, Participant};
-use k256::Secp256k1;
 use mpc_keys::hpke;
 use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
@@ -37,6 +41,7 @@ pub trait ConsensusCtx {
     fn sign_sk(&self) -> &near_crypto::SecretKey;
     fn secret_storage(&self) -> &SecretNodeStorageBox;
     fn triple_stockpile(&self) -> &Option<usize>;
+    fn triple_storage(&mut self) -> LockTripleNodeStorageBox;
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -56,7 +61,21 @@ pub enum ConsensusError {
     #[error("cait-sith initialization error: {0}")]
     CaitSithInitializationError(#[from] InitializationError),
     #[error("secret storage error: {0}")]
-    SecretStorageError(#[from] SecretStorageError),
+    SecretStorageError(SecretStorageError),
+    #[error("datastore storage error: {0}")]
+    DatastoreStorageError(DatastoreStorageError),
+}
+
+impl From<SecretStorageError> for ConsensusError {
+    fn from(err: SecretStorageError) -> Self {
+        ConsensusError::SecretStorageError(err)
+    }
+}
+
+impl From<DatastoreStorageError> for ConsensusError {
+    fn from(err: DatastoreStorageError) -> Self {
+        ConsensusError::DatastoreStorageError(err)
+    }
 }
 
 #[async_trait]
@@ -72,10 +91,10 @@ pub trait ConsensusProtocol {
 impl ConsensusProtocol for StartedState {
     async fn advance<C: ConsensusCtx + Send + Sync>(
         self,
-        ctx: C,
+        mut ctx: C,
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
-        match self.0 {
+        match self.persistent_node_data {
             Some(PersistentNodeData {
                 epoch,
                 private_share,
@@ -100,10 +119,9 @@ impl ConsensusProtocol for StartedState {
                         }
                         Ordering::Less => Err(ConsensusError::EpochRollback),
                         Ordering::Equal => {
-                            match contract_state
-                                .participants
-                                .find_participant(ctx.my_account_id())
-                            {
+                            let account_id = ctx.my_account_id();
+                            let sign_queue = ctx.sign_queue();
+                            match contract_state.participants.find_participant(account_id) {
                                 Some(me) => {
                                     tracing::info!(
                                         "started: contract state is running and we are already a participant"
@@ -116,6 +134,8 @@ impl ConsensusProtocol for StartedState {
                                         contract_state.threshold,
                                         epoch,
                                         *ctx.triple_stockpile(),
+                                        vec![],
+                                        ctx.triple_storage(),
                                     );
                                     // Start stockpiling triples in the background. This will wait until crypto loop to generate.
                                     if let Err(err) = triple_manager
@@ -136,7 +156,7 @@ impl ConsensusProtocol for StartedState {
                                         threshold: contract_state.threshold,
                                         private_share,
                                         public_key,
-                                        sign_queue: ctx.sign_queue(),
+                                        sign_queue,
                                         triple_manager: Arc::new(RwLock::new(triple_manager)),
                                         presignature_manager: Arc::new(RwLock::new(
                                             PresignatureManager::new(
@@ -193,16 +213,13 @@ impl ConsensusProtocol for StartedState {
             },
             None => match contract_state {
                 ProtocolState::Initializing(contract_state) => {
-                    match contract_state
-                        .participants
-                        .find_participant(ctx.my_account_id())
-                    {
+                    let participants: Participants = contract_state.candidates.clone().into();
+                    match participants.find_participant(ctx.my_account_id()) {
                         Some(me) => {
                             tracing::info!(
                                 "started(initializing): starting key generation as a part of the participant set"
                             );
-                            let participants = contract_state.participants;
-                            let protocol = cait_sith::keygen::<Secp256k1>(
+                            let protocol = KeygenProtocol::new(
                                 &participants.keys().cloned().collect::<Vec<_>>(),
                                 me,
                                 contract_state.threshold,
@@ -210,7 +227,7 @@ impl ConsensusProtocol for StartedState {
                             Ok(NodeState::Generating(GeneratingState {
                                 participants,
                                 threshold: contract_state.threshold,
-                                protocol: Arc::new(RwLock::new(protocol)),
+                                protocol,
                                 messages: Default::default(),
                             }))
                         }
@@ -287,7 +304,7 @@ impl ConsensusProtocol for GeneratingState {
 impl ConsensusProtocol for WaitingForConsensusState {
     async fn advance<C: ConsensusCtx + Send + Sync>(
         self,
-        ctx: C,
+        mut ctx: C,
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
         match contract_state {
@@ -350,6 +367,8 @@ impl ConsensusProtocol for WaitingForConsensusState {
                         self.threshold,
                         self.epoch,
                         *ctx.triple_stockpile(),
+                        vec![],
+                        ctx.triple_storage(),
                     );
                     // Start stockpiling triples in the background. This will wait until crypto loop to generate.
                     if let Err(err) =
@@ -693,8 +712,12 @@ impl ConsensusProtocol for NodeState {
     ) -> Result<NodeState, ConsensusError> {
         match self {
             NodeState::Starting => {
-                let node_data = ctx.secret_storage().load().await?;
-                Ok(NodeState::Started(StartedState(node_data)))
+                let persistent_node_data = ctx.secret_storage().load().await?;
+                let triple_data = load_triples(ctx).await?;
+                Ok(NodeState::Started(StartedState {
+                    persistent_node_data,
+                    triple_data,
+                }))
             }
             NodeState::Started(state) => state.advance(ctx, contract_state).await,
             NodeState::Generating(state) => state.advance(ctx, contract_state).await,
@@ -706,6 +729,36 @@ impl ConsensusProtocol for NodeState {
     }
 }
 
+async fn load_triples<C: ConsensusCtx + Send + Sync>(
+    mut ctx: C,
+) -> Result<Vec<TripleData>, ConsensusError> {
+    let triple_storage = ctx.triple_storage();
+    let read_lock = triple_storage.read().await;
+    let mut retries = 3;
+    let mut error = None;
+    while retries > 0 {
+        match read_lock.load().await {
+            Err(DatastoreStorageError::FetchEntitiesError(_)) => {
+                tracing::info!("There are no triples persisted.");
+                drop(read_lock);
+                return Ok(vec![]);
+            }
+            Err(e) => {
+                retries -= 1;
+                tracing::warn!(?e, "triple load failed.");
+                error = Some(e);
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
+            Ok(loaded_triples) => {
+                drop(read_lock);
+                return Ok(loaded_triples);
+            }
+        }
+    }
+    drop(read_lock);
+    Err(ConsensusError::DatastoreStorageError(error.unwrap()))
+}
+
 async fn start_resharing<C: ConsensusCtx>(
     private_share: Option<SecretKeyShare>,
     ctx: C,
@@ -715,30 +768,14 @@ async fn start_resharing<C: ConsensusCtx>(
         .new_participants
         .find_participant(ctx.my_account_id())
         .unwrap();
-    let protocol = cait_sith::reshare::<Secp256k1>(
-        &contract_state
-            .old_participants
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>(),
-        contract_state.threshold,
-        &contract_state
-            .new_participants
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>(),
-        contract_state.threshold,
-        me,
-        private_share,
-        contract_state.public_key,
-    )?;
+    let protocol = ReshareProtocol::new(private_share, me, &contract_state)?;
     Ok(NodeState::Resharing(ResharingState {
         old_epoch: contract_state.old_epoch,
         old_participants: contract_state.old_participants,
         new_participants: contract_state.new_participants,
         threshold: contract_state.threshold,
         public_key: contract_state.public_key,
-        protocol: Arc::new(RwLock::new(protocol)),
+        protocol,
         messages: Default::default(),
     }))
 }

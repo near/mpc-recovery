@@ -5,6 +5,7 @@ use super::signature::SignatureManager;
 use super::triple::TripleManager;
 use super::SignQueue;
 use crate::http_client::MessageQueue;
+use crate::storage::triple_storage::TripleData;
 use crate::types::{KeygenProtocol, PublicKey, ReshareProtocol, SecretKeyShare};
 use cait_sith::protocol::Participant;
 use near_primitives::types::AccountId;
@@ -30,7 +31,10 @@ impl fmt::Debug for PersistentNodeData {
 }
 
 #[derive(Debug, Clone)]
-pub struct StartedState(pub Option<PersistentNodeData>);
+pub struct StartedState {
+    pub persistent_node_data: Option<PersistentNodeData>,
+    pub triple_data: Vec<TripleData>,
+}
 
 #[derive(Clone)]
 pub struct GeneratingState {

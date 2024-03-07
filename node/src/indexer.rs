@@ -1,5 +1,7 @@
+use crate::gcp::GcpService;
 use crate::kdf;
 use crate::protocol::{SignQueue, SignRequest};
+use crate::types::LatestBlockHeight;
 use near_lake_framework::{LakeBuilder, LakeContext};
 use near_lake_primitives::actions::ActionMetaDataExt;
 use near_lake_primitives::{receipts::ExecutionStatus, AccountId};
@@ -69,7 +71,9 @@ struct SignPayload {
 #[derive(LakeContext)]
 struct Context {
     mpc_contract_id: AccountId,
+    gcp_service: GcpService,
     queue: Arc<RwLock<SignQueue>>,
+    latest_block_height: Arc<RwLock<LatestBlockHeight>>,
 }
 
 async fn handle_block(
@@ -79,7 +83,7 @@ async fn handle_block(
     for action in block.actions().cloned().collect::<Vec<_>>() {
         if action.receiver_id() == ctx.mpc_contract_id {
             let receipt = block.receipt_by_id(&action.receipt_id()).unwrap();
-            let ExecutionStatus::SuccessValue(result) = receipt.status() else {
+            let ExecutionStatus::SuccessReceiptId(receipt_id) = receipt.status() else {
                 continue;
             };
             if let Some(function_call) = action.as_function_call() {
@@ -87,14 +91,23 @@ async fn handle_block(
                     if let Ok(sign_payload) =
                         serde_json::from_slice::<'_, SignPayload>(function_call.args())
                     {
-                        let Ok(entropy) = serde_json::from_slice::<'_, [u8; 32]>(&result) else {
+                        if receipt.logs().is_empty() {
+                            tracing::warn!("`sign` did not produce entropy");
+                            continue;
+                        }
+                        let Ok(entropy) = serde_json::from_str::<'_, [u8; 32]>(&receipt.logs()[1])
+                        else {
+                            tracing::warn!(
+                                "`sign` did not produce entropy correctly: {:?}",
+                                receipt.logs()[0]
+                            );
                             continue;
                         };
                         let epsilon =
                             kdf::derive_epsilon(&action.predecessor_id(), &sign_payload.path);
-                        let delta = kdf::derive_delta(receipt.receipt_id(), entropy);
+                        let delta = kdf::derive_delta(receipt_id, entropy);
                         tracing::info!(
-                            receipt_id = %receipt.receipt_id(),
+                            receipt_id = %receipt_id,
                             caller_id = receipt.predecessor_id().to_string(),
                             payload = hex::encode(sign_payload.payload),
                             entropy = hex::encode(entropy),
@@ -102,7 +115,7 @@ async fn handle_block(
                         );
                         let mut queue = ctx.queue.write().await;
                         queue.add(SignRequest {
-                            receipt_id: receipt.receipt_id(),
+                            receipt_id,
                             msg_hash: sign_payload.payload,
                             epsilon,
                             delta,
@@ -114,8 +127,16 @@ async fn handle_block(
             }
         }
     }
+
+    ctx.latest_block_height
+        .write()
+        .await
+        .set(block.block_height())
+        .store(&ctx.gcp_service)
+        .await?;
+
     if block.block_height() % 1000 == 0 {
-        tracing::info!(block_height = block.block_height(), "indexed block")
+        tracing::info!(block_height = block.block_height(), "indexed block");
     }
     Ok(())
 }
@@ -123,7 +144,9 @@ async fn handle_block(
 pub fn run(
     options: Options,
     mpc_contract_id: AccountId,
+    node_account_id: AccountId,
     queue: Arc<RwLock<SignQueue>>,
+    gcp_service: crate::gcp::GcpService,
 ) -> anyhow::Result<()> {
     tracing::info!(
         s3_bucket = options.s3_bucket,
@@ -133,27 +156,43 @@ pub fn run(
         %mpc_contract_id,
         "starting indexer"
     );
-    let mut lake_builder = LakeBuilder::default()
-        .s3_bucket_name(options.s3_bucket)
-        .s3_region_name(options.s3_region)
-        .start_block_height(options.start_block_height);
-    let lake = tokio::runtime::Builder::new_multi_thread()
+
+    let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
-        .unwrap()
-        .block_on(async {
-            if let Some(s3_url) = options.s3_url {
-                let aws_config = aws_config::from_env().load().await;
-                let s3_config = aws_sdk_s3::config::Builder::from(&aws_config)
-                    .endpoint_url(s3_url)
-                    .build();
-                lake_builder = lake_builder.s3_config(s3_config);
+        .unwrap();
+
+    let (lake, latest_block_height) = rt.block_on(async {
+        let latest = match LatestBlockHeight::fetch(&gcp_service).await {
+            Ok(latest) => latest,
+            Err(err) => {
+                tracing::error!(%err, "failed to fetch latest block height; using start_block_height={} instead", options.start_block_height);
+                LatestBlockHeight {
+                    account_id: node_account_id.to_string(),
+                    block_height: options.start_block_height,
+                }
             }
-            lake_builder.build()
-        })?;
+        };
+
+        let mut lake_builder = LakeBuilder::default()
+            .s3_bucket_name(options.s3_bucket)
+            .s3_region_name(options.s3_region)
+            .start_block_height(latest.block_height);
+
+        if let Some(s3_url) = options.s3_url {
+            let aws_config = aws_config::from_env().load().await;
+            let s3_config = aws_sdk_s3::config::Builder::from(&aws_config)
+                .endpoint_url(s3_url)
+                .build();
+            lake_builder = lake_builder.s3_config(s3_config);
+        }
+        anyhow::Ok((anyhow::Context::context(lake_builder.build(), "could not build lake indexer")?, latest))
+    })?;
     let context = Context {
         mpc_contract_id,
+        gcp_service,
         queue,
+        latest_block_height: Arc::new(RwLock::new(latest_block_height)),
     };
     lake.run_with_context(handle_block, &context)?;
     Ok(())

@@ -7,6 +7,13 @@ pub trait NearPublicKeyExt {
     fn into_affine_point(self) -> PublicKey;
 }
 
+impl NearPublicKeyExt for String {
+    fn into_affine_point(self) -> PublicKey {
+        let public_key_value = serde_json::json!(self);
+        serde_json::from_value(public_key_value).expect("Failed to deserialize struct")
+    }
+}
+
 impl NearPublicKeyExt for near_sdk::PublicKey {
     fn into_affine_point(self) -> PublicKey {
         let mut bytes = self.into_bytes();
