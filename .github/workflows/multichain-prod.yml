@@ -52,3 +52,4 @@ jobs:
 
       - name: 'Update Nodes'
         run: 'gcloud compute instances update-container multichain-${{ github.event.inputs.network }}-0 --zone us-central1-a --container-image=${{ github.event.inputs.image }}:${{ github.event.inputs.tag }} & gcloud compute instances update-container multichain-${{ github.event.inputs.network }}-1 --zone us-central1-a --container-image=${{ github.event.inputs.image }}:${{ github.event.inputs.tag }} & gcloud compute instances update-container multichain-${{ github.event.inputs.network }}-2 --zone us-central1-a --container-image=${{ github.event.inputs.image }}:${{ github.event.inputs.tag }}'
+
