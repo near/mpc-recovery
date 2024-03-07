@@ -51,7 +51,4 @@ jobs:
         run: 'gcloud config set project pagoda-discovery-platform-prod'
 
       - name: 'Update Nodes'
-        run: |
-          gcloud compute instances update-container multichain-${{ github.event.inputs.network }}-0 --zone us-central1-a --image "${{ github.event.inputs.image }}:${{ github.event.inputs.tag }}"
-          gcloud compute instances update-container multichain-${{ github.event.inputs.network }}-1 --zone us-central1-a --image "${{ github.event.inputs.image }}:${{ github.event.inputs.tag }}"
-          gcloud compute instances update-container multichain-${{ github.event.inputs.network }}-2 --zone us-central1-a --image "${{ github.event.inputs.image }}:${{ github.event.inputs.tag }}"
+        run: 'gcloud compute instances update-container multichain-${{ github.event.inputs.network }}-0 --zone us-central1-a --container-image=${{ github.event.inputs.image }}:${{ github.event.inputs.tag }} & gcloud compute instances update-container multichain-${{ github.event.inputs.network }}-1 --zone us-central1-a --container-image=${{ github.event.inputs.image }}:${{ github.event.inputs.tag }} & gcloud compute instances update-container multichain-${{ github.event.inputs.network }}-2 --zone us-central1-a --container-image=${{ github.event.inputs.image }}:${{ github.event.inputs.tag }}'
