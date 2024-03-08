@@ -13,7 +13,7 @@ use k256::elliptic_curve::group::GroupEncoding;
 use k256::Secp256k1;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Instant;
 
 /// The minimum amount of triples that each node needs to own.
@@ -91,6 +91,7 @@ pub struct TripleManager {
     pub epoch: u64,
     pub triple_cfg: TripleConfig,
     pub triple_storage: LockTripleNodeStorageBox,
+    pub triples_time_out: HashSet<TripleId>,
 }
 
 impl TripleManager {
@@ -121,6 +122,7 @@ impl TripleManager {
             epoch,
             triple_cfg,
             triple_storage,
+            triples_time_out: HashSet::new(),
         }
     }
 
@@ -143,6 +145,12 @@ impl TripleManager {
     /// all ongoing generation protocols complete.
     pub fn potential_len(&self) -> usize {
         self.len() + self.generators.len()
+    }
+
+    pub fn clear_triple_time_out(&mut self) -> () {
+        if self.len() == self.potential_len() {
+            self.triples_time_out.clear()
+        }
     }
 
     /// Starts a new Beaver triple generation protocol.
@@ -302,6 +310,7 @@ impl TripleManager {
                     Ok(action) => action,
                     Err(e) => {
                         result = Err(e);
+                        self.triples_time_out.insert(id.clone());
                         break false;
                     }
                 };
