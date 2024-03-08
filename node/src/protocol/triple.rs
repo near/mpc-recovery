@@ -311,6 +311,7 @@ impl TripleManager {
                     Err(e) => {
                         result = Err(e);
                         self.triples_time_out.insert(id.clone());
+                        tracing::info!("added {} to time out triples", id.clone());
                         break false;
                     }
                 };

@@ -229,7 +229,6 @@ impl DatastoreService {
             transaction: None,
         };
 
-        tracing::debug!(?request);
         let (_, _) = self
             .datastore
             .projects()
