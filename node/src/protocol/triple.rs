@@ -169,7 +169,6 @@ impl TripleManager {
             || self.my_len() < min_triples && self.potential_len() < max_triples;
 
         if not_enough_triples() {
-            tracing::info!(min_triples, max_triples, "generating stockpile of triples");
             self.generate()?;
         }
         Ok(())

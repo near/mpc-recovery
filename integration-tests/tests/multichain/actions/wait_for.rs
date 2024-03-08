@@ -67,9 +67,9 @@ pub async fn has_at_least_triples<'a>(
     let mut state_views = Vec::new();
     for id in 0..ctx.nodes.len() {
         let state_view = is_enough_triples(id)
-                .retry(&ExponentialBuilder::default().with_max_times(6))
-                .await
-                .with_context(|| format!("mpc node '{id}' failed to generate '{expected_triple_count}' triples before deadline"))?;
+            .retry(&ExponentialBuilder::default().with_max_times(8))
+            .await
+            .with_context(|| format!("mpc node '{id}' failed to generate '{expected_triple_count}' triples before deadline"))?;
         state_views.push(state_view);
     }
     Ok(state_views)
