@@ -52,8 +52,8 @@ pub enum Cli {
         #[clap(flatten)]
         storage_options: storage::Options,
         /// How many triples to stockpile
-        #[arg(long, env("MPC_RECOVERY_TRIPLE_STOCKPILE_SIZE"))]
-        triple_stockpile: Option<usize>,
+        #[arg(long, env("MPC_RECOVERY_MAX_TRIPLES"))]
+        max_triples: Option<usize>,
     },
 }
 
@@ -71,7 +71,7 @@ impl Cli {
                 indexer_options,
                 my_address,
                 storage_options,
-                triple_stockpile,
+                max_triples,
             } => {
                 let mut args = vec![
                     "start".to_string(),
@@ -93,10 +93,10 @@ impl Cli {
                 if let Some(my_address) = my_address {
                     args.extend(vec!["--my-address".to_string(), my_address.to_string()]);
                 }
-                if let Some(triple_stockpile) = triple_stockpile {
+                if let Some(max_triples) = max_triples {
                     args.extend(vec![
                         "--triple-stockpile".to_string(),
-                        triple_stockpile.to_string(),
+                        max_triples.to_string(),
                     ]);
                 }
                 args.extend(indexer_options.into_str_args());
@@ -132,7 +132,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
             indexer_options,
             my_address,
             storage_options,
-            triple_stockpile,
+            max_triples,
         } => {
             let sign_queue = Arc::new(RwLock::new(SignQueue::new()));
             tokio::runtime::Builder::new_multi_thread()
@@ -175,7 +175,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                         sign_queue.clone(),
                         hpke::PublicKey::try_from_bytes(&hex::decode(cipher_pk)?)?,
                         key_storage,
-                        triple_stockpile,
+                        max_triples,
                         triple_storage,
                     );
                     tracing::debug!("protocol initialized");

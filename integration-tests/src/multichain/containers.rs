@@ -35,7 +35,7 @@ impl<'a> Node<'a> {
         ctx: &super::Context<'a>,
         account_id: &AccountId,
         account_sk: &near_workspaces::types::SecretKey,
-        triple_stockpile: usize,
+        max_triples: usize,
     ) -> anyhow::Result<Node<'a>> {
         tracing::info!("running node container, account_id={}", account_id);
         let (cipher_sk, cipher_pk) = hpke::generate();
@@ -56,7 +56,7 @@ impl<'a> Node<'a> {
             },
             my_address: None,
             storage_options: storage_options.clone(),
-            triple_stockpile: Some(triple_stockpile),
+            max_triples: Some(max_triples),
         }
         .into_str_args();
         let image: GenericImage = GenericImage::new("near/mpc-recovery-node", "latest")

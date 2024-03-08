@@ -40,7 +40,7 @@ pub trait ConsensusCtx {
     fn sign_pk(&self) -> near_crypto::PublicKey;
     fn sign_sk(&self) -> &near_crypto::SecretKey;
     fn secret_storage(&self) -> &SecretNodeStorageBox;
-    fn triple_stockpile(&self) -> &Option<usize>;
+    fn max_triples(&self) -> &Option<usize>;
     fn triple_storage(&mut self) -> LockTripleNodeStorageBox;
 }
 
@@ -133,13 +133,13 @@ impl ConsensusProtocol for StartedState {
                                         me,
                                         contract_state.threshold,
                                         epoch,
-                                        *ctx.triple_stockpile(),
+                                        *ctx.max_triples(),
                                         vec![],
                                         ctx.triple_storage(),
                                     );
                                     // Start stockpiling triples in the background. This will wait until crypto loop to generate.
                                     if let Err(err) = triple_manager
-                                        .generate_pile_by_bandwidth(participants_vec.len())
+                                        .generate_stockpile_by_bandwidth(participants_vec.len())
                                     {
                                         tracing::warn!(
                                             ?err,
@@ -366,13 +366,13 @@ impl ConsensusProtocol for WaitingForConsensusState {
                         me,
                         self.threshold,
                         self.epoch,
-                        *ctx.triple_stockpile(),
+                        *ctx.max_triples(),
                         vec![],
                         ctx.triple_storage(),
                     );
                     // Start stockpiling triples in the background. This will wait until crypto loop to generate.
                     if let Err(err) =
-                        triple_manager.generate_pile_by_bandwidth(participants_vec.len())
+                        triple_manager.generate_stockpile_by_bandwidth(participants_vec.len())
                     {
                         tracing::warn!(
                             ?err,

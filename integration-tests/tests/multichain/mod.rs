@@ -20,7 +20,7 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
 
             let account = ctx.nodes.ctx().worker.dev_create_account().await?;
             ctx.nodes
-                .add_node(account.id(), account.secret_key(), ctx.cfg.triple_stockpile)
+                .add_node(account.id(), account.secret_key(), ctx.cfg.max_triples)
                 .await?;
 
             let state_1 = wait_for::running_mpc(&ctx, 1).await?;

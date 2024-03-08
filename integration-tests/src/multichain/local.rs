@@ -23,7 +23,7 @@ impl Node {
         ctx: &super::Context<'_>,
         account_id: &AccountId,
         account_sk: &near_workspaces::types::SecretKey,
-        triple_stockpile: usize,
+        max_triples: usize,
     ) -> anyhow::Result<Self> {
         let web_port = util::pick_unused_port().await?;
         let (cipher_sk, cipher_pk) = hpke::generate();
@@ -44,7 +44,7 @@ impl Node {
             },
             my_address: None,
             storage_options: storage_options.clone(),
-            triple_stockpile: Some(triple_stockpile),
+            max_triples: Some(max_triples),
         };
 
         let mpc_node_id = format!("multichain/{account_id}", account_id = account_id);
