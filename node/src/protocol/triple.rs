@@ -151,7 +151,7 @@ impl TripleManager {
     /// Clears an entry from failed triples if that triple protocol was created more than 2 hrs ago
     pub fn clear_failed_triples(&mut self) {
         self.failed_triples
-            .retain(|_, timestamp| timestamp.elapsed() > crate::types::FAILED_TRIPLES_TIMEOUT)
+            .retain(|_, timestamp| timestamp.elapsed() < crate::types::FAILED_TRIPLES_TIMEOUT)
     }
 
     /// Starts a new Beaver triple generation protocol.
