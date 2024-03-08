@@ -4,6 +4,8 @@ use mpc_keys::hpke;
 use mpc_recovery_node::storage;
 use near_workspaces::AccountId;
 
+use super::MultichainConfig;
+
 #[allow(dead_code)]
 pub struct Node {
     pub address: String,
@@ -23,7 +25,7 @@ impl Node {
         ctx: &super::Context<'_>,
         account_id: &AccountId,
         account_sk: &near_workspaces::types::SecretKey,
-        max_triples: usize,
+        cfg: &MultichainConfig,
     ) -> anyhow::Result<Self> {
         let web_port = util::pick_unused_port().await?;
         let (cipher_sk, cipher_pk) = hpke::generate();
@@ -44,7 +46,8 @@ impl Node {
             },
             my_address: None,
             storage_options: storage_options.clone(),
-            max_triples: Some(max_triples),
+            min_triples: cfg.triple_cfg.min_triples,
+            max_triples: cfg.triple_cfg.max_triples,
         };
 
         let mpc_node_id = format!("multichain/{account_id}", account_id = account_id);

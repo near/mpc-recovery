@@ -1,4 +1,5 @@
 use crate::gcp::GcpService;
+use crate::protocol::triple::TripleConfig;
 use crate::protocol::{MpcSignProtocol, SignQueue};
 use crate::storage::triple_storage::LockTripleNodeStorageBox;
 use crate::{indexer, storage, web};
@@ -51,9 +52,12 @@ pub enum Cli {
         /// Storage options
         #[clap(flatten)]
         storage_options: storage::Options,
-        /// How many triples to stockpile
-        #[arg(long, env("MPC_RECOVERY_MAX_TRIPLES"))]
-        max_triples: Option<usize>,
+        /// At minimum, how many triples to stockpile on this node.
+        #[arg(long, env("MPC_RECOVERY_MAX_TRIPLES"), default_value("2"))]
+        min_triples: usize,
+        /// At maximum, how many triples to stockpile on this node.
+        #[arg(long, env("MPC_RECOVERY_MAX_TRIPLES"), default_value("10"))]
+        max_triples: usize,
     },
 }
 
@@ -71,6 +75,7 @@ impl Cli {
                 indexer_options,
                 my_address,
                 storage_options,
+                min_triples,
                 max_triples,
             } => {
                 let mut args = vec![
@@ -89,15 +94,13 @@ impl Cli {
                     cipher_pk,
                     "--cipher-sk".to_string(),
                     cipher_sk,
+                    "--min-triples".to_string(),
+                    min_triples.to_string(),
+                    "--max-triples".to_string(),
+                    max_triples.to_string(),
                 ];
                 if let Some(my_address) = my_address {
                     args.extend(vec!["--my-address".to_string(), my_address.to_string()]);
-                }
-                if let Some(max_triples) = max_triples {
-                    args.extend(vec![
-                        "--triple-stockpile".to_string(),
-                        max_triples.to_string(),
-                    ]);
                 }
                 args.extend(indexer_options.into_str_args());
                 args.extend(storage_options.into_str_args());
@@ -132,6 +135,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
             indexer_options,
             my_address,
             storage_options,
+            min_triples,
             max_triples,
         } => {
             let sign_queue = Arc::new(RwLock::new(SignQueue::new()));
@@ -175,7 +179,10 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                         sign_queue.clone(),
                         hpke::PublicKey::try_from_bytes(&hex::decode(cipher_pk)?)?,
                         key_storage,
-                        max_triples,
+                        TripleConfig {
+                            min_triples,
+                            max_triples,
+                        },
                         triple_storage,
                     );
                     tracing::debug!("protocol initialized");

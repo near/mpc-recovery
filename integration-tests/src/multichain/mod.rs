@@ -5,6 +5,7 @@ use crate::env::containers::DockerClient;
 use crate::{initialize_lake_indexer, LakeIndexerCtx};
 use mpc_contract::primitives::CandidateInfo;
 use mpc_recovery_node::gcp::GcpService;
+use mpc_recovery_node::protocol::triple::TripleConfig;
 use mpc_recovery_node::storage;
 use mpc_recovery_node::storage::triple_storage::TripleNodeStorageBox;
 use near_workspaces::network::Sandbox;
@@ -17,14 +18,17 @@ const NETWORK: &str = "mpc_it_network";
 #[derive(Clone)]
 pub struct MultichainConfig {
     pub nodes: usize,
-    pub max_triples: usize,
+    pub triple_cfg: TripleConfig,
 }
 
 impl Default for MultichainConfig {
     fn default() -> Self {
         Self {
             nodes: 3,
-            max_triples: 10,
+            triple_cfg: TripleConfig {
+                min_triples: 2,
+                max_triples: 10,
+            },
         }
     }
 }
@@ -70,15 +74,15 @@ impl Nodes<'_> {
         &mut self,
         account: &AccountId,
         account_sk: &near_workspaces::types::SecretKey,
-        max_triples: usize,
+        cfg: &MultichainConfig,
     ) -> anyhow::Result<()> {
         tracing::info!(%account, "adding one more node");
         match self {
             Nodes::Local { ctx, nodes } => {
-                nodes.push(local::Node::run(ctx, account, account_sk, max_triples).await?)
+                nodes.push(local::Node::run(ctx, account, account_sk, cfg).await?)
             }
             Nodes::Docker { ctx, nodes } => {
-                nodes.push(containers::Node::run(ctx, account, account_sk, max_triples).await?)
+                nodes.push(containers::Node::run(ctx, account, account_sk, cfg).await?)
             }
         }
 
@@ -178,19 +182,17 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
     })
 }
 
-pub async fn docker(
-    MultichainConfig { nodes, max_triples }: MultichainConfig,
-    docker_client: &DockerClient,
-) -> anyhow::Result<Nodes> {
+pub async fn docker(cfg: MultichainConfig, docker_client: &DockerClient) -> anyhow::Result<Nodes> {
     let ctx = setup(docker_client).await?;
 
-    let accounts = futures::future::join_all((0..nodes).map(|_| ctx.worker.dev_create_account()))
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()?;
+    let accounts =
+        futures::future::join_all((0..cfg.nodes).map(|_| ctx.worker.dev_create_account()))
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?;
     let mut node_futures = Vec::new();
     for account in &accounts {
-        let node = containers::Node::run(&ctx, account.id(), account.secret_key(), max_triples);
+        let node = containers::Node::run(&ctx, account.id(), account.secret_key(), &cfg);
         node_futures.push(node);
     }
     let nodes = futures::future::join_all(node_futures)
@@ -226,23 +228,21 @@ pub async fn docker(
     Ok(Nodes::Docker { ctx, nodes })
 }
 
-pub async fn host(
-    MultichainConfig { nodes, max_triples }: MultichainConfig,
-    docker_client: &DockerClient,
-) -> anyhow::Result<Nodes> {
+pub async fn host(cfg: MultichainConfig, docker_client: &DockerClient) -> anyhow::Result<Nodes> {
     let ctx = setup(docker_client).await?;
 
-    let accounts = futures::future::join_all((0..nodes).map(|_| ctx.worker.dev_create_account()))
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()?;
-    let mut node_futures = Vec::with_capacity(nodes);
-    for account in accounts.iter().take(nodes) {
+    let accounts =
+        futures::future::join_all((0..cfg.nodes).map(|_| ctx.worker.dev_create_account()))
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?;
+    let mut node_futures = Vec::with_capacity(cfg.nodes);
+    for account in accounts.iter().take(cfg.nodes) {
         node_futures.push(local::Node::run(
             &ctx,
             account.id(),
             account.secret_key(),
-            max_triples,
+            &cfg,
         ));
     }
     let nodes = futures::future::join_all(node_futures)

@@ -20,6 +20,7 @@ pub use state::NodeState;
 use self::consensus::ConsensusCtx;
 use self::cryptography::CryptographicCtx;
 use self::message::MessageCtx;
+use self::triple::TripleConfig;
 use crate::protocol::consensus::ConsensusProtocol;
 use crate::protocol::cryptography::CryptographicProtocol;
 use crate::protocol::message::{MessageHandler, MpcMessageQueue};
@@ -48,7 +49,7 @@ struct Ctx {
     cipher_pk: hpke::PublicKey,
     sign_sk: near_crypto::SecretKey,
     secret_storage: SecretNodeStorageBox,
-    max_triples: Option<usize>,
+    triple_cfg: TripleConfig,
     triple_storage: LockTripleNodeStorageBox,
 }
 
@@ -97,8 +98,8 @@ impl ConsensusCtx for &mut MpcSignProtocol {
         &self.ctx.secret_storage
     }
 
-    fn max_triples(&self) -> &Option<usize> {
-        &self.ctx.max_triples
+    fn triple_cfg(&self) -> TripleConfig {
+        self.ctx.triple_cfg
     }
 
     fn triple_storage(&mut self) -> LockTripleNodeStorageBox {
@@ -166,7 +167,7 @@ impl MpcSignProtocol {
         sign_queue: Arc<RwLock<SignQueue>>,
         cipher_pk: hpke::PublicKey,
         secret_storage: SecretNodeStorageBox,
-        max_triples: Option<usize>,
+        triple_cfg: TripleConfig,
         triple_storage: LockTripleNodeStorageBox,
     ) -> (Self, Arc<RwLock<NodeState>>) {
         let state = Arc::new(RwLock::new(NodeState::Starting));
@@ -181,7 +182,7 @@ impl MpcSignProtocol {
             sign_sk: signer.secret_key.clone(),
             signer,
             secret_storage,
-            max_triples,
+            triple_cfg,
             triple_storage,
         };
         let protocol = MpcSignProtocol {

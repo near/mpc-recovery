@@ -297,9 +297,7 @@ impl CryptographicProtocol for RunningState {
         }
 
         let mut triple_manager = self.triple_manager.write().await;
-        if triple_manager.my_len() < 2 && triple_manager.potential_len() < 10 {
-            triple_manager.generate()?;
-        }
+        triple_manager.stockpile()?;
         for (p, msg) in triple_manager.poke().await? {
             let info = self.fetch_participant(&p)?;
             messages.push(info.clone(), MpcMessage::Triple(msg));

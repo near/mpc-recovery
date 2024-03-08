@@ -3,6 +3,7 @@ use super::state::{
     JoiningState, NodeState, PersistentNodeData, RunningState, StartedState,
     WaitingForConsensusState,
 };
+use super::triple::TripleConfig;
 use super::SignQueue;
 use crate::gcp::error::DatastoreStorageError;
 use crate::gcp::error::SecretStorageError;
@@ -40,7 +41,7 @@ pub trait ConsensusCtx {
     fn sign_pk(&self) -> near_crypto::PublicKey;
     fn sign_sk(&self) -> &near_crypto::SecretKey;
     fn secret_storage(&self) -> &SecretNodeStorageBox;
-    fn max_triples(&self) -> &Option<usize>;
+    fn triple_cfg(&self) -> TripleConfig;
     fn triple_storage(&mut self) -> LockTripleNodeStorageBox;
 }
 
@@ -128,27 +129,15 @@ impl ConsensusProtocol for StartedState {
                                     );
                                     let participants_vec: Vec<Participant> =
                                         contract_state.participants.keys().cloned().collect();
-                                    let mut triple_manager = TripleManager::new(
+                                    let triple_manager = TripleManager::new(
                                         participants_vec.clone(),
                                         me,
                                         contract_state.threshold,
                                         epoch,
-                                        *ctx.max_triples(),
+                                        ctx.triple_cfg(),
                                         vec![],
                                         ctx.triple_storage(),
                                     );
-                                    // Start stockpiling triples in the background. This will wait until crypto loop to generate.
-                                    if let Err(err) = triple_manager
-                                        .generate_stockpile_by_bandwidth(participants_vec.len())
-                                    {
-                                        tracing::warn!(
-                                            ?err,
-                                            len = triple_manager.len(),
-                                            potential_len = triple_manager.potential_len(),
-                                            node_state = ?self,
-                                            "failed to stockpile triples on startup: not fatal, but will slow down signing"
-                                        );
-                                    }
 
                                     Ok(NodeState::Running(RunningState {
                                         epoch,
@@ -361,27 +350,15 @@ impl ConsensusProtocol for WaitingForConsensusState {
                         .find_participant(ctx.my_account_id())
                         .unwrap();
 
-                    let mut triple_manager = TripleManager::new(
+                    let triple_manager = TripleManager::new(
                         participants_vec.clone(),
                         me,
                         self.threshold,
                         self.epoch,
-                        *ctx.max_triples(),
+                        ctx.triple_cfg(),
                         vec![],
                         ctx.triple_storage(),
                     );
-                    // Start stockpiling triples in the background. This will wait until crypto loop to generate.
-                    if let Err(err) =
-                        triple_manager.generate_stockpile_by_bandwidth(participants_vec.len())
-                    {
-                        tracing::warn!(
-                            ?err,
-                            len = triple_manager.len(),
-                            potential_len = triple_manager.potential_len(),
-                            node_state = ?self,
-                            "failed to stockpile triples on startup: not fatal, but will slow down signing"
-                        );
-                    }
 
                     Ok(NodeState::Running(RunningState {
                         epoch: self.epoch,

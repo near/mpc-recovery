@@ -15,6 +15,10 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+const STARTING_EPOCH: u64 = 0;
+const MIN_TRIPLES: usize = 2;
+const MAX_TRIPLES: usize = 10;
+
 struct TestTripleManagers {
     managers: Vec<TripleManager>,
 }
@@ -48,8 +52,9 @@ impl TestTripleManagers {
                     participants.clone(),
                     Participant::from(num),
                     num_managers as usize,
-                    0,
-                    None,
+                    STARTING_EPOCH,
+                    MIN_TRIPLES,
+                    MAX_TRIPLES,
                     vec![],
                     triple_storage,
                 )
