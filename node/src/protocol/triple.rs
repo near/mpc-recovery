@@ -311,7 +311,7 @@ impl TripleManager {
                     Ok(action) => action,
                     Err(e) => {
                         result = Err(e);
-                        self.failed_triples.insert(*id, generator.timestamp);
+                        self.failed_triples.insert(*id, Instant::now());
                         tracing::info!("added {} to failed triples", id.clone());
                         break false;
                     }
