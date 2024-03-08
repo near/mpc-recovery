@@ -213,12 +213,12 @@ impl MessageHandler for RunningState {
         let participants = ctx.mesh().active_participants();
         let mut triple_manager = self.triple_manager.write().await;
 
-        // remove the triple_id that has been timed out from the triple_bins
+        // remove the triple_id that has already failed from the triple_bins
         queue
             .triple_bins
             .entry(self.epoch)
             .or_default()
-            .retain(|id, _| !triple_manager.triples_time_out.contains(&id));
+            .retain(|id, _| !triple_manager.failed_triples.contains_key(id));
 
         for (id, queue) in queue.triple_bins.entry(self.epoch).or_default() {
             if let Some(protocol) = triple_manager.get_or_generate(*id, participants)? {
@@ -312,6 +312,7 @@ impl MessageHandler for RunningState {
                 );
                 queue.extend(leftover_messages);
             }
+            triple_manager.clear_failed_triples();
         }
         Ok(())
     }
