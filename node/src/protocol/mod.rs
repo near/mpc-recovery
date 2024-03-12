@@ -21,7 +21,7 @@ use self::consensus::ConsensusCtx;
 use self::cryptography::CryptographicCtx;
 use self::message::MessageCtx;
 use self::triple::TripleConfig;
-use crate::connection;
+use crate::mesh::connection;
 use crate::protocol::consensus::ConsensusProtocol;
 use crate::protocol::contract::primitives::Participants;
 use crate::protocol::cryptography::CryptographicProtocol;
