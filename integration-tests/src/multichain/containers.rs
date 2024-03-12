@@ -97,4 +97,8 @@ impl<'a> Node<'a> {
             sign_pk: account_sk.public_key(),
         })
     }
+
+    pub fn kill(&self) {
+        self.container.stop();
+    }
 }

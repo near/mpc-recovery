@@ -16,7 +16,6 @@ pub struct Node {
     storage_options: storage::Options,
 
     // process held so it's not dropped. Once dropped, process will be killed.
-    #[allow(unused)]
     process: Child,
 }
 
@@ -66,5 +65,17 @@ impl Node {
             storage_options,
             process,
         })
+    }
+
+    pub fn kill(&mut self) -> std::io::Result<()> {
+        self.process.kill()?;
+        tracing::info!(?self.account_id, ?self.address, "node killed");
+        Ok(())
+    }
+}
+
+impl Drop for Node {
+    fn drop(&mut self) {
+        self.kill().unwrap();
     }
 }
