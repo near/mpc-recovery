@@ -21,7 +21,9 @@ use self::consensus::ConsensusCtx;
 use self::cryptography::CryptographicCtx;
 use self::message::MessageCtx;
 use self::triple::TripleConfig;
+use crate::connection;
 use crate::protocol::consensus::ConsensusProtocol;
+use crate::protocol::contract::primitives::Participants;
 use crate::protocol::cryptography::CryptographicProtocol;
 use crate::protocol::message::{MessageHandler, MpcMessageQueue};
 use crate::rpc_client::{self};
@@ -51,6 +53,8 @@ struct Ctx {
     secret_storage: SecretNodeStorageBox,
     triple_cfg: TripleConfig,
     triple_storage: LockTripleNodeStorageBox,
+    connection_pool: connection::Pool,
+    active_participants: Participants,
 }
 
 impl ConsensusCtx for &mut MpcSignProtocol {
@@ -140,12 +144,20 @@ impl CryptographicCtx for &mut MpcSignProtocol {
     fn secret_storage(&mut self) -> &mut SecretNodeStorageBox {
         &mut self.ctx.secret_storage
     }
+
+    fn active_participants(&self) -> &Participants {
+        &self.ctx.active_participants
+    }
 }
 
 #[async_trait::async_trait]
 impl MessageCtx for &MpcSignProtocol {
     async fn me(&self) -> Participant {
         get_my_participant(self).await
+    }
+
+    fn active_participants(&self) -> &Participants {
+        &self.ctx.active_participants
     }
 }
 
@@ -184,6 +196,8 @@ impl MpcSignProtocol {
             secret_storage,
             triple_cfg,
             triple_storage,
+            connection_pool: connection::Pool::spawn(),
+            active_participants: Default::default(),
         };
         let protocol = MpcSignProtocol {
             ctx,
@@ -229,6 +243,12 @@ impl MpcSignProtocol {
                     }
                 }
             }
+
+            self.ctx.active_participants = self
+                .ctx
+                .connection_pool
+                .establish_participants(&contract_state)
+                .await;
 
             let state = {
                 let guard = self.state.read().await;

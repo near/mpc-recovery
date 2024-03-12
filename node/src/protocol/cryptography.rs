@@ -3,6 +3,7 @@ use std::sync::PoisonError;
 use super::state::{GeneratingState, NodeState, ResharingState, RunningState};
 use crate::gcp::error::SecretStorageError;
 use crate::http_client::SendError;
+use crate::protocol::contract::primitives::Participants;
 use crate::protocol::message::{GeneratingMessage, ResharingMessage};
 use crate::protocol::state::{PersistentNodeData, WaitingForConsensusState};
 use crate::protocol::MpcMessage;
@@ -24,6 +25,9 @@ pub trait CryptographicCtx {
     fn cipher_pk(&self) -> &hpke::PublicKey;
     fn sign_sk(&self) -> &near_crypto::SecretKey;
     fn secret_storage(&mut self) -> &mut SecretNodeStorageBox;
+
+    /// Active participants is the active participants at the beginning of each protocol loop.
+    fn active_participants(&self) -> &Participants;
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -103,7 +107,7 @@ impl CryptographicProtocol for GeneratingState {
                 Action::SendMany(m) => {
                     tracing::debug!("generating: sending a message to many participants");
                     let mut messages = self.messages.write().await;
-                    for (p, info) in self.participants.iter() {
+                    for (p, info) in ctx.active_participants().iter() {
                         if p == &ctx.me().await {
                             // Skip yourself, cait-sith never sends messages to oneself
                             continue;
@@ -297,7 +301,7 @@ impl CryptographicProtocol for RunningState {
         }
 
         let mut triple_manager = self.triple_manager.write().await;
-        triple_manager.stockpile()?;
+        triple_manager.stockpile(ctx.active_participants())?;
         for (p, msg) in triple_manager.poke().await? {
             let info = self.fetch_participant(&p)?;
             messages.push(info.clone(), MpcMessage::Triple(msg));
@@ -313,6 +317,7 @@ impl CryptographicProtocol for RunningState {
             // to use the same triple as any other node.
             if let Some((triple0, triple1)) = triple_manager.take_two_mine().await {
                 presignature_manager.generate(
+                    ctx.active_participants(),
                     triple0,
                     triple1,
                     &self.public_key,
@@ -339,7 +344,7 @@ impl CryptographicProtocol for RunningState {
                 let Some(presignature) = presignature_manager.take_mine() else {
                     break;
                 };
-                signature_manager.retry_failed_generation(presignature);
+                signature_manager.retry_failed_generation(presignature, ctx.active_participants());
                 break;
             }
 
@@ -354,6 +359,7 @@ impl CryptographicProtocol for RunningState {
             let receipt_id = *receipt_id;
             let my_request = my_requests.remove(&receipt_id).unwrap();
             signature_manager.generate(
+                ctx.active_participants(),
                 receipt_id,
                 presignature,
                 self.public_key,

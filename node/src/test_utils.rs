@@ -1,6 +1,8 @@
 use std::{collections::HashMap, fs::OpenOptions, ops::Range};
 
+use crate::protocol::contract::primitives::Participants;
 use crate::protocol::triple::TripleConfig;
+use crate::protocol::ParticipantInfo;
 use crate::{gcp::GcpService, protocol::message::TripleMessage, storage};
 use cait_sith::protocol::{InitializationError, Participant, ProtocolError};
 use std::io::prelude::*;
@@ -25,12 +27,16 @@ const DEFAULT_TRIPLE_CONFIG: TripleConfig = TripleConfig {
 
 struct TestTripleManagers {
     managers: Vec<TripleManager>,
+    participants: Participants,
 }
 
 impl TestTripleManagers {
     async fn new(num_managers: u32, datastore_url: Option<String>) -> Self {
-        let range = 0..num_managers;
-        let participants: Vec<Participant> = range.clone().map(Participant::from).collect();
+        let mut participants = Participants::default();
+        (0..num_managers)
+            .map(Participant::from)
+            .for_each(|p| participants.insert(&p, ParticipantInfo::new(p.into())));
+
         let gcp_service = if let Some(url) = datastore_url {
             let storage_options = storage::Options {
                 gcp_project_id: "triple-test".to_string(),
@@ -47,13 +53,12 @@ impl TestTripleManagers {
             None
         };
 
-        let managers = range
+        let managers = (0..num_managers)
             .map(|num| {
                 let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(
                     storage::triple_storage::init(gcp_service.as_ref(), num.to_string()),
                 ));
                 TripleManager::new(
-                    participants.clone(),
                     Participant::from(num),
                     num_managers as usize,
                     STARTING_EPOCH,
@@ -63,11 +68,14 @@ impl TestTripleManagers {
                 )
             })
             .collect();
-        TestTripleManagers { managers }
+        TestTripleManagers {
+            managers,
+            participants,
+        }
     }
 
     fn generate(&mut self, index: usize) -> Result<(), InitializationError> {
-        self.managers[index].generate()
+        self.managers[index].generate(&self.participants)
     }
 
     async fn poke(&mut self, index: usize) -> Result<bool, ProtocolError> {
@@ -84,7 +92,7 @@ impl TestTripleManagers {
             quiet = false;
             let participant_i: u32 = participant.into();
             let manager = &mut self.managers[participant_i as usize];
-            if let Some(protocol) = manager.get_or_generate(id).unwrap() {
+            if let Some(protocol) = manager.get_or_generate(id, &self.participants).unwrap() {
                 protocol.message(from, data.to_vec());
             } else {
                 println!("Tried to write to completed mailbox {:?}", tm);

@@ -20,7 +20,19 @@ pub struct ParticipantInfo {
     pub sign_pk: near_crypto::PublicKey,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+impl ParticipantInfo {
+    pub fn new(id: u32) -> Self {
+        Self {
+            id,
+            account_id: format!("p-{id}").parse().unwrap(),
+            url: String::default(),
+            cipher_pk: hpke::PublicKey::from_bytes(&[0; 32]),
+            sign_pk: near_crypto::PublicKey::empty(near_crypto::KeyType::ED25519),
+        }
+    }
+}
+
+#[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Participants {
     pub participants: BTreeMap<Participant, ParticipantInfo>,
 }
@@ -93,6 +105,10 @@ impl IntoIterator for Participants {
 }
 
 impl Participants {
+    pub fn insert(&mut self, id: &Participant, info: ParticipantInfo) {
+        self.participants.insert(*id, info);
+    }
+
     pub fn get(&self, id: &Participant) -> Option<&ParticipantInfo> {
         self.participants.get(id)
     }

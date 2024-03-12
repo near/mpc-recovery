@@ -1,3 +1,4 @@
+use super::contract::primitives::Participants;
 use super::cryptography::CryptographicError;
 use super::message::TripleMessage;
 use super::presignature::GenerationError;
@@ -36,14 +37,16 @@ pub struct Triple {
 
 pub struct TripleGenerator {
     pub id: TripleId,
+    pub participants: Vec<Participant>,
     pub protocol: TripleProtocol,
     pub timestamp: Instant,
 }
 
 impl TripleGenerator {
-    pub fn new(id: TripleId, protocol: TripleProtocol) -> Self {
+    pub fn new(id: TripleId, participants: Vec<Participant>, protocol: TripleProtocol) -> Self {
         Self {
             id,
+            participants,
             protocol,
             timestamp: Instant::now(),
         }
@@ -82,7 +85,7 @@ pub struct TripleManager {
     pub generators: HashMap<TripleId, TripleGenerator>,
     /// List of triple ids generation of which was initiated by the current node.
     pub mine: VecDeque<TripleId>,
-    pub participants: Vec<Participant>,
+
     pub me: Participant,
     pub threshold: usize,
     pub epoch: u64,
@@ -92,7 +95,6 @@ pub struct TripleManager {
 
 impl TripleManager {
     pub fn new(
-        participants: Vec<Participant>,
         me: Participant,
         threshold: usize,
         epoch: u64,
@@ -114,7 +116,6 @@ impl TripleManager {
             triples: all_triples,
             generators: HashMap::new(),
             mine,
-            participants,
             me,
             threshold,
             epoch,
@@ -145,22 +146,23 @@ impl TripleManager {
     }
 
     /// Starts a new Beaver triple generation protocol.
-    pub fn generate(&mut self) -> Result<(), InitializationError> {
+    pub fn generate(&mut self, participants: &Participants) -> Result<(), InitializationError> {
         let id = rand::random();
         tracing::debug!(id, "starting protocol to generate a new triple");
+        let participants: Vec<_> = participants.keys().cloned().collect();
         let protocol: TripleProtocol = Box::new(cait_sith::triples::generate_triple::<Secp256k1>(
-            &self.participants,
+            &participants,
             self.me,
             self.threshold,
         )?);
         self.generators
-            .insert(id, TripleGenerator::new(id, protocol));
+            .insert(id, TripleGenerator::new(id, participants, protocol));
         Ok(())
     }
 
     /// Stockpile triples if the amount of unspent triples is below the minimum
     /// and the maximum number of all ongoing generation protocols is below the maximum.
-    pub fn stockpile(&mut self) -> Result<(), InitializationError> {
+    pub fn stockpile(&mut self, participants: &Participants) -> Result<(), InitializationError> {
         let TripleConfig {
             min_triples,
             max_triples,
@@ -169,7 +171,7 @@ impl TripleManager {
             || self.my_len() < min_triples && self.potential_len() < max_triples;
 
         if not_enough_triples() {
-            self.generate()?;
+            self.generate(participants)?;
         }
         Ok(())
     }
@@ -264,6 +266,7 @@ impl TripleManager {
     pub fn get_or_generate(
         &mut self,
         id: TripleId,
+        participants: &Participants,
     ) -> Result<Option<&mut TripleProtocol>, CryptographicError> {
         if self.triples.contains_key(&id) {
             Ok(None)
@@ -271,12 +274,13 @@ impl TripleManager {
             match self.generators.entry(id) {
                 Entry::Vacant(e) => {
                     tracing::debug!(id, "joining protocol to generate a new triple");
+                    let participants: Vec<_> = participants.keys().cloned().collect();
                     let protocol = Box::new(cait_sith::triples::generate_triple::<Secp256k1>(
-                        &self.participants,
+                        &participants,
                         self.me,
                         self.threshold,
                     )?);
-                    let generator = e.insert(TripleGenerator::new(id, protocol));
+                    let generator = e.insert(TripleGenerator::new(id, participants, protocol));
                     Ok(Some(&mut generator.protocol))
                 }
                 Entry::Occupied(e) => Ok(Some(&mut e.into_mut().protocol)),
@@ -309,7 +313,7 @@ impl TripleManager {
                         break true;
                     }
                     Action::SendMany(data) => {
-                        for p in &self.participants {
+                        for p in &generator.participants {
                             messages.push((
                                 *p,
                                 TripleMessage {
@@ -356,10 +360,10 @@ impl TripleManager {
                             let entropy =
                                 HighwayHasher::default().hash64(&big_c.to_bytes()) as usize;
 
-                            let num_participants = self.participants.len();
+                            let num_participants = generator.participants.len();
                             // This has a *tiny* bias towards lower indexed participants, they're up to (1 + num_participants / u64::MAX)^2 times more likely to be selected
                             // This is acceptably small that it will likely never result in a biased selection happening
-                            let triple_owner = self.participants[entropy % num_participants];
+                            let triple_owner = generator.participants[entropy % num_participants];
 
                             triple_owner == self.me
                         };

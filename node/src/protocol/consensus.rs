@@ -19,7 +19,7 @@ use crate::types::{KeygenProtocol, ReshareProtocol, SecretKeyShare};
 use crate::util::AffinePointExt;
 use crate::{http_client, rpc_client};
 use async_trait::async_trait;
-use cait_sith::protocol::{InitializationError, Participant};
+use cait_sith::protocol::InitializationError;
 use mpc_keys::hpke;
 use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
@@ -127,10 +127,7 @@ impl ConsensusProtocol for StartedState {
                                     tracing::info!(
                                         "started: contract state is running and we are already a participant"
                                     );
-                                    let participants_vec: Vec<Participant> =
-                                        contract_state.participants.keys().cloned().collect();
                                     let triple_manager = TripleManager::new(
-                                        participants_vec.clone(),
                                         me,
                                         contract_state.threshold,
                                         epoch,
@@ -149,7 +146,6 @@ impl ConsensusProtocol for StartedState {
                                         triple_manager: Arc::new(RwLock::new(triple_manager)),
                                         presignature_manager: Arc::new(RwLock::new(
                                             PresignatureManager::new(
-                                                participants_vec.clone(),
                                                 me,
                                                 contract_state.threshold,
                                                 epoch,
@@ -157,7 +153,6 @@ impl ConsensusProtocol for StartedState {
                                         )),
                                         signature_manager: Arc::new(RwLock::new(
                                             SignatureManager::new(
-                                                participants_vec,
                                                 me,
                                                 contract_state.public_key,
                                                 epoch,
@@ -325,6 +320,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                             self.epoch,
                             contract_state.epoch
                         );
+
                     Ok(NodeState::Joining(JoiningState {
                         participants: contract_state.participants,
                         public_key: contract_state.public_key,
@@ -342,8 +338,6 @@ impl ConsensusProtocol for WaitingForConsensusState {
                     if contract_state.public_key != self.public_key {
                         return Err(ConsensusError::MismatchedPublicKey);
                     }
-                    let participants_vec: Vec<Participant> =
-                        self.participants.keys().cloned().collect();
 
                     let me = contract_state
                         .participants
@@ -351,7 +345,6 @@ impl ConsensusProtocol for WaitingForConsensusState {
                         .unwrap();
 
                     let triple_manager = TripleManager::new(
-                        participants_vec.clone(),
                         me,
                         self.threshold,
                         self.epoch,
@@ -369,13 +362,11 @@ impl ConsensusProtocol for WaitingForConsensusState {
                         sign_queue: ctx.sign_queue(),
                         triple_manager: Arc::new(RwLock::new(triple_manager)),
                         presignature_manager: Arc::new(RwLock::new(PresignatureManager::new(
-                            participants_vec.clone(),
                             me,
                             self.threshold,
                             self.epoch,
                         ))),
                         signature_manager: Arc::new(RwLock::new(SignatureManager::new(
-                            participants_vec,
                             me,
                             self.public_key,
                             self.epoch,
@@ -405,6 +396,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                             self.epoch,
                             contract_state.old_epoch
                         );
+
                         Ok(NodeState::Joining(JoiningState {
                             participants: contract_state.old_participants,
                             public_key: contract_state.public_key,
@@ -469,6 +461,7 @@ impl ConsensusProtocol for RunningState {
                             self.epoch,
                             contract_state.epoch
                         );
+
                     Ok(NodeState::Joining(JoiningState {
                         participants: contract_state.participants,
                         public_key: contract_state.public_key,
@@ -497,6 +490,7 @@ impl ConsensusProtocol for RunningState {
                             self.epoch,
                             contract_state.old_epoch
                         );
+
                         Ok(NodeState::Joining(JoiningState {
                             participants: contract_state.old_participants,
                             public_key: contract_state.public_key,
@@ -542,6 +536,7 @@ impl ConsensusProtocol for ResharingState {
                             self.old_epoch + 1,
                             contract_state.epoch
                         );
+
                         Ok(NodeState::Joining(JoiningState {
                             participants: contract_state.participants,
                             public_key: contract_state.public_key,
@@ -571,6 +566,7 @@ impl ConsensusProtocol for ResharingState {
                             self.old_epoch,
                             contract_state.old_epoch
                         );
+
                         Ok(NodeState::Joining(JoiningState {
                             participants: contract_state.old_participants,
                             public_key: contract_state.public_key,

@@ -4,6 +4,7 @@ use super::state::{GeneratingState, NodeState, ResharingState, RunningState};
 use super::triple::TripleId;
 use crate::gcp::error::SecretStorageError;
 use crate::http_client::SendError;
+use crate::protocol::contract::primitives::Participants;
 use async_trait::async_trait;
 use cait_sith::protocol::{InitializationError, MessageData, Participant, ProtocolError};
 use k256::Scalar;
@@ -18,6 +19,7 @@ use tokio::sync::RwLock;
 #[async_trait::async_trait]
 pub trait MessageCtx {
     async fn me(&self) -> Participant;
+    fn active_participants(&self) -> &Participants;
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -204,12 +206,13 @@ impl MessageHandler for ResharingState {
 impl MessageHandler for RunningState {
     async fn handle<C: MessageCtx + Send + Sync>(
         &mut self,
-        _ctx: C,
+        ctx: C,
         queue: &mut MpcMessageQueue,
     ) -> Result<(), MessageHandleError> {
+        let participants = ctx.active_participants();
         let mut triple_manager = self.triple_manager.write().await;
         for (id, queue) in queue.triple_bins.entry(self.epoch).or_default() {
-            if let Some(protocol) = triple_manager.get_or_generate(*id)? {
+            if let Some(protocol) = triple_manager.get_or_generate(*id, participants)? {
                 while let Some(message) = queue.pop_front() {
                     protocol.message(message.from, message.data);
                 }
@@ -222,6 +225,7 @@ impl MessageHandler for RunningState {
             while let Some(message) = queue.pop_front() {
                 match presignature_manager
                     .get_or_generate(
+                        participants,
                         *id,
                         message.triple0,
                         message.triple1,
@@ -276,6 +280,7 @@ impl MessageHandler for RunningState {
                 // };
                 // TODO: Validate that the message matches our sign_queue
                 match signature_manager.get_or_generate(
+                    participants,
                     *receipt_id,
                     message.proposer,
                     message.presignature_id,

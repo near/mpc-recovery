@@ -1,6 +1,7 @@
 use super::message::PresignatureMessage;
 use super::triple::{Triple, TripleId, TripleManager};
 use crate::gcp::error::DatastoreStorageError;
+use crate::protocol::contract::primitives::Participants;
 use crate::types::{PresignatureProtocol, PublicKey, SecretKeyShare};
 use crate::util::AffinePointExt;
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
@@ -23,6 +24,7 @@ pub struct Presignature {
 
 /// An ongoing presignature generator.
 pub struct PresignatureGenerator {
+    pub participants: Vec<Participant>,
     pub protocol: PresignatureProtocol,
     pub triple0: TripleId,
     pub triple1: TripleId,
@@ -33,12 +35,14 @@ pub struct PresignatureGenerator {
 impl PresignatureGenerator {
     pub fn new(
         protocol: PresignatureProtocol,
+        participants: Vec<Participant>,
         triple0: TripleId,
         triple1: TripleId,
         mine: bool,
     ) -> Self {
         Self {
             protocol,
+            participants,
             triple0,
             triple1,
             mine,
@@ -85,24 +89,17 @@ pub struct PresignatureManager {
     /// List of presignature ids generation of which was initiated by the current node.
     mine: VecDeque<PresignatureId>,
 
-    participants: Vec<Participant>,
     me: Participant,
     threshold: usize,
     epoch: u64,
 }
 
 impl PresignatureManager {
-    pub fn new(
-        participants: Vec<Participant>,
-        me: Participant,
-        threshold: usize,
-        epoch: u64,
-    ) -> Self {
+    pub fn new(me: Participant, threshold: usize, epoch: u64) -> Self {
         Self {
             presignatures: HashMap::new(),
             generators: HashMap::new(),
             mine: VecDeque::new(),
-            participants,
             me,
             threshold,
             epoch,
@@ -132,7 +129,7 @@ impl PresignatureManager {
 
     #[allow(clippy::too_many_arguments)]
     fn generate_internal(
-        participants: &[Participant],
+        participants: &Participants,
         me: Participant,
         threshold: usize,
         triple0: Triple,
@@ -141,8 +138,9 @@ impl PresignatureManager {
         private_share: &SecretKeyShare,
         mine: bool,
     ) -> Result<PresignatureGenerator, InitializationError> {
+        let participants: Vec<_> = participants.keys().cloned().collect();
         let protocol = Box::new(cait_sith::presign(
-            participants,
+            &participants,
             me,
             PresignArguments {
                 triple0: (triple0.share, triple0.public),
@@ -155,13 +153,18 @@ impl PresignatureManager {
             },
         )?);
         Ok(PresignatureGenerator::new(
-            protocol, triple0.id, triple1.id, mine,
+            protocol,
+            participants,
+            triple0.id,
+            triple1.id,
+            mine,
         ))
     }
 
     /// Starts a new presignature generation protocol.
     pub fn generate(
         &mut self,
+        participants: &Participants,
         triple0: Triple,
         triple1: Triple,
         public_key: &PublicKey,
@@ -170,7 +173,7 @@ impl PresignatureManager {
         let id = rand::random();
         tracing::info!(id, "starting protocol to generate a new presignature");
         let generator = Self::generate_internal(
-            &self.participants,
+            participants,
             self.me,
             self.threshold,
             triple0,
@@ -189,8 +192,10 @@ impl PresignatureManager {
     /// 3) Has never been seen by the manager in which case start a new protocol and returns `Some(protocol)`, or
     /// 4) Depends on triples (`triple0`/`triple1`) that are unknown to the node
     // TODO: What if the presignature completed generation and is already spent?
+    #[allow(clippy::too_many_arguments)]
     pub async fn get_or_generate(
         &mut self,
+        participants: &Participants,
         id: PresignatureId,
         triple0: TripleId,
         triple1: TripleId,
@@ -213,7 +218,7 @@ impl PresignatureManager {
                             }
                         };
                     let generator = Self::generate_internal(
-                        &self.participants,
+                        participants,
                         self.me,
                         self.threshold,
                         triple0,
@@ -263,7 +268,7 @@ impl PresignatureManager {
                         return true;
                     }
                     Action::SendMany(data) => {
-                        for p in &self.participants {
+                        for p in generator.participants.iter() {
                             messages.push((
                                 *p,
                                 PresignatureMessage {
