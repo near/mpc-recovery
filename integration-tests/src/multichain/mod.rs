@@ -89,7 +89,7 @@ impl Nodes<'_> {
         Ok(())
     }
 
-    pub fn kill_node(&mut self, index: usize) -> anyhow::Result<()> {
+    pub async fn kill_node(&mut self, index: usize) -> anyhow::Result<()> {
         match self {
             Nodes::Local { nodes, .. } => {
                 nodes[index].kill()?;
@@ -100,6 +100,9 @@ impl Nodes<'_> {
                 nodes.remove(index);
             }
         }
+
+        // wait for the node to be removed from the network
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         Ok(())
     }

@@ -1,4 +1,4 @@
-use crate::protocol::contract::primitives::ParticipantInfo;
+use crate::protocol::contract::primitives::{ParticipantInfo, Participants};
 use crate::protocol::message::SignedMessage;
 use crate::protocol::MpcMessage;
 use cait_sith::protocol::Participant;
@@ -7,8 +7,12 @@ use near_primitives::types::AccountId;
 use reqwest::{Client, IntoUrl};
 use std::collections::VecDeque;
 use std::str::Utf8Error;
+use std::time::{Duration, Instant};
 use tokio_retry::strategy::{jitter, ExponentialBackoff};
 use tokio_retry::Retry;
+
+// 5 minutes max to wait for this message to be sent by defaults
+const MESSAGE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 #[derive(Debug, thiserror::Error)]
 pub enum SendError {
@@ -114,7 +118,7 @@ pub async fn join<U: IntoUrl>(
 // TODO: add check for participant list to see if the messages to be sent are still valid.
 #[derive(Default)]
 pub struct MessageQueue {
-    deque: VecDeque<(ParticipantInfo, MpcMessage)>,
+    deque: VecDeque<(ParticipantInfo, MpcMessage, Instant)>,
 }
 
 impl MessageQueue {
@@ -127,7 +131,7 @@ impl MessageQueue {
     }
 
     pub fn push(&mut self, info: ParticipantInfo, msg: MpcMessage) {
-        self.deque.push_back((info, msg));
+        self.deque.push_back((info, msg, Instant::now()));
     }
 
     pub async fn send_encrypted(
@@ -135,22 +139,49 @@ impl MessageQueue {
         from: Participant,
         sign_sk: &near_crypto::SecretKey,
         client: &Client,
-    ) -> Result<(), SendError> {
-        while let Some((info, msg)) = self.deque.front() {
-            let result =
-                send_encrypted(from, &info.cipher_pk, sign_sk, client, &info.url, msg).await;
+        participants: &Participants,
+    ) -> Vec<SendError> {
+        let mut failed = VecDeque::new();
+        let mut errors = Vec::new();
+        while let Some((info, msg, instant)) = self.deque.pop_front() {
+            if !participants.contains_key(&Participant::from(info.id)) {
+                if instant.elapsed() > message_type_to_timeout(&msg) {
+                    errors.push(SendError::Unsuccessful(format!(
+                        "message has timed out on offline node: {info:?}",
+                    )));
+                }
 
-            match result {
-                Ok(()) => {
-                    let _ = self.deque.pop_front();
+                failed.push_back((info, msg, instant));
+                continue;
+            }
+
+            if let Err(err) =
+                send_encrypted(from, &info.cipher_pk, sign_sk, client, &info.url, &msg).await
+            {
+                if instant.elapsed() > message_type_to_timeout(&msg) {
+                    errors.push(SendError::Unsuccessful(format!(
+                        "message has timed out: {err:?}"
+                    )));
+                    continue;
                 }
-                Err(err) => {
-                    return Err(err);
-                }
+
+                failed.push_back((info, msg, instant));
+                errors.push(err);
             }
         }
+        // Add back the failed attempts for next time.
+        self.deque = failed;
+        errors
+    }
+}
 
-        Ok(())
+fn message_type_to_timeout(msg: &MpcMessage) -> Duration {
+    match msg {
+        MpcMessage::Generating(_) => MESSAGE_TIMEOUT,
+        MpcMessage::Resharing(_) => MESSAGE_TIMEOUT,
+        MpcMessage::Triple(_) => crate::types::PROTOCOL_TRIPLE_TIMEOUT,
+        MpcMessage::Presignature(_) => crate::types::PROTOCOL_PRESIG_TIMEOUT,
+        MpcMessage::Signature(_) => crate::types::PROTOCOL_SIGNATURE_TIMEOUT,
     }
 }
 

@@ -6,7 +6,7 @@ use crate::protocol::contract::primitives::Participants;
 use crate::protocol::ProtocolState;
 use crate::web::StateView;
 
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(1);
 
 // TODO: this is a basic connection pool and does not do most of the work yet. This is
 //       mostly here just to facilitate offline node handling for now.

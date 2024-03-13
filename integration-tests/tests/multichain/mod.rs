@@ -67,6 +67,27 @@ async fn test_signature() -> anyhow::Result<()> {
 }
 
 #[test(tokio::test)]
+async fn test_signature_offline_node() -> anyhow::Result<()> {
+    with_multichain_nodes(MultichainConfig::default(), |mut ctx| {
+        Box::pin(async move {
+            let state_0 = wait_for::running_mpc(&ctx, 0).await?;
+            assert_eq!(state_0.participants.len(), 3);
+            wait_for::has_at_least_triples(&ctx, 2).await?;
+
+            // Kill the node then have presignature and signature generation only use the active set of nodes
+            // to start generating presignatures and signatures.
+            ctx.nodes.kill_node(2).await?;
+
+            wait_for::has_at_least_presignatures(&ctx, 2).await?;
+            actions::single_signature_production(&ctx, &state_0).await?;
+
+            Ok(())
+        })
+    })
+    .await
+}
+
+#[test(tokio::test)]
 async fn test_signature_large_stockpile() -> anyhow::Result<()> {
     const SIGNATURE_AMOUNT: usize = 10;
     let triple_cfg = TripleConfig {

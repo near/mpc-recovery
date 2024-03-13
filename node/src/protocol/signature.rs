@@ -1,7 +1,6 @@
 use super::contract::primitives::Participants;
 use super::message::SignatureMessage;
 use super::presignature::{Presignature, PresignatureId, PresignatureManager};
-use super::state::RunningState;
 use crate::kdf;
 use crate::types::{PublicKey, SignatureProtocol};
 use crate::util::{AffinePointExt, ScalarExt};
@@ -49,13 +48,10 @@ impl SignQueue {
         self.unorganized_requests.push(request);
     }
 
-    pub fn organize(&mut self, state: &RunningState, me: Participant) {
+    pub fn organize(&mut self, threshold: usize, active: &Participants, me: Participant) {
         for request in self.unorganized_requests.drain(..) {
             let mut rng = StdRng::from_seed(request.entropy);
-            let subset = state
-                .participants
-                .keys()
-                .choose_multiple(&mut rng, state.threshold);
+            let subset = active.keys().choose_multiple(&mut rng, threshold);
             let proposer = **subset.choose(&mut rng).unwrap();
             if subset.contains(&&me) {
                 tracing::info!(
@@ -217,6 +213,7 @@ impl SignatureManager {
         participants: &Participants,
     ) -> Option<()> {
         let (hash, failed_generator) = self.failed_generators.pop_front()?;
+        tracing::info!(receipt_id = %hash, participants = ?participants.keys().collect::<Vec<_>>(), "restarting failed protocol to generate signature");
         let generator = Self::generate_internal(
             participants,
             self.me,
@@ -244,7 +241,7 @@ impl SignatureManager {
         epsilon: Scalar,
         delta: Scalar,
     ) -> Result<(), InitializationError> {
-        tracing::info!(%receipt_id, "starting protocol to generate a new signature");
+        tracing::info!(%receipt_id, participants = ?participants.keys().collect::<Vec<_>>(), "starting protocol to generate a new signature");
         let generator = Self::generate_internal(
             participants,
             self.me,

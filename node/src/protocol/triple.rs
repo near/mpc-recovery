@@ -53,7 +53,7 @@ impl TripleGenerator {
     }
 
     pub fn poke(&mut self) -> Result<Action<TripleGenerationOutput<Secp256k1>>, ProtocolError> {
-        if self.timestamp.elapsed() > crate::types::PROTOCOL_TIMEOUT {
+        if self.timestamp.elapsed() > crate::types::PROTOCOL_TRIPLE_TIMEOUT {
             tracing::info!(id = self.id, "triple protocol timed out");
             return Err(ProtocolError::Other(
                 anyhow::anyhow!("triple protocol timed out").into(),

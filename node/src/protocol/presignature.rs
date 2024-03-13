@@ -51,7 +51,7 @@ impl PresignatureGenerator {
     }
 
     pub fn poke(&mut self) -> Result<Action<PresignOutput<Secp256k1>>, ProtocolError> {
-        if self.timestamp.elapsed() > crate::types::PROTOCOL_TIMEOUT {
+        if self.timestamp.elapsed() > crate::types::PROTOCOL_PRESIG_TIMEOUT {
             tracing::info!(
                 self.triple0,
                 self.triple1,

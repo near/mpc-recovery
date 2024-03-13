@@ -13,11 +13,14 @@ use crate::gcp::value::{FromValue, IntoValue, Value};
 use crate::gcp::{DatastoreResult, GcpService, KeyKind};
 use crate::protocol::contract::ResharingContractState;
 
-/// Default timeout for triple/presig generation protocols. Times out after 5 minutes of being alive.
-pub const PROTOCOL_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+/// Default timeout for triple/presig generation protocols. Times out after 3 minutes of being alive.
+pub const PROTOCOL_TRIPLE_TIMEOUT: Duration = Duration::from_secs(3 * 60);
 
-/// Default timeout for signature generation protocol. Times out after 10 minutes of being alive.
-pub const PROTOCOL_SIGNATURE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+/// Default timeout for triple/presig generation protocols. Times out after 1 minutes of being alive since this should be shorted lived.
+pub const PROTOCOL_PRESIG_TIMEOUT: Duration = Duration::from_secs(1 * 60);
+
+/// Default timeout for signature generation protocol. Times out after 1 minutes of being alive since this should be shorted lived.
+pub const PROTOCOL_SIGNATURE_TIMEOUT: Duration = Duration::from_secs(1 * 60);
 
 pub type SecretKeyShare = <Secp256k1 as CurveArithmetic>::Scalar;
 pub type PublicKey = <Secp256k1 as CurveArithmetic>::AffinePoint;
