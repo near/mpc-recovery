@@ -4,7 +4,8 @@ use super::state::{GeneratingState, NodeState, ResharingState, RunningState};
 use super::triple::TripleId;
 use crate::gcp::error::SecretStorageError;
 use crate::http_client::SendError;
-use crate::protocol::contract::primitives::Participants;
+use crate::mesh::Mesh;
+
 use async_trait::async_trait;
 use cait_sith::protocol::{InitializationError, MessageData, Participant, ProtocolError};
 use k256::Scalar;
@@ -19,7 +20,7 @@ use tokio::sync::RwLock;
 #[async_trait::async_trait]
 pub trait MessageCtx {
     async fn me(&self) -> Participant;
-    fn active_participants(&self) -> &Participants;
+    fn mesh(&self) -> &Mesh;
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -209,7 +210,7 @@ impl MessageHandler for RunningState {
         ctx: C,
         queue: &mut MpcMessageQueue,
     ) -> Result<(), MessageHandleError> {
-        let participants = ctx.active_participants();
+        let participants = ctx.mesh().active_participants();
         let mut triple_manager = self.triple_manager.write().await;
         for (id, queue) in queue.triple_bins.entry(self.epoch).or_default() {
             if let Some(protocol) = triple_manager.get_or_generate(*id, participants)? {

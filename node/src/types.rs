@@ -17,10 +17,10 @@ use crate::protocol::contract::ResharingContractState;
 pub const PROTOCOL_TRIPLE_TIMEOUT: Duration = Duration::from_secs(3 * 60);
 
 /// Default timeout for triple/presig generation protocols. Times out after 1 minutes of being alive since this should be shorted lived.
-pub const PROTOCOL_PRESIG_TIMEOUT: Duration = Duration::from_secs(1 * 60);
+pub const PROTOCOL_PRESIG_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Default timeout for signature generation protocol. Times out after 1 minutes of being alive since this should be shorted lived.
-pub const PROTOCOL_SIGNATURE_TIMEOUT: Duration = Duration::from_secs(1 * 60);
+pub const PROTOCOL_SIGNATURE_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub type SecretKeyShare = <Secp256k1 as CurveArithmetic>::Scalar;
 pub type PublicKey = <Secp256k1 as CurveArithmetic>::AffinePoint;

@@ -3,7 +3,7 @@ use std::sync::PoisonError;
 use super::state::{GeneratingState, NodeState, ResharingState, RunningState};
 use crate::gcp::error::SecretStorageError;
 use crate::http_client::SendError;
-use crate::protocol::contract::primitives::Participants;
+use crate::mesh::Mesh;
 use crate::protocol::message::{GeneratingMessage, ResharingMessage};
 use crate::protocol::state::{PersistentNodeData, WaitingForConsensusState};
 use crate::protocol::MpcMessage;
@@ -27,7 +27,7 @@ pub trait CryptographicCtx {
     fn secret_storage(&mut self) -> &mut SecretNodeStorageBox;
 
     /// Active participants is the active participants at the beginning of each protocol loop.
-    fn active_participants(&self) -> &Participants;
+    fn mesh(&self) -> &Mesh;
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -75,7 +75,7 @@ impl CryptographicProtocol for GeneratingState {
         mut self,
         mut ctx: C,
     ) -> Result<NodeState, CryptographicError> {
-        tracing::info!("generating: progressing key generation");
+        tracing::info!(active = ?ctx.mesh().active_participants().keys_vec(), "generating: progressing key generation");
         let mut protocol = self.protocol.write().await;
         loop {
             let action = match protocol.poke() {
@@ -100,11 +100,14 @@ impl CryptographicProtocol for GeneratingState {
                             ctx.me().await,
                             ctx.sign_sk(),
                             ctx.http_client(),
-                            ctx.active_participants(),
+                            ctx.mesh().active_participants(),
                         )
                         .await;
                     if !failures.is_empty() {
-                        tracing::warn!(participants = ?self.participants, "generating(wait): failed to send encrypted message; {failures:#?}");
+                        tracing::warn!(
+                            active = ?ctx.mesh().active_participants().keys_vec(),
+                            "generating(wait): failed to send encrypted message; {failures:#?}"
+                        );
                     }
 
                     return Ok(NodeState::Generating(self));
@@ -112,7 +115,7 @@ impl CryptographicProtocol for GeneratingState {
                 Action::SendMany(m) => {
                     tracing::debug!("generating: sending a message to many participants");
                     let mut messages = self.messages.write().await;
-                    for (p, info) in ctx.active_participants().iter() {
+                    for (p, info) in ctx.mesh().active_participants().iter() {
                         if p == &ctx.me().await {
                             // Skip yourself, cait-sith never sends messages to oneself
                             continue;
@@ -158,11 +161,14 @@ impl CryptographicProtocol for GeneratingState {
                             ctx.me().await,
                             ctx.sign_sk(),
                             ctx.http_client(),
-                            ctx.active_participants(),
+                            ctx.mesh().active_participants(),
                         )
                         .await;
                     if !failures.is_empty() {
-                        tracing::warn!(participants = ?self.participants, "generating(return): failed to send encrypted message; {failures:#?}");
+                        tracing::warn!(
+                            active = ?ctx.mesh().active_participants().keys_vec(),
+                            "generating(return): failed to send encrypted message; {failures:#?}"
+                        );
                     }
                     return Ok(NodeState::WaitingForConsensus(WaitingForConsensusState {
                         epoch: 0,
@@ -192,11 +198,14 @@ impl CryptographicProtocol for WaitingForConsensusState {
                 ctx.me().await,
                 ctx.sign_sk(),
                 ctx.http_client(),
-                ctx.active_participants(),
+                ctx.mesh().active_participants(),
             )
             .await;
         if !failures.is_empty() {
-            tracing::warn!(participants = ?self.participants, "waitingForConsensus: failed to send encrypted message; {failures:#?}");
+            tracing::warn!(
+                active = ?ctx.mesh().active_participants().keys_vec(),
+                "waitingForConsensus: failed to send encrypted message; {failures:#?}"
+            );
         }
 
         // Wait for ConsensusProtocol step to advance state
@@ -210,7 +219,14 @@ impl CryptographicProtocol for ResharingState {
         mut self,
         ctx: C,
     ) -> Result<NodeState, CryptographicError> {
-        tracing::info!("progressing key reshare");
+        // TODO: we are not using active potential participants here, but we should in the future.
+        // Currently resharing protocol does not timeout and restart with new set of participants.
+        // So if it picks up a participant that is not active, it will never be able to send a message to it.
+        let active = ctx
+            .mesh()
+            .active_participants()
+            .and(&ctx.mesh().potential_participants().await);
+        tracing::info!(active = ?active.keys().collect::<Vec<_>>(), "progressing key reshare");
         let mut protocol = self.protocol.write().await;
         loop {
             let action = match protocol.poke() {
@@ -231,15 +247,15 @@ impl CryptographicProtocol for ResharingState {
                         .messages
                         .write()
                         .await
-                        .send_encrypted(
-                            ctx.me().await,
-                            ctx.sign_sk(),
-                            ctx.http_client(),
-                            ctx.active_participants(),
-                        )
+                        .send_encrypted(ctx.me().await, ctx.sign_sk(), ctx.http_client(), &active)
                         .await;
                     if !failures.is_empty() {
-                        tracing::warn!(new = ?self.new_participants, old = ?self.old_participants, "resharing(wait): failed to send encrypted message; {failures:#?}");
+                        tracing::warn!(
+                            active = ?active.keys_vec(),
+                            new = ?self.new_participants,
+                            old = ?self.old_participants,
+                            "resharing(wait): failed to send encrypted message; {failures:#?}",
+                        );
                     }
 
                     return Ok(NodeState::Resharing(self));
@@ -285,15 +301,15 @@ impl CryptographicProtocol for ResharingState {
                         .messages
                         .write()
                         .await
-                        .send_encrypted(
-                            ctx.me().await,
-                            ctx.sign_sk(),
-                            ctx.http_client(),
-                            ctx.active_participants(),
-                        )
+                        .send_encrypted(ctx.me().await, ctx.sign_sk(), ctx.http_client(), &active)
                         .await;
                     if !failures.is_empty() {
-                        tracing::warn!(new = ?self.new_participants, old = ?self.old_participants, "resharing(return): failed to send encrypted message; {failures:#?}");
+                        tracing::warn!(
+                            active = ?active.keys_vec(),
+                            new = ?self.new_participants,
+                            old = ?self.old_participants,
+                            "resharing(return): failed to send encrypted message; {failures:#?}",
+                        );
                     }
 
                     return Ok(NodeState::WaitingForConsensus(WaitingForConsensusState {
@@ -316,22 +332,10 @@ impl CryptographicProtocol for RunningState {
         mut self,
         ctx: C,
     ) -> Result<NodeState, CryptographicError> {
+        let active = ctx.mesh().active_participants();
         let mut messages = self.messages.write().await;
-        // Try sending any leftover messages donated to RunningState.
-        let failures = messages
-            .send_encrypted(
-                ctx.me().await,
-                ctx.sign_sk(),
-                ctx.http_client(),
-                ctx.active_participants(),
-            )
-            .await;
-        if !failures.is_empty() {
-            tracing::warn!(participants = ?self.participants, "running(pre): failed to send encrypted message; {failures:#?}");
-        }
-
         let mut triple_manager = self.triple_manager.write().await;
-        triple_manager.stockpile(ctx.active_participants())?;
+        triple_manager.stockpile(active)?;
         for (p, msg) in triple_manager.poke().await? {
             let info = self.fetch_participant(&p)?;
             messages.push(info.clone(), MpcMessage::Triple(msg));
@@ -347,7 +351,7 @@ impl CryptographicProtocol for RunningState {
             // to use the same triple as any other node.
             if let Some((triple0, triple1)) = triple_manager.take_two_mine().await {
                 presignature_manager.generate(
-                    ctx.active_participants(),
+                    active,
                     triple0,
                     triple1,
                     &self.public_key,
@@ -367,14 +371,14 @@ impl CryptographicProtocol for RunningState {
 
         let mut sign_queue = self.sign_queue.write().await;
         let mut signature_manager = self.signature_manager.write().await;
-        sign_queue.organize(self.threshold, ctx.active_participants(), ctx.me().await);
+        sign_queue.organize(self.threshold, active, ctx.me().await);
         let my_requests = sign_queue.my_requests(ctx.me().await);
         while presignature_manager.my_len() > 0 {
             if signature_manager.failed_len() > 0 {
                 let Some(presignature) = presignature_manager.take_mine() else {
                     break;
                 };
-                signature_manager.retry_failed_generation(presignature, ctx.active_participants());
+                signature_manager.retry_failed_generation(presignature, active);
                 break;
             }
 
@@ -389,7 +393,7 @@ impl CryptographicProtocol for RunningState {
             let receipt_id = *receipt_id;
             let my_request = my_requests.remove(&receipt_id).unwrap();
             signature_manager.generate(
-                ctx.active_participants(),
+                active,
                 receipt_id,
                 presignature,
                 self.public_key,
@@ -409,15 +413,13 @@ impl CryptographicProtocol for RunningState {
             .await?;
         drop(signature_manager);
         let failures = messages
-            .send_encrypted(
-                ctx.me().await,
-                ctx.sign_sk(),
-                ctx.http_client(),
-                ctx.active_participants(),
-            )
+            .send_encrypted(ctx.me().await, ctx.sign_sk(), ctx.http_client(), active)
             .await;
         if !failures.is_empty() {
-            tracing::warn!(participants = ?self.participants, "running(post): failed to send encrypted message; {failures:#?}");
+            tracing::warn!(
+                active = ?active.keys_vec(),
+                "running(post): failed to send encrypted message; {failures:#?}"
+            );
         }
         drop(messages);
 

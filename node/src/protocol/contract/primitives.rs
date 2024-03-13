@@ -121,6 +121,10 @@ impl Participants {
         self.participants.keys()
     }
 
+    pub fn keys_vec(&self) -> Vec<Participant> {
+        self.participants.keys().cloned().collect()
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = (&Participant, &ParticipantInfo)> {
         self.participants.iter()
     }
@@ -149,6 +153,14 @@ impl Participants {
             .values()
             .map(|participant_info| participant_info.account_id.clone())
             .collect()
+    }
+
+    pub fn and(&self, other: &Self) -> Self {
+        let mut participants = self.participants.clone();
+        for (participant, info) in &other.participants {
+            participants.insert(*participant, info.clone());
+        }
+        Participants { participants }
     }
 }
 

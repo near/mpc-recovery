@@ -5,7 +5,7 @@ use cait_sith::protocol::Participant;
 use mpc_keys::hpke;
 use near_primitives::types::AccountId;
 use reqwest::{Client, IntoUrl};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::str::Utf8Error;
 use std::time::{Duration, Instant};
 use tokio_retry::strategy::{jitter, ExponentialBackoff};
@@ -143,14 +143,17 @@ impl MessageQueue {
     ) -> Vec<SendError> {
         let mut failed = VecDeque::new();
         let mut errors = Vec::new();
+        let mut cannot_send_errors = HashMap::new();
         while let Some((info, msg, instant)) = self.deque.pop_front() {
             if !participants.contains_key(&Participant::from(info.id)) {
                 if instant.elapsed() > message_type_to_timeout(&msg) {
                     errors.push(SendError::Unsuccessful(format!(
                         "message has timed out on offline node: {info:?}",
                     )));
+                    continue;
                 }
-
+                let counter = cannot_send_errors.entry(info.id).or_insert(0);
+                *counter += 1;
                 failed.push_back((info, msg, instant));
                 continue;
             }
@@ -169,13 +172,19 @@ impl MessageQueue {
                 errors.push(err);
             }
         }
+        if !cannot_send_errors.is_empty() {
+            errors.push(SendError::Unsuccessful(format!(
+                "cannot send message due to participants not responding: {cannot_send_errors:?}",
+            )));
+        }
+
         // Add back the failed attempts for next time.
         self.deque = failed;
         errors
     }
 }
 
-fn message_type_to_timeout(msg: &MpcMessage) -> Duration {
+const fn message_type_to_timeout(msg: &MpcMessage) -> Duration {
     match msg {
         MpcMessage::Generating(_) => MESSAGE_TIMEOUT,
         MpcMessage::Resharing(_) => MESSAGE_TIMEOUT,
