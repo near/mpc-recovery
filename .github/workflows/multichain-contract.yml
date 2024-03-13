@@ -1,0 +1,40 @@
+name: Multichain Contract
+
+on:
+  push:
+    branches:
+      - develop
+  pull_request:
+    paths:
+      - contract/**
+
+env:
+  RUSTFLAGS: -D warnings
+jobs:
+  test:
+    name: Test
+    strategy:
+      matrix:
+        os: [ubuntu-22.04-4core]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          target: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v1
+
+      - name: Compile Contract
+        run: cargo build -p mpc-contract --target wasm32-unknown-unknown --release
+
+      - name: Test Contract
+        run: cd contract && cargo test
+        env:
+          RUST_LOG: INFO
+          RUST_BACKTRACE: 1
