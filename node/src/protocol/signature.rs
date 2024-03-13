@@ -25,6 +25,7 @@ pub struct SignRequest {
     pub epsilon: Scalar,
     pub delta: Scalar,
     pub entropy: [u8; 32],
+    pub time_added: Instant,
 }
 
 #[derive(Default)]
@@ -107,6 +108,7 @@ impl SignatureGenerator {
         msg_hash: [u8; 32],
         epsilon: Scalar,
         delta: Scalar,
+        timestamp: Instant,
     ) -> Self {
         Self {
             protocol,
@@ -115,7 +117,7 @@ impl SignatureGenerator {
             msg_hash,
             epsilon,
             delta,
-            timestamp: Instant::now(),
+            timestamp,
         }
     }
 
@@ -147,8 +149,8 @@ pub struct SignatureManager {
     /// Failed signatures awaiting to be retried.
     failed_generators: VecDeque<(CryptoHash, FailedGenerator)>,
     /// Generated signatures assigned to the current node that are yet to be published.
-    signatures: Vec<(CryptoHash, [u8; 32], FullSignature<Secp256k1>)>,
-
+    /// Vec<(receipt_id, msg_hash, timestamp, output)>
+    signatures: Vec<(CryptoHash, [u8; 32], Instant, FullSignature<Secp256k1>)>,
     participants: Vec<Participant>,
     me: Participant,
     public_key: PublicKey,
@@ -187,6 +189,7 @@ impl SignatureManager {
         msg_hash: [u8; 32],
         epsilon: Scalar,
         delta: Scalar,
+        time_added: Instant,
     ) -> Result<SignatureGenerator, InitializationError> {
         let PresignOutput { big_r, k, sigma } = presignature.output;
         // TODO: Check whether it is okay to use invert_vartime instead
@@ -209,6 +212,7 @@ impl SignatureManager {
             msg_hash,
             epsilon,
             delta,
+            time_added,
         ))
     }
 
@@ -223,6 +227,7 @@ impl SignatureManager {
             failed_generator.msg_hash,
             failed_generator.epsilon,
             failed_generator.delta,
+            failed_generator.timestamp,
         )
         .unwrap();
         self.generators.insert(hash, generator);
@@ -230,6 +235,7 @@ impl SignatureManager {
     }
 
     /// Starts a new presignature generation protocol.
+    #[allow(clippy::too_many_arguments)]
     pub fn generate(
         &mut self,
         receipt_id: CryptoHash,
@@ -238,6 +244,7 @@ impl SignatureManager {
         msg_hash: [u8; 32],
         epsilon: Scalar,
         delta: Scalar,
+        time_added: Instant,
     ) -> Result<(), InitializationError> {
         tracing::info!(%receipt_id, "starting protocol to generate a new signature");
         let generator = Self::generate_internal(
@@ -249,6 +256,7 @@ impl SignatureManager {
             msg_hash,
             epsilon,
             delta,
+            time_added,
         )?;
         self.generators.insert(receipt_id, generator);
         Ok(())
@@ -287,6 +295,7 @@ impl SignatureManager {
                     msg_hash,
                     epsilon,
                     delta,
+                    Instant::now(),
                 )?;
                 let generator = entry.insert(generator);
                 Ok(Some(&mut generator.protocol))
@@ -367,7 +376,7 @@ impl SignatureManager {
                         );
                         if generator.proposer == self.me {
                             self.signatures
-                                .push((*receipt_id, generator.msg_hash, output));
+                                .push((*receipt_id, generator.msg_hash, generator.timestamp, output));
                         }
                         // Do not retain the protocol
                         return false;
@@ -383,8 +392,9 @@ impl SignatureManager {
         rpc_client: &near_fetch::Client,
         signer: &T,
         mpc_contract_id: &AccountId,
+        my_account_id: &AccountId,
     ) -> Result<(), near_fetch::Error> {
-        for (receipt_id, payload, signature) in self.signatures.drain(..) {
+        for (receipt_id, payload, time_added, signature) in self.signatures.drain(..) {
             // TODO: Figure out how to properly serialize the signature
             // let r_s = signature.big_r.x().concat(signature.s.to_bytes());
             // let tag =
@@ -411,6 +421,12 @@ impl SignatureManager {
                     )],
                 )
                 .await?;
+            crate::metrics::NUM_SIGN_SUCCESS
+                .with_label_values(&[my_account_id])
+                .inc();
+            crate::metrics::SIGN_LATENCY
+                .with_label_values(&[my_account_id])
+                .observe(time_added.elapsed().as_secs_f64());
             tracing::info!(%receipt_id, big_r = signature.big_r.to_base58(), s = ?signature.s, status = ?response.status, "published signature response");
         }
         Ok(())

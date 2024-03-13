@@ -360,6 +360,7 @@ impl CryptographicProtocol for RunningState {
                 my_request.msg_hash,
                 my_request.epsilon,
                 my_request.delta,
+                my_request.time_added,
             )?;
         }
         drop(sign_queue);
@@ -368,8 +369,14 @@ impl CryptographicProtocol for RunningState {
             let info = self.participants.get(&p).unwrap();
             messages.push(info.clone(), MpcMessage::Signature(msg));
         }
+        let my_account_id = &self.fetch_participant(&ctx.me().await)?.account_id;
         signature_manager
-            .publish(ctx.rpc_client(), ctx.signer(), ctx.mpc_contract_id())
+            .publish(
+                ctx.rpc_client(),
+                ctx.signer(),
+                ctx.mpc_contract_id(),
+                my_account_id,
+            )
             .await?;
         drop(signature_manager);
         if let Err(err) = messages

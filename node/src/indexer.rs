@@ -7,6 +7,7 @@ use near_lake_primitives::actions::ActionMetaDataExt;
 use near_lake_primitives::{receipts::ExecutionStatus, AccountId};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::RwLock;
 
 /// Configures indexer.
@@ -120,7 +121,11 @@ async fn handle_block(
                             epsilon,
                             delta,
                             entropy,
+                            time_added: Instant::now(),
                         });
+                        crate::metrics::NUM_SIGN_REQUESTS
+                            .with_label_values(&[&ctx.gcp_service.account_id.to_string()])
+                            .inc();
                         drop(queue);
                     }
                 }

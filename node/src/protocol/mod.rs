@@ -194,7 +194,11 @@ impl MpcSignProtocol {
     }
 
     pub async fn run(mut self) -> anyhow::Result<()> {
-        let _span = tracing::info_span!("running", my_account_id = self.ctx.account_id.to_string());
+        let my_account_id = self.ctx.account_id.to_string();
+        let _span = tracing::info_span!("running", my_account_id);
+        crate::metrics::NODE_RUNNING
+            .with_label_values(&[&my_account_id])
+            .set(1);
         let mut queue = MpcMessageQueue::default();
         loop {
             tracing::debug!("trying to advance mpc recovery protocol");
