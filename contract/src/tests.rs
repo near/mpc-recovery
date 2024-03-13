@@ -1,41 +1,39 @@
-#[cfg(test)]
-mod tests {
-    use crate::primitives::CandidateInfo;
-    use near_workspaces::AccountId;
-    use std::collections::HashMap;
 
-    const CONTRACT_FILE_PATH: &str = "./../target/wasm32-unknown-unknown/release/mpc_contract.wasm";
+use crate::primitives::CandidateInfo;
+use near_workspaces::AccountId;
+use std::collections::HashMap;
 
-    #[tokio::test]
-    async fn test_contract_can_not_be_reinitialized() -> anyhow::Result<()> {
-        let worker = near_workspaces::sandbox().await?;
-        let wasm = std::fs::read(CONTRACT_FILE_PATH)?;
-        let contract = worker.dev_deploy(&wasm).await?;
+const CONTRACT_FILE_PATH: &str = "./../target/wasm32-unknown-unknown/release/mpc_contract.wasm";
 
-        let candidates: HashMap<AccountId, CandidateInfo> = HashMap::new();
+#[tokio::test]
+async fn test_contract_can_not_be_reinitialized() -> anyhow::Result<()> {
+    let worker = near_workspaces::sandbox().await?;
+    let wasm = std::fs::read(CONTRACT_FILE_PATH)?;
+    let contract = worker.dev_deploy(&wasm).await?;
 
-        let result1 = contract
-            .call("init")
-            .args_json(serde_json::json!({
-                "threshold": 2,
-                "candidates": candidates
-            }))
-            .transact()
-            .await?;
+    let candidates: HashMap<AccountId, CandidateInfo> = HashMap::new();
 
-        assert!(result1.is_success());
+    let result1 = contract
+        .call("init")
+        .args_json(serde_json::json!({
+            "threshold": 2,
+            "candidates": candidates
+        }))
+        .transact()
+        .await?;
 
-        let result2 = contract
-            .call("init")
-            .args_json(serde_json::json!({
-                "threshold": 2,
-                "candidates": candidates
-            }))
-            .transact()
-            .await?;
+    assert!(result1.is_success());
 
-        assert!(result2.is_failure());
+    let result2 = contract
+        .call("init")
+        .args_json(serde_json::json!({
+            "threshold": 2,
+            "candidates": candidates
+        }))
+        .transact()
+        .await?;
 
-        Ok(())
-    }
+    assert!(result2.is_failure());
+
+    Ok(())
 }
