@@ -1,5 +1,4 @@
-
-use crate::primitives::CandidateInfo;
+use mpc_contract::primitives::CandidateInfo;
 use near_workspaces::AccountId;
 use std::collections::HashMap;
 

@@ -34,7 +34,7 @@ jobs:
         run: cargo build -p mpc-contract --target wasm32-unknown-unknown --release
 
       - name: Test Contract
-        run: cd contract && cargo test
+        run: cd contract && cargo test --target x86_64-unknown-linux-gnu --release
         env:
           RUST_LOG: INFO
           RUST_BACKTRACE: 1
