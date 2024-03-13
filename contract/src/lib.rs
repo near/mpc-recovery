@@ -1,4 +1,5 @@
 pub mod primitives;
+mod tests;
 
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::LookupMap;
