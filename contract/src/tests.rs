@@ -14,7 +14,7 @@ mod tests {
 
         let candidates: HashMap<AccountId, CandidateInfo> = HashMap::new();
 
-        let status1 = contract
+        let result1 = contract
             .call("init")
             .args_json(serde_json::json!({
                 "threshold": 2,
@@ -23,9 +23,9 @@ mod tests {
             .transact()
             .await?;
 
-        assert!(status1.is_success());
+        assert!(result1.is_success());
 
-        let status2 = contract
+        let result2 = contract
             .call("init")
             .args_json(serde_json::json!({
                 "threshold": 2,
@@ -34,7 +34,7 @@ mod tests {
             .transact()
             .await?;
 
-        assert!(status2.is_failure());
+        assert!(result2.is_failure());
 
         Ok(())
     }

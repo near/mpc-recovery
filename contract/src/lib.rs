@@ -55,7 +55,7 @@ pub struct MpcContract {
 
 #[near_bindgen]
 impl MpcContract {
-    #[init(ignore_state)]
+    #[init]
     pub fn init(threshold: usize, candidates: BTreeMap<AccountId, CandidateInfo>) -> Self {
         log!(
             "init: signer={}, treshhold={}, candidates={}",
