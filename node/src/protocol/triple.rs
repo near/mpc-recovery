@@ -176,8 +176,10 @@ impl TripleManager {
             min_triples,
             max_triples,
         } = self.triple_cfg;
-        let not_enough_triples =
-            || (self.my_len() < min_triples && self.potential_len() == self.len()) || self.potential_len() < max_triples ;
+        let not_enough_triples = || {
+            (self.my_len() < min_triples && self.potential_len() == self.len())
+                || self.potential_len() < max_triples
+        };
 
         if not_enough_triples() {
             self.generate(participants)?;
