@@ -20,6 +20,7 @@ pub type PresignatureId = u64;
 pub struct Presignature {
     pub id: PresignatureId,
     pub output: PresignOutput<Secp256k1>,
+    pub participants: Vec<Participant>,
 }
 
 /// An ongoing presignature generator.
@@ -299,8 +300,14 @@ impl PresignatureManager {
                             big_r = ?output.big_r.to_base58(),
                             "completed presignature generation"
                         );
-                        self.presignatures
-                            .insert(*id, Presignature { id: *id, output });
+                        self.presignatures.insert(
+                            *id,
+                            Presignature {
+                                id: *id,
+                                output,
+                                participants: generator.participants.clone(),
+                            },
+                        );
                         if generator.mine {
                             tracing::info!(id, "assigning presignature to myself");
                             self.mine.push_back(*id);

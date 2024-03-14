@@ -350,8 +350,10 @@ impl CryptographicProtocol for RunningState {
             // that we proposed. This way in a non-BFT environment we are guaranteed to never try
             // to use the same triple as any other node.
             if let Some((triple0, triple1)) = triple_manager.take_two_mine().await {
+                let presig_participants = active
+                    .intersection(&[&triple0.public.participants, &triple1.public.participants]);
                 presignature_manager.generate(
-                    active,
+                    &presig_participants,
                     triple0,
                     triple1,
                     &self.public_key,
@@ -378,7 +380,8 @@ impl CryptographicProtocol for RunningState {
                 let Some(presignature) = presignature_manager.take_mine() else {
                     break;
                 };
-                signature_manager.retry_failed_generation(presignature, active);
+                let sig_participants = active.intersection(&[&presignature.participants]);
+                signature_manager.retry_failed_generation(presignature, &sig_participants);
                 break;
             }
 
@@ -391,9 +394,10 @@ impl CryptographicProtocol for RunningState {
             };
 
             let receipt_id = *receipt_id;
+            let sig_participants = active.intersection(&[&presignature.participants]);
             let my_request = my_requests.remove(&receipt_id).unwrap();
             signature_manager.generate(
-                active,
+                &sig_participants,
                 receipt_id,
                 presignature,
                 self.public_key,

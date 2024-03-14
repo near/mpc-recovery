@@ -162,6 +162,26 @@ impl Participants {
         }
         Participants { participants }
     }
+
+    pub fn intersection(&self, other: &[&[Participant]]) -> Self {
+        let mut intersect = BTreeMap::new();
+        let other = other
+            .iter()
+            .map(|participants| participants.iter().cloned().collect::<HashSet<_>>())
+            .collect::<Vec<_>>();
+
+        'outer: for (participant, info) in &self.participants {
+            for participants in &other {
+                if !participants.contains(participant) {
+                    continue 'outer;
+                }
+            }
+            intersect.insert(*participant, info.clone());
+        }
+        Participants {
+            participants: intersect,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
