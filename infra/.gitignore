@@ -17,6 +17,7 @@ crash.*.log
 *.tfvars.json
 !terraform-dev.tfvars
 !backend-config-*.tfvars
+!terraform-testnet-example.tfvars
 
 # Ignore override files as they are usually used to override resources locally and so
 # are not checked in

@@ -45,7 +45,7 @@ module "gce-container" {
       },
       {
         name  = "MPC_RECOVERY_LOCAL_ADDRESS"
-        value = "http://${google_compute_address.internal_ips[count.index].address}"
+        value = "http://${google_compute_global_address.external_ips[count.index].address}"
       },
       {
         name = "MPC_RECOVERY_SK_SHARE_SECRET_ID"
@@ -59,30 +59,48 @@ module "gce-container" {
   }
 }
 
-resource "google_compute_address" "internal_ips" {
-  count        = length(var.node_configs)
-  name         = "multichain-dev-${count.index}"
-  address_type = "INTERNAL"
-  region       = var.region
-  subnetwork   = "projects/pagoda-shared-infrastructure/regions/us-central1/subnetworks/dev-us-central1"
+resource "google_service_account" "service_account" {
+  account_id   = "multichain-${var.env}"
+  display_name = "Multichain ${var.env} Account"
 }
 
-module "mig_template" {
+resource "google_project_iam_binding" "sa-roles" {
+  for_each = toset([
+      "roles/datastore.user",
+      "roles/secretmanager.admin",
+      "roles/storage.objectAdmin",
+      "roles/iam.serviceAccountAdmin",
+  ])
+
+  role = each.key
+  members = [ 
+    "serviceAccount:${google_service_account.service_account.email}"
+   ]
+   project = var.project_id
+}
+
+resource "google_compute_global_address" "external_ips" {
+  count        = length(var.node_configs)
+  name         = "multichain-dev-parnter-${count.index}"
+  address_type = "EXTERNAL"
+}
+
+module "ig_template" {
   count      = length(var.node_configs)
   source     = "../modules/mig_template"
-  network    = "projects/pagoda-shared-infrastructure/global/networks/dev"
-  subnetwork = "projects/pagoda-shared-infrastructure/regions/us-central1/subnetworks/dev-us-central1"
+  network    = var.network
+  subnetwork = var.subnetwork
   region     = var.region
   service_account = {
-    email  = "mpc-recovery@pagoda-discovery-platform-dev.iam.gserviceaccount.com",
+    email  = google_service_account.service_account.email,
     scopes = ["cloud-platform"]
   }
-  name_prefix          = "multichain-${count.index}"
+  name_prefix          = "multichain-partner-${count.index}"
   source_image_family  = "cos-stable"
   source_image_project = "cos-cloud"
-  machine_type         = "n2-standard-2"
+  machine_type         = "n2d-standard-2"
 
-  startup_script = "docker rm watchtower ; docker run -d --name watchtower -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower --debug --interval 30"
+  startup_script = "docker rm watchtower ; docker run -d --name watchtower -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower --debug --interval 3600"
 
   source_image = reverse(split("/", module.gce-container[count.index].source_image))[0]
   metadata     = merge(var.additional_metadata, { "gce-container-declaration" = module.gce-container["${count.index}"].metadata_value })
@@ -93,7 +111,7 @@ module "mig_template" {
     "container-vm" = module.gce-container[count.index].vm_container_label
   }
 
-  depends_on = [google_compute_address.internal_ips]
+  depends_on = [google_compute_global_address.external_ips]
 }
 
 
@@ -102,17 +120,16 @@ module "instances" {
   source     = "../modules/instance-from-tpl"
   region     = var.region
   project_id = var.project_id
-  hostname   = "multichain-dev-${count.index}"
-  network    = "projects/pagoda-shared-infrastructure/global/networks/dev"
-  subnetwork = "projects/pagoda-shared-infrastructure/regions/us-central1/subnetworks/dev-us-central1"
+  hostname   = "multichain-dev-partner-${count.index}"
+  network    = var.network
+  subnetwork = var.subnetwork
 
-  instance_template = module.mig_template[count.index].self_link_unique
-  static_ips        = [google_compute_address.internal_ips[count.index].address]
+  instance_template = module.ig_template[count.index].self_link_unique
 
 }
 
 resource "google_compute_health_check" "multichain_healthcheck" {
-  name = "multichain-dev-healthcheck"
+  name = "multichain-dev-partner-healthcheck"
 
   http_health_check {
     port         = 3000
@@ -121,9 +138,31 @@ resource "google_compute_health_check" "multichain_healthcheck" {
 
 }
 
+resource "google_compute_global_forwarding_rule" "default" {
+  count      = length(var.node_configs)
+  name       = "multichain-partner-rule-${count.index}"
+  target     = google_compute_target_http_proxy.default[count.index].id
+  port_range = "80"
+  load_balancing_scheme = "EXTERNAL"
+  ip_address = google_compute_global_address.external_ips[count.index].address
+}
+
+resource "google_compute_target_http_proxy" "default" {
+  count      = length(var.node_configs)
+  name        = "multichain-partner-target-proxy-${count.index}"
+  description = "a description"
+  url_map     = google_compute_url_map.default[count.index].id
+}
+
+resource "google_compute_url_map" "default" {
+  count           = length(var.node_configs)
+  name            = "multichain-partner-url-map-${count.index}"
+  default_service = google_compute_backend_service.multichain_backend.id
+}
+
 resource "google_compute_backend_service" "multichain_backend" {
-  name                  = "multichain-service"
-  load_balancing_scheme = "INTERNAL_SELF_MANAGED"
+  name                  = "multichain-partner-backend-service"
+  load_balancing_scheme = "EXTERNAL"
 
   backend {
     group = google_compute_instance_group.multichain_group.id
@@ -133,7 +172,7 @@ resource "google_compute_backend_service" "multichain_backend" {
 }
 
 resource "google_compute_instance_group" "multichain_group" {
-  name      = "multichain-instance-group"
+  name      = "multichain-partner-instance-group"
   instances = module.instances[*].self_links[0]
 
   zone = "us-central1-a"
@@ -141,4 +180,18 @@ resource "google_compute_instance_group" "multichain_group" {
     name = "http"
     port = 3000
   }
+}
+
+resource "google_compute_firewall" "app_port" {
+  name = "allow-multichain-healthcheck-access"
+  network = var.network
+
+  source_ranges = [ "130.211.0.0/22", "35.191.0.0/16" ]
+  source_tags = [ "multichain" ]
+
+  allow {
+    protocol = "tcp"
+    ports = [ "80" ]
+  }
+  
 }
