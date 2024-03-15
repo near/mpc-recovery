@@ -1,7 +1,7 @@
 terraform {
   backend "gcs" {
-    bucket = "<your-tf-state-gcs-bucket>" # Example: terraform-multichain-state-bucket
-    prefix = "<your-multichain-prefix>" # Example: state/multichain-vm
+    bucket = "multichain-terraform-dev" # Example: terraform-multichain-state-bucket
+    prefix = "state/multichain-vm-partner-test" # Example: state/multichain-vm
   }
 
   required_providers {

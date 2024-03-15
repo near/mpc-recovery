@@ -1,13 +1,13 @@
 variable "project_id" {
   description = "The project ID to deploy resource into"
   type        = string
-  default     = "<your-project-id>"
+  default     = "<your-project-name-here>"
 }
 
 variable "subnetwork" {
   description = "The name of the subnetwork to deploy instances into"
   type        = string
-  default     = "<your-vpc-subnetwork>"
+  default     = "us-central1-subnet"
 }
 
 variable "mig_name" {
@@ -37,7 +37,7 @@ variable "region" {
 variable "network" {
   description = "The GCP network"
   type        = string
-  default     = "<your-vpc-network>"
+  default     = "multichain-network"
 }
 
 variable "additional_metadata" {

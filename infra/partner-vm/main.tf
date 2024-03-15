@@ -105,7 +105,8 @@ module "ig_template" {
   source_image = reverse(split("/", module.gce-container[count.index].source_image))[0]
   metadata     = merge(var.additional_metadata, { "gce-container-declaration" = module.gce-container["${count.index}"].metadata_value })
   tags = [
-    "multichain"
+    "multichain",
+    "allow-ssh"
   ]
   labels = {
     "container-vm" = module.gce-container[count.index].vm_container_label
