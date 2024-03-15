@@ -7,6 +7,7 @@ members = [
     "load-tests",
     "keys",
     "test-oidc-provider",
+    "infra/scripts/generate_cipher_keys", 
 ]
 
 [profile.flamegraph]
