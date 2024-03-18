@@ -37,7 +37,7 @@ variable "region" {
 variable "network" {
   description = "The GCP network"
   type        = string
-  default     = "multichain-network"
+  default     = "default"
 }
 
 variable "additional_metadata" {
@@ -120,4 +120,9 @@ variable "static_env" {
       value = "eu-central-1"
     }
   ]
+}
+
+variable "create_network" {
+  default = false
+  description = "Do you want to create a new VPC network or use default GCP network?"
 }

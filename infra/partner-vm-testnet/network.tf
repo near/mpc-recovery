@@ -1,4 +1,5 @@
 module "vpc" {
+    count = var.create_network ? 1 : 0
     source  = "terraform-google-modules/network/google"
     version = "~> 9.0"
 
