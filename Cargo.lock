@@ -2919,14 +2919,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "generate_cipher_keys"
-version = "0.1.0"
-dependencies = [
- "hex 0.4.3",
- "mpc-keys",
-]
-
-[[package]]
 name = "generic-array"
 version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
