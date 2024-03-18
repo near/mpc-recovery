@@ -4037,11 +4037,14 @@ dependencies = [
 name = "mpc-contract"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "borsh 1.3.1",
  "near-sdk",
+ "near-workspaces 0.10.0",
  "schemars",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -4084,8 +4087,8 @@ dependencies = [
  "multi-party-eddsa",
  "near-crypto 0.17.0",
  "near-fetch",
- "near-jsonrpc-client",
- "near-jsonrpc-primitives",
+ "near-jsonrpc-client 0.6.0",
+ "near-jsonrpc-primitives 0.17.0",
  "near-primitives 0.17.0",
  "opentelemetry 0.20.0",
  "opentelemetry-otlp 0.13.0",
@@ -4142,11 +4145,11 @@ dependencies = [
  "multi-party-eddsa",
  "near-crypto 0.17.0",
  "near-fetch",
- "near-jsonrpc-client",
+ "near-jsonrpc-client 0.6.0",
  "near-lake-framework",
  "near-lake-primitives",
  "near-primitives 0.17.0",
- "near-workspaces",
+ "near-workspaces 0.9.0",
  "nix",
  "once_cell",
  "rand 0.7.3",
@@ -4198,6 +4201,8 @@ dependencies = [
  "near-lake-primitives",
  "near-primitives 0.17.0",
  "near-sdk",
+ "once_cell",
+ "prometheus",
  "rand 0.8.5",
  "reqwest",
  "serde",
@@ -4326,6 +4331,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "near-chain-configs"
+version = "0.20.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d05e5a8ace81c09d7eb165dffc1742358a021b2fa761f2160943305f83216003"
+dependencies = [
+ "anyhow",
+ "bytesize",
+ "chrono",
+ "derive_more",
+ "near-config-utils 0.20.1",
+ "near-crypto 0.20.1",
+ "near-parameters",
+ "near-primitives 0.20.1",
+ "num-rational",
+ "once_cell",
+ "serde",
+ "serde_json",
+ "sha2 0.10.8",
+ "smart-default",
+ "tracing",
+]
+
+[[package]]
 name = "near-config-utils"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4411,8 +4439,8 @@ checksum = "d227650df31a89e5bd256f7a9b5ae85f6f9b855f7114b2a4e935d15372d77cab"
 dependencies = [
  "near-account-id 0.17.0",
  "near-crypto 0.17.0",
- "near-jsonrpc-client",
- "near-jsonrpc-primitives",
+ "near-jsonrpc-client 0.6.0",
+ "near-jsonrpc-primitives 0.17.0",
  "near-primitives 0.17.0",
  "serde",
  "serde_json",
@@ -4470,10 +4498,29 @@ dependencies = [
  "borsh 0.10.3",
  "lazy_static",
  "log",
- "near-chain-configs",
+ "near-chain-configs 0.17.0",
  "near-crypto 0.17.0",
- "near-jsonrpc-primitives",
+ "near-jsonrpc-primitives 0.17.0",
  "near-primitives 0.17.0",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "near-jsonrpc-client"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18ad81e015f7aced8925d5b9ba3f369b36da9575c15812cfd0786bc1213284ca"
+dependencies = [
+ "borsh 1.3.1",
+ "lazy_static",
+ "log",
+ "near-chain-configs 0.20.1",
+ "near-crypto 0.20.1",
+ "near-jsonrpc-primitives 0.20.1",
+ "near-primitives 0.20.1",
  "reqwest",
  "serde",
  "serde_json",
@@ -4487,10 +4534,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97b2934b5ab243e25e951c984525ba0aff0e719ed915c988c5195405aa0f6987"
 dependencies = [
  "arbitrary",
- "near-chain-configs",
+ "near-chain-configs 0.17.0",
  "near-crypto 0.17.0",
  "near-primitives 0.17.0",
  "near-rpc-error-macro 0.17.0",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "near-jsonrpc-primitives"
+version = "0.20.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0ce745e954ae776eef05957602e638ee9581106a3675946fb43c2fe7e38ef03"
+dependencies = [
+ "arbitrary",
+ "near-chain-configs 0.20.1",
+ "near-crypto 0.20.1",
+ "near-primitives 0.20.1",
+ "near-rpc-error-macro 0.20.1",
  "serde",
  "serde_json",
  "thiserror",
@@ -4934,9 +4997,44 @@ dependencies = [
  "near-account-id 0.17.0",
  "near-crypto 0.17.0",
  "near-gas",
- "near-jsonrpc-client",
- "near-jsonrpc-primitives",
+ "near-jsonrpc-client 0.6.0",
+ "near-jsonrpc-primitives 0.17.0",
  "near-primitives 0.17.0",
+ "near-sandbox-utils",
+ "near-token",
+ "rand 0.8.5",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.10.8",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-retry",
+ "tracing",
+ "url 2.5.0",
+]
+
+[[package]]
+name = "near-workspaces"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3e597da87d0c1a722e23efb8c24ae42a0ad99a15f37101dad45c15defb051c1"
+dependencies = [
+ "async-trait",
+ "base64 0.21.7",
+ "bs58 0.5.0",
+ "cargo-near",
+ "chrono",
+ "fs2",
+ "json-patch",
+ "libc",
+ "near-account-id 1.0.0",
+ "near-crypto 0.20.1",
+ "near-gas",
+ "near-jsonrpc-client 0.8.0",
+ "near-jsonrpc-primitives 0.20.1",
+ "near-primitives 0.20.1",
  "near-sandbox-utils",
  "near-token",
  "rand 0.8.5",

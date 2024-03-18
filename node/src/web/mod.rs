@@ -4,6 +4,7 @@ use self::error::Error;
 use crate::protocol::message::SignedMessage;
 use crate::protocol::{MpcMessage, NodeState};
 use crate::web::error::Result;
+use anyhow::Context;
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Extension, Json, Router};
@@ -13,6 +14,7 @@ use mpc_keys::hpke::{self, Ciphered};
 use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
 use near_primitives::types::AccountId;
+use prometheus::{Encoder, TextEncoder};
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::{mpsc::Sender, RwLock};
@@ -57,6 +59,7 @@ pub async fn run(
         .route("/msg", post(msg))
         .route("/join", post(join))
         .route("/state", get(state))
+        .route("/metrics", get(metrics))
         .layer(Extension(Arc::new(axum_state)));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
@@ -184,6 +187,34 @@ async fn state(Extension(state): Extension<Arc<AxumState>>) -> Result<Json<State
         _ => {
             tracing::debug!("not running, state unavailable");
             Ok(Json(StateView::NotRunning))
+        }
+    }
+}
+
+#[tracing::instrument(level = "debug", skip_all)]
+async fn metrics() -> (StatusCode, String) {
+    let grab_metrics = || {
+        let encoder = TextEncoder::new();
+        let mut buffer = vec![];
+        encoder
+            .encode(&prometheus::gather(), &mut buffer)
+            .with_context(|| "failed to encode metrics")?;
+
+        let response = String::from_utf8(buffer.clone())
+            .with_context(|| "failed to convert bytes to string")?;
+        buffer.clear();
+
+        Ok::<String, anyhow::Error>(response)
+    };
+
+    match grab_metrics() {
+        Ok(response) => (StatusCode::OK, response),
+        Err(err) => {
+            tracing::error!("failed to generate prometheus metrics: {err}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to generate prometheus metrics".to_string(),
+            )
         }
     }
 }
