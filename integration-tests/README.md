@@ -22,6 +22,14 @@ Build OIDC Provider test image
 docker build -t near/test-oidc-provider ./test-oidc-provider
 ```
 
+Set dummy AWS credentials and the correct region
+
+``` bash
+aws configure set region us-east-1
+aws --profile default configure set aws_access_key_id "123"
+aws --profile default configure set aws_secret_access_key "456"
+```
+
 Then run the integration tests:
 
 ```BASH
@@ -110,3 +118,4 @@ It's a known issue on MacOS. Try executiong the following command:
 ```bash
 sudo ln -s $HOME/.docker/run/docker.sock /var/run/docker.sock
 ```
+
