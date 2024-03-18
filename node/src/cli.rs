@@ -188,19 +188,9 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                     tracing::debug!("protocol initialized");
                     let protocol_handle = tokio::spawn(async move { protocol.run().await });
                     tracing::debug!("protocol thread spawned");
-                    let mpc_contract_id_cloned = mpc_contract_id.clone();
                     let cipher_sk = hpke::SecretKey::try_from_bytes(&hex::decode(cipher_sk)?)?;
                     let web_handle = tokio::spawn(async move {
-                        web::run(
-                            web_port,
-                            mpc_contract_id_cloned,
-                            rpc_client,
-                            signer,
-                            sender,
-                            cipher_sk,
-                            protocol_state,
-                        )
-                        .await
+                        web::run(web_port, sender, cipher_sk, protocol_state).await
                     });
                     tracing::debug!("protocol http server spawned");
 

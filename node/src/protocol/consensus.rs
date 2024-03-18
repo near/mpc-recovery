@@ -12,12 +12,12 @@ use crate::protocol::presignature::PresignatureManager;
 use crate::protocol::signature::SignatureManager;
 use crate::protocol::state::{GeneratingState, ResharingState};
 use crate::protocol::triple::TripleManager;
+use crate::rpc_client;
 use crate::storage::secret_storage::SecretNodeStorageBox;
 use crate::storage::triple_storage::LockTripleNodeStorageBox;
 use crate::storage::triple_storage::TripleData;
 use crate::types::{KeygenProtocol, ReshareProtocol, SecretKeyShare};
 use crate::util::AffinePointExt;
-use crate::{http_client, rpc_client};
 use async_trait::async_trait;
 use cait_sith::protocol::InitializationError;
 use mpc_keys::hpke;
@@ -609,29 +609,23 @@ impl ConsensusProtocol for JoiningState {
                     .candidates
                     .find_candidate(ctx.my_account_id())
                 {
-                    Some(candidate_info) => {
-                        let voted = contract_state
+                    Some(_) => {
+                        let votes = contract_state
                             .join_votes
                             .get(ctx.my_account_id())
                             .cloned()
                             .unwrap_or_default();
+                        let participant_account_ids_to_vote = contract_state
+                            .participants
+                            .iter()
+                            .map(|(_, info)| info.account_id.clone())
+                            .filter(|id| !votes.contains(id))
+                            .map(|id| id.to_string())
+                            .collect::<Vec<_>>();
                         tracing::info!(
-                            already_voted = voted.len(),
-                            votes_to_go = contract_state.threshold - voted.len(),
-                            "joining(running): trying to get participants to vote for us"
+                            ?participant_account_ids_to_vote,
+                            "Some participants have not voted for you to join"
                         );
-                        for (_, info) in contract_state.participants {
-                            if voted.contains(&info.account_id) {
-                                continue;
-                            }
-                            http_client::join(
-                                ctx.http_client(),
-                                info.url,
-                                &candidate_info.account_id,
-                            )
-                            .await
-                            .unwrap()
-                        }
                         Ok(NodeState::Joining(self))
                     }
                     None => {
