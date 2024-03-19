@@ -30,10 +30,9 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
                 )
                 .await?;
 
-            // TODO: wait till new node adds itself as a candidate?
-            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+            // Wait for new node to add itself as a candidate
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 
-            // Voring for new node
             let participant_accounts: Vec<Account> = ctx
                 .nodes
                 .near_acc_sks()
@@ -48,6 +47,7 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
                 .filter(|account| account.id() != new_node_account.id())
                 .collect();
 
+            // vote for new node
             let vote_futures = participant_accounts
                 .iter()
                 .map(|account| {

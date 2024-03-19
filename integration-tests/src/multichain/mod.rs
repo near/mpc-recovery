@@ -10,7 +10,7 @@ use mpc_recovery_node::storage;
 use mpc_recovery_node::storage::triple_storage::TripleNodeStorageBox;
 use near_workspaces::network::Sandbox;
 use near_workspaces::types::SecretKey;
-use near_workspaces::{Account, AccountId, Contract, Worker};
+use near_workspaces::{AccountId, Contract, Worker};
 use serde_json::json;
 use std::collections::HashMap;
 
