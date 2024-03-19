@@ -622,10 +622,12 @@ impl ConsensusProtocol for JoiningState {
                             .filter(|id| !votes.contains(id))
                             .map(|id| id.to_string())
                             .collect::<Vec<_>>();
-                        tracing::info!(
-                            ?participant_account_ids_to_vote,
-                            "Some participants have not voted for you to join"
-                        );
+                        if !participant_account_ids_to_vote.is_empty() {
+                            tracing::info!(
+                                ?participant_account_ids_to_vote,
+                                "Some participants have not voted for you to join"
+                            );
+                        }
                         Ok(NodeState::Joining(self))
                     }
                     None => {
