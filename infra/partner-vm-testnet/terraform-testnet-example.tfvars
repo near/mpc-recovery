@@ -1,7 +1,7 @@
 env          = "testnet"
 project_id   = "<your-project-id>"
 network      = "default"
-subnetwork   = "europe-west1"
+subnetwork   = "default"
 image        = "us-east1-docker.pkg.dev/pagoda-discovery-platform-prod/multichain-public/multichain-testnet:latest"
 region       = "europe-west1"
 zone         = "europe-west1-b"
