@@ -153,9 +153,10 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
     } = initialize_lake_indexer(docker_client, docker_network).await?;
 
     let mpc_contract = worker
-        .dev_deploy(&std::fs::read(
-            format!("{}/wasm32-unknown-unknown/release/mpc_contract.wasm", TARGET_CONTRACT_DIR),
-        )?)
+        .dev_deploy(&std::fs::read(format!(
+            "{}/wasm32-unknown-unknown/release/mpc_contract.wasm",
+            TARGET_CONTRACT_DIR
+        ))?)
         .await?;
     tracing::info!(contract_id = %mpc_contract.id(), "deployed mpc contract");
 

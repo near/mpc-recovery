@@ -79,7 +79,13 @@ pub async fn build_multichain(release: bool) -> anyhow::Result<ExitStatus> {
 
 pub async fn build_multichain_contract() -> anyhow::Result<ExitStatus> {
     // We use a different target directory to stop the different rustflags between targets from clobbering the build cache
-    build_package(true, PACKAGE_CONTRACT, Some(TARGET_CONTRACT), Some(TARGET_CONTRACT_DIR)).await
+    build_package(
+        true,
+        PACKAGE_CONTRACT,
+        Some(TARGET_CONTRACT),
+        Some(TARGET_CONTRACT_DIR),
+    )
+    .await
 }
 
 pub async fn spawn(release: bool, node: &str, cli: Cli) -> anyhow::Result<NodeProcess> {
