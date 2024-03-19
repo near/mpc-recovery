@@ -192,7 +192,7 @@ resource "google_compute_firewall" "app_port" {
 
   allow {
     protocol = "tcp"
-    ports = [ "80" ]
+    ports = [ "80", "3000" ]
   }
   
 }
