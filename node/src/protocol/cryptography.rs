@@ -333,6 +333,14 @@ impl CryptographicProtocol for RunningState {
         ctx: C,
     ) -> Result<NodeState, CryptographicError> {
         let active = ctx.mesh().active_participants();
+        if active.len() < self.threshold {
+            tracing::info!(
+                active = ?active.keys_vec(),
+                "running: not enough participants to progress"
+            );
+            return Ok(NodeState::Running(self));
+        }
+
         let mut messages = self.messages.write().await;
         let mut triple_manager = self.triple_manager.write().await;
         triple_manager.stockpile(active)?;
@@ -352,13 +360,25 @@ impl CryptographicProtocol for RunningState {
             if let Some((triple0, triple1)) = triple_manager.take_two_mine().await {
                 let presig_participants = active
                     .intersection(&[&triple0.public.participants, &triple1.public.participants]);
-                presignature_manager.generate(
-                    &presig_participants,
-                    triple0,
-                    triple1,
-                    &self.public_key,
-                    &self.private_share,
-                )?;
+                if presig_participants.len() < self.threshold {
+                    tracing::debug!(
+                        participants = ?presig_participants.keys_vec(),
+                        "running(pre): we don't have enough participants to generate a presignature"
+                    );
+
+                    // Insert back the triples to be used later since this active set of
+                    // participants were not able to make use of these triples.
+                    triple_manager.insert_mine(triple0).await;
+                    triple_manager.insert_mine(triple1).await;
+                } else {
+                    presignature_manager.generate(
+                        &presig_participants,
+                        triple0,
+                        triple1,
+                        &self.public_key,
+                        &self.private_share,
+                    )?;
+                }
             } else {
                 tracing::debug!(
                     "running(pre): we don't have enough triples to generate a presignature"
@@ -375,12 +395,22 @@ impl CryptographicProtocol for RunningState {
         let mut signature_manager = self.signature_manager.write().await;
         sign_queue.organize(self.threshold, active, ctx.me().await);
         let my_requests = sign_queue.my_requests(ctx.me().await);
+        let mut failed_presigs = Vec::new();
         while presignature_manager.my_len() > 0 {
             if signature_manager.failed_len() > 0 {
                 let Some(presignature) = presignature_manager.take_mine() else {
                     break;
                 };
                 let sig_participants = active.intersection(&[&presignature.participants]);
+                if sig_participants.len() < self.threshold {
+                    tracing::debug!(
+                        participants = ?sig_participants.keys_vec(),
+                        "running: we don't have enough participants to generate a failed signature"
+                    );
+                    failed_presigs.push(presignature);
+                    continue;
+                }
+
                 signature_manager.retry_failed_generation(presignature, &sig_participants);
                 break;
             }
@@ -395,6 +425,15 @@ impl CryptographicProtocol for RunningState {
 
             let receipt_id = *receipt_id;
             let sig_participants = active.intersection(&[&presignature.participants]);
+            if sig_participants.len() < self.threshold {
+                tracing::debug!(
+                    participants = ?sig_participants.keys_vec(),
+                    "running: we don't have enough participants to generate a signature"
+                );
+                failed_presigs.push(presignature);
+                continue;
+            }
+
             let my_request = my_requests.remove(&receipt_id).unwrap();
             signature_manager.generate(
                 &sig_participants,
@@ -408,6 +447,9 @@ impl CryptographicProtocol for RunningState {
             )?;
         }
         drop(sign_queue);
+        for presignature in failed_presigs {
+            presignature_manager.insert_mine(presignature);
+        }
         drop(presignature_manager);
         for (p, msg) in signature_manager.poke() {
             let info = self.participants.get(&p).unwrap();

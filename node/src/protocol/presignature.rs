@@ -246,6 +246,11 @@ impl PresignatureManager {
         self.presignatures.remove(&id)
     }
 
+    pub fn insert_mine(&mut self, presig: Presignature) {
+        self.mine.push_back(presig.id);
+        self.presignatures.insert(presig.id, presig);
+    }
+
     /// Pokes all of the ongoing generation protocols and returns a vector of
     /// messages to be sent to the respective participant.
     ///
