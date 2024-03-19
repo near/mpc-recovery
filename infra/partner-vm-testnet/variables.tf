@@ -1,7 +1,7 @@
 variable "project_id" {
   description = "The project ID to deploy resource into"
   type        = string
-  default     = "<your-project-name-here>"
+  default     = "<your-project-id>"
 }
 
 variable "subnetwork" {
