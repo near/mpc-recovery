@@ -89,7 +89,7 @@ variable "static_env" {
     },
     {
       name  = "MPC_RECOVERY_CONTRACT_ID"
-      value = "multichain0.testnet"
+      value = "v1.multichain-mpc.testnet"
     },
     {
       name  = "MPC_RECOVERY_INDEXER_S3_BUCKET"
