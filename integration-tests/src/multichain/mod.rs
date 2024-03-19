@@ -30,7 +30,8 @@ impl Default for MultichainConfig {
             triple_cfg: TripleConfig {
                 min_triples: 2,
                 max_triples: 10,
-                max_concurrent_generation: 16,
+                max_concurrent_introduction: 8,
+                max_concurrent_generation: 24,
             },
         }
     }

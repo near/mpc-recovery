@@ -23,7 +23,8 @@ const STARTING_EPOCH: u64 = 0;
 const DEFAULT_TRIPLE_CONFIG: TripleConfig = TripleConfig {
     min_triples: 2,
     max_triples: 10,
-    max_concurrent_generation: 8,
+    max_concurrent_introduction: 4,
+    max_concurrent_generation: 16,
 };
 
 struct TestTripleManagers {

@@ -58,8 +58,18 @@ pub enum Cli {
         /// At maximum, how many triples to stockpile on this node.
         #[arg(long, env("MPC_RECOVERY_MAX_TRIPLES"), default_value("10"))]
         max_triples: usize,
-        /// At maximum, how many ongoing protocols for triples, presignatures and signatures
-        /// to be running at the same time. The rest will be queued up.
+
+        /// At maximum, how many triple protocols can this current node introduce
+        /// at the same time. This should be something like `max_concurrent_gen / num_nodes`
+        #[arg(
+            long,
+            env("MPC_RECOVERY_MAX_CONCURRENT_INTRODUCTION"),
+            default_value("2")
+        )]
+        max_concurrent_introduction: usize,
+
+        /// At maximum, how many ongoing protocols for triples to be running
+        /// at the same time. The rest will be queued up.
         #[arg(
             long,
             env("MPC_RECOVERY_MAX_CONCURRENT_GENERATION"),
@@ -85,6 +95,7 @@ impl Cli {
                 storage_options,
                 min_triples,
                 max_triples,
+                max_concurrent_introduction,
                 max_concurrent_generation,
             } => {
                 let mut args = vec![
@@ -107,6 +118,8 @@ impl Cli {
                     min_triples.to_string(),
                     "--max-triples".to_string(),
                     max_triples.to_string(),
+                    "--max-concurrent-introduction".to_string(),
+                    max_concurrent_introduction.to_string(),
                     "--max-concurrent-generation".to_string(),
                     max_concurrent_generation.to_string(),
                 ];
@@ -148,6 +161,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
             storage_options,
             min_triples,
             max_triples,
+            max_concurrent_introduction,
             max_concurrent_generation,
         } => {
             let sign_queue = Arc::new(RwLock::new(SignQueue::new()));
@@ -194,6 +208,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                         TripleConfig {
                             min_triples,
                             max_triples,
+                            max_concurrent_introduction,
                             max_concurrent_generation,
                         },
                         triple_storage,

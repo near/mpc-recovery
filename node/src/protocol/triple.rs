@@ -72,6 +72,8 @@ pub struct TripleConfig {
     pub min_triples: usize,
     /// Maximum amount of triples that is owned by each node.
     pub max_triples: usize,
+    /// Maximum amount of concurrent triple generation that can be introduce by this node.
+    pub max_concurrent_introduction: usize,
     /// Maximum amount of concurrent triple generation that can be done per node.
     pub max_concurrent_generation: usize,
 }
@@ -92,6 +94,9 @@ pub struct TripleManager {
     /// Ongoing triple generation protocols. Once added here, they will not be removed until
     /// they are completed or timed out.
     pub ongoing: HashSet<TripleId>,
+
+    /// The set of triples that were introduced to the system by the current node.
+    pub introduced: HashSet<TripleId>,
 
     /// List of triple ids generation of which was initiated by the current node.
     pub mine: VecDeque<TripleId>,
@@ -129,6 +134,7 @@ impl TripleManager {
             generators: HashMap::new(),
             queued: VecDeque::new(),
             ongoing: HashSet::new(),
+            introduced: HashSet::new(),
             mine,
             me,
             threshold,
@@ -179,6 +185,7 @@ impl TripleManager {
         self.generators
             .insert(id, TripleGenerator::new(id, participants, protocol));
         self.queued.push_back(id);
+        self.introduced.insert(id);
         Ok(())
     }
 
@@ -188,11 +195,23 @@ impl TripleManager {
         let TripleConfig {
             min_triples,
             max_triples,
-            ..
+            max_concurrent_introduction,
+            max_concurrent_generation,
         } = self.triple_cfg;
 
-        let not_enough_triples =
-            || self.my_len() < min_triples && self.potential_len() < max_triples;
+        let not_enough_triples = || {
+            // Stopgap to prevent too many triples in the system. This should be around min_triple*nodes*2
+            // for good measure so that we have enough triples to do presig generation while also maintain
+            // the minimum number of triples where a single node can't flood the system.
+            if self.potential_len() >= max_triples {
+                return false;
+            }
+
+            // We will always try to generate a new triple if we have less than the minimum
+            self.my_len() < min_triples
+                && self.introduced.len() < max_concurrent_introduction
+                && self.generators.len() < max_concurrent_generation
+        };
 
         if not_enough_triples() {
             self.generate(participants)?;
@@ -343,6 +362,7 @@ impl TripleManager {
                         result = Err(e);
                         self.failed_triples.insert(*id, Instant::now());
                         self.ongoing.remove(id);
+                        self.introduced.remove(id);
                         tracing::info!("added {} to failed triples", id.clone());
                         break false;
                     }
@@ -420,6 +440,7 @@ impl TripleManager {
 
                         // Protocol done, remove it from the ongoing pool.
                         self.ongoing.remove(id);
+                        self.introduced.remove(id);
                         // Do not retain the protocol
                         break false;
                     }
