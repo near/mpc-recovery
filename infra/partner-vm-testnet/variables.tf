@@ -29,7 +29,6 @@ variable "image_port" {
 variable "region" {
   description = "The GCP region to deploy instances into"
   type        = string
-  default     = "us-central1"
 }
 
 variable "network" {
