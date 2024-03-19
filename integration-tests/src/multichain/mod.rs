@@ -72,21 +72,21 @@ impl Nodes<'_> {
         }
     }
 
-    pub fn near_acc_sks(&self) -> HashMap<AccountId, SecretKey> {
-        let mut account_to_urls = HashMap::new();
+    pub fn near_acc_sk(&self) -> HashMap<AccountId, SecretKey> {
+        let mut account_to_sk = HashMap::new();
         match self {
             Nodes::Local { nodes, .. } => {
                 for node in nodes {
-                    account_to_urls.insert(node.account_id.clone(), node.account_sk.clone());
+                    account_to_sk.insert(node.account_id.clone(), node.account_sk.clone());
                 }
             }
             Nodes::Docker { nodes, .. } => {
                 for node in nodes {
-                    account_to_urls.insert(node.account_id.clone(), node.account_sk.clone());
+                    account_to_sk.insert(node.account_id.clone(), node.account_sk.clone());
                 }
             }
         };
-        account_to_urls
+        account_to_sk
     }
 
     pub async fn start_node(

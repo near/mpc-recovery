@@ -35,7 +35,7 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
 
             let participant_accounts: Vec<Account> = ctx
                 .nodes
-                .near_acc_sks()
+                .near_acc_sk()
                 .iter()
                 .map(|(account_id, account_sk)| {
                     Account::from_secret_key(
