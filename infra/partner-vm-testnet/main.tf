@@ -10,7 +10,7 @@ module "gce-container" {
   version = "~> 3.0"
 
   container = {
-    image = "us-east1-docker.pkg.dev/pagoda-discovery-platform-prod/multichain-public/multichain-dev:latest"
+    image = var.image
     args  = ["start"]
     port  = "3000"
 
@@ -121,7 +121,7 @@ module "instances" {
   source     = "../modules/instance-from-tpl"
   region     = var.region
   project_id = var.project_id
-  hostname   = "multichain-dev-partner-${count.index}"
+  hostname   = "multichain-testnet-partner-${count.index}"
   network    = var.network
   subnetwork = var.subnetwork
 

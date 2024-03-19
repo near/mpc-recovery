@@ -1,9 +1,8 @@
 terraform {
   backend "gcs" {
-    bucket = "multichain-terraform-{your_entity_name}"
-    prefix = "state/testnet"
+    bucket = "multichain-terraform-dev"
+    prefix = "state/multichain-vm-partner-test"
   }
-
 
   required_providers {
     google = {
