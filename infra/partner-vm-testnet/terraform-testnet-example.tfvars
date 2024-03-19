@@ -3,7 +3,8 @@ project_id   = "<your-project-id>"
 network      = "default"
 subnetwork   = "us-central1"
 image        = "us-east1-docker.pkg.dev/pagoda-discovery-platform-prod/multichain-public/multichain-testnet:latest"
-region       = "<prefered-region>"
+region       = "<preferred-region>"
+zone         = "<preferred-zone>"
 # These will be specific to your node
 node_configs = [
   {
