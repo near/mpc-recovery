@@ -91,6 +91,8 @@ pub struct TripleManager {
     pub epoch: u64,
     pub triple_cfg: TripleConfig,
     pub triple_storage: LockTripleNodeStorageBox,
+    /// triple generation protocols that failed.
+    pub failed_triples: HashMap<TripleId, Instant>,
 }
 
 impl TripleManager {
@@ -121,6 +123,7 @@ impl TripleManager {
             epoch,
             triple_cfg,
             triple_storage,
+            failed_triples: HashMap::new(),
         }
     }
 
@@ -143,6 +146,12 @@ impl TripleManager {
     /// all ongoing generation protocols complete.
     pub fn potential_len(&self) -> usize {
         self.len() + self.generators.len()
+    }
+
+    /// Clears an entry from failed triples if that triple protocol was created more than 2 hrs ago
+    pub fn clear_failed_triples(&mut self) {
+        self.failed_triples
+            .retain(|_, timestamp| timestamp.elapsed() < crate::types::FAILED_TRIPLES_TIMEOUT)
     }
 
     /// Starts a new Beaver triple generation protocol.
@@ -302,6 +311,8 @@ impl TripleManager {
                     Ok(action) => action,
                     Err(e) => {
                         result = Err(e);
+                        self.failed_triples.insert(*id, Instant::now());
+                        tracing::info!("added {} to failed triples", id.clone());
                         break false;
                     }
                 };

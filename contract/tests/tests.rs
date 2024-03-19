@@ -2,7 +2,8 @@ use mpc_contract::primitives::CandidateInfo;
 use near_workspaces::AccountId;
 use std::collections::HashMap;
 
-const CONTRACT_FILE_PATH: &str = "./../target/wasm32-unknown-unknown/release/mpc_contract.wasm";
+const CONTRACT_FILE_PATH: &str =
+    "./../target/seperate_wasm/wasm32-unknown-unknown/release/mpc_contract.wasm";
 
 #[tokio::test]
 async fn test_contract_can_not_be_reinitialized() -> anyhow::Result<()> {

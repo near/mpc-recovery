@@ -10,6 +10,7 @@ const PACKAGE: &str = "mpc-recovery";
 const PACKAGE_MULTICHAIN: &str = "mpc-recovery-node";
 const PACKAGE_CONTRACT: &str = "mpc-contract";
 const TARGET_CONTRACT: &str = "wasm32-unknown-unknown";
+pub const TARGET_CONTRACT_DIR: &str = "../target/seperate_wasm";
 
 /// NodeProcess holds onto the respective handles such that on drop, it will clean
 /// the running process, task, or thread.
@@ -43,6 +44,7 @@ async fn build_package(
     release: bool,
     package: &str,
     target: Option<&str>,
+    target_dir: Option<&str>,
 ) -> anyhow::Result<ExitStatus> {
     let mut cmd = Command::new("cargo");
     cmd.arg("build")
@@ -60,19 +62,30 @@ async fn build_package(
         cmd.arg("--target").arg(target);
     }
 
+    if let Some(target_dir) = target_dir {
+        cmd.arg("--target-dir").arg(target_dir);
+    }
+
     Ok(cmd.spawn()?.status().await?)
 }
 
 pub async fn build(release: bool) -> anyhow::Result<ExitStatus> {
-    build_package(release, PACKAGE, None).await
+    build_package(release, PACKAGE, None, None).await
 }
 
 pub async fn build_multichain(release: bool) -> anyhow::Result<ExitStatus> {
-    build_package(release, PACKAGE_MULTICHAIN, None).await
+    build_package(release, PACKAGE_MULTICHAIN, None, None).await
 }
 
 pub async fn build_multichain_contract() -> anyhow::Result<ExitStatus> {
-    build_package(true, PACKAGE_CONTRACT, Some(TARGET_CONTRACT)).await
+    // We use a different target directory to stop the different rustflags between targets from clobbering the build cache
+    build_package(
+        true,
+        PACKAGE_CONTRACT,
+        Some(TARGET_CONTRACT),
+        Some(TARGET_CONTRACT_DIR),
+    )
+    .await
 }
 
 pub async fn spawn(release: bool, node: &str, cli: Cli) -> anyhow::Result<NodeProcess> {

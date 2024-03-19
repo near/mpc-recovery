@@ -132,7 +132,7 @@ impl ConsensusProtocol for StartedState {
                                         contract_state.threshold,
                                         epoch,
                                         ctx.triple_cfg(),
-                                        vec![],
+                                        self.triple_data,
                                         ctx.triple_storage(),
                                     );
 
