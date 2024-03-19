@@ -10,7 +10,7 @@ module "gce-container" {
   version = "~> 3.0"
 
   container = {
-    image = "us-east1-docker.pkg.dev/pagoda-discovery-platform-prod/multichain-public/multichain-dev:latest"
+    image = "us-east1-docker.pkg.dev/pagoda-discovery-platform-prod/multichain-public/multichain-testnet:latest"
     args  = ["start"]
     port  = "3000"
 
