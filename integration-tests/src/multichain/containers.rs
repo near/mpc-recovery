@@ -60,6 +60,7 @@ impl<'a> Node<'a> {
             storage_options: storage_options.clone(),
             min_triples: cfg.triple_cfg.min_triples,
             max_triples: cfg.triple_cfg.max_triples,
+            max_concurrent_generation: cfg.triple_cfg.max_concurrent_generation,
         }
         .into_str_args();
         let image: GenericImage = GenericImage::new("near/mpc-recovery-node", "latest")

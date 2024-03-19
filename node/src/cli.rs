@@ -58,6 +58,14 @@ pub enum Cli {
         /// At maximum, how many triples to stockpile on this node.
         #[arg(long, env("MPC_RECOVERY_MAX_TRIPLES"), default_value("10"))]
         max_triples: usize,
+        /// At maximum, how many ongoing protocols for triples, presignatures and signatures
+        /// to be running at the same time. The rest will be queued up.
+        #[arg(
+            long,
+            env("MPC_RECOVERY_MAX_CONCURRENT_GENERATION"),
+            default_value("8")
+        )]
+        max_concurrent_generation: usize,
     },
 }
 
@@ -77,6 +85,7 @@ impl Cli {
                 storage_options,
                 min_triples,
                 max_triples,
+                max_concurrent_generation,
             } => {
                 let mut args = vec![
                     "start".to_string(),
@@ -98,6 +107,8 @@ impl Cli {
                     min_triples.to_string(),
                     "--max-triples".to_string(),
                     max_triples.to_string(),
+                    "--max-concurrent-generation".to_string(),
+                    max_concurrent_generation.to_string(),
                 ];
                 if let Some(my_address) = my_address {
                     args.extend(vec!["--my-address".to_string(), my_address.to_string()]);
@@ -137,6 +148,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
             storage_options,
             min_triples,
             max_triples,
+            max_concurrent_generation,
         } => {
             let sign_queue = Arc::new(RwLock::new(SignQueue::new()));
             tokio::runtime::Builder::new_multi_thread()
@@ -182,6 +194,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                         TripleConfig {
                             min_triples,
                             max_triples,
+                            max_concurrent_generation,
                         },
                         triple_storage,
                     );

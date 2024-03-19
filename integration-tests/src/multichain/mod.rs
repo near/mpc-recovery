@@ -18,6 +18,7 @@ const NETWORK: &str = "mpc_it_network";
 #[derive(Clone)]
 pub struct MultichainConfig {
     pub nodes: usize,
+    pub threshold: usize,
     pub triple_cfg: TripleConfig,
 }
 
@@ -25,9 +26,11 @@ impl Default for MultichainConfig {
     fn default() -> Self {
         Self {
             nodes: 3,
+            threshold: 2,
             triple_cfg: TripleConfig {
                 min_triples: 2,
                 max_triples: 10,
+                max_concurrent_generation: 16,
             },
         }
     }
@@ -236,7 +239,7 @@ pub async fn docker(cfg: MultichainConfig, docker_client: &DockerClient) -> anyh
     ctx.mpc_contract
         .call("init")
         .args_json(json!({
-            "threshold": 2,
+            "threshold": cfg.threshold,
             "candidates": candidates
         }))
         .transact()
@@ -286,7 +289,7 @@ pub async fn host(cfg: MultichainConfig, docker_client: &DockerClient) -> anyhow
     ctx.mpc_contract
         .call("init")
         .args_json(json!({
-            "threshold": 2,
+            "threshold": cfg.threshold,
             "candidates": candidates
         }))
         .transact()
