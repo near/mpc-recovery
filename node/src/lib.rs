@@ -12,3 +12,4 @@ pub mod test_utils;
 pub mod types;
 pub mod util;
 pub mod web;
+pub mod logging;

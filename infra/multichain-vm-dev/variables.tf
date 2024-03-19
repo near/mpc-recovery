@@ -118,6 +118,14 @@ variable "static_env" {
     {
       name  = "MPC_RECOVERY_INDEXER_S3_REGION"
       value = "eu-central-1"
+    },
+    {
+      name = "MPC_RECOVERY_OPENTELEMETRY_LEVEL"
+      value = "debug"
+    },
+    {
+      name = MPC_RECOVERY_OTLP_ENDPOINT
+      value = "https://otel.dev.api.pagoda.co:443/v1/traces"
     }
   ]
 }

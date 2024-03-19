@@ -1,7 +1,7 @@
 use crate::{mpc, util};
 use async_process::Child;
 use mpc_keys::hpke;
-use mpc_recovery_node::storage;
+use mpc_recovery_node::{logging, storage};
 use near_workspaces::AccountId;
 
 use super::MultichainConfig;
@@ -47,6 +47,7 @@ impl Node {
             storage_options: storage_options.clone(),
             min_triples: cfg.triple_cfg.min_triples,
             max_triples: cfg.triple_cfg.max_triples,
+            logging_options: logging::Options::default(),
         };
 
         let mpc_node_id = format!("multichain/{account_id}", account_id = account_id);

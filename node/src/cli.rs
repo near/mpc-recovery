@@ -11,6 +11,7 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use tracing_subscriber::EnvFilter;
 use url::Url;
+use crate::logging;
 
 use mpc_keys::hpke;
 
@@ -58,6 +59,9 @@ pub enum Cli {
         /// At maximum, how many triples to stockpile on this node.
         #[arg(long, env("MPC_RECOVERY_MAX_TRIPLES"), default_value("10"))]
         max_triples: usize,
+        /// Enables export of span data using opentelemetry protocol.
+        #[clap(flatten)]
+        logging_options: logging::Options,
     },
 }
 
@@ -77,6 +81,7 @@ impl Cli {
                 storage_options,
                 min_triples,
                 max_triples,
+                logging_options,
             } => {
                 let mut args = vec![
                     "start".to_string(),
@@ -104,6 +109,7 @@ impl Cli {
                 }
                 args.extend(indexer_options.into_str_args());
                 args.extend(storage_options.into_str_args());
+                args.extend(logging_options.into_str_args());
                 args
             }
         }
@@ -111,18 +117,7 @@ impl Cli {
 }
 
 pub fn run(cmd: Cli) -> anyhow::Result<()> {
-    // Install global collector configured based on RUST_LOG env var.
-    let mut subscriber = tracing_subscriber::fmt()
-        .with_thread_ids(true)
-        .with_env_filter(EnvFilter::from_default_env());
-    // Check if running in Google Cloud Run: https://cloud.google.com/run/docs/container-contract#services-env-vars
-    if std::env::var("K_SERVICE").is_ok() {
-        // Disable colored logging as it messes up GCP's log formatting
-        subscriber = subscriber.with_ansi(false);
-    }
-    subscriber.init();
     let _span = tracing::trace_span!("cli").entered();
-
     match cmd {
         Cli::Start {
             near_rpc,
@@ -137,12 +132,20 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
             storage_options,
             min_triples,
             max_triples,
+            logging_options,
         } => {
             let sign_queue = Arc::new(RwLock::new(SignQueue::new()));
             tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()?
                 .block_on(async {
+                    let _subscriber_guard = logging::subscribe_global(
+                        EnvFilter::from_default_env(),
+                        &logging_options,
+                        storage_options.env.clone(),
+                        account_id.to_string(),
+                    )
+                    .await;
                     let (sender, receiver) = mpsc::channel(16384);
                     let gcp_service = GcpService::init(&account_id, &storage_options).await?;
 

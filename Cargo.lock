@@ -4176,6 +4176,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "atty",
  "aws-config",
  "aws-sdk-s3",
  "aws-types",
@@ -4202,6 +4203,9 @@ dependencies = [
  "near-primitives 0.17.0",
  "near-sdk",
  "once_cell",
+ "opentelemetry 0.20.0",
+ "opentelemetry-otlp 0.13.0",
+ "opentelemetry-semantic-conventions 0.12.0",
  "prometheus",
  "rand 0.8.5",
  "reqwest",
@@ -4212,6 +4216,8 @@ dependencies = [
  "tokio",
  "tokio-retry",
  "tracing",
+ "tracing-appender",
+ "tracing-opentelemetry 0.21.0",
  "tracing-subscriber",
  "url 2.5.0",
 ]
