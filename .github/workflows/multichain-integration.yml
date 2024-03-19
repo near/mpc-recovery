@@ -68,7 +68,7 @@ jobs:
           aws --profile default configure set aws_secret_access_key "456"
 
       - name: Compile Contract
-        run: cargo build -p mpc-contract --target wasm32-unknown-unknown --release
+        run: cargo build -p mpc-contract --target wasm32-unknown-unknown --release --target-dir target/seperate_wasm
 
       - name: Build MPC Recovery Binary Locally
         run: |

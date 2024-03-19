@@ -2,6 +2,7 @@ pub mod containers;
 pub mod local;
 
 use crate::env::containers::DockerClient;
+use crate::mpc::TARGET_CONTRACT_DIR;
 use crate::{initialize_lake_indexer, LakeIndexerCtx};
 use mpc_contract::primitives::CandidateInfo;
 use mpc_recovery_node::gcp::GcpService;
@@ -170,9 +171,10 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
     } = initialize_lake_indexer(docker_client, docker_network).await?;
 
     let mpc_contract = worker
-        .dev_deploy(&std::fs::read(
-            "../target/wasm32-unknown-unknown/release/mpc_contract.wasm",
-        )?)
+        .dev_deploy(&std::fs::read(format!(
+            "{}/wasm32-unknown-unknown/release/mpc_contract.wasm",
+            TARGET_CONTRACT_DIR
+        ))?)
         .await?;
     tracing::info!(contract_id = %mpc_contract.id(), "deployed mpc contract");
 

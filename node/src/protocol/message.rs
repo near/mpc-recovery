@@ -15,6 +15,7 @@ use near_primitives::hash::CryptoHash;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::RwLock;
 
 #[async_trait::async_trait]
@@ -212,6 +213,20 @@ impl MessageHandler for RunningState {
     ) -> Result<(), MessageHandleError> {
         let participants = ctx.mesh().active_participants();
         let mut triple_manager = self.triple_manager.write().await;
+
+        // remove the triple_id that has already failed from the triple_bins
+        queue
+            .triple_bins
+            .entry(self.epoch)
+            .or_default()
+            .retain(|id, _| {
+                let has_failed = triple_manager.failed_triples.contains_key(id);
+                if has_failed {
+                    triple_manager.failed_triples.insert(*id, Instant::now());
+                }
+                !has_failed
+            });
+
         for (id, queue) in queue.triple_bins.entry(self.epoch).or_default() {
             if let Some(protocol) = triple_manager.get_or_generate(*id, participants)? {
                 while let Some(message) = queue.pop_front() {
@@ -304,6 +319,7 @@ impl MessageHandler for RunningState {
                 );
                 queue.extend(leftover_messages);
             }
+            triple_manager.clear_failed_triples();
         }
         Ok(())
     }
