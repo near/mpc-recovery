@@ -1,10 +1,10 @@
 env          = "testnet"
 project_id   = "<your-project-id>"
 network      = "default"
-subnetwork   = "us-central1"
+subnetwork   = "europe-west1"
 image        = "us-east1-docker.pkg.dev/pagoda-discovery-platform-prod/multichain-public/multichain-testnet:latest"
-region       = "<preferred-region>"
-zone         = "<preferred-zone>"
+region       = "europe-west1"
+zone         = "europe-west1-b"
 # These will be specific to your node
 node_configs = [
   {
