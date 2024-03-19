@@ -52,7 +52,7 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
                 .iter()
                 .map(|account| {
                     let result = account
-                        .call(&ctx.nodes.ctx().mpc_contract.id(), "vote_join")
+                        .call(ctx.nodes.ctx().mpc_contract.id(), "vote_join")
                         .args_json(serde_json::json!({
                             "candidate_account_id": new_node_account.id()
                         }))
