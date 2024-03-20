@@ -5,6 +5,7 @@ use fastauth::{
     claim_oidc, mpc_public_key, new_account, prepare_user_credentials, sign, user_credentials,
 };
 use goose::prelude::*;
+use multichain::multichain_sign;
 use tracing_subscriber::{filter, prelude::*};
 
 #[tokio::main]
@@ -16,6 +17,10 @@ async fn main() -> Result<(), GooseError> {
         .init();
 
     GooseAttack::initialize()?
+        .register_scenario(
+            scenario!("multichainSign")
+                .register_transaction(transaction!(multichain_sign).set_sequence(2)),
+        )
         .register_scenario(
             scenario!("fastAuthRegistration")
                 .register_transaction(transaction!(prepare_user_credentials).set_sequence(1))

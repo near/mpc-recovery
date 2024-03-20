@@ -3883,6 +3883,8 @@ dependencies = [
  "jsonwebtoken",
  "mpc-recovery",
  "near-crypto 0.17.0",
+ "near-fetch 0.2.0",
+ "near-jsonrpc-client 0.6.0",
  "near-primitives 0.17.0",
  "rand 0.8.5",
  "reqwest",
@@ -3891,6 +3893,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "web3",
 ]
 
 [[package]]
@@ -4086,7 +4089,7 @@ dependencies = [
  "lazy_static",
  "multi-party-eddsa",
  "near-crypto 0.17.0",
- "near-fetch",
+ "near-fetch 0.0.12",
  "near-jsonrpc-client 0.6.0",
  "near-jsonrpc-primitives 0.17.0",
  "near-primitives 0.17.0",
@@ -4144,7 +4147,7 @@ dependencies = [
  "mpc-recovery-node",
  "multi-party-eddsa",
  "near-crypto 0.17.0",
- "near-fetch",
+ "near-fetch 0.0.12",
  "near-jsonrpc-client 0.6.0",
  "near-lake-framework",
  "near-lake-primitives",
@@ -4196,7 +4199,7 @@ dependencies = [
  "mpc-contract",
  "mpc-keys",
  "near-crypto 0.17.0",
- "near-fetch",
+ "near-fetch 0.0.12",
  "near-lake-framework",
  "near-lake-primitives",
  "near-primitives 0.17.0",
@@ -4442,6 +4445,27 @@ dependencies = [
  "near-jsonrpc-client 0.6.0",
  "near-jsonrpc-primitives 0.17.0",
  "near-primitives 0.17.0",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-retry",
+]
+
+[[package]]
+name = "near-fetch"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c73512370a4ac876c24039031216b959e9108e45ce8ce15a3ad5cff0c9611bf"
+dependencies = [
+ "base64 0.21.7",
+ "near-account-id 0.17.0",
+ "near-crypto 0.17.0",
+ "near-gas",
+ "near-jsonrpc-client 0.6.0",
+ "near-jsonrpc-primitives 0.17.0",
+ "near-primitives 0.17.0",
+ "near-token",
  "serde",
  "serde_json",
  "thiserror",
