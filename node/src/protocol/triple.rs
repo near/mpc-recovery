@@ -369,7 +369,10 @@ impl TripleManager {
                         self.failed_triples.insert(*id, Instant::now());
                         self.ongoing.remove(id);
                         self.introduced.remove(id);
-                        tracing::info!("added {} to failed triples", id.clone());
+                        tracing::info!(
+                            elapsed = ?generator.timestamp.unwrap().elapsed(),
+                            "added {id} to failed triples"
+                        );
                         break false;
                     }
                 };
@@ -405,6 +408,7 @@ impl TripleManager {
                     Action::Return(output) => {
                         tracing::info!(
                             id,
+                            elapsed = ?generator.timestamp.unwrap().elapsed(),
                             big_a = ?output.1.big_a.to_base58(),
                             big_b = ?output.1.big_b.to_base58(),
                             big_c = ?output.1.big_c.to_base58(),
