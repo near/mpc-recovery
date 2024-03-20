@@ -143,7 +143,7 @@ async fn handle_block(
     crate::metrics::LATEST_BLOCK_HEIGHT
         .with_label_values(&[&ctx.gcp_service.account_id.to_string()])
         .set(block.block_height() as i64);
-                            
+
     if block.block_height() % 1000 == 0 {
         tracing::info!(block_height = block.block_height(), "indexed block");
     }

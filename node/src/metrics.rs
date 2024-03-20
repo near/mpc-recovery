@@ -46,7 +46,7 @@ pub(crate) static LATEST_BLOCK_HEIGHT: Lazy<IntGaugeVec> = Lazy::new(|| {
     try_create_int_gauge_vec(
         "multichain_latest_block_height",
         "Latest block height seen by the node",
-        &["node_account_id"]
+        &["node_account_id"],
     )
     .unwrap()
 });
