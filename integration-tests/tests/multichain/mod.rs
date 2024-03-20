@@ -129,9 +129,9 @@ async fn test_signature_offline_node() -> anyhow::Result<()> {
 #[test(tokio::test)]
 async fn test_signature_large_stockpile() -> anyhow::Result<()> {
     const SIGNATURE_AMOUNT: usize = 10;
-    const NODES: usize = 3;
-    const THRESHOLD: usize = 2;
-    const MIN_TRIPLES: usize = 20;
+    const NODES: usize = 8;
+    const THRESHOLD: usize = 4;
+    const MIN_TRIPLES: usize = 10;
     const MAX_TRIPLES: usize = 2 * NODES * MIN_TRIPLES;
 
     let triple_cfg = TripleConfig {
