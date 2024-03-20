@@ -2,6 +2,7 @@ pub mod containers;
 pub mod local;
 
 use crate::env::containers::DockerClient;
+use crate::mpc::TARGET_CONTRACT_DIR;
 use crate::{initialize_lake_indexer, LakeIndexerCtx};
 use mpc_contract::primitives::CandidateInfo;
 use mpc_recovery_node::gcp::GcpService;
@@ -9,6 +10,7 @@ use mpc_recovery_node::protocol::triple::TripleConfig;
 use mpc_recovery_node::storage;
 use mpc_recovery_node::storage::triple_storage::TripleNodeStorageBox;
 use near_workspaces::network::Sandbox;
+use near_workspaces::types::SecretKey;
 use near_workspaces::{AccountId, Contract, Worker};
 use serde_json::json;
 use std::collections::HashMap;
@@ -74,19 +76,36 @@ impl Nodes<'_> {
         }
     }
 
-    pub async fn add_node(
+    pub fn near_acc_sk(&self) -> HashMap<AccountId, SecretKey> {
+        let mut account_to_sk = HashMap::new();
+        match self {
+            Nodes::Local { nodes, .. } => {
+                for node in nodes {
+                    account_to_sk.insert(node.account_id.clone(), node.account_sk.clone());
+                }
+            }
+            Nodes::Docker { nodes, .. } => {
+                for node in nodes {
+                    account_to_sk.insert(node.account_id.clone(), node.account_sk.clone());
+                }
+            }
+        };
+        account_to_sk
+    }
+
+    pub async fn start_node(
         &mut self,
-        account: &AccountId,
+        new_node_account_id: &AccountId,
         account_sk: &near_workspaces::types::SecretKey,
         cfg: &MultichainConfig,
     ) -> anyhow::Result<()> {
-        tracing::info!(%account, "adding one more node");
+        tracing::info!(%new_node_account_id, "adding one more node");
         match self {
             Nodes::Local { ctx, nodes } => {
-                nodes.push(local::Node::run(ctx, account, account_sk, cfg).await?)
+                nodes.push(local::Node::run(ctx, new_node_account_id, account_sk, cfg).await?)
             }
             Nodes::Docker { ctx, nodes } => {
-                nodes.push(containers::Node::run(ctx, account, account_sk, cfg).await?)
+                nodes.push(containers::Node::run(ctx, new_node_account_id, account_sk, cfg).await?)
             }
         }
 
@@ -174,9 +193,10 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
     } = initialize_lake_indexer(docker_client, docker_network).await?;
 
     let mpc_contract = worker
-        .dev_deploy(&std::fs::read(
-            "../target/wasm32-unknown-unknown/release/mpc_contract.wasm",
-        )?)
+        .dev_deploy(&std::fs::read(format!(
+            "{}/wasm32-unknown-unknown/release/mpc_contract.wasm",
+            TARGET_CONTRACT_DIR
+        ))?)
         .await?;
     tracing::info!(contract_id = %mpc_contract.id(), "deployed mpc contract");
 

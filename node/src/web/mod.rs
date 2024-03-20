@@ -11,18 +11,12 @@ use axum::{Extension, Json, Router};
 use axum_extra::extract::WithRejection;
 use cait_sith::protocol::Participant;
 use mpc_keys::hpke::{self, Ciphered};
-use near_crypto::InMemorySigner;
-use near_primitives::transaction::{Action, FunctionCallAction};
-use near_primitives::types::AccountId;
 use prometheus::{Encoder, TextEncoder};
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::{mpsc::Sender, RwLock};
 
 struct AxumState {
-    mpc_contract_id: AccountId,
-    rpc_client: near_fetch::Client,
-    signer: InMemorySigner,
     sender: Sender<MpcMessage>,
     protocol_state: Arc<RwLock<NodeState>>,
     cipher_sk: hpke::SecretKey,
@@ -30,18 +24,12 @@ struct AxumState {
 
 pub async fn run(
     port: u16,
-    mpc_contract_id: AccountId,
-    rpc_client: near_fetch::Client,
-    signer: InMemorySigner,
     sender: Sender<MpcMessage>,
     cipher_sk: hpke::SecretKey,
     protocol_state: Arc<RwLock<NodeState>>,
 ) -> anyhow::Result<()> {
     tracing::debug!("running a node");
     let axum_state = AxumState {
-        mpc_contract_id,
-        rpc_client,
-        signer,
         sender,
         protocol_state,
         cipher_sk,
@@ -57,7 +45,6 @@ pub async fn run(
             }),
         )
         .route("/msg", post(msg))
-        .route("/join", post(join))
         .route("/state", get(state))
         .route("/metrics", get(metrics))
         .layer(Extension(Arc::new(axum_state)));
@@ -98,48 +85,6 @@ async fn msg(
         return Err(err.into());
     }
     Ok(())
-}
-
-#[tracing::instrument(level = "debug", skip_all)]
-async fn join(
-    Extension(state): Extension<Arc<AxumState>>,
-    WithRejection(Json(account_id), _): WithRejection<Json<AccountId>, Error>,
-) -> Result<()> {
-    let protocol_state = state.protocol_state.read().await;
-    match &*protocol_state {
-        NodeState::Running { .. } => {
-            let args = serde_json::json!({
-                "candidate_account_id": account_id
-            });
-            match state
-                .rpc_client
-                .send_tx(
-                    &state.signer,
-                    &state.mpc_contract_id,
-                    vec![Action::FunctionCall(FunctionCallAction {
-                        method_name: "vote_join".to_string(),
-                        args: args.to_string().into_bytes(),
-                        gas: 300_000_000_000_000,
-                        deposit: 0,
-                    })],
-                )
-                .await
-            {
-                Ok(_) => {
-                    tracing::info!(?account_id, "successfully voted for a node to join");
-                    Ok(())
-                }
-                Err(e) => {
-                    tracing::error!(%e, "failed to vote for a new node to join");
-                    Err(e)?
-                }
-            }
-        }
-        _ => {
-            tracing::debug!(?account_id, "not ready to accept join requests yet");
-            Err(Error::NotRunning)
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize)]

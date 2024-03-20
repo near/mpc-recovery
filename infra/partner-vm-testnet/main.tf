@@ -10,7 +10,7 @@ module "gce-container" {
   version = "~> 3.0"
 
   container = {
-    image = "us-east1-docker.pkg.dev/pagoda-discovery-platform-prod/multichain-public/multichain-dev:latest"
+    image = var.image
     args  = ["start"]
     port  = "3000"
 
@@ -121,7 +121,7 @@ module "instances" {
   source     = "../modules/instance-from-tpl"
   region     = var.region
   project_id = var.project_id
-  hostname   = "multichain-dev-partner-${count.index}"
+  hostname   = "multichain-testnet-partner-${count.index}"
   network    = var.network
   subnetwork = var.subnetwork
 
@@ -130,7 +130,7 @@ module "instances" {
 }
 
 resource "google_compute_health_check" "multichain_healthcheck" {
-  name = "multichain-dev-partner-healthcheck"
+  name = "multichain-testnet-partner-healthcheck"
 
   http_health_check {
     port         = 3000
@@ -176,7 +176,7 @@ resource "google_compute_instance_group" "multichain_group" {
   name      = "multichain-partner-instance-group"
   instances = module.instances[*].self_links[0]
 
-  zone = "us-central1-a"
+  zone = var.zone
   named_port {
     name = "http"
     port = 3000
@@ -192,7 +192,7 @@ resource "google_compute_firewall" "app_port" {
 
   allow {
     protocol = "tcp"
-    ports = [ "80" ]
+    ports = [ "80", "3000" ]
   }
   
 }

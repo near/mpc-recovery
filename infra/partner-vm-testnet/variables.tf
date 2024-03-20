@@ -1,13 +1,11 @@
 variable "project_id" {
   description = "The project ID to deploy resource into"
   type        = string
-  default     = "<your-project-name-here>"
 }
 
 variable "subnetwork" {
   description = "The name of the subnetwork to deploy instances into"
   type        = string
-  default     = "us-central1-subnet"
 }
 
 variable "mig_name" {
@@ -19,7 +17,7 @@ variable "mig_name" {
 variable "image" {
   description = "The Docker image to deploy to GCE instances. Note: This is a public image repository used for updating your nodes, please do not change this"
   type        = string
-  default     = "us-east1-docker.pkg.dev/pagoda-discovery-platform-prod/multichain-public/multichain-dev:latest"
+  default     = "us-east1-docker.pkg.dev/pagoda-discovery-platform-prod/multichain-public/multichain-testnet:latest"
 }
 
 variable "image_port" {
@@ -31,13 +29,15 @@ variable "image_port" {
 variable "region" {
   description = "The GCP region to deploy instances into"
   type        = string
-  default     = "us-central1"
+}
+
+variable "zone" {
+  type = string
 }
 
 variable "network" {
   description = "The GCP network"
   type        = string
-  default     = "default"
 }
 
 variable "additional_metadata" {
@@ -89,7 +89,7 @@ variable "static_env" {
     },
     {
       name  = "MPC_RECOVERY_CONTRACT_ID"
-      value = "multichain0.testnet"
+      value = "v1.multichain-mpc.testnet"
     },
     {
       name  = "MPC_RECOVERY_INDEXER_S3_BUCKET"
@@ -124,5 +124,5 @@ variable "static_env" {
 
 variable "create_network" {
   default = false
-  description = "Do you want to create a new VPC network or use default GCP network?"
+  description = "Do you want to create a new VPC network (true) or use default GCP network (false)?"
 }

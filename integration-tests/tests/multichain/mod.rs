@@ -10,6 +10,7 @@ use mpc_recovery_node::protocol::triple::TripleConfig;
 use mpc_recovery_node::test_utils;
 use mpc_recovery_node::types::LatestBlockHeight;
 use mpc_recovery_node::util::{NearPublicKeyExt, ScalarExt};
+use near_workspaces::Account;
 use test_log::test;
 
 #[test(tokio::test)]
@@ -19,10 +20,48 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
             assert_eq!(state_0.participants.len(), 3);
 
-            let account = ctx.nodes.ctx().worker.dev_create_account().await?;
+            let new_node_account = ctx.nodes.ctx().worker.dev_create_account().await?;
+
             ctx.nodes
-                .add_node(account.id(), account.secret_key(), &ctx.cfg)
+                .start_node(
+                    new_node_account.id(),
+                    new_node_account.secret_key(),
+                    &ctx.cfg,
+                )
                 .await?;
+
+            // Wait for new node to add itself as a candidate
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+
+            let participant_accounts: Vec<Account> = ctx
+                .nodes
+                .near_acc_sk()
+                .iter()
+                .map(|(account_id, account_sk)| {
+                    Account::from_secret_key(
+                        account_id.clone(),
+                        account_sk.clone(),
+                        &ctx.nodes.ctx().worker,
+                    )
+                })
+                .filter(|account| account.id() != new_node_account.id())
+                .collect();
+
+            // vote for new node
+            let vote_futures = participant_accounts
+                .iter()
+                .map(|account| {
+                    let result = account
+                        .call(ctx.nodes.ctx().mpc_contract.id(), "vote_join")
+                        .args_json(serde_json::json!({
+                            "candidate_account_id": new_node_account.id()
+                        }))
+                        .transact();
+                    result
+                })
+                .collect::<Vec<_>>();
+
+            futures::future::join_all(vote_futures).await;
 
             let state_1 = wait_for::running_mpc(&ctx, 1).await?;
             assert_eq!(state_1.participants.len(), 4);
