@@ -200,21 +200,21 @@ impl TripleManager {
             max_concurrent_generation,
         } = self.triple_cfg;
 
-        let not_enough_triples = || {
+        let not_enough_triples = {
             // Stopgap to prevent too many triples in the system. This should be around min_triple*nodes*2
             // for good measure so that we have enough triples to do presig generation while also maintain
             // the minimum number of triples where a single node can't flood the system.
             if self.potential_len() >= max_triples {
-                return false;
+                false
+            } else {
+                // We will always try to generate a new triple if we have less than the minimum
+                self.my_len() < min_triples
+                    && self.introduced.len() < max_concurrent_introduction
+                    && self.ongoing.len() < max_concurrent_generation
             }
-
-            // We will always try to generate a new triple if we have less than the minimum
-            self.my_len() < min_triples
-                && self.introduced.len() < max_concurrent_introduction
-                && self.generators.len() < max_concurrent_generation
         };
 
-        if not_enough_triples() {
+        if not_enough_triples {
             self.generate(participants)?;
         }
         Ok(())
