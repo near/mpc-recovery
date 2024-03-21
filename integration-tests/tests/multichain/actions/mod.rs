@@ -74,6 +74,50 @@ pub async fn request_sign(
     Ok((payload, payload_hashed, account, tx_hash))
 }
 
+pub async fn rogue_respond(
+    ctx: &MultichainTestContext<'_>,
+    payload_hash: [u8; 32],
+) -> anyhow::Result<CryptoHash> {
+    let worker = &ctx.nodes.ctx().worker;
+    let account = worker.dev_create_account().await?;
+
+    let signer = InMemorySigner {
+        account_id: account.id().clone(),
+        public_key: account.secret_key().public_key().clone().into(),
+        secret_key: account.secret_key().to_string().parse()?,
+    };
+    let (nonce, block_hash, _) = ctx
+        .rpc_client
+        .fetch_nonce(&signer.account_id, &signer.public_key)
+        .await?;
+    let hash = ctx
+        .jsonrpc_client
+        .call(&RpcBroadcastTxAsyncRequest {
+            signed_transaction: Transaction {
+                nonce,
+                block_hash,
+                signer_id: signer.account_id.clone(),
+                public_key: signer.public_key.clone(),
+                receiver_id: ctx.nodes.ctx().mpc_contract.id().clone(),
+                actions: vec![Action::FunctionCall(FunctionCallAction {
+                    method_name: "respond".to_string(),
+                    args: serde_json::to_vec(&serde_json::json!({
+                        "payload": payload_hash,
+                        "big_r": "Fake BigR",
+                        "s": "Fake S",
+                    }))?,
+                    gas: 300_000_000_000_000,
+                    deposit: 0,
+                })],
+            }
+            .sign(&signer),
+        })
+        .await?;
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    Ok(hash)
+}
+
 pub async fn assert_signature(
     account_id: &near_workspaces::AccountId,
     mpc_pk_bytes: &[u8],
@@ -93,7 +137,34 @@ pub async fn single_signature_production(
     state: &RunningContractState,
 ) -> anyhow::Result<()> {
     let (_, payload_hash, account, tx_hash) = request_sign(ctx).await?;
+
     let signature = wait_for::signature_responded(ctx, tx_hash).await?;
+
+    let mut mpc_pk_bytes = vec![0x04];
+    mpc_pk_bytes.extend_from_slice(&state.public_key.as_bytes()[1..]);
+    assert_signature(account.id(), &mpc_pk_bytes, &payload_hash, &signature).await;
+
+    Ok(())
+}
+
+// A normal signature, but we try to insert a bad response which fails and the signature is generated
+pub async fn single_signature_rogue_responder(
+    ctx: &MultichainTestContext<'_>,
+    state: &RunningContractState,
+) -> anyhow::Result<()> {
+    let (_, payload_hash, account, tx_hash) = request_sign(ctx).await?;
+    // We have to use seperate transactions because one could fail.
+    // This leads to a potential race condition where this transaction could get sent after the signature completes, but I think that's unlikely
+    let rogue_hash = rogue_respond(ctx, payload_hash).await?;
+
+    let signature = wait_for::signature_responded(ctx, tx_hash).await?;
+
+    let err = wait_for::rogue_message_responded(ctx, rogue_hash).await?;
+    assert_eq!(
+        err,
+        "Smart contract panicked: You must be participating in the MPC protocol to respond"
+            .to_string()
+    );
 
     let mut mpc_pk_bytes = vec![0x04];
     mpc_pk_bytes.extend_from_slice(&state.public_key.as_bytes()[1..]);

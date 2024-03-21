@@ -99,7 +99,7 @@ async fn test_signature() -> anyhow::Result<()> {
             assert_eq!(state_0.participants.len(), 3);
             wait_for::has_at_least_triples(&ctx, 2).await?;
             wait_for::has_at_least_presignatures(&ctx, 2).await?;
-            actions::single_signature_production(&ctx, &state_0).await
+            actions::single_signature_rogue_responder(&ctx, &state_0).await
         })
     })
     .await

@@ -42,6 +42,7 @@ near-jsonrpc-client = "0.6"
 near-primitives = "0.17.0"
 near-lake-framework = { git = "https://github.com/near/near-lake-framework-rs.git", branch = "daniyar/upgrade-sdk" }
 near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs.git", branch = "daniyar/upgrade-sdk" }
+near-vm-errors = "0.17.0"
 
 mpc-contract = { path = "../contract" }
 mpc-keys = { path = "../keys" }
