@@ -1,5 +1,5 @@
 use super::message::PresignatureMessage;
-use super::triple::{Triple, TripleId, TripleManager};
+use super::triple::{Triple, TripleConfig, TripleId, TripleManager};
 use super::Config;
 use crate::gcp::error::DatastoreStorageError;
 use crate::protocol::contract::primitives::Participants;
@@ -9,7 +9,7 @@ use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolErro
 use cait_sith::{KeygenOutput, PresignArguments, PresignOutput};
 use k256::Secp256k1;
 use std::collections::hash_map::Entry;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Instant;
 
 /// Unique number used to identify a specific ongoing presignature generation protocol.
@@ -92,10 +92,12 @@ pub enum GenerationError {
 pub struct PresignatureManager {
     /// Completed unspent presignatures.
     presignatures: HashMap<PresignatureId, Presignature>,
-    /// Ongoing triple generation protocols.
+    /// Ongoing presignature generation protocols.
     generators: HashMap<PresignatureId, PresignatureGenerator>,
     /// List of presignature ids generation of which was initiated by the current node.
     mine: VecDeque<PresignatureId>,
+    /// The set of presignatures that were introduced to the system by the current node.
+    introduced: HashSet<PresignatureId>,
 
     me: Participant,
     threshold: usize,
@@ -109,6 +111,7 @@ impl PresignatureManager {
             presignatures: HashMap::new(),
             generators: HashMap::new(),
             mine: VecDeque::new(),
+            introduced: HashSet::new(),
             me,
             threshold,
             epoch,
@@ -193,6 +196,7 @@ impl PresignatureManager {
             true,
         )?;
         self.generators.insert(id, generator);
+        self.introduced.insert(id);
         Ok(())
     }
 
@@ -203,9 +207,30 @@ impl PresignatureManager {
         sk_share: &SecretKeyShare,
         triple_manager: &mut TripleManager,
     ) -> Result<(), InitializationError> {
-        if self.my_len() < self.presig_cfg.min_presignatures
-            && self.potential_len() < self.presig_cfg.max_presignatures
-        {
+        let PresignatureConfig {
+            min_presignatures,
+            max_presignatures,
+        } = self.presig_cfg;
+
+        let TripleConfig {
+            max_concurrent_introduction,
+            ..
+        } = triple_manager.triple_cfg;
+
+        let not_enough_presignatures = {
+            // Stopgap to prevent too many presignatures in the system. This should be around min_presig*nodes*2
+            // for good measure so that we have enough presignatures to do sig generation while also maintain
+            // the minimum number of presignature where a single node can't flood the system.
+            if self.potential_len() >= max_presignatures {
+                false
+            } else {
+                // We will always try to generate a new triple if we have less than the minimum
+                self.my_len() < min_presignatures
+                    && self.introduced.len() < max_concurrent_introduction
+            }
+        };
+
+        if not_enough_presignatures {
             // To ensure there is no contention between different nodes we are only using triples
             // that we proposed. This way in a non-BFT environment we are guaranteed to never try
             // to use the same triple as any other node.
@@ -309,6 +334,7 @@ impl PresignatureManager {
                 let action = match generator.poke() {
                     Ok(action) => action,
                     Err(e) => {
+                        self.introduced.remove(id);
                         result = Err(e);
                         break false;
                     }
@@ -363,6 +389,7 @@ impl PresignatureManager {
                             tracing::info!(id, "assigning presignature to myself");
                             self.mine.push_back(*id);
                         }
+                        self.introduced.remove(id);
                         // Do not retain the protocol
                         return false;
                     }
