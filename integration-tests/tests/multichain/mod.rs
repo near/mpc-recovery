@@ -92,7 +92,7 @@ async fn test_triples_and_presignatures() -> anyhow::Result<()> {
 }
 
 #[test(tokio::test)]
-async fn test_signature() -> anyhow::Result<()> {
+async fn test_signature_basic() -> anyhow::Result<()> {
     with_multichain_nodes(MultichainConfig::default(), |ctx| {
         Box::pin(async move {
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;

@@ -33,6 +33,7 @@ use cait_sith::protocol::Participant;
 use near_crypto::InMemorySigner;
 use near_primitives::types::AccountId;
 use reqwest::IntoUrl;
+use std::time::SystemTime;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::mpsc::{self, error::TryRecvError};
 use tokio::sync::RwLock;
@@ -255,6 +256,9 @@ impl MpcSignProtocol {
                 let guard = self.state.read().await;
                 guard.clone()
             };
+
+            let before_step = SystemTime::now();
+
             let state = match state.progress(&mut self).await {
                 Ok(state) => state,
                 Err(err) => {
@@ -277,9 +281,18 @@ impl MpcSignProtocol {
                 continue;
             }
 
+            let after_step = SystemTime::now();
+
             let mut guard = self.state.write().await;
             *guard = state;
             drop(guard);
+
+            let step_duration = after_step.duration_since(before_step).unwrap().as_millis();
+
+            // If there was no work to do - sleep to avoid CPU and RPC burn
+            if step_duration < 2 {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
         }
     }
 }
