@@ -42,6 +42,15 @@ pub(crate) static SIGN_LATENCY: Lazy<HistogramVec> = Lazy::new(|| {
     .unwrap()
 });
 
+pub(crate) static LATEST_BLOCK_HEIGHT: Lazy<IntGaugeVec> = Lazy::new(|| {
+    try_create_int_gauge_vec(
+        "multichain_latest_block_height",
+        "Latest block height seen by the node",
+        &["node_account_id"],
+    )
+    .unwrap()
+});
+
 pub fn try_create_int_gauge_vec(name: &str, help: &str, labels: &[&str]) -> Result<IntGaugeVec> {
     check_metric_multichain_prefix(name)?;
     let opts = Opts::new(name, help);
