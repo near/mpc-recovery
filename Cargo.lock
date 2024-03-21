@@ -4149,6 +4149,7 @@ dependencies = [
  "near-lake-framework 0.8.0-beta.2 (git+https://github.com/near/near-lake-framework-rs.git?branch=daniyar/upgrade-sdk)",
  "near-lake-primitives 0.8.0-beta.2 (git+https://github.com/near/near-lake-framework-rs.git?branch=daniyar/upgrade-sdk)",
  "near-primitives 0.17.0",
+ "near-vm-errors",
  "near-workspaces 0.9.0",
  "nix",
  "once_cell",

@@ -12,6 +12,8 @@ use mpc_recovery_node::web::StateView;
 use near_jsonrpc_client::methods::tx::RpcTransactionStatusRequest;
 use near_jsonrpc_client::methods::tx::TransactionInfo;
 use near_lake_primitives::CryptoHash;
+use near_primitives::errors::ActionErrorKind;
+use near_primitives::errors::TxExecutionError;
 use near_primitives::views::FinalExecutionStatus;
 
 pub async fn running_mpc<'a>(
@@ -132,6 +134,41 @@ pub async fn signature_responded(
         let (big_r, s): (AffinePoint, Scalar) = serde_json::from_slice(&payload)?;
         let signature = cait_sith::FullSignature::<Secp256k1> { big_r, s };
         Ok(signature)
+    };
+
+    let signature = is_tx_ready
+        .retry(&ExponentialBuilder::default().with_max_times(6))
+        .await
+        .with_context(|| "failed to wait for signature response")?;
+    Ok(signature)
+}
+
+pub async fn rogue_message_responded(
+    ctx: &MultichainTestContext<'_>,
+    tx_hash: CryptoHash,
+) -> anyhow::Result<String> {
+    let is_tx_ready = || async {
+        let outcome_view = ctx
+            .jsonrpc_client
+            .call(RpcTransactionStatusRequest {
+                transaction_info: TransactionInfo::TransactionId {
+                    hash: tx_hash,
+                    account_id: ctx.nodes.ctx().mpc_contract.id().clone(),
+                },
+            })
+            .await?;
+        let FinalExecutionStatus::Failure(TxExecutionError::ActionError(payload)) =
+            outcome_view.status
+        else {
+            anyhow::bail!("Rogue message was successful: {:?}", outcome_view.status);
+        };
+        let ActionErrorKind::FunctionCallError(err) = payload.kind else {
+            anyhow::bail!("Not a function call error {:?}", payload.kind);
+        };
+        let near_vm_errors::FunctionCallErrorSer::ExecutionError(err_msg) = err else {
+            anyhow::bail!("Wrong error type: {:?}", err);
+        };
+        Ok(err_msg)
     };
 
     let signature = is_tx_ready

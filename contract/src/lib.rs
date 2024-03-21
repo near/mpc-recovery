@@ -351,13 +351,24 @@ impl MpcContract {
     }
 
     pub fn respond(&mut self, payload: [u8; 32], big_r: String, s: String) {
+        let signer = env::signer_account_id();
         log!(
             "respond: signer={}, payload={:?} big_r={} s={}",
-            env::signer_account_id(),
+            signer,
             payload,
             big_r,
             s
         );
+
+        match &self.protocol_state {
+            ProtocolContractState::Running(state) => {
+                if !state.participants.contains_key(&signer) {
+                    env::panic_str("You must be participating in the MPC protocol to respond")
+                }
+            }
+            e => env::panic_str(&format!("Protocol isn't running instead it's {:?}", e)),
+        };
+
         self.pending_requests.insert(&payload, &Some((big_r, s)));
     }
 
