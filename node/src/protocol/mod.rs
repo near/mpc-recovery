@@ -280,8 +280,6 @@ impl MpcSignProtocol {
             let mut guard = self.state.write().await;
             *guard = state;
             drop(guard);
-
-            tokio::time::sleep(Duration::from_millis(1000)).await;
         }
     }
 }
