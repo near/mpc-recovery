@@ -58,6 +58,24 @@ pub enum Cli {
         /// At maximum, how many triples to stockpile on this node.
         #[arg(long, env("MPC_RECOVERY_MAX_TRIPLES"), default_value("10"))]
         max_triples: usize,
+
+        /// At maximum, how many triple protocols can this current node introduce
+        /// at the same time. This should be something like `max_concurrent_gen / num_nodes`
+        #[arg(
+            long,
+            env("MPC_RECOVERY_MAX_CONCURRENT_INTRODUCTION"),
+            default_value("2")
+        )]
+        max_concurrent_introduction: usize,
+
+        /// At maximum, how many ongoing protocols for triples to be running
+        /// at the same time. The rest will be queued up.
+        #[arg(
+            long,
+            env("MPC_RECOVERY_MAX_CONCURRENT_GENERATION"),
+            default_value("8")
+        )]
+        max_concurrent_generation: usize,
     },
 }
 
@@ -77,6 +95,8 @@ impl Cli {
                 storage_options,
                 min_triples,
                 max_triples,
+                max_concurrent_introduction,
+                max_concurrent_generation,
             } => {
                 let mut args = vec![
                     "start".to_string(),
@@ -98,6 +118,10 @@ impl Cli {
                     min_triples.to_string(),
                     "--max-triples".to_string(),
                     max_triples.to_string(),
+                    "--max-concurrent-introduction".to_string(),
+                    max_concurrent_introduction.to_string(),
+                    "--max-concurrent-generation".to_string(),
+                    max_concurrent_generation.to_string(),
                 ];
                 if let Some(my_address) = my_address {
                     args.extend(vec!["--my-address".to_string(), my_address.to_string()]);
@@ -137,6 +161,8 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
             storage_options,
             min_triples,
             max_triples,
+            max_concurrent_introduction,
+            max_concurrent_generation,
         } => {
             let sign_queue = Arc::new(RwLock::new(SignQueue::new()));
             tokio::runtime::Builder::new_multi_thread()
@@ -182,25 +208,17 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                         TripleConfig {
                             min_triples,
                             max_triples,
+                            max_concurrent_introduction,
+                            max_concurrent_generation,
                         },
                         triple_storage,
                     );
                     tracing::debug!("protocol initialized");
                     let protocol_handle = tokio::spawn(async move { protocol.run().await });
                     tracing::debug!("protocol thread spawned");
-                    let mpc_contract_id_cloned = mpc_contract_id.clone();
                     let cipher_sk = hpke::SecretKey::try_from_bytes(&hex::decode(cipher_sk)?)?;
                     let web_handle = tokio::spawn(async move {
-                        web::run(
-                            web_port,
-                            mpc_contract_id_cloned,
-                            rpc_client,
-                            signer,
-                            sender,
-                            cipher_sk,
-                            protocol_state,
-                        )
-                        .await
+                        web::run(web_port, sender, cipher_sk, protocol_state).await
                     });
                     tracing::debug!("protocol http server spawned");
 

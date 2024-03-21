@@ -62,6 +62,7 @@ pub async fn request_sign(
                     args: serde_json::to_vec(&serde_json::json!({
                         "payload": payload_hashed,
                         "path": "test",
+                        "key_version": 0,
                     }))?,
                     gas: 300_000_000_000_000,
                     deposit: 0,

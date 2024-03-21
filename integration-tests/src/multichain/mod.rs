@@ -10,6 +10,7 @@ use mpc_recovery_node::protocol::triple::TripleConfig;
 use mpc_recovery_node::storage;
 use mpc_recovery_node::storage::triple_storage::TripleNodeStorageBox;
 use near_workspaces::network::Sandbox;
+use near_workspaces::types::SecretKey;
 use near_workspaces::{AccountId, Contract, Worker};
 use serde_json::json;
 use std::collections::HashMap;
@@ -19,6 +20,7 @@ const NETWORK: &str = "mpc_it_network";
 #[derive(Clone)]
 pub struct MultichainConfig {
     pub nodes: usize,
+    pub threshold: usize,
     pub triple_cfg: TripleConfig,
 }
 
@@ -26,9 +28,12 @@ impl Default for MultichainConfig {
     fn default() -> Self {
         Self {
             nodes: 3,
+            threshold: 2,
             triple_cfg: TripleConfig {
                 min_triples: 2,
                 max_triples: 10,
+                max_concurrent_introduction: 8,
+                max_concurrent_generation: 24,
             },
         }
     }
@@ -71,19 +76,36 @@ impl Nodes<'_> {
         }
     }
 
-    pub async fn add_node(
+    pub fn near_acc_sk(&self) -> HashMap<AccountId, SecretKey> {
+        let mut account_to_sk = HashMap::new();
+        match self {
+            Nodes::Local { nodes, .. } => {
+                for node in nodes {
+                    account_to_sk.insert(node.account_id.clone(), node.account_sk.clone());
+                }
+            }
+            Nodes::Docker { nodes, .. } => {
+                for node in nodes {
+                    account_to_sk.insert(node.account_id.clone(), node.account_sk.clone());
+                }
+            }
+        };
+        account_to_sk
+    }
+
+    pub async fn start_node(
         &mut self,
-        account: &AccountId,
+        new_node_account_id: &AccountId,
         account_sk: &near_workspaces::types::SecretKey,
         cfg: &MultichainConfig,
     ) -> anyhow::Result<()> {
-        tracing::info!(%account, "adding one more node");
+        tracing::info!(%new_node_account_id, "adding one more node");
         match self {
             Nodes::Local { ctx, nodes } => {
-                nodes.push(local::Node::run(ctx, account, account_sk, cfg).await?)
+                nodes.push(local::Node::run(ctx, new_node_account_id, account_sk, cfg).await?)
             }
             Nodes::Docker { ctx, nodes } => {
-                nodes.push(containers::Node::run(ctx, account, account_sk, cfg).await?)
+                nodes.push(containers::Node::run(ctx, new_node_account_id, account_sk, cfg).await?)
             }
         }
 
@@ -238,7 +260,7 @@ pub async fn docker(cfg: MultichainConfig, docker_client: &DockerClient) -> anyh
     ctx.mpc_contract
         .call("init")
         .args_json(json!({
-            "threshold": 2,
+            "threshold": cfg.threshold,
             "candidates": candidates
         }))
         .transact()
@@ -288,7 +310,7 @@ pub async fn host(cfg: MultichainConfig, docker_client: &DockerClient) -> anyhow
     ctx.mpc_contract
         .call("init")
         .args_json(json!({
-            "threshold": 2,
+            "threshold": cfg.threshold,
             "candidates": candidates
         }))
         .transact()

@@ -47,6 +47,8 @@ impl Node {
             storage_options: storage_options.clone(),
             min_triples: cfg.triple_cfg.min_triples,
             max_triples: cfg.triple_cfg.max_triples,
+            max_concurrent_introduction: cfg.triple_cfg.max_concurrent_introduction,
+            max_concurrent_generation: cfg.triple_cfg.max_concurrent_generation,
         };
 
         let mpc_node_id = format!("multichain/{account_id}", account_id = account_id);

@@ -20,8 +20,6 @@ pub enum Error {
     Message(#[from] SendError<MpcMessage>),
     #[error(transparent)]
     Rpc(#[from] near_fetch::Error),
-    #[error("node is not running")]
-    NotRunning,
 }
 
 impl Error {
@@ -32,7 +30,6 @@ impl Error {
             Error::Cryptography(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Message(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Rpc(_) => StatusCode::BAD_REQUEST,
-            Error::NotRunning => StatusCode::BAD_REQUEST,
         }
     }
 }

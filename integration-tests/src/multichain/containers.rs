@@ -14,6 +14,7 @@ pub struct Node<'a> {
     pub container: Container<'a, GenericImage>,
     pub address: String,
     pub account_id: AccountId,
+    pub account_sk: near_workspaces::types::SecretKey,
     pub local_address: String,
     pub cipher_pk: hpke::PublicKey,
     pub cipher_sk: hpke::SecretKey,
@@ -60,6 +61,8 @@ impl<'a> Node<'a> {
             storage_options: storage_options.clone(),
             min_triples: cfg.triple_cfg.min_triples,
             max_triples: cfg.triple_cfg.max_triples,
+            max_concurrent_introduction: cfg.triple_cfg.max_concurrent_introduction,
+            max_concurrent_generation: cfg.triple_cfg.max_concurrent_generation,
         }
         .into_str_args();
         let image: GenericImage = GenericImage::new("near/mpc-recovery-node", "latest")
@@ -91,6 +94,7 @@ impl<'a> Node<'a> {
             container,
             address: full_address,
             account_id: account_id.clone(),
+            account_sk: account_sk.clone(),
             local_address: format!("http://localhost:{host_port}"),
             cipher_pk,
             cipher_sk,

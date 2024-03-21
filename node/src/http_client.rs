@@ -3,7 +3,6 @@ use crate::protocol::message::SignedMessage;
 use crate::protocol::MpcMessage;
 use cait_sith::protocol::Participant;
 use mpc_keys::hpke;
-use near_primitives::types::AccountId;
 use reqwest::{Client, IntoUrl};
 use std::collections::{HashMap, VecDeque};
 use std::str::Utf8Error;
@@ -70,42 +69,6 @@ async fn send_encrypted<U: IntoUrl>(
                 status,
                 response_str
             );
-            Err(SendError::Unsuccessful(response_str.into()))
-        }
-    };
-
-    let retry_strategy = ExponentialBackoff::from_millis(10).map(jitter).take(3);
-    Retry::spawn(retry_strategy, action).await
-}
-
-pub async fn join<U: IntoUrl>(
-    client: &Client,
-    url: U,
-    account_id: &AccountId,
-) -> Result<(), SendError> {
-    let _span = tracing::info_span!("join_request", ?account_id);
-    let mut url = url.into_url()?;
-    url.set_path("join");
-    tracing::debug!(%url, "making http request");
-    let action = || async {
-        let response = client
-            .post(url.clone())
-            .header("content-type", "application/json")
-            .json(&account_id)
-            .send()
-            .await
-            .map_err(SendError::ReqwestClientError)?;
-        let status = response.status();
-        if status.is_success() {
-            Ok(())
-        } else {
-            let response_bytes = response
-                .bytes()
-                .await
-                .map_err(SendError::ReqwestBodyError)?;
-            let response_str =
-                std::str::from_utf8(&response_bytes).map_err(SendError::MalformedResponse)?;
-            tracing::error!("failed to connect to {}: {}", url, response_str);
             Err(SendError::Unsuccessful(response_str.into()))
         }
     };
