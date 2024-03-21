@@ -38,6 +38,7 @@ pub async fn multichain_sign(user: &mut GooseUser) -> TransactionResult {
 
     let payload: [u8; 32] = rand::thread_rng().gen();
     let payload_hashed = web3::signing::keccak256(&payload);
+    tracing::info!("requesting signature for: {:?}", payload_hashed);
 
     let transaction = Transaction {
         signer_id: account_id.clone(),
@@ -82,10 +83,19 @@ pub async fn multichain_sign(user: &mut GooseUser) -> TransactionResult {
         .set_request_builder(request_builder)
         .build();
 
-    let goose_responce = user.request(goose_request).await?;
+    let goose_response = user.request(goose_request).await?;
 
-    let validate = &Validate::builder().status(200).build(); // TODO: Do the real check of the transaction result
-    validate_and_load_static_assets(user, goose_responce, validate).await?;
+    let rsp = goose_response.response.as_ref().unwrap();
+
+    tracing::info!("goose_response: {:?}", rsp);
+
+    let expected_log = "sign_helper: signature ready";
+
+    let validate = &Validate::builder()
+        .status(200)
+        .text(expected_log) // Naive check if the request is successful
+        .build();
+    validate_and_load_static_assets(user, goose_response, validate).await?;
 
     Ok(())
 }
