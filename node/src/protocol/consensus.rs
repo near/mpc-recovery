@@ -3,8 +3,7 @@ use super::state::{
     JoiningState, NodeState, PersistentNodeData, RunningState, StartedState,
     WaitingForConsensusState,
 };
-use super::triple::TripleConfig;
-use super::SignQueue;
+use super::{Config, SignQueue};
 use crate::gcp::error::DatastoreStorageError;
 use crate::gcp::error::SecretStorageError;
 use crate::protocol::contract::primitives::Participants;
@@ -41,8 +40,8 @@ pub trait ConsensusCtx {
     fn sign_pk(&self) -> near_crypto::PublicKey;
     fn sign_sk(&self) -> &near_crypto::SecretKey;
     fn secret_storage(&self) -> &SecretNodeStorageBox;
-    fn triple_cfg(&self) -> TripleConfig;
     fn triple_storage(&mut self) -> LockTripleNodeStorageBox;
+    fn cfg(&self) -> Config;
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -131,7 +130,7 @@ impl ConsensusProtocol for StartedState {
                                         me,
                                         contract_state.threshold,
                                         epoch,
-                                        ctx.triple_cfg(),
+                                        ctx.cfg(),
                                         self.triple_data,
                                         ctx.triple_storage(),
                                     );
@@ -149,6 +148,7 @@ impl ConsensusProtocol for StartedState {
                                                 me,
                                                 contract_state.threshold,
                                                 epoch,
+                                                ctx.cfg(),
                                             ),
                                         )),
                                         signature_manager: Arc::new(RwLock::new(
@@ -348,7 +348,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                         me,
                         self.threshold,
                         self.epoch,
-                        ctx.triple_cfg(),
+                        ctx.cfg(),
                         vec![],
                         ctx.triple_storage(),
                     );
@@ -365,6 +365,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                             me,
                             self.threshold,
                             self.epoch,
+                            ctx.cfg(),
                         ))),
                         signature_manager: Arc::new(RwLock::new(SignatureManager::new(
                             me,

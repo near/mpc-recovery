@@ -1,5 +1,6 @@
 use super::message::PresignatureMessage;
 use super::triple::{Triple, TripleId, TripleManager};
+use super::Config;
 use crate::gcp::error::DatastoreStorageError;
 use crate::protocol::contract::primitives::Participants;
 use crate::types::{PresignatureProtocol, PublicKey, SecretKeyShare};
@@ -21,6 +22,12 @@ pub struct Presignature {
     pub id: PresignatureId,
     pub output: PresignOutput<Secp256k1>,
     pub participants: Vec<Participant>,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct PresignatureConfig {
+    pub min_presignatures: usize,
+    pub max_presignatures: usize,
 }
 
 /// An ongoing presignature generator.
@@ -93,10 +100,11 @@ pub struct PresignatureManager {
     me: Participant,
     threshold: usize,
     epoch: u64,
+    presig_cfg: PresignatureConfig,
 }
 
 impl PresignatureManager {
-    pub fn new(me: Participant, threshold: usize, epoch: u64) -> Self {
+    pub fn new(me: Participant, threshold: usize, epoch: u64, cfg: Config) -> Self {
         Self {
             presignatures: HashMap::new(),
             generators: HashMap::new(),
@@ -104,6 +112,7 @@ impl PresignatureManager {
             me,
             threshold,
             epoch,
+            presig_cfg: cfg.presig_cfg,
         }
     }
 
@@ -184,6 +193,43 @@ impl PresignatureManager {
             true,
         )?;
         self.generators.insert(id, generator);
+        Ok(())
+    }
+
+    pub async fn stockpile(
+        &mut self,
+        active: &Participants,
+        pk: &PublicKey,
+        sk_share: &SecretKeyShare,
+        triple_manager: &mut TripleManager,
+    ) -> Result<(), InitializationError> {
+        if self.my_len() < self.presig_cfg.min_presignatures
+            && self.potential_len() < self.presig_cfg.max_presignatures
+        {
+            // To ensure there is no contention between different nodes we are only using triples
+            // that we proposed. This way in a non-BFT environment we are guaranteed to never try
+            // to use the same triple as any other node.
+            if let Some((triple0, triple1)) = triple_manager.take_two_mine().await {
+                let presig_participants = active
+                    .intersection(&[&triple0.public.participants, &triple1.public.participants]);
+                if presig_participants.len() < self.threshold {
+                    tracing::debug!(
+                        participants = ?presig_participants.keys_vec(),
+                        "running: we don't have enough participants to generate a presignature"
+                    );
+
+                    // Insert back the triples to be used later since this active set of
+                    // participants were not able to make use of these triples.
+                    triple_manager.insert_mine(triple0).await;
+                    triple_manager.insert_mine(triple1).await;
+                } else {
+                    self.generate(&presig_participants, triple0, triple1, pk, sk_share)?;
+                }
+            } else {
+                tracing::debug!("running: we don't have enough triples to generate a presignature");
+            }
+        }
+
         Ok(())
     }
 

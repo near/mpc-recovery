@@ -2,6 +2,7 @@ use super::contract::primitives::Participants;
 use super::cryptography::CryptographicError;
 use super::message::TripleMessage;
 use super::presignature::GenerationError;
+use super::Config;
 use crate::gcp::error;
 use crate::storage::triple_storage::{LockTripleNodeStorageBox, TripleData};
 use crate::types::TripleProtocol;
@@ -115,7 +116,7 @@ impl TripleManager {
         me: Participant,
         threshold: usize,
         epoch: u64,
-        triple_cfg: TripleConfig,
+        cfg: Config,
         triple_data: Vec<TripleData>,
         triple_storage: LockTripleNodeStorageBox,
     ) -> Self {
@@ -139,7 +140,7 @@ impl TripleManager {
             me,
             threshold,
             epoch,
-            triple_cfg,
+            triple_cfg: cfg.triple_cfg,
             triple_storage,
             failed_triples: HashMap::new(),
         }

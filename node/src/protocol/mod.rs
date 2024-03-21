@@ -20,6 +20,7 @@ pub use state::NodeState;
 use self::consensus::ConsensusCtx;
 use self::cryptography::CryptographicCtx;
 use self::message::MessageCtx;
+use self::presignature::PresignatureConfig;
 use self::triple::TripleConfig;
 use crate::mesh::Mesh;
 use crate::protocol::consensus::ConsensusProtocol;
@@ -40,6 +41,12 @@ use url::Url;
 
 use mpc_keys::hpke;
 
+#[derive(Copy, Clone, Debug)]
+pub struct Config {
+    pub triple_cfg: TripleConfig,
+    pub presig_cfg: PresignatureConfig,
+}
+
 struct Ctx {
     my_address: Url,
     account_id: AccountId,
@@ -51,8 +58,8 @@ struct Ctx {
     cipher_pk: hpke::PublicKey,
     sign_sk: near_crypto::SecretKey,
     secret_storage: SecretNodeStorageBox,
-    triple_cfg: TripleConfig,
     triple_storage: LockTripleNodeStorageBox,
+    cfg: Config,
     mesh: Mesh,
 }
 
@@ -101,8 +108,8 @@ impl ConsensusCtx for &mut MpcSignProtocol {
         &self.ctx.secret_storage
     }
 
-    fn triple_cfg(&self) -> TripleConfig {
-        self.ctx.triple_cfg
+    fn cfg(&self) -> Config {
+        self.ctx.cfg
     }
 
     fn triple_storage(&mut self) -> LockTripleNodeStorageBox {
@@ -178,8 +185,8 @@ impl MpcSignProtocol {
         sign_queue: Arc<RwLock<SignQueue>>,
         cipher_pk: hpke::PublicKey,
         secret_storage: SecretNodeStorageBox,
-        triple_cfg: TripleConfig,
         triple_storage: LockTripleNodeStorageBox,
+        cfg: Config,
     ) -> (Self, Arc<RwLock<NodeState>>) {
         let state = Arc::new(RwLock::new(NodeState::Starting));
         let ctx = Ctx {
@@ -193,8 +200,8 @@ impl MpcSignProtocol {
             sign_sk: signer.secret_key.clone(),
             signer,
             secret_storage,
-            triple_cfg,
             triple_storage,
+            cfg,
             mesh: Mesh::default(),
         };
         let protocol = MpcSignProtocol {

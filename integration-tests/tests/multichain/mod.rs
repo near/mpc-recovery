@@ -6,6 +6,7 @@ use k256::elliptic_curve::point::AffineCoordinates;
 use mpc_recovery_integration_tests::env::containers::DockerClient;
 use mpc_recovery_integration_tests::multichain::MultichainConfig;
 use mpc_recovery_node::kdf::{self, x_coordinate};
+use mpc_recovery_node::protocol::presignature::PresignatureConfig;
 use mpc_recovery_node::protocol::triple::TripleConfig;
 use mpc_recovery_node::test_utils;
 use mpc_recovery_node::types::LatestBlockHeight;
@@ -144,8 +145,14 @@ async fn test_signature_large_stockpile() -> anyhow::Result<()> {
         // This is the maximum amount of triples that can be generated concurrently by the whole system.
         max_concurrent_generation: 24,
     };
+    let presig_cfg = PresignatureConfig {
+        min_presignatures: 10,
+        max_presignatures: 1000,
+    };
+
     let config = MultichainConfig {
         triple_cfg,
+        presig_cfg,
         nodes: NODES,
         threshold: THRESHOLD,
     };

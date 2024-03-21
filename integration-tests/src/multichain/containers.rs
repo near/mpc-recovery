@@ -63,6 +63,8 @@ impl<'a> Node<'a> {
             max_triples: cfg.triple_cfg.max_triples,
             max_concurrent_introduction: cfg.triple_cfg.max_concurrent_introduction,
             max_concurrent_generation: cfg.triple_cfg.max_concurrent_generation,
+            min_presignatures: cfg.presig_cfg.min_presignatures,
+            max_presignatures: cfg.presig_cfg.max_presignatures,
         }
         .into_str_args();
         let image: GenericImage = GenericImage::new("near/mpc-recovery-node", "latest")
