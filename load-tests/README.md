@@ -5,7 +5,7 @@ This directory contains load tests for the FastAuth and Multichain services. It 
 To run the tests, you need to have Rust installed. You can install Rust using [rustup](https://rustup.rs/).
 To start the tests, run the following command:
 ```bash
-RUST_LOG=info cargo run --release -- --host <host> --report-file=load_test_results.html --test-plan "$(cat ./fastauth/test_plans/short.txt)" --scenarios fastAuthSimpleMpcPublicKey
+RUST_LOG=info cargo run --release -- --host <host> --report-file=load_test_results.html --test-plan "$(cat ./src/fastauth/test_plans/short.txt)" --scenarios fastAuthSimpleMpcPublicKey
 ```
 You can run Load Tests against your local development environment (check `/integration-tests` for more info) or against the staging environment by setting the `--host` parameter.
 

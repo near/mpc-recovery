@@ -21,3 +21,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 near-jsonrpc-client = "0.6.0"
 near-fetch = "0.2.0"
 web3 = "0.19.0"
+borsh = "0.10.3"

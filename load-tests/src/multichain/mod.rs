@@ -3,16 +3,13 @@ use std::{str::FromStr, time::Duration};
 use goose::goose::{GooseMethod, GooseRequest, GooseUser, TransactionResult};
 use goose_eggs::{validate_and_load_static_assets, Validate};
 use near_crypto::{InMemorySigner, SecretKey};
-use near_jsonrpc_client::{
-    methods::{broadcast_tx_commit::RpcBroadcastTxCommitRequest, RpcMethod},
-    JsonRpcClient,
-};
+use near_jsonrpc_client::JsonRpcClient;
 use near_primitives::{
     transaction::{Action, FunctionCallAction, Transaction},
     types::AccountId,
 };
 use rand::Rng;
-use reqwest::{header::CONTENT_TYPE, Body};
+use reqwest::header::CONTENT_TYPE;
 
 pub async fn multichain_sign(user: &mut GooseUser) -> TransactionResult {
     tracing::info!("multichain_sign");
@@ -22,7 +19,7 @@ pub async fn multichain_sign(user: &mut GooseUser) -> TransactionResult {
     let secret_key = SecretKey::from_str("ed25519:4hc3qA3nTE8M63DB8jEZx9ZbHVUPdkMjUAoa11m4xtET7F6w4bk51TwQ3RzEcFhBtXvF6NYzFdiJduaGdJUvynAi").unwrap();
     let public_key = secret_key.public_key();
     let multichain_contract_id = AccountId::try_from("multichain0.testnet".to_string()).unwrap(); // TODO: pass in parameters
-    let testnet_rpc_url = "https://rpc.testnet.near.org".to_string(); // TODO: pass from parameters
+    let testnet_rpc_url = "https://rpc.testnet.near.org".to_string();
 
     let signer = InMemorySigner {
         account_id: account_id.clone(),
@@ -62,17 +59,22 @@ pub async fn multichain_sign(user: &mut GooseUser) -> TransactionResult {
 
     let signed_transaction = transaction.sign(&signer);
 
-    let request = RpcBroadcastTxCommitRequest {
-        signed_transaction: signed_transaction.clone(),
-    };
+    let encoded_transaction = near_primitives::serialize::to_base64(
+        &borsh::BorshSerialize::try_to_vec(&signed_transaction).unwrap(),
+    );
 
-    let body_json =
-        serde_json::to_string(&request.params().unwrap()).expect("request serialization failed");
+    let payload = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": "dontcare",
+        "method": "broadcast_tx_commit",
+        "params": [
+            encoded_transaction
+        ]
+    });
 
-    let body = Body::from(body_json.to_owned());
     let request_builder = user
-        .get_request_builder(&GooseMethod::Post, request.method_name())?
-        .body(body)
+        .get_request_builder(&GooseMethod::Post, "")?
+        .json(&payload)
         .header(CONTENT_TYPE, "application/json")
         .timeout(Duration::from_secs(50));
 
@@ -82,7 +84,7 @@ pub async fn multichain_sign(user: &mut GooseUser) -> TransactionResult {
 
     let goose_responce = user.request(goose_request).await?;
 
-    let validate = &Validate::builder().status(200).build(); // TODO: is it enough?
+    let validate = &Validate::builder().status(200).build(); // TODO: Do the real check of the transaction result
     validate_and_load_static_assets(user, goose_responce, validate).await?;
 
     Ok(())
