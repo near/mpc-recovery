@@ -321,8 +321,15 @@ impl TripleManager {
         if self.triples.contains_key(&id) {
             Ok(None)
         } else {
+            let potential_len = self.potential_len();
             match self.generators.entry(id) {
                 Entry::Vacant(e) => {
+                    if potential_len >= self.triple_cfg.max_triples {
+                        // We are at the maximum amount of triples, we cannot generate more. So just in case a node
+                        // sends more triple generation requests, reject them and have them tiemout.
+                        return Ok(None);
+                    }
+
                     tracing::debug!(id, "joining protocol to generate a new triple");
                     let participants: Vec<_> = participants.keys().cloned().collect();
                     let protocol = Box::new(cait_sith::triples::generate_triple::<Secp256k1>(
