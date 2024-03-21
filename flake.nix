@@ -15,35 +15,59 @@
         pkgs = import nixpkgs { inherit system overlays; };
 
         # Pick what rust compiler to use
+        rustVersion = pkgs.rust-bin.stable.latest.default;
       in {
         devShell = pkgs.mkShell {
 
+          # More agressively cache build artefacts
+          # Uses more disk but speeds up compile times significantly
           env = {
             SCCACHE_GHA_ENABLED = true;
             RUSTC_WRAPPER = "sccache";
           };
 
           # Everything in this list is added to your path
-          buildInputs =
-            with pkgs;
+          buildInputs = with pkgs;
             [
+              # Native build dependencies
               protobuf
               curl
               gmp
               openssl
 
               # Development
+              # A nice LSP IDE backend
+              rust-analyzer
+
+              # A very opinionated linter
+              clippy
+
+              # Adds cargo, rustc and rustfmt
+              (rustVersion.override {
+
+                # We need this for rust analyzer to jump to library code
+                extensions = [ "rust-src" ];
+
+                # Add foreign compile targets here
+                targets = [
+                  "wasm32-unknown-unknown"
+                  "x86_64-apple-darwin"
+                  "wasm32-wasi"
+                ];
+              })
               cargo-watch
               cargo-audit
               sccache
+
+              # TODO Add podman + docker image dependencies
+              # TODO Add AWS-CLI and dummy credentials
             ] ++
 
-            pkgs.lib.optionals pkgs.stdenv.isDarwin
-              [
+            pkgs.lib.optionals pkgs.stdenv.isDarwin [
               # Mac crypto libs
               darwin.apple_sdk.frameworks.Security
               darwin.apple_sdk.frameworks.SystemConfiguration
-              ];
+            ];
         };
       });
 }
