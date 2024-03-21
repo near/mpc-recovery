@@ -54,7 +54,11 @@ module "gce-container" {
       {
         name = "MPC_RECOVERY_ENV",
         value = var.env
-      }
+      },
+      {
+      name  = "MPC_RECOVERY_GCP_PROJECT_ID"
+      value = var.project_id
+      },
     ])
   }
 }

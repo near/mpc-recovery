@@ -104,10 +104,6 @@ variable "static_env" {
       value = "eu-central-1"
     },
     {
-      name  = "MPC_RECOVERY_GCP_PROJECT_ID"
-      value = "<your-project-id>"
-    },
-    {
       name  = "MPC_RECOVERY_WEB_PORT"
       value = "3000"
     },
