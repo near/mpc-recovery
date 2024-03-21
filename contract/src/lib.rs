@@ -303,7 +303,7 @@ impl MpcContract {
             latest_key_version,
         );
         log!(
-            "sign: signer={}, payload={:?} path={:?}",
+            "sign: signer={}, payload={:?}, path={:?}, key_version={}",
             env::signer_account_id(),
             payload,
             path,
