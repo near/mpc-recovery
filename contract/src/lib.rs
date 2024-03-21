@@ -306,7 +306,8 @@ impl MpcContract {
             "sign: signer={}, payload={:?} path={:?}",
             env::signer_account_id(),
             payload,
-            path
+            path,
+            key_version
         );
         match self.pending_requests.get(&payload) {
             None => {
