@@ -208,9 +208,9 @@ impl TripleManager {
             }
 
             // We will always try to generate a new triple if we have less than the minimum
-            self.my_len() < min_triples
-                && self.introduced.len() < max_concurrent_introduction
-                && self.generators.len() < max_concurrent_generation
+            self.my_len() <= min_triples
+                && self.introduced.len() <= max_concurrent_introduction
+                && self.generators.len() <= max_concurrent_generation
         };
 
         if not_enough_triples() {
