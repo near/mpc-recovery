@@ -67,6 +67,7 @@ impl Options {
 struct SignPayload {
     payload: [u8; 32],
     path: String,
+    key_version: u32,
 }
 
 #[derive(LakeContext)]
@@ -111,6 +112,7 @@ async fn handle_block(
                             receipt_id = %receipt_id,
                             caller_id = receipt.predecessor_id().to_string(),
                             payload = hex::encode(sign_payload.payload),
+                            key_version = sign_payload.key_version,
                             entropy = hex::encode(entropy),
                             "indexed new `sign` function call"
                         );
@@ -139,6 +141,10 @@ async fn handle_block(
         .set(block.block_height())
         .store(&ctx.gcp_service)
         .await?;
+
+    crate::metrics::LATEST_BLOCK_HEIGHT
+        .with_label_values(&[&ctx.gcp_service.account_id.to_string()])
+        .set(block.block_height() as i64);
 
     if block.block_height() % 1000 == 0 {
         tracing::info!(block_height = block.block_height(), "indexed block");

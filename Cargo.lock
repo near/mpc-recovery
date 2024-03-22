@@ -1415,7 +1415,7 @@ dependencies = [
 [[package]]
 name = "cait-sith"
 version = "0.8.0"
-source = "git+https://github.com/LIT-Protocol/cait-sith.git#da627425fa62994838ee3469d77e61725432766a"
+source = "git+https://github.com/LIT-Protocol/cait-sith.git?rev=da627425fa62994838ee3469d77e61725432766a#da627425fa62994838ee3469d77e61725432766a"
 dependencies = [
  "auto_ops",
  "ck-meow",
@@ -4150,8 +4150,8 @@ dependencies = [
  "near-crypto 0.17.0",
  "near-fetch 0.0.12",
  "near-jsonrpc-client 0.6.0",
- "near-lake-framework",
- "near-lake-primitives",
+ "near-lake-framework 0.8.0-beta.2 (git+https://github.com/near/near-lake-framework-rs.git?branch=daniyar/upgrade-sdk)",
+ "near-lake-primitives 0.8.0-beta.2 (git+https://github.com/near/near-lake-framework-rs.git?branch=daniyar/upgrade-sdk)",
  "near-primitives 0.17.0",
  "near-workspaces 0.9.0",
  "nix",
@@ -4201,8 +4201,8 @@ dependencies = [
  "mpc-keys",
  "near-crypto 0.17.0",
  "near-fetch 0.0.12",
- "near-lake-framework",
- "near-lake-primitives",
+ "near-lake-framework 0.8.0-beta.2 (git+https://github.com/near/near-lake-framework-rs.git?rev=dc0f1f9)",
+ "near-lake-primitives 0.8.0-beta.2 (git+https://github.com/near/near-lake-framework-rs.git?rev=dc0f1f9)",
  "near-primitives 0.17.0",
  "near-sdk",
  "once_cell",
@@ -4594,6 +4594,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "near-lake-context-derive"
+version = "0.8.0-beta.2"
+source = "git+https://github.com/near/near-lake-framework-rs.git?rev=dc0f1f9#dc0f1f91e421b641a43145781f776d4bf1a69ee8"
+dependencies = [
+ "quote",
+ "syn 2.0.48",
+]
+
+[[package]]
 name = "near-lake-framework"
 version = "0.8.0-beta.2"
 source = "git+https://github.com/near/near-lake-framework-rs.git?branch=daniyar/upgrade-sdk#dc0f1f91e421b641a43145781f776d4bf1a69ee8"
@@ -4606,8 +4615,31 @@ dependencies = [
  "aws-types",
  "derive_builder",
  "futures",
- "near-lake-context-derive",
- "near-lake-primitives",
+ "near-lake-context-derive 0.8.0-beta.2 (git+https://github.com/near/near-lake-framework-rs.git?branch=daniyar/upgrade-sdk)",
+ "near-lake-primitives 0.8.0-beta.2 (git+https://github.com/near/near-lake-framework-rs.git?branch=daniyar/upgrade-sdk)",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+]
+
+[[package]]
+name = "near-lake-framework"
+version = "0.8.0-beta.2"
+source = "git+https://github.com/near/near-lake-framework-rs.git?rev=dc0f1f9#dc0f1f91e421b641a43145781f776d4bf1a69ee8"
+dependencies = [
+ "async-stream",
+ "async-trait",
+ "aws-config",
+ "aws-credential-types",
+ "aws-sdk-s3",
+ "aws-types",
+ "derive_builder",
+ "futures",
+ "near-lake-context-derive 0.8.0-beta.2 (git+https://github.com/near/near-lake-framework-rs.git?rev=dc0f1f9)",
+ "near-lake-primitives 0.8.0-beta.2 (git+https://github.com/near/near-lake-framework-rs.git?rev=dc0f1f9)",
  "serde",
  "serde_json",
  "thiserror",
@@ -4620,6 +4652,22 @@ dependencies = [
 name = "near-lake-primitives"
 version = "0.8.0-beta.2"
 source = "git+https://github.com/near/near-lake-framework-rs.git?branch=daniyar/upgrade-sdk#dc0f1f91e421b641a43145781f776d4bf1a69ee8"
+dependencies = [
+ "anyhow",
+ "near-crypto 0.17.0",
+ "near-indexer-primitives",
+ "near-primitives 0.17.0",
+ "near-primitives-core 0.17.0",
+ "paste",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "near-lake-primitives"
+version = "0.8.0-beta.2"
+source = "git+https://github.com/near/near-lake-framework-rs.git?rev=dc0f1f9#dc0f1f91e421b641a43145781f776d4bf1a69ee8"
 dependencies = [
  "anyhow",
  "near-crypto 0.17.0",
