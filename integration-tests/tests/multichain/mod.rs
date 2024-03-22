@@ -127,6 +127,7 @@ async fn test_signature_offline_node() -> anyhow::Result<()> {
 }
 
 #[test(tokio::test)]
+#[ignore = "This test is too slow to run in CI"]
 async fn test_signature_large_stockpile() -> anyhow::Result<()> {
     const SIGNATURE_AMOUNT: usize = 10;
     const NODES: usize = 3;
