@@ -17,7 +17,7 @@ axum = { version = "0.6.19" }
 axum-extra = "0.7"
 cait-sith = { git = "https://github.com/LIT-Protocol/cait-sith.git", features = [
     "k256",
-] }
+], rev = "da627425fa62994838ee3469d77e61725432766a"}
 clap = { version = "4.2", features = ["derive", "env"] }
 google-datastore1 = "5"
 google-secretmanager1 = "5"
@@ -42,8 +42,8 @@ url = { version = "2.4.0", features = ["serde"] }
 
 near-crypto = "0.17"
 near-fetch = "0.0.12"
-near-lake-framework = { git = "https://github.com/near/near-lake-framework-rs.git", branch = "daniyar/upgrade-sdk" }
-near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs.git", branch = "daniyar/upgrade-sdk" }
+near-lake-framework = { git = "https://github.com/near/near-lake-framework-rs.git", rev = "dc0f1f9"} # branch = "daniyar/upgrade-sdk"
+near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs.git", rev = "dc0f1f9" } # branch = "daniyar/upgrade-sdk"
 near-primitives = "0.17.0"
 near-sdk = "5.0.0-alpha.1"
 
