@@ -51,6 +51,7 @@ pub async fn multichain_sign(user: &mut GooseUser) -> TransactionResult {
             args: serde_json::to_vec(&serde_json::json!({
                 "payload": payload_hashed,
                 "path": "test",
+                "key_version": 0,
             }))
             .unwrap(),
             gas: 300_000_000_000_000,
