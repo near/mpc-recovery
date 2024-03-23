@@ -17,7 +17,10 @@ use rand::seq::{IteratorRandom, SliceRandom};
 use rand::SeedableRng;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
-use std::time::Instant;
+use std::time::{Duration, Instant};
+
+/// Duration for which completed signatures are retained.
+pub const COMPLETION_EXISTENCE_TIMEOUT: Duration = Duration::from_secs(120 * 60);
 
 pub struct SignRequest {
     pub receipt_id: CryptoHash,
@@ -151,6 +154,8 @@ pub struct SignatureManager {
     generators: HashMap<CryptoHash, SignatureGenerator>,
     /// Failed signatures awaiting to be retried.
     failed_generators: VecDeque<(CryptoHash, FailedGenerator)>,
+    /// Set of completed signatures
+    completed: HashMap<PresignatureId, Instant>,
     /// Generated signatures assigned to the current node that are yet to be published.
     /// Vec<(receipt_id, msg_hash, timestamp, output)>
     signatures: Vec<(CryptoHash, [u8; 32], Instant, FullSignature<Secp256k1>)>,
@@ -164,6 +169,7 @@ impl SignatureManager {
         Self {
             generators: HashMap::new(),
             failed_generators: VecDeque::new(),
+            completed: HashMap::new(),
             signatures: Vec::new(),
             me,
             public_key,
@@ -388,6 +394,7 @@ impl SignatureManager {
                             s = ?output.s,
                             "completed signature generation"
                         );
+                        self.completed.insert(generator.presignature_id, Instant::now());
                         if generator.proposer == self.me {
                             self.signatures
                                 .push((*receipt_id, generator.msg_hash, generator.timestamp, output));
@@ -444,5 +451,13 @@ impl SignatureManager {
             tracing::info!(%receipt_id, big_r = signature.big_r.to_base58(), s = ?signature.s, status = ?response.status, "published signature response");
         }
         Ok(())
+    }
+
+    /// Check whether or not the signature has been completed with this presignature_id.
+    pub fn has_completed(&mut self, presignature_id: &PresignatureId) -> bool {
+        self.completed
+            .retain(|_, timestamp| timestamp.elapsed() < COMPLETION_EXISTENCE_TIMEOUT);
+
+        self.completed.contains_key(presignature_id)
     }
 }
