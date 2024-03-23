@@ -119,6 +119,7 @@ async fn state(Extension(state): Extension<Arc<AxumState>>) -> Result<Json<State
             let presignature_potential_count = presignature_read.potential_len();
 
             tracing::debug!("running, state available");
+
             Ok(Json(StateView::Running {
                 participants: state.participants.keys().cloned().collect(),
                 triple_count,

@@ -208,9 +208,9 @@ impl TripleManager {
             }
 
             // We will always try to generate a new triple if we have less than the minimum
-            self.my_len() < min_triples
-                && self.introduced.len() < max_concurrent_introduction
-                && self.generators.len() < max_concurrent_generation
+            self.my_len() <= min_triples
+                && self.introduced.len() <= max_concurrent_introduction
+                && self.generators.len() <= max_concurrent_generation
         };
 
         if not_enough_triples() {
@@ -287,7 +287,7 @@ impl TripleManager {
         }
         let id0 = self.mine.pop_front()?;
         let id1 = self.mine.pop_front()?;
-        tracing::info!(id0, id1, "trying to take two triples");
+        tracing::info!(id0, id1, me = ?self.me, "trying to take two triples");
 
         let take_two_result = self.take_two(id0, id1, true).await;
         match take_two_result {
@@ -299,6 +299,12 @@ impl TripleManager {
             }
             Ok(val) => Some(val),
         }
+    }
+
+    pub async fn insert_mine(&mut self, triple: Triple) {
+        self.mine.push_back(triple.id);
+        self.triples.insert(triple.id, triple.clone());
+        self.insert_triples_to_storage(vec![triple]).await;
     }
 
     /// Ensures that the triple with the given id is either:
@@ -314,8 +320,15 @@ impl TripleManager {
         if self.triples.contains_key(&id) {
             Ok(None)
         } else {
+            let potential_len = self.potential_len();
             match self.generators.entry(id) {
                 Entry::Vacant(e) => {
+                    if potential_len >= self.triple_cfg.max_triples {
+                        // We are at the maximum amount of triples, we cannot generate more. So just in case a node
+                        // sends more triple generation requests, reject them and have them tiemout.
+                        return Ok(None);
+                    }
+
                     tracing::debug!(id, "joining protocol to generate a new triple");
                     let participants: Vec<_> = participants.keys().cloned().collect();
                     let protocol = Box::new(cait_sith::triples::generate_triple::<Secp256k1>(
@@ -348,6 +361,9 @@ impl TripleManager {
         let mut messages = Vec::new();
         let mut result = Ok(());
         let mut triples_to_insert = Vec::new();
+        let triple_storage_read_lock = self.triple_storage.read().await;
+        let my_account_id = triple_storage_read_lock.account_id();
+        drop(triple_storage_read_lock);
         self.generators.retain(|id, generator| {
             if !self.ongoing.contains(id) {
                 // If the protocol is not ongoing, we should retain it for the next time
@@ -363,7 +379,10 @@ impl TripleManager {
                         self.failed_triples.insert(*id, Instant::now());
                         self.ongoing.remove(id);
                         self.introduced.remove(id);
-                        tracing::info!("added {} to failed triples", id.clone());
+                        tracing::info!(
+                            elapsed = ?generator.timestamp.unwrap().elapsed(),
+                            "added {id} to failed triples"
+                        );
                         break false;
                     }
                 };
@@ -399,11 +418,19 @@ impl TripleManager {
                     Action::Return(output) => {
                         tracing::info!(
                             id,
+                            me = ?self.me,
+                            elapsed = ?generator.timestamp.unwrap().elapsed(),
                             big_a = ?output.1.big_a.to_base58(),
                             big_b = ?output.1.big_b.to_base58(),
                             big_c = ?output.1.big_c.to_base58(),
                             "completed triple generation"
                         );
+
+                        if let Some(start_time) = generator.timestamp {
+                            crate::metrics::TRIPLE_LATENCY
+                                .with_label_values(&[&my_account_id])
+                                .observe(start_time.elapsed().as_secs_f64());
+                        }
 
                         let triple = Triple {
                             id: *id,
