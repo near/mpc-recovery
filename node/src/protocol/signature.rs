@@ -144,7 +144,6 @@ pub struct FailedGenerator {
     pub epsilon: Scalar,
     pub delta: Scalar,
     pub sign_request_timestamp: Instant,
-    pub generator_timestamp: Instant,
 }
 
 pub struct SignatureManager {
@@ -329,8 +328,7 @@ impl SignatureManager {
                                 msg_hash: generator.msg_hash,
                                 epsilon: generator.epsilon,
                                 delta: generator.delta,
-                                sign_request_timestamp: generator.sign_request_timestamp,
-                                generator_timestamp: generator.generator_timestamp,
+                                sign_request_timestamp: generator.sign_request_timestamp
                             },
                         ));
                         break false;

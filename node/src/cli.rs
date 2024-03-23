@@ -56,7 +56,7 @@ pub enum Cli {
         #[arg(long, env("MPC_RECOVERY_MIN_TRIPLES"), default_value("20"))]
         min_triples: usize,
         /// At maximum, how many triples to stockpile on this node.
-        #[arg(long, env("MPC_RECOVERY_MAX_TRIPLES"), default_value("120"))]
+        #[arg(long, env("MPC_RECOVERY_MAX_TRIPLES"), default_value("400"))]
         max_triples: usize,
 
         /// At maximum, how many triple protocols can this current node introduce
