@@ -57,6 +57,7 @@ impl SignQueue {
             if subset.contains(&&me) {
                 tracing::info!(
                     receipt_id = %request.receipt_id,
+                    ?me,
                     ?subset,
                     ?proposer,
                     "saving sign request: node is in the signer subset"
@@ -66,6 +67,7 @@ impl SignQueue {
             } else {
                 tracing::info!(
                     receipt_id = %request.receipt_id,
+                    ?me,
                     ?subset,
                     ?proposer,
                     "skipping sign request: node is NOT in the signer subset"
@@ -248,7 +250,13 @@ impl SignatureManager {
         delta: Scalar,
         time_added: Instant,
     ) -> Result<(), InitializationError> {
-        tracing::info!(%receipt_id, participants = ?participants.keys().collect::<Vec<_>>(), "starting protocol to generate a new signature");
+        tracing::info!(
+            %receipt_id,
+            me = ?self.me,
+            presignature_id = presignature.id,
+            participants = ?participants.keys_vec(),
+            "starting protocol to generate a new signature",
+        );
         let generator = Self::generate_internal(
             participants,
             self.me,
@@ -284,11 +292,12 @@ impl SignatureManager {
     ) -> Result<Option<&mut SignatureProtocol>, InitializationError> {
         match self.generators.entry(receipt_id) {
             Entry::Vacant(entry) => {
-                tracing::info!(%receipt_id, "joining protocol to generate a new signature");
+                tracing::info!(%receipt_id, me = ?self.me, presignature_id, "joining protocol to generate a new signature");
                 let Some(presignature) = presignature_manager.take(presignature_id) else {
-                    tracing::warn!(presignature_id, "presignature is missing, can't join");
+                    tracing::warn!(me = ?self.me, presignature_id, "presignature is missing, can't join");
                     return Ok(None);
                 };
+                tracing::info!(me = ?self.me, presignature_id, "found presignature: ready to start signature generation");
                 let generator = Self::generate_internal(
                     participants,
                     self.me,
@@ -373,6 +382,8 @@ impl SignatureManager {
                     Action::Return(output) => {
                         tracing::info!(
                             ?receipt_id,
+                            me = ?self.me,
+                            presignature_id = generator.presignature_id,
                             big_r = ?output.big_r.to_base58(),
                             s = ?output.s,
                             "completed signature generation"
