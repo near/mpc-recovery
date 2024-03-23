@@ -1415,7 +1415,7 @@ dependencies = [
 [[package]]
 name = "cait-sith"
 version = "0.8.0"
-source = "git+https://github.com/LIT-Protocol/cait-sith.git?rev=da627425fa62994838ee3469d77e61725432766a#da627425fa62994838ee3469d77e61725432766a"
+source = "git+https://github.com/LIT-Protocol/cait-sith.git?rev=8ad2316#8ad2316f804a39d6039bb87519406cf25df1b078"
 dependencies = [
  "auto_ops",
  "ck-meow",
