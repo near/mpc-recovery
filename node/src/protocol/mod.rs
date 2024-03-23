@@ -33,7 +33,7 @@ use cait_sith::protocol::Participant;
 use near_crypto::InMemorySigner;
 use near_primitives::types::AccountId;
 use reqwest::IntoUrl;
-use std::time::SystemTime;
+use std::time::Instant;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::mpsc::{self, error::TryRecvError};
 use tokio::sync::RwLock;
@@ -213,27 +213,14 @@ impl MpcSignProtocol {
             .with_label_values(&[&my_account_id])
             .set(1);
         let mut queue = MpcMessageQueue::default();
+        let mut last_state_update = Instant::now();
         loop {
             tracing::debug!("trying to advance mpc recovery protocol");
-            let contract_state = match rpc_client::fetch_mpc_contract_state(
-                &self.ctx.rpc_client,
-                &self.ctx.mpc_contract_id,
-            )
-            .await
-            {
-                Ok(contract_state) => contract_state,
-                Err(e) => {
-                    tracing::error!("could not fetch contract's state: {e}");
-                    tokio::time::sleep(Duration::from_secs(1)).await;
-                    continue;
-                }
-            };
-            tracing::debug!(?contract_state);
             loop {
                 let msg_result = self.receiver.try_recv();
                 match msg_result {
                     Ok(msg) => {
-                        tracing::debug!("received a new message");
+                        tracing::debug!(?msg, "received a new message");
                         queue.push(msg);
                     }
                     Err(TryRecvError::Empty) => {
@@ -247,19 +234,12 @@ impl MpcSignProtocol {
                 }
             }
 
-            // Establish the participants for this current iteration of the protocol loop. This will
-            // set which participants are currently active in the protocol and determines who will be
-            // receiving messages.
-            self.ctx.mesh.establish_participants(&contract_state).await;
-
             let state = {
                 let guard = self.state.read().await;
                 guard.clone()
             };
 
-            let before_step = SystemTime::now();
-
-            let state = match state.progress(&mut self).await {
+            let mut state = match state.progress(&mut self).await {
                 Ok(state) => state,
                 Err(err) => {
                     tracing::info!("protocol unable to progress: {err:?}");
@@ -267,33 +247,48 @@ impl MpcSignProtocol {
                     continue;
                 }
             };
-            let mut state = match state.advance(&mut self, contract_state).await {
-                Ok(state) => state,
-                Err(err) => {
-                    tracing::info!("protocol unable to advance: {err:?}");
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                    continue;
-                }
-            };
+
             if let Err(err) = state.handle(&self, &mut queue).await {
                 tracing::info!("protocol unable to handle messages: {err:?}");
                 tokio::time::sleep(Duration::from_millis(100)).await;
                 continue;
             }
 
-            let after_step = SystemTime::now();
+            if last_state_update.elapsed() > Duration::from_secs(1) {
+                let contract_state = match rpc_client::fetch_mpc_contract_state(
+                    &self.ctx.rpc_client,
+                    &self.ctx.mpc_contract_id,
+                )
+                .await
+                {
+                    Ok(contract_state) => contract_state,
+                    Err(e) => {
+                        tracing::error!("could not fetch contract's state: {e}");
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        continue;
+                    }
+                };
+                tracing::debug!(?contract_state);
+
+                // Establish the participants for this current iteration of the protocol loop. This will
+                // set which participants are currently active in the protocol and determines who will be
+                // receiving messages.
+                self.ctx.mesh.establish_participants(&contract_state).await;
+
+                state = match state.advance(&mut self, contract_state).await {
+                    Ok(state) => state,
+                    Err(err) => {
+                        tracing::info!("protocol unable to advance: {err:?}");
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        continue;
+                    }
+                };
+                last_state_update = Instant::now();
+            }
 
             let mut guard = self.state.write().await;
             *guard = state;
             drop(guard);
-
-            let step_duration = after_step.duration_since(before_step).unwrap().as_millis();
-
-            // TODO: add conditional delays based on node state
-            // If there was no work to do - sleep to avoid CPU and RPC burn
-            if step_duration < 2 {
-                tokio::time::sleep(Duration::from_millis(100)).await;
-            }
         }
     }
 }
