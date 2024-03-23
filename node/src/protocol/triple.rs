@@ -348,6 +348,9 @@ impl TripleManager {
         let mut messages = Vec::new();
         let mut result = Ok(());
         let mut triples_to_insert = Vec::new();
+        let triple_storage_read_lock = self.triple_storage.read().await;
+        let my_account_id = triple_storage_read_lock.account_id();
+        drop(triple_storage_read_lock);
         self.generators.retain(|id, generator| {
             if !self.ongoing.contains(id) {
                 // If the protocol is not ongoing, we should retain it for the next time
@@ -404,6 +407,12 @@ impl TripleManager {
                             big_c = ?output.1.big_c.to_base58(),
                             "completed triple generation"
                         );
+
+                        if let Some(start_time) = generator.timestamp {
+                            crate::metrics::TRIPLE_LATENCY
+                                .with_label_values(&[&my_account_id])
+                                .observe(start_time.elapsed().as_secs_f64());
+                        }
 
                         let triple = Triple {
                             id: *id,
