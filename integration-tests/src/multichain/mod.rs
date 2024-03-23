@@ -32,14 +32,14 @@ impl Default for MultichainConfig {
             nodes: 3,
             threshold: 2,
             triple_cfg: TripleConfig {
-                min_triples: 2,
-                max_triples: 10,
-                max_concurrent_introduction: 2,
-                max_concurrent_generation: 10,
+                min_triples: 8,
+                max_triples: 80,
+                max_concurrent_introduction: 8,
+                max_concurrent_generation: 24,
             },
             presig_cfg: PresignatureConfig {
                 min_presignatures: 2,
-                max_presignatures: 10,
+                max_presignatures: 20,
             },
         }
     }

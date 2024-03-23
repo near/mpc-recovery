@@ -67,11 +67,13 @@ impl Options {
 struct SignPayload {
     payload: [u8; 32],
     path: String,
+    key_version: u32,
 }
 
 #[derive(LakeContext)]
 struct Context {
     mpc_contract_id: AccountId,
+    node_account_id: AccountId,
     gcp_service: GcpService,
     queue: Arc<RwLock<SignQueue>>,
     latest_block_height: Arc<RwLock<LatestBlockHeight>>,
@@ -110,7 +112,9 @@ async fn handle_block(
                         tracing::info!(
                             receipt_id = %receipt_id,
                             caller_id = receipt.predecessor_id().to_string(),
+                            our_account = ctx.node_account_id.to_string(),
                             payload = hex::encode(sign_payload.payload),
+                            key_version = sign_payload.key_version,
                             entropy = hex::encode(entropy),
                             "indexed new `sign` function call"
                         );
@@ -199,6 +203,7 @@ pub fn run(
     })?;
     let context = Context {
         mpc_contract_id,
+        node_account_id,
         gcp_service,
         queue,
         latest_block_height: Arc::new(RwLock::new(latest_block_height)),

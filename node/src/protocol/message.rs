@@ -285,6 +285,15 @@ impl MessageHandler for RunningState {
                     presignature_id = message.presignature_id,
                     "new signature message"
                 );
+
+                // TODO: make consistent with presignature manager AlreadyGenerated.
+                if signature_manager.has_completed(&message.presignature_id) {
+                    tracing::info!(
+                        presignature_id = message.presignature_id,
+                        "signature already generated, nothing left to do"
+                    );
+                    continue;
+                }
                 // if !self
                 //     .sign_queue
                 //     .read()

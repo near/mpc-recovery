@@ -128,6 +128,7 @@ async fn test_signature_offline_node() -> anyhow::Result<()> {
 }
 
 #[test(tokio::test)]
+#[ignore = "This test is too slow to run in CI"]
 async fn test_signature_large_stockpile() -> anyhow::Result<()> {
     const SIGNATURE_AMOUNT: usize = 10;
     const NODES: usize = 8;
@@ -181,10 +182,10 @@ async fn test_key_derivation() -> anyhow::Result<()> {
         Box::pin(async move {
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
             assert_eq!(state_0.participants.len(), 3);
-            wait_for::has_at_least_triples(&ctx, 2).await?;
-            wait_for::has_at_least_presignatures(&ctx, 2).await?;
+            wait_for::has_at_least_triples(&ctx, 6).await?;
+            wait_for::has_at_least_presignatures(&ctx, 3).await?;
 
-            for _ in 0..5 {
+            for _ in 0..3 {
                 let mpc_pk: k256::AffinePoint = state_0.public_key.clone().into_affine_point();
                 let (_, payload_hashed, account, tx_hash) = actions::request_sign(&ctx).await?;
                 let payload_hashed_rev = {

@@ -1,6 +1,6 @@
 env          = "dev"
 project      = "pagoda-discovery-platform-dev"
-docker_image = "us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev:latest"
+docker_image = "us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/mpc-recovery/mpc-recovery-dev:bcef52a5f9ecb19930642887006af50b1b2bff9f"
 
 account_creator_id           = "mpc-recovery-dev-creator.testnet"
 account_creator_sk_secret_id = "mpc-recovery-account-creator-sk-dev"
