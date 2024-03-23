@@ -67,6 +67,7 @@ impl Options {
 struct SignPayload {
     payload: [u8; 32],
     path: String,
+    key_version: u32,
 }
 
 #[derive(LakeContext)]
@@ -113,6 +114,7 @@ async fn handle_block(
                             caller_id = receipt.predecessor_id().to_string(),
                             our_account = ctx.node_account_id.to_string(),
                             payload = hex::encode(sign_payload.payload),
+                            key_version = sign_payload.key_version,
                             entropy = hex::encode(entropy),
                             "indexed new `sign` function call"
                         );
