@@ -91,6 +91,7 @@ pub async fn rogue_respond(
         .rpc_client
         .fetch_nonce(&signer.account_id, &signer.public_key)
         .await?;
+    let epsilon = [0u8; 32];
     let hash = ctx
         .jsonrpc_client
         .call(&RpcBroadcastTxAsyncRequest {
@@ -104,6 +105,7 @@ pub async fn rogue_respond(
                     method_name: "respond".to_string(),
                     args: serde_json::to_vec(&serde_json::json!({
                         "payload": payload_hash,
+                        "epsilon": epsilon,
                         "big_r": "Fake BigR",
                         "s": "Fake S",
                     }))?,

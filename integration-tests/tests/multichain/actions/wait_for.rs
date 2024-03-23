@@ -174,6 +174,6 @@ pub async fn rogue_message_responded(
     let signature = is_tx_ready
         .retry(&ExponentialBuilder::default().with_max_times(6))
         .await
-        .with_context(|| "failed to wait for signature response")?;
+        .with_context(|| "failed to wait for rogue message response")?;
     Ok(signature)
 }

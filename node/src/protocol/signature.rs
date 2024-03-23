@@ -153,7 +153,13 @@ pub struct SignatureManager {
     failed_generators: VecDeque<(CryptoHash, FailedGenerator)>,
     /// Generated signatures assigned to the current node that are yet to be published.
     /// Vec<(receipt_id, msg_hash, timestamp, output)>
-    signatures: Vec<(CryptoHash, [u8; 32], Instant, FullSignature<Secp256k1>)>,
+    signatures: Vec<(
+        CryptoHash,
+        [u8; 32],
+        Scalar,
+        Instant,
+        FullSignature<Secp256k1>,
+    )>,
     me: Participant,
     public_key: PublicKey,
     epoch: u64,
@@ -381,7 +387,7 @@ impl SignatureManager {
                         );
                         if generator.proposer == self.me {
                             self.signatures
-                                .push((*receipt_id, generator.msg_hash, generator.sign_request_timestamp, output));
+                                .push((*receipt_id, generator.msg_hash, generator.epsilon, generator.sign_request_timestamp, output));
                         }
                         // Do not retain the protocol
                         return false;
@@ -399,7 +405,7 @@ impl SignatureManager {
         mpc_contract_id: &AccountId,
         my_account_id: &AccountId,
     ) -> Result<(), near_fetch::Error> {
-        for (receipt_id, payload, time_added, signature) in self.signatures.drain(..) {
+        for (receipt_id, payload, epsilon, time_added, signature) in self.signatures.drain(..) {
             // TODO: Figure out how to properly serialize the signature
             // let r_s = signature.big_r.x().concat(signature.s.to_bytes());
             // let tag =
@@ -416,6 +422,7 @@ impl SignatureManager {
                             method_name: "respond".to_string(),
                             args: serde_json::to_vec(&serde_json::json!({
                                 "payload": payload,
+                                "epsilon": epsilon.to_bytes(),
                                 "big_r": signature.big_r,
                                 "s": signature.s
                             }))
