@@ -95,7 +95,8 @@ pub struct SignatureGenerator {
     pub msg_hash: [u8; 32],
     pub epsilon: Scalar,
     pub delta: Scalar,
-    pub timestamp: Instant,
+    pub sign_request_timestamp: Instant,
+    pub generator_timestamp: Instant,
 }
 
 impl SignatureGenerator {
@@ -108,7 +109,7 @@ impl SignatureGenerator {
         msg_hash: [u8; 32],
         epsilon: Scalar,
         delta: Scalar,
-        timestamp: Instant,
+        sign_request_timestamp: Instant,
     ) -> Self {
         Self {
             protocol,
@@ -118,12 +119,13 @@ impl SignatureGenerator {
             msg_hash,
             epsilon,
             delta,
-            timestamp,
+            sign_request_timestamp,
+            generator_timestamp: Instant::now(),
         }
     }
 
     pub fn poke(&mut self) -> Result<Action<FullSignature<Secp256k1>>, ProtocolError> {
-        if self.timestamp.elapsed() > crate::types::PROTOCOL_SIGNATURE_TIMEOUT {
+        if self.generator_timestamp.elapsed() > crate::types::PROTOCOL_SIGNATURE_TIMEOUT {
             tracing::info!(self.presignature_id, "signature protocol timed out");
             return Err(ProtocolError::Other(
                 anyhow::anyhow!("signature protocol timed out").into(),
@@ -141,7 +143,8 @@ pub struct FailedGenerator {
     pub msg_hash: [u8; 32],
     pub epsilon: Scalar,
     pub delta: Scalar,
-    pub timestamp: Instant,
+    pub sign_request_timestamp: Instant,
+    pub generator_timestamp: Instant,
 }
 
 pub struct SignatureManager {
@@ -183,7 +186,7 @@ impl SignatureManager {
         msg_hash: [u8; 32],
         epsilon: Scalar,
         delta: Scalar,
-        time_added: Instant,
+        sign_request_timestamp: Instant,
     ) -> Result<SignatureGenerator, InitializationError> {
         let participants: Vec<_> = participants.keys().cloned().collect();
         let PresignOutput { big_r, k, sigma } = presignature.output;
@@ -208,7 +211,7 @@ impl SignatureManager {
             msg_hash,
             epsilon,
             delta,
-            time_added,
+            sign_request_timestamp,
         ))
     }
 
@@ -228,7 +231,7 @@ impl SignatureManager {
             failed_generator.msg_hash,
             failed_generator.epsilon,
             failed_generator.delta,
-            failed_generator.timestamp,
+            failed_generator.sign_request_timestamp,
         )
         .unwrap();
         self.generators.insert(hash, generator);
@@ -246,7 +249,7 @@ impl SignatureManager {
         msg_hash: [u8; 32],
         epsilon: Scalar,
         delta: Scalar,
-        time_added: Instant,
+        sign_request_timestamp: Instant,
     ) -> Result<(), InitializationError> {
         tracing::info!(%receipt_id, participants = ?participants.keys().collect::<Vec<_>>(), "starting protocol to generate a new signature");
         let generator = Self::generate_internal(
@@ -258,7 +261,7 @@ impl SignatureManager {
             msg_hash,
             epsilon,
             delta,
-            time_added,
+            sign_request_timestamp,
         )?;
         self.generators.insert(receipt_id, generator);
         Ok(())
@@ -326,7 +329,8 @@ impl SignatureManager {
                                 msg_hash: generator.msg_hash,
                                 epsilon: generator.epsilon,
                                 delta: generator.delta,
-                                timestamp: generator.timestamp,
+                                sign_request_timestamp: generator.sign_request_timestamp,
+                                generator_timestamp: generator.generator_timestamp,
                             },
                         ));
                         break false;
@@ -379,7 +383,7 @@ impl SignatureManager {
                         );
                         if generator.proposer == self.me {
                             self.signatures
-                                .push((*receipt_id, generator.msg_hash, generator.timestamp, output));
+                                .push((*receipt_id, generator.msg_hash, generator.sign_request_timestamp, output));
                         }
                         // Do not retain the protocol
                         return false;
