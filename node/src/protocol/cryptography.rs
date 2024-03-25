@@ -106,7 +106,7 @@ impl CryptographicProtocol for GeneratingState {
                     if !failures.is_empty() {
                         tracing::warn!(
                             active = ?ctx.mesh().active_participants().keys_vec(),
-                            "generating(wait): failed to send encrypted message; {failures:#?}"
+                            "generating(wait): failed to send encrypted message; {failures:?}"
                         );
                     }
 
@@ -167,7 +167,7 @@ impl CryptographicProtocol for GeneratingState {
                     if !failures.is_empty() {
                         tracing::warn!(
                             active = ?ctx.mesh().active_participants().keys_vec(),
-                            "generating(return): failed to send encrypted message; {failures:#?}"
+                            "generating(return): failed to send encrypted message; {failures:?}"
                         );
                     }
                     return Ok(NodeState::WaitingForConsensus(WaitingForConsensusState {
@@ -204,7 +204,7 @@ impl CryptographicProtocol for WaitingForConsensusState {
         if !failures.is_empty() {
             tracing::warn!(
                 active = ?ctx.mesh().active_participants().keys_vec(),
-                "waitingForConsensus: failed to send encrypted message; {failures:#?}"
+                "waitingForConsensus: failed to send encrypted message; {failures:?}"
             );
         }
 
@@ -254,7 +254,7 @@ impl CryptographicProtocol for ResharingState {
                             active = ?active.keys_vec(),
                             new = ?self.new_participants,
                             old = ?self.old_participants,
-                            "resharing(wait): failed to send encrypted message; {failures:#?}",
+                            "resharing(wait): failed to send encrypted message; {failures:?}",
                         );
                     }
 
@@ -308,7 +308,7 @@ impl CryptographicProtocol for ResharingState {
                             active = ?active.keys_vec(),
                             new = ?self.new_participants,
                             old = ?self.old_participants,
-                            "resharing(return): failed to send encrypted message; {failures:#?}",
+                            "resharing(return): failed to send encrypted message; {failures:?}",
                         );
                     }
 
@@ -507,7 +507,7 @@ impl CryptographicProtocol for RunningState {
         if !failures.is_empty() {
             tracing::warn!(
                 active = ?active.keys_vec(),
-                "running(post): failed to send encrypted message; {failures:#?}"
+                "running(post): failed to send encrypted message; {failures:?}"
             );
         }
         drop(messages);
