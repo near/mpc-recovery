@@ -411,6 +411,7 @@ where
                 .fetch_participant(&from)?
                 .sign_pk,
         ) {
+            tracing::debug!("signed message from {from:#?} erred out");
             return Err(CryptographicError::Encryption(
                 "invalid signature while verifying authenticity of encrypted ".to_string(),
             ));
