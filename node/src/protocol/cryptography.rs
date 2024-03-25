@@ -370,8 +370,8 @@ impl CryptographicProtocol for RunningState {
 
         let mut presignature_manager = self.presignature_manager.write().await;
         // TODO: separate out into our own presignature_cfg
-        if presignature_manager.my_len() < triple_manager.triple_cfg.min_triples
-            && presignature_manager.potential_len() < triple_manager.triple_cfg.max_triples
+        if presignature_manager.my_len() < 10
+            && presignature_manager.potential_len() < 320
         {
             // To ensure there is no contention between different nodes we are only using triples
             // that we proposed. This way in a non-BFT environment we are guaranteed to never try
