@@ -343,11 +343,30 @@ impl CryptographicProtocol for RunningState {
 
         let mut messages = self.messages.write().await;
         let mut triple_manager = self.triple_manager.write().await;
+        let triple_storage_read_lock = triple_manager.triple_storage.read().await;
+        let my_account_id = triple_storage_read_lock.account_id();
+        drop(triple_storage_read_lock);
+        crate::metrics::MESSAGE_QUEUE_SIZE
+            .with_label_values(&[&my_account_id.to_string()])
+            .set(messages.len() as i64);
         triple_manager.stockpile(active)?;
         for (p, msg) in triple_manager.poke().await? {
             let info = self.fetch_participant(&p)?;
             messages.push(info.clone(), MpcMessage::Triple(msg));
         }
+
+        crate::metrics::NUM_TRIPLES_MINE
+            .with_label_values(&[&my_account_id.to_string()])
+            .set(triple_manager.mine.len() as i64);
+        crate::metrics::NUM_TRIPLES_TOTAL
+            .with_label_values(&[&my_account_id.to_string()])
+            .set(triple_manager.triples.len() as i64);
+        crate::metrics::NUM_TRIPLE_GENERATORS_INTRODUCED
+            .with_label_values(&[&my_account_id.to_string()])
+            .set(triple_manager.introduced.len() as i64);
+        crate::metrics::NUM_TRIPLE_GENERATORS_TOTAL
+            .with_label_values(&[&my_account_id.to_string()])
+            .set(triple_manager.ongoing.len() as i64);
 
         let mut presignature_manager = self.presignature_manager.write().await;
         // TODO: separate out into our own presignature_cfg
@@ -391,10 +410,27 @@ impl CryptographicProtocol for RunningState {
             messages.push(info.clone(), MpcMessage::Presignature(msg));
         }
 
+        crate::metrics::NUM_PRESIGNATURES_MINE
+            .with_label_values(&[&my_account_id.to_string()])
+            .set(presignature_manager.my_len() as i64);
+        crate::metrics::NUM_PRESIGNATURES_TOTAL
+            .with_label_values(&[&my_account_id.to_string()])
+            .set(presignature_manager.len() as i64);
+        crate::metrics::NUM_PRESIGNATURE_GENERATORS_TOTAL
+            .with_label_values(&[&my_account_id.to_string()])
+            .set(presignature_manager.potential_len() as i64 - presignature_manager.len() as i64);
+
         let mut sign_queue = self.sign_queue.write().await;
+        crate::metrics::SIGN_QUEUE_SIZE
+            .with_label_values(&[&my_account_id.to_string()])
+            .set(sign_queue.len() as i64);
+
         let mut signature_manager = self.signature_manager.write().await;
         sign_queue.organize(self.threshold, active, ctx.me().await);
         let my_requests = sign_queue.my_requests(ctx.me().await);
+        crate::metrics::SIGN_QUEUE_MINE_SIZE
+            .with_label_values(&[&my_account_id.to_string()])
+            .set(my_requests.len() as i64);
         let mut failed_presigs = Vec::new();
         while presignature_manager.my_len() > 0 {
             if signature_manager.failed_len() > 0 {

@@ -7,6 +7,7 @@ use crate::util::AffinePointExt;
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::{KeygenOutput, PresignArguments, PresignOutput};
 use k256::Secp256k1;
+use near_lake_primitives::AccountId;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
 use std::time::Instant;
@@ -93,10 +94,11 @@ pub struct PresignatureManager {
     me: Participant,
     threshold: usize,
     epoch: u64,
+    my_account_id: AccountId,
 }
 
 impl PresignatureManager {
-    pub fn new(me: Participant, threshold: usize, epoch: u64) -> Self {
+    pub fn new(me: Participant, threshold: usize, epoch: u64, my_account_id: AccountId) -> Self {
         Self {
             presignatures: HashMap::new(),
             generators: HashMap::new(),
@@ -104,6 +106,7 @@ impl PresignatureManager {
             me,
             threshold,
             epoch,
+            my_account_id,
         }
     }
 
@@ -330,6 +333,11 @@ impl PresignatureManager {
                             tracing::info!(id, "assigning presignature to myself");
                             self.mine.push_back(*id);
                         }
+
+                        crate::metrics::PRESIGNATURE_LATENCY
+                            .with_label_values(&[&self.my_account_id.as_ref()])
+                            .observe(generator.timestamp.elapsed().as_secs_f64());
+
                         // Do not retain the protocol
                         return false;
                     }
