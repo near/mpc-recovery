@@ -42,6 +42,14 @@ impl SignQueue {
         Self::default()
     }
 
+    pub fn len(&self) -> usize {
+        self.unorganized_requests.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn add(&mut self, request: SignRequest) {
         tracing::info!(
             receipt_id = %request.receipt_id,

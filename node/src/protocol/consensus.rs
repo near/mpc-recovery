@@ -126,6 +126,13 @@ impl ConsensusProtocol for StartedState {
                                     tracing::info!(
                                         "started: contract state is running and we are already a participant"
                                     );
+                                    let presignature_manager = PresignatureManager::new(
+                                        me,
+                                        contract_state.threshold,
+                                        epoch,
+                                        account_id.clone(),
+                                        ctx.cfg(),
+                                    );
                                     let triple_manager = TripleManager::new(
                                         me,
                                         contract_state.threshold,
@@ -134,7 +141,6 @@ impl ConsensusProtocol for StartedState {
                                         self.triple_data,
                                         ctx.triple_storage(),
                                     );
-
                                     Ok(NodeState::Running(RunningState {
                                         epoch,
                                         participants: contract_state.participants,
@@ -144,12 +150,7 @@ impl ConsensusProtocol for StartedState {
                                         sign_queue,
                                         triple_manager: Arc::new(RwLock::new(triple_manager)),
                                         presignature_manager: Arc::new(RwLock::new(
-                                            PresignatureManager::new(
-                                                me,
-                                                contract_state.threshold,
-                                                epoch,
-                                                ctx.cfg(),
-                                            ),
+                                            presignature_manager,
                                         )),
                                         signature_manager: Arc::new(RwLock::new(
                                             SignatureManager::new(
@@ -365,6 +366,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                             me,
                             self.threshold,
                             self.epoch,
+                            ctx.my_account_id().clone(),
                             ctx.cfg(),
                         ))),
                         signature_manager: Arc::new(RwLock::new(SignatureManager::new(

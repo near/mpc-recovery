@@ -8,6 +8,7 @@ use crate::util::AffinePointExt;
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::{KeygenOutput, PresignArguments, PresignOutput};
 use k256::Secp256k1;
+use near_lake_primitives::AccountId;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Instant;
@@ -102,11 +103,18 @@ pub struct PresignatureManager {
     me: Participant,
     threshold: usize,
     epoch: u64,
+    my_account_id: AccountId,
     presig_cfg: PresignatureConfig,
 }
 
 impl PresignatureManager {
-    pub fn new(me: Participant, threshold: usize, epoch: u64, cfg: Config) -> Self {
+    pub fn new(
+        me: Participant,
+        threshold: usize,
+        epoch: u64,
+        my_account_id: AccountId,
+        cfg: Config,
+    ) -> Self {
         Self {
             presignatures: HashMap::new(),
             generators: HashMap::new(),
@@ -115,6 +123,7 @@ impl PresignatureManager {
             me,
             threshold,
             epoch,
+            my_account_id,
             presig_cfg: cfg.presig_cfg,
         }
     }
@@ -153,6 +162,10 @@ impl PresignatureManager {
     ) -> Result<PresignatureGenerator, InitializationError> {
         let participants: Vec<_> = participants.keys().cloned().collect();
         let protocol = Box::new(cait_sith::presign(
+            &participants,
+            me,
+            // These paramaters appear to be to make it easier to use different indexing schemes for triples
+            // Introduced in this PR https://github.com/LIT-Protocol/cait-sith/pull/7
             &participants,
             me,
             PresignArguments {
@@ -399,6 +412,11 @@ impl PresignatureManager {
                             self.mine.push_back(*id);
                         }
                         self.introduced.remove(id);
+
+                        crate::metrics::PRESIGNATURE_LATENCY
+                            .with_label_values(&[&self.my_account_id.as_ref()])
+                            .observe(generator.timestamp.elapsed().as_secs_f64());
+
                         // Do not retain the protocol
                         return false;
                     }
