@@ -36,8 +36,7 @@ pub async fn multichain_sign(user: &mut GooseUser) -> TransactionResult {
         .await
         .unwrap();
 
-    let payload: [u8; 32] = rand::thread_rng().gen();
-    let payload_hashed = web3::signing::keccak256(&payload);
+    let payload_hashed: [u8; 32] = rand::thread_rng().gen();
     tracing::info!("requesting signature for: {:?}", payload_hashed);
 
     let transaction = Transaction {
