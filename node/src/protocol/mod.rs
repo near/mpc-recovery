@@ -220,7 +220,7 @@ impl MpcSignProtocol {
                 let msg_result = self.receiver.try_recv();
                 match msg_result {
                     Ok(msg) => {
-                        tracing::debug!(?msg, "received a new message");
+                        tracing::debug!("received a new message");
                         queue.push(msg);
                     }
                     Err(TryRecvError::Empty) => {
@@ -247,12 +247,6 @@ impl MpcSignProtocol {
                     continue;
                 }
             };
-
-            if let Err(err) = state.handle(&self, &mut queue).await {
-                tracing::info!("protocol unable to handle messages: {err:?}");
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                continue;
-            }
 
             if last_state_update.elapsed() > Duration::from_secs(1) {
                 let contract_state = match rpc_client::fetch_mpc_contract_state(
@@ -284,6 +278,12 @@ impl MpcSignProtocol {
                     }
                 };
                 last_state_update = Instant::now();
+            }
+
+            if let Err(err) = state.handle(&self, &mut queue).await {
+                tracing::info!("protocol unable to handle messages: {err:?}");
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                continue;
             }
 
             let mut guard = self.state.write().await;
