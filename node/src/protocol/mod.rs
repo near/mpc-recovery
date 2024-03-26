@@ -223,7 +223,7 @@ impl MpcSignProtocol {
         if let Ok(version) = mpc_contract_version {
             crate::metrics::MPC_CONTRACT_VERSION
                 .with_label_values(&[&my_account_id.to_string()])
-                .set(version as i64);
+                .set(version);
         }
         let mut queue = MpcMessageQueue::default();
         let mut last_state_update = Instant::now();
