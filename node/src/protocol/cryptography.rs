@@ -369,39 +369,14 @@ impl CryptographicProtocol for RunningState {
             .set(triple_manager.ongoing.len() as i64);
 
         let mut presignature_manager = self.presignature_manager.write().await;
-        // TODO: separate out into our own presignature_cfg
-        if presignature_manager.my_len() < triple_manager.triple_cfg.min_triples
-            && presignature_manager.potential_len() < triple_manager.triple_cfg.max_triples
-        {
-            // To ensure there is no contention between different nodes we are only using triples
-            // that we proposed. This way in a non-BFT environment we are guaranteed to never try
-            // to use the same triple as any other node.
-            if let Some((triple0, triple1)) = triple_manager.take_two_mine().await {
-                let presig_participants = active
-                    .intersection(&[&triple0.public.participants, &triple1.public.participants]);
-                if presig_participants.len() < self.threshold {
-                    tracing::debug!(
-                        participants = ?presig_participants.keys_vec(),
-                        "running: we don't have enough participants to generate a presignature"
-                    );
-
-                    // Insert back the triples to be used later since this active set of
-                    // participants were not able to make use of these triples.
-                    triple_manager.insert_mine(triple0).await;
-                    triple_manager.insert_mine(triple1).await;
-                } else {
-                    presignature_manager.generate(
-                        &presig_participants,
-                        triple0,
-                        triple1,
-                        &self.public_key,
-                        &self.private_share,
-                    )?;
-                }
-            } else {
-                tracing::debug!("running: we don't have enough triples to generate a presignature");
-            }
-        }
+        presignature_manager
+            .stockpile(
+                active,
+                &self.public_key,
+                &self.private_share,
+                &mut triple_manager,
+            )
+            .await?;
         drop(triple_manager);
         for (p, msg) in presignature_manager.poke()? {
             let info = self.fetch_participant(&p)?;
