@@ -70,7 +70,6 @@ async fn msg(
     Extension(state): Extension<Arc<AxumState>>,
     WithRejection(Json(encrypted), _): WithRejection<Json<Ciphered>, Error>,
 ) -> Result<()> {
-    tracing::debug!(ciphertext = ?encrypted.text, "received encrypted");
     let message =
         match SignedMessage::decrypt(&state.cipher_sk, &state.protocol_state, encrypted).await {
             Ok(msg) => msg,
