@@ -411,7 +411,7 @@ impl MpcContract {
     }
 
     fn remove_request(&mut self, payload: &[u8; 32]) {
-        self.pending_requests.remove(&payload);
+        self.pending_requests.remove(payload);
         self.request_counter -= 1;
     }
 }
