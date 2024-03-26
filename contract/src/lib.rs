@@ -1,7 +1,7 @@
 pub mod primitives;
 
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::collections::TreeMap;
+use near_sdk::collections::LookupMap;
 use near_sdk::log;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault, Promise, PromiseOrValue, PublicKey};
@@ -49,7 +49,8 @@ pub enum ProtocolContractState {
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct MpcContract {
     protocol_state: ProtocolContractState,
-    pending_requests: TreeMap<[u8; 32], Option<(String, String)>>,
+    pending_requests: LookupMap<[u8; 32], Option<(String, String)>>,
+    request_counter: u32,
 }
 
 #[near_bindgen]
@@ -68,7 +69,8 @@ impl MpcContract {
                 threshold,
                 pk_votes: PkVotes::new(),
             }),
-            pending_requests: TreeMap::new(b"m"),
+            pending_requests: LookupMap::new(b"m"),
+            request_counter: 0,
         }
     }
 
@@ -296,9 +298,6 @@ impl MpcContract {
     #[allow(unused_variables)]
     /// `key_version` must be less than or equal to the value at `latest_key_version`
     pub fn sign(&mut self, payload: [u8; 32], path: String, key_version: u32) -> Promise {
-        if self.pending_requests.len() > 8 {
-            env::panic_str("Too many pending requests. Please, try again later.");
-        }
         let latest_key_version: u32 = self.latest_key_version();
         assert!(
             key_version <= latest_key_version,
@@ -314,7 +313,7 @@ impl MpcContract {
         );
         match self.pending_requests.get(&payload) {
             None => {
-                self.pending_requests.insert(&payload, &None);
+                self.add_request(&payload, &None);
                 log!(&serde_json::to_string(&near_sdk::env::random_seed_array()).unwrap());
                 Self::ext(env::current_account_id()).sign_helper(payload, 0)
             }
@@ -336,12 +335,12 @@ impl MpcContract {
                         signature,
                         depth
                     );
-                    self.pending_requests.remove(&payload);
+                    self.remove_request(&payload);
                     PromiseOrValue::Value(signature)
                 }
                 None => {
                     if depth > 30 {
-                        self.pending_requests.remove(&payload);
+                        self.remove_request(&payload);
                         env::panic_str("Signature was not provided in time. Please, try again.");
                     }
                     log!(&format!(
@@ -366,7 +365,7 @@ impl MpcContract {
             s
         );
         if self.pending_requests.contains_key(&payload) {
-            self.pending_requests.insert(&payload, &Some((big_r, s)));
+            self.add_request(&payload, &Some((big_r, s)));
         }
     }
 
@@ -379,14 +378,9 @@ impl MpcContract {
         }
         Self {
             protocol_state: ProtocolContractState::NotInitialized,
-            pending_requests: TreeMap::new(b"m"),
+            pending_requests: LookupMap::new(b"m"),
+            request_counter: 0,
         }
-    }
-
-    #[private]
-    pub fn clean_requests(&mut self) {
-        log!("clean requests");
-        self.pending_requests.clear();
     }
 
     /// This is the root public key combined from all the public keys of the participants.
@@ -404,5 +398,21 @@ impl MpcContract {
     /// Currently only 0 is a valid key version
     pub const fn latest_key_version(&self) -> u32 {
         0
+    }
+
+    fn add_request(&mut self, payload: &[u8; 32], signature: &Option<(String, String)>) {
+        if self.request_counter > 8 {
+            env::panic_str("Too many pending requests. Please, try again later.");
+        }
+        if !self.pending_requests.contains_key(payload) {
+            self.request_counter += 1;
+        }
+        self.pending_requests.insert(payload, signature);
+        
+    }
+
+    fn remove_request(&mut self, payload: &[u8; 32]) {
+        self.pending_requests.remove(&payload);
+        self.request_counter -= 1;
     }
 }
