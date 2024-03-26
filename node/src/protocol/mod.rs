@@ -219,6 +219,12 @@ impl MpcSignProtocol {
         crate::metrics::NODE_RUNNING
             .with_label_values(&[&my_account_id])
             .set(1);
+        let mpc_contract_version = get_contract_version(&self.ctx.mpc_contract_id);
+        if let Ok(version) = mpc_contract_version {
+            crate::metrics::MPC_CONTRACT_VERSION
+                .with_label_values(&[&my_account_id.to_string()])
+                .set(version as i64);
+        }
         let mut queue = MpcMessageQueue::default();
         let mut last_state_update = Instant::now();
         loop {
@@ -310,4 +316,11 @@ async fn get_my_participant(protocol: &MpcSignProtocol) -> Participant {
             panic!("could not find participant info for {my_near_acc_id}");
         });
     participant_info.id.into()
+}
+
+fn get_contract_version(mpc_contract_account: &AccountId) -> Result<i64, std::num::ParseIntError> {
+    let mpc_contract_id = mpc_contract_account.as_str();
+    let parts: Vec<&str> = mpc_contract_id.split('.').collect();
+    let version_str = parts[0].trim_start_matches('v');
+    version_str.parse::<i64>()
 }
