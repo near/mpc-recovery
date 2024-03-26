@@ -4,7 +4,7 @@ use crate::protocol::MpcMessage;
 use cait_sith::protocol::Participant;
 use mpc_keys::hpke;
 use reqwest::{Client, IntoUrl};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::str::Utf8Error;
 use std::time::{Duration, Instant};
 use tokio_retry::strategy::{jitter, ExponentialBackoff};
@@ -86,6 +86,7 @@ async fn send_encrypted<U: IntoUrl>(
 #[derive(Default)]
 pub struct MessageQueue {
     deque: VecDeque<(ParticipantInfo, MpcMessage, Instant)>,
+    seen_counts: HashSet<String>,
 }
 
 impl MessageQueue {
@@ -110,7 +111,7 @@ impl MessageQueue {
     ) -> Vec<SendError> {
         let mut failed = VecDeque::new();
         let mut errors = Vec::new();
-        let mut cannot_send_errors = HashMap::new();
+        let mut participant_counter = HashMap::new();
         while let Some((info, msg, instant)) = self.deque.pop_front() {
             if !participants.contains_key(&Participant::from(info.id)) {
                 if instant.elapsed() > message_type_to_timeout(&msg) {
@@ -119,7 +120,7 @@ impl MessageQueue {
                     )));
                     continue;
                 }
-                let counter = cannot_send_errors.entry(info.id).or_insert(0);
+                let counter = participant_counter.entry(info.id).or_insert(0);
                 *counter += 1;
                 failed.push_back((info, msg, instant));
                 continue;
@@ -139,9 +140,11 @@ impl MessageQueue {
                 errors.push(err);
             }
         }
-        if !cannot_send_errors.is_empty() {
+        // only add the participant count if it hasn't been seen before.
+        let counts = format!("{participant_counter:?}");
+        if !participant_counter.is_empty() && self.seen_counts.insert(counts.clone()) {
             errors.push(SendError::ParticipantNotAlive(format!(
-                "participants not responding: {cannot_send_errors:?}",
+                "participants not responding: {counts:?}",
             )));
         }
 
