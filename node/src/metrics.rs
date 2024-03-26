@@ -249,6 +249,15 @@ pub(crate) static NUM_TOTAL_HISTORICAL_PRESIGNATURE_GENERATORS_MINE_SUCCESS: Laz
         .unwrap()
     });
 
+pub(crate) static NUM_SIGN_SUCCESS_30S: Lazy<IntGaugeVec> = Lazy::new(|| {
+    try_create_int_gauge_vec(
+            "multichain_sign_requests_success_30s",
+            "number of successful multichain sign requests that finished within 30s, marked by publish()",
+            &["node_account_id"],
+        )
+        .unwrap()
+});
+
 pub fn try_create_int_gauge_vec(name: &str, help: &str, labels: &[&str]) -> Result<IntGaugeVec> {
     check_metric_multichain_prefix(name)?;
     let opts = Opts::new(name, help);
