@@ -214,6 +214,7 @@ impl MpcSignProtocol {
             .set(1);
         let mut queue = MpcMessageQueue::default();
         let mut last_state_update = Instant::now();
+        let mut last_pinged = Instant::now();
         loop {
             tracing::debug!("trying to advance mpc recovery protocol");
             loop {
@@ -234,21 +235,7 @@ impl MpcSignProtocol {
                 }
             }
 
-            let state = {
-                let guard = self.state.read().await;
-                guard.clone()
-            };
-
-            let mut state = match state.progress(&mut self).await {
-                Ok(state) => state,
-                Err(err) => {
-                    tracing::info!("protocol unable to progress: {err:?}");
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                    continue;
-                }
-            };
-
-            if last_state_update.elapsed() > Duration::from_secs(1) {
+            let contract_state = if last_state_update.elapsed() > Duration::from_secs(1) {
                 let contract_state = match rpc_client::fetch_mpc_contract_state(
                     &self.ctx.rpc_client,
                     &self.ctx.mpc_contract_id,
@@ -269,6 +256,32 @@ impl MpcSignProtocol {
                 // receiving messages.
                 self.ctx.mesh.establish_participants(&contract_state).await;
 
+                last_state_update = Instant::now();
+                Some(contract_state)
+            } else {
+                None
+            };
+
+            if last_pinged.elapsed() > Duration::from_millis(300) {
+                self.ctx.mesh.ping().await;
+                last_pinged = Instant::now();
+            }
+
+            let state = {
+                let guard = self.state.read().await;
+                guard.clone()
+            };
+
+            let mut state = match state.progress(&mut self).await {
+                Ok(state) => state,
+                Err(err) => {
+                    tracing::info!("protocol unable to progress: {err:?}");
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    continue;
+                }
+            };
+
+            if let Some(contract_state) = contract_state {
                 state = match state.advance(&mut self, contract_state).await {
                     Ok(state) => state,
                     Err(err) => {
@@ -277,7 +290,6 @@ impl MpcSignProtocol {
                         continue;
                     }
                 };
-                last_state_update = Instant::now();
             }
 
             if let Err(err) = state.handle(&self, &mut queue).await {
@@ -286,9 +298,21 @@ impl MpcSignProtocol {
                 continue;
             }
 
+            let sleep_ms = match state {
+                NodeState::Generating(_) => 500,
+                NodeState::Resharing(_) => 500,
+                NodeState::Running(_) => 100,
+
+                NodeState::Starting => 1000,
+                NodeState::Started(_) => 1000,
+                NodeState::WaitingForConsensus(_) => 1000,
+                NodeState::Joining(_) => 1000,
+            };
+
             let mut guard = self.state.write().await;
             *guard = state;
             drop(guard);
+            tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
         }
     }
 }

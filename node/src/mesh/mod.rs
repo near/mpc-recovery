@@ -52,6 +52,11 @@ impl Mesh {
         self.connections
             .establish_participants(contract_state)
             .await;
+        self.ping().await;
+    }
+
+    /// Ping the active participants such that we can see who is alive.
+    pub async fn ping(&mut self) {
         self.active_participants = self.connections.ping().await;
         self.active_potential_participants = self.connections.ping_potential().await;
     }

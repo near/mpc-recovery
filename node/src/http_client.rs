@@ -27,6 +27,10 @@ pub enum SendError {
     MalformedResponse(Utf8Error),
     #[error("encryption error: {0}")]
     EncryptionError(String),
+    #[error("http request timeout: {0}")]
+    Timeout(String),
+    #[error("participant is not alive: {0}")]
+    ParticipantNotAlive(String),
 }
 
 async fn send_encrypted<U: IntoUrl>(
@@ -110,7 +114,7 @@ impl MessageQueue {
         while let Some((info, msg, instant)) = self.deque.pop_front() {
             if !participants.contains_key(&Participant::from(info.id)) {
                 if instant.elapsed() > message_type_to_timeout(&msg) {
-                    errors.push(SendError::Unsuccessful(format!(
+                    errors.push(SendError::Timeout(format!(
                         "message has timed out on offline node: {info:?}",
                     )));
                     continue;
@@ -125,7 +129,7 @@ impl MessageQueue {
                 send_encrypted(from, &info.cipher_pk, sign_sk, client, &info.url, &msg).await
             {
                 if instant.elapsed() > message_type_to_timeout(&msg) {
-                    errors.push(SendError::Unsuccessful(format!(
+                    errors.push(SendError::Timeout(format!(
                         "message has timed out: {err:?}"
                     )));
                     continue;
@@ -136,8 +140,8 @@ impl MessageQueue {
             }
         }
         if !cannot_send_errors.is_empty() {
-            errors.push(SendError::Unsuccessful(format!(
-                "cannot send message due to participants not responding: {cannot_send_errors:?}",
+            errors.push(SendError::ParticipantNotAlive(format!(
+                "participants not responding: {cannot_send_errors:?}",
             )));
         }
 

@@ -111,7 +111,7 @@ async fn test_signature_offline_node() -> anyhow::Result<()> {
         Box::pin(async move {
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
             assert_eq!(state_0.participants.len(), 3);
-            wait_for::has_at_least_triples(&ctx, 2).await?;
+            wait_for::has_at_least_triples(&ctx, 4).await?;
 
             // Kill the node then have presignature and signature generation only use the active set of nodes
             // to start generating presignatures and signatures.

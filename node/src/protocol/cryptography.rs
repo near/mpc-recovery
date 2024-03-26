@@ -382,7 +382,7 @@ impl CryptographicProtocol for RunningState {
                 if presig_participants.len() < self.threshold {
                     tracing::debug!(
                         participants = ?presig_participants.keys_vec(),
-                        "running(pre): we don't have enough participants to generate a presignature"
+                        "running: we don't have enough participants to generate a presignature"
                     );
 
                     // Insert back the triples to be used later since this active set of
@@ -399,9 +399,7 @@ impl CryptographicProtocol for RunningState {
                     )?;
                 }
             } else {
-                tracing::debug!(
-                    "running(pre): we don't have enough triples to generate a presignature"
-                );
+                tracing::debug!("running: we don't have enough triples to generate a presignature");
             }
         }
         drop(triple_manager);
@@ -507,7 +505,7 @@ impl CryptographicProtocol for RunningState {
         if !failures.is_empty() {
             tracing::warn!(
                 active = ?active.keys_vec(),
-                "running(post): failed to send encrypted message; {failures:?}"
+                "running: failed to send encrypted message; {failures:?}"
             );
         }
         drop(messages);
