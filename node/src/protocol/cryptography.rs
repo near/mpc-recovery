@@ -106,7 +106,7 @@ impl CryptographicProtocol for GeneratingState {
                     if !failures.is_empty() {
                         tracing::warn!(
                             active = ?ctx.mesh().active_participants().keys_vec(),
-                            "generating(wait): failed to send encrypted message; {failures:#?}"
+                            "generating(wait): failed to send encrypted message; {failures:?}"
                         );
                     }
 
@@ -167,7 +167,7 @@ impl CryptographicProtocol for GeneratingState {
                     if !failures.is_empty() {
                         tracing::warn!(
                             active = ?ctx.mesh().active_participants().keys_vec(),
-                            "generating(return): failed to send encrypted message; {failures:#?}"
+                            "generating(return): failed to send encrypted message; {failures:?}"
                         );
                     }
                     return Ok(NodeState::WaitingForConsensus(WaitingForConsensusState {
@@ -204,7 +204,7 @@ impl CryptographicProtocol for WaitingForConsensusState {
         if !failures.is_empty() {
             tracing::warn!(
                 active = ?ctx.mesh().active_participants().keys_vec(),
-                "waitingForConsensus: failed to send encrypted message; {failures:#?}"
+                "waitingForConsensus: failed to send encrypted message; {failures:?}"
             );
         }
 
@@ -254,7 +254,7 @@ impl CryptographicProtocol for ResharingState {
                             active = ?active.keys_vec(),
                             new = ?self.new_participants,
                             old = ?self.old_participants,
-                            "resharing(wait): failed to send encrypted message; {failures:#?}",
+                            "resharing(wait): failed to send encrypted message; {failures:?}",
                         );
                     }
 
@@ -308,7 +308,7 @@ impl CryptographicProtocol for ResharingState {
                             active = ?active.keys_vec(),
                             new = ?self.new_participants,
                             old = ?self.old_participants,
-                            "resharing(return): failed to send encrypted message; {failures:#?}",
+                            "resharing(return): failed to send encrypted message; {failures:?}",
                         );
                     }
 
@@ -333,54 +333,93 @@ impl CryptographicProtocol for RunningState {
         ctx: C,
     ) -> Result<NodeState, CryptographicError> {
         let active = ctx.mesh().active_participants();
+        if active.len() < self.threshold {
+            tracing::info!(
+                active = ?active.keys_vec(),
+                "running: not enough participants to progress"
+            );
+            return Ok(NodeState::Running(self));
+        }
+
         let mut messages = self.messages.write().await;
         let mut triple_manager = self.triple_manager.write().await;
+        let triple_storage_read_lock = triple_manager.triple_storage.read().await;
+        let my_account_id = triple_storage_read_lock.account_id();
+        drop(triple_storage_read_lock);
+        crate::metrics::MESSAGE_QUEUE_SIZE
+            .with_label_values(&[&my_account_id.to_string()])
+            .set(messages.len() as i64);
         triple_manager.stockpile(active)?;
         for (p, msg) in triple_manager.poke().await? {
             let info = self.fetch_participant(&p)?;
             messages.push(info.clone(), MpcMessage::Triple(msg));
         }
 
+        crate::metrics::NUM_TRIPLES_MINE
+            .with_label_values(&[&my_account_id.to_string()])
+            .set(triple_manager.mine.len() as i64);
+        crate::metrics::NUM_TRIPLES_TOTAL
+            .with_label_values(&[&my_account_id.to_string()])
+            .set(triple_manager.triples.len() as i64);
+        crate::metrics::NUM_TRIPLE_GENERATORS_INTRODUCED
+            .with_label_values(&[&my_account_id.to_string()])
+            .set(triple_manager.introduced.len() as i64);
+        crate::metrics::NUM_TRIPLE_GENERATORS_TOTAL
+            .with_label_values(&[&my_account_id.to_string()])
+            .set(triple_manager.ongoing.len() as i64);
+
         let mut presignature_manager = self.presignature_manager.write().await;
-        // TODO: separate out into our own presignature_cfg
-        if presignature_manager.my_len() < triple_manager.triple_cfg.min_triples
-            && presignature_manager.potential_len() < triple_manager.triple_cfg.max_triples
-        {
-            // To ensure there is no contention between different nodes we are only using triples
-            // that we proposed. This way in a non-BFT environment we are guaranteed to never try
-            // to use the same triple as any other node.
-            if let Some((triple0, triple1)) = triple_manager.take_two_mine().await {
-                let presig_participants = active
-                    .intersection(&[&triple0.public.participants, &triple1.public.participants]);
-                presignature_manager.generate(
-                    &presig_participants,
-                    triple0,
-                    triple1,
-                    &self.public_key,
-                    &self.private_share,
-                )?;
-            } else {
-                tracing::debug!(
-                    "running(pre): we don't have enough triples to generate a presignature"
-                );
-            }
-        }
+        presignature_manager
+            .stockpile(
+                active,
+                &self.public_key,
+                &self.private_share,
+                &mut triple_manager,
+            )
+            .await?;
         drop(triple_manager);
         for (p, msg) in presignature_manager.poke()? {
             let info = self.fetch_participant(&p)?;
             messages.push(info.clone(), MpcMessage::Presignature(msg));
         }
 
+        crate::metrics::NUM_PRESIGNATURES_MINE
+            .with_label_values(&[&my_account_id.to_string()])
+            .set(presignature_manager.my_len() as i64);
+        crate::metrics::NUM_PRESIGNATURES_TOTAL
+            .with_label_values(&[&my_account_id.to_string()])
+            .set(presignature_manager.len() as i64);
+        crate::metrics::NUM_PRESIGNATURE_GENERATORS_TOTAL
+            .with_label_values(&[&my_account_id.to_string()])
+            .set(presignature_manager.potential_len() as i64 - presignature_manager.len() as i64);
+
         let mut sign_queue = self.sign_queue.write().await;
+        crate::metrics::SIGN_QUEUE_SIZE
+            .with_label_values(&[&my_account_id.to_string()])
+            .set(sign_queue.len() as i64);
+
         let mut signature_manager = self.signature_manager.write().await;
         sign_queue.organize(self.threshold, active, ctx.me().await);
         let my_requests = sign_queue.my_requests(ctx.me().await);
+        crate::metrics::SIGN_QUEUE_MINE_SIZE
+            .with_label_values(&[&my_account_id.to_string()])
+            .set(my_requests.len() as i64);
+        let mut failed_presigs = Vec::new();
         while presignature_manager.my_len() > 0 {
             if signature_manager.failed_len() > 0 {
                 let Some(presignature) = presignature_manager.take_mine() else {
                     break;
                 };
                 let sig_participants = active.intersection(&[&presignature.participants]);
+                if sig_participants.len() < self.threshold {
+                    tracing::debug!(
+                        participants = ?sig_participants.keys_vec(),
+                        "running: we don't have enough participants to generate a failed signature"
+                    );
+                    failed_presigs.push(presignature);
+                    continue;
+                }
+
                 signature_manager.retry_failed_generation(presignature, &sig_participants);
                 break;
             }
@@ -395,6 +434,15 @@ impl CryptographicProtocol for RunningState {
 
             let receipt_id = *receipt_id;
             let sig_participants = active.intersection(&[&presignature.participants]);
+            if sig_participants.len() < self.threshold {
+                tracing::debug!(
+                    participants = ?sig_participants.keys_vec(),
+                    "running: we don't have enough participants to generate a signature"
+                );
+                failed_presigs.push(presignature);
+                continue;
+            }
+
             let my_request = my_requests.remove(&receipt_id).unwrap();
             signature_manager.generate(
                 &sig_participants,
@@ -408,6 +456,9 @@ impl CryptographicProtocol for RunningState {
             )?;
         }
         drop(sign_queue);
+        for presignature in failed_presigs {
+            presignature_manager.insert_mine(presignature);
+        }
         drop(presignature_manager);
         for (p, msg) in signature_manager.poke() {
             let info = self.participants.get(&p).unwrap();
@@ -429,7 +480,7 @@ impl CryptographicProtocol for RunningState {
         if !failures.is_empty() {
             tracing::warn!(
                 active = ?active.keys_vec(),
-                "running(post): failed to send encrypted message; {failures:#?}"
+                "running: failed to send encrypted message; {failures:?}"
             );
         }
         drop(messages);

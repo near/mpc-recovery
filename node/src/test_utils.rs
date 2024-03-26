@@ -2,12 +2,12 @@ use std::{collections::HashMap, fs::OpenOptions, ops::Range};
 
 use crate::protocol::contract::primitives::Participants;
 use crate::protocol::triple::TripleConfig;
-use crate::protocol::ParticipantInfo;
+use crate::protocol::{Config, ParticipantInfo};
 use crate::{gcp::GcpService, protocol::message::TripleMessage, storage};
 use cait_sith::protocol::{InitializationError, Participant, ProtocolError};
 use std::io::prelude::*;
 
-use crate::protocol::presignature::GenerationError;
+use crate::protocol::presignature::{GenerationError, PresignatureConfig};
 use crate::protocol::triple::Triple;
 use crate::protocol::triple::TripleId;
 use crate::protocol::triple::TripleManager;
@@ -20,11 +20,17 @@ use tokio::sync::RwLock;
 
 // Constants to be used for testing.
 const STARTING_EPOCH: u64 = 0;
-const DEFAULT_TRIPLE_CONFIG: TripleConfig = TripleConfig {
-    min_triples: 2,
-    max_triples: 10,
-    max_concurrent_introduction: 4,
-    max_concurrent_generation: 16,
+const DEFAULT_TEST_CONFIG: Config = Config {
+    triple_cfg: TripleConfig {
+        min_triples: 2,
+        max_triples: 10,
+        max_concurrent_introduction: 4,
+        max_concurrent_generation: 16,
+    },
+    presig_cfg: PresignatureConfig {
+        min_presignatures: 2,
+        max_presignatures: 10,
+    },
 };
 
 struct TestTripleManagers {
@@ -64,7 +70,7 @@ impl TestTripleManagers {
                     Participant::from(num),
                     num_managers as usize,
                     STARTING_EPOCH,
-                    DEFAULT_TRIPLE_CONFIG,
+                    DEFAULT_TEST_CONFIG,
                     vec![],
                     triple_storage,
                 )

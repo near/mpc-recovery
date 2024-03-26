@@ -20,6 +20,7 @@ pub use state::NodeState;
 use self::consensus::ConsensusCtx;
 use self::cryptography::CryptographicCtx;
 use self::message::MessageCtx;
+use self::presignature::PresignatureConfig;
 use self::triple::TripleConfig;
 use crate::mesh::Mesh;
 use crate::protocol::consensus::ConsensusProtocol;
@@ -33,12 +34,19 @@ use cait_sith::protocol::Participant;
 use near_crypto::InMemorySigner;
 use near_primitives::types::AccountId;
 use reqwest::IntoUrl;
+use std::time::Instant;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::mpsc::{self, error::TryRecvError};
 use tokio::sync::RwLock;
 use url::Url;
 
 use mpc_keys::hpke;
+
+#[derive(Copy, Clone, Debug)]
+pub struct Config {
+    pub triple_cfg: TripleConfig,
+    pub presig_cfg: PresignatureConfig,
+}
 
 struct Ctx {
     my_address: Url,
@@ -51,8 +59,8 @@ struct Ctx {
     cipher_pk: hpke::PublicKey,
     sign_sk: near_crypto::SecretKey,
     secret_storage: SecretNodeStorageBox,
-    triple_cfg: TripleConfig,
     triple_storage: LockTripleNodeStorageBox,
+    cfg: Config,
     mesh: Mesh,
 }
 
@@ -101,8 +109,8 @@ impl ConsensusCtx for &mut MpcSignProtocol {
         &self.ctx.secret_storage
     }
 
-    fn triple_cfg(&self) -> TripleConfig {
-        self.ctx.triple_cfg
+    fn cfg(&self) -> Config {
+        self.ctx.cfg
     }
 
     fn triple_storage(&mut self) -> LockTripleNodeStorageBox {
@@ -178,8 +186,8 @@ impl MpcSignProtocol {
         sign_queue: Arc<RwLock<SignQueue>>,
         cipher_pk: hpke::PublicKey,
         secret_storage: SecretNodeStorageBox,
-        triple_cfg: TripleConfig,
         triple_storage: LockTripleNodeStorageBox,
+        cfg: Config,
     ) -> (Self, Arc<RwLock<NodeState>>) {
         let state = Arc::new(RwLock::new(NodeState::Starting));
         let ctx = Ctx {
@@ -193,8 +201,8 @@ impl MpcSignProtocol {
             sign_sk: signer.secret_key.clone(),
             signer,
             secret_storage,
-            triple_cfg,
             triple_storage,
+            cfg,
             mesh: Mesh::default(),
         };
         let protocol = MpcSignProtocol {
@@ -211,23 +219,17 @@ impl MpcSignProtocol {
         crate::metrics::NODE_RUNNING
             .with_label_values(&[&my_account_id])
             .set(1);
+        let mpc_contract_version = get_contract_version(&self.ctx.mpc_contract_id);
+        if let Ok(version) = mpc_contract_version {
+            crate::metrics::MPC_CONTRACT_VERSION
+                .with_label_values(&[&my_account_id.to_string()])
+                .set(version);
+        }
         let mut queue = MpcMessageQueue::default();
+        let mut last_state_update = Instant::now();
+        let mut last_pinged = Instant::now();
         loop {
             tracing::debug!("trying to advance mpc recovery protocol");
-            let contract_state = match rpc_client::fetch_mpc_contract_state(
-                &self.ctx.rpc_client,
-                &self.ctx.mpc_contract_id,
-            )
-            .await
-            {
-                Ok(contract_state) => contract_state,
-                Err(e) => {
-                    tracing::error!("could not fetch contract's state: {e}");
-                    tokio::time::sleep(Duration::from_secs(1)).await;
-                    continue;
-                }
-            };
-            tracing::debug!(?contract_state);
             loop {
                 let msg_result = self.receiver.try_recv();
                 match msg_result {
@@ -246,42 +248,84 @@ impl MpcSignProtocol {
                 }
             }
 
-            // Establish the participants for this current iteration of the protocol loop. This will
-            // set which participants are currently active in the protocol and determines who will be
-            // receiving messages.
-            self.ctx.mesh.establish_participants(&contract_state).await;
+            let contract_state = if last_state_update.elapsed() > Duration::from_secs(1) {
+                let contract_state = match rpc_client::fetch_mpc_contract_state(
+                    &self.ctx.rpc_client,
+                    &self.ctx.mpc_contract_id,
+                )
+                .await
+                {
+                    Ok(contract_state) => contract_state,
+                    Err(e) => {
+                        tracing::error!("could not fetch contract's state: {e}");
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        continue;
+                    }
+                };
+                tracing::debug!(?contract_state);
+
+                // Establish the participants for this current iteration of the protocol loop. This will
+                // set which participants are currently active in the protocol and determines who will be
+                // receiving messages.
+                self.ctx.mesh.establish_participants(&contract_state).await;
+
+                last_state_update = Instant::now();
+                Some(contract_state)
+            } else {
+                None
+            };
+
+            if last_pinged.elapsed() > Duration::from_millis(300) {
+                self.ctx.mesh.ping().await;
+                last_pinged = Instant::now();
+            }
 
             let state = {
                 let guard = self.state.read().await;
                 guard.clone()
             };
-            let state = match state.progress(&mut self).await {
+
+            let mut state = match state.progress(&mut self).await {
                 Ok(state) => state,
                 Err(err) => {
                     tracing::info!("protocol unable to progress: {err:?}");
-                    tokio::time::sleep(Duration::from_millis(1000)).await;
+                    tokio::time::sleep(Duration::from_millis(100)).await;
                     continue;
                 }
             };
-            let mut state = match state.advance(&mut self, contract_state).await {
-                Ok(state) => state,
-                Err(err) => {
-                    tracing::info!("protocol unable to advance: {err:?}");
-                    tokio::time::sleep(Duration::from_millis(1000)).await;
-                    continue;
-                }
-            };
+
+            if let Some(contract_state) = contract_state {
+                state = match state.advance(&mut self, contract_state).await {
+                    Ok(state) => state,
+                    Err(err) => {
+                        tracing::info!("protocol unable to advance: {err:?}");
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        continue;
+                    }
+                };
+            }
+
             if let Err(err) = state.handle(&self, &mut queue).await {
                 tracing::info!("protocol unable to handle messages: {err:?}");
-                tokio::time::sleep(Duration::from_millis(1000)).await;
+                tokio::time::sleep(Duration::from_millis(100)).await;
                 continue;
             }
+
+            let sleep_ms = match state {
+                NodeState::Generating(_) => 500,
+                NodeState::Resharing(_) => 500,
+                NodeState::Running(_) => 100,
+
+                NodeState::Starting => 1000,
+                NodeState::Started(_) => 1000,
+                NodeState::WaitingForConsensus(_) => 1000,
+                NodeState::Joining(_) => 1000,
+            };
 
             let mut guard = self.state.write().await;
             *guard = state;
             drop(guard);
-
-            tokio::time::sleep(Duration::from_millis(1000)).await;
+            tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
         }
     }
 }
@@ -296,4 +340,11 @@ async fn get_my_participant(protocol: &MpcSignProtocol) -> Participant {
             panic!("could not find participant info for {my_near_acc_id}");
         });
     participant_info.id.into()
+}
+
+fn get_contract_version(mpc_contract_account: &AccountId) -> Result<i64, std::num::ParseIntError> {
+    let mpc_contract_id = mpc_contract_account.as_str();
+    let parts: Vec<&str> = mpc_contract_id.split('.').collect();
+    let version_str = parts[0].trim_start_matches('v');
+    version_str.parse::<i64>()
 }

@@ -6,7 +6,7 @@ use near_primitives::utils::generate_random_string;
 use reqwest::{header::CONTENT_TYPE, Body};
 use std::time::Duration;
 
-use crate::primitives::IdTokenClaims;
+use super::primitives::IdTokenClaims;
 
 // TODO: try using existing function
 pub fn create_jwt_token(

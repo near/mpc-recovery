@@ -1,5 +1,6 @@
 use super::message::PresignatureMessage;
-use super::triple::{Triple, TripleId, TripleManager};
+use super::triple::{Triple, TripleConfig, TripleId, TripleManager};
+use super::Config;
 use crate::gcp::error::DatastoreStorageError;
 use crate::protocol::contract::primitives::Participants;
 use crate::types::{PresignatureProtocol, PublicKey, SecretKeyShare};
@@ -7,8 +8,9 @@ use crate::util::AffinePointExt;
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::{KeygenOutput, PresignArguments, PresignOutput};
 use k256::Secp256k1;
+use near_lake_primitives::AccountId;
 use std::collections::hash_map::Entry;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Instant;
 
 /// Unique number used to identify a specific ongoing presignature generation protocol.
@@ -21,6 +23,12 @@ pub struct Presignature {
     pub id: PresignatureId,
     pub output: PresignOutput<Secp256k1>,
     pub participants: Vec<Participant>,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct PresignatureConfig {
+    pub min_presignatures: usize,
+    pub max_presignatures: usize,
 }
 
 /// An ongoing presignature generator.
@@ -85,25 +93,38 @@ pub enum GenerationError {
 pub struct PresignatureManager {
     /// Completed unspent presignatures.
     presignatures: HashMap<PresignatureId, Presignature>,
-    /// Ongoing triple generation protocols.
+    /// Ongoing presignature generation protocols.
     generators: HashMap<PresignatureId, PresignatureGenerator>,
     /// List of presignature ids generation of which was initiated by the current node.
     mine: VecDeque<PresignatureId>,
+    /// The set of presignatures that were introduced to the system by the current node.
+    introduced: HashSet<PresignatureId>,
 
     me: Participant,
     threshold: usize,
     epoch: u64,
+    my_account_id: AccountId,
+    presig_cfg: PresignatureConfig,
 }
 
 impl PresignatureManager {
-    pub fn new(me: Participant, threshold: usize, epoch: u64) -> Self {
+    pub fn new(
+        me: Participant,
+        threshold: usize,
+        epoch: u64,
+        my_account_id: AccountId,
+        cfg: Config,
+    ) -> Self {
         Self {
             presignatures: HashMap::new(),
             generators: HashMap::new(),
             mine: VecDeque::new(),
+            introduced: HashSet::new(),
             me,
             threshold,
             epoch,
+            my_account_id,
+            presig_cfg: cfg.presig_cfg,
         }
     }
 
@@ -141,6 +162,10 @@ impl PresignatureManager {
     ) -> Result<PresignatureGenerator, InitializationError> {
         let participants: Vec<_> = participants.keys().cloned().collect();
         let protocol = Box::new(cait_sith::presign(
+            &participants,
+            me,
+            // These paramaters appear to be to make it easier to use different indexing schemes for triples
+            // Introduced in this PR https://github.com/LIT-Protocol/cait-sith/pull/7
             &participants,
             me,
             PresignArguments {
@@ -184,6 +209,65 @@ impl PresignatureManager {
             true,
         )?;
         self.generators.insert(id, generator);
+        self.introduced.insert(id);
+        Ok(())
+    }
+
+    pub async fn stockpile(
+        &mut self,
+        active: &Participants,
+        pk: &PublicKey,
+        sk_share: &SecretKeyShare,
+        triple_manager: &mut TripleManager,
+    ) -> Result<(), InitializationError> {
+        let PresignatureConfig {
+            min_presignatures,
+            max_presignatures,
+        } = self.presig_cfg;
+
+        let TripleConfig {
+            max_concurrent_introduction,
+            ..
+        } = triple_manager.triple_cfg;
+
+        let not_enough_presignatures = {
+            // Stopgap to prevent too many presignatures in the system. This should be around min_presig*nodes*2
+            // for good measure so that we have enough presignatures to do sig generation while also maintain
+            // the minimum number of presignature where a single node can't flood the system.
+            if self.potential_len() >= max_presignatures {
+                false
+            } else {
+                // We will always try to generate a new triple if we have less than the minimum
+                self.my_len() < min_presignatures
+                    && self.introduced.len() < max_concurrent_introduction
+            }
+        };
+
+        if not_enough_presignatures {
+            // To ensure there is no contention between different nodes we are only using triples
+            // that we proposed. This way in a non-BFT environment we are guaranteed to never try
+            // to use the same triple as any other node.
+            if let Some((triple0, triple1)) = triple_manager.take_two_mine().await {
+                let presig_participants = active
+                    .intersection(&[&triple0.public.participants, &triple1.public.participants]);
+                if presig_participants.len() < self.threshold {
+                    tracing::debug!(
+                        participants = ?presig_participants.keys_vec(),
+                        "running: we don't have enough participants to generate a presignature"
+                    );
+
+                    // Insert back the triples to be used later since this active set of
+                    // participants were not able to make use of these triples.
+                    triple_manager.insert_mine(triple0).await;
+                    triple_manager.insert_mine(triple1).await;
+                } else {
+                    self.generate(&presig_participants, triple0, triple1, pk, sk_share)?;
+                }
+            } else {
+                tracing::debug!("running: we don't have enough triples to generate a presignature");
+            }
+        }
+
         Ok(())
     }
 
@@ -210,14 +294,22 @@ impl PresignatureManager {
             match self.generators.entry(id) {
                 Entry::Vacant(entry) => {
                     tracing::info!(id, "joining protocol to generate a new presignature");
-                    let (triple0, triple1) =
-                        match triple_manager.take_two(triple0, triple1, false).await {
-                            Ok(result) => result,
-                            Err(error) => {
-                                tracing::warn!(?error, triple0, triple1,);
-                                return Err(error);
-                            }
-                        };
+                    let (triple0, triple1) = match triple_manager
+                        .take_two(triple0, triple1, false)
+                        .await
+                    {
+                        Ok(result) => result,
+                        Err(error) => {
+                            tracing::warn!(
+                                ?error,
+                                id,
+                                triple0,
+                                triple1,
+                                "could not initiate non-introduced presignature: triple might not have completed for this node yet"
+                            );
+                            return Err(error);
+                        }
+                    };
                     let generator = Self::generate_internal(
                         participants,
                         self.me,
@@ -246,6 +338,11 @@ impl PresignatureManager {
         self.presignatures.remove(&id)
     }
 
+    pub fn insert_mine(&mut self, presig: Presignature) {
+        self.mine.push_back(presig.id);
+        self.presignatures.insert(presig.id, presig);
+    }
+
     /// Pokes all of the ongoing generation protocols and returns a vector of
     /// messages to be sent to the respective participant.
     ///
@@ -258,6 +355,7 @@ impl PresignatureManager {
                 let action = match generator.poke() {
                     Ok(action) => action,
                     Err(e) => {
+                        self.introduced.remove(id);
                         result = Err(e);
                         break false;
                     }
@@ -297,6 +395,7 @@ impl PresignatureManager {
                     Action::Return(output) => {
                         tracing::info!(
                             id,
+                            me = ?self.me,
                             big_r = ?output.big_r.to_base58(),
                             "completed presignature generation"
                         );
@@ -312,6 +411,12 @@ impl PresignatureManager {
                             tracing::info!(id, "assigning presignature to myself");
                             self.mine.push_back(*id);
                         }
+                        self.introduced.remove(id);
+
+                        crate::metrics::PRESIGNATURE_LATENCY
+                            .with_label_values(&[&self.my_account_id.as_ref()])
+                            .observe(generator.timestamp.elapsed().as_secs_f64());
+
                         // Do not retain the protocol
                         return false;
                     }

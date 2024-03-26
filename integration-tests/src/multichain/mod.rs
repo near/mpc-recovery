@@ -6,6 +6,7 @@ use crate::mpc::TARGET_CONTRACT_DIR;
 use crate::{initialize_lake_indexer, LakeIndexerCtx};
 use mpc_contract::primitives::CandidateInfo;
 use mpc_recovery_node::gcp::GcpService;
+use mpc_recovery_node::protocol::presignature::PresignatureConfig;
 use mpc_recovery_node::protocol::triple::TripleConfig;
 use mpc_recovery_node::storage;
 use mpc_recovery_node::storage::triple_storage::TripleNodeStorageBox;
@@ -22,6 +23,7 @@ pub struct MultichainConfig {
     pub nodes: usize,
     pub threshold: usize,
     pub triple_cfg: TripleConfig,
+    pub presig_cfg: PresignatureConfig,
 }
 
 impl Default for MultichainConfig {
@@ -30,10 +32,14 @@ impl Default for MultichainConfig {
             nodes: 3,
             threshold: 2,
             triple_cfg: TripleConfig {
-                min_triples: 2,
-                max_triples: 10,
+                min_triples: 8,
+                max_triples: 80,
                 max_concurrent_introduction: 8,
                 max_concurrent_generation: 24,
+            },
+            presig_cfg: PresignatureConfig {
+                min_presignatures: 2,
+                max_presignatures: 20,
             },
         }
     }

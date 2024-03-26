@@ -1,6 +1,7 @@
 use crate::gcp::GcpService;
+use crate::protocol::presignature::PresignatureConfig;
 use crate::protocol::triple::TripleConfig;
-use crate::protocol::{MpcSignProtocol, SignQueue};
+use crate::protocol::{Config, MpcSignProtocol, SignQueue};
 use crate::storage::triple_storage::LockTripleNodeStorageBox;
 use crate::{indexer, storage, web};
 use clap::Parser;
@@ -25,7 +26,11 @@ pub enum Cli {
         )]
         near_rpc: String,
         /// MPC contract id
-        #[arg(long, env("MPC_RECOVERY_CONTRACT_ID"))]
+        #[arg(
+            long,
+            env("MPC_RECOVERY_CONTRACT_ID"),
+            default_value("v5.multichain-mpc-dev.testnet")
+        )]
         mpc_contract_id: AccountId,
         /// This node's account id
         #[arg(long, env("MPC_RECOVERY_ACCOUNT_ID"))]
@@ -53,10 +58,10 @@ pub enum Cli {
         #[clap(flatten)]
         storage_options: storage::Options,
         /// At minimum, how many triples to stockpile on this node.
-        #[arg(long, env("MPC_RECOVERY_MAX_TRIPLES"), default_value("2"))]
+        #[arg(long, env("MPC_RECOVERY_MIN_TRIPLES"), default_value("20"))]
         min_triples: usize,
         /// At maximum, how many triples to stockpile on this node.
-        #[arg(long, env("MPC_RECOVERY_MAX_TRIPLES"), default_value("10"))]
+        #[arg(long, env("MPC_RECOVERY_MAX_TRIPLES"), default_value("560"))]
         max_triples: usize,
 
         /// At maximum, how many triple protocols can this current node introduce
@@ -64,7 +69,7 @@ pub enum Cli {
         #[arg(
             long,
             env("MPC_RECOVERY_MAX_CONCURRENT_INTRODUCTION"),
-            default_value("2")
+            default_value("4")
         )]
         max_concurrent_introduction: usize,
 
@@ -73,9 +78,17 @@ pub enum Cli {
         #[arg(
             long,
             env("MPC_RECOVERY_MAX_CONCURRENT_GENERATION"),
-            default_value("8")
+            default_value("32")
         )]
         max_concurrent_generation: usize,
+
+        /// At minimum, how many presignatures to stockpile on this node.
+        #[arg(long, env("MPC_RECOVERY_MIN_PRESIGNATURES"), default_value("10"))]
+        min_presignatures: usize,
+
+        /// At maximum, how many presignatures to stockpile on the network.
+        #[arg(long, env("MPC_RECOVERY_MAX_PRESIGNATURES"), default_value("280"))]
+        max_presignatures: usize,
     },
 }
 
@@ -97,6 +110,8 @@ impl Cli {
                 max_triples,
                 max_concurrent_introduction,
                 max_concurrent_generation,
+                min_presignatures,
+                max_presignatures,
             } => {
                 let mut args = vec![
                     "start".to_string(),
@@ -122,6 +137,10 @@ impl Cli {
                     max_concurrent_introduction.to_string(),
                     "--max-concurrent-generation".to_string(),
                     max_concurrent_generation.to_string(),
+                    "--min-presignatures".to_string(),
+                    min_presignatures.to_string(),
+                    "--max-presignatures".to_string(),
+                    max_presignatures.to_string(),
                 ];
                 if let Some(my_address) = my_address {
                     args.extend(vec!["--my-address".to_string(), my_address.to_string()]);
@@ -163,6 +182,8 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
             max_triples,
             max_concurrent_introduction,
             max_concurrent_generation,
+            min_presignatures,
+            max_presignatures,
         } => {
             let sign_queue = Arc::new(RwLock::new(SignQueue::new()));
             tokio::runtime::Builder::new_multi_thread()
@@ -205,13 +226,19 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                         sign_queue.clone(),
                         hpke::PublicKey::try_from_bytes(&hex::decode(cipher_pk)?)?,
                         key_storage,
-                        TripleConfig {
-                            min_triples,
-                            max_triples,
-                            max_concurrent_introduction,
-                            max_concurrent_generation,
-                        },
                         triple_storage,
+                        Config {
+                            triple_cfg: TripleConfig {
+                                min_triples,
+                                max_triples,
+                                max_concurrent_introduction,
+                                max_concurrent_generation,
+                            },
+                            presig_cfg: PresignatureConfig {
+                                min_presignatures,
+                                max_presignatures,
+                            },
+                        },
                     );
                     tracing::debug!("protocol initialized");
                     let protocol_handle = tokio::spawn(async move { protocol.run().await });

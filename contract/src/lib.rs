@@ -1,7 +1,7 @@
 pub mod primitives;
 
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::collections::LookupMap;
+use near_sdk::collections::TreeMap;
 use near_sdk::log;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault, Promise, PromiseOrValue, PublicKey};
@@ -49,7 +49,7 @@ pub enum ProtocolContractState {
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct MpcContract {
     protocol_state: ProtocolContractState,
-    pending_requests: LookupMap<[u8; 32], Option<(String, String)>>,
+    pending_requests: TreeMap<[u8; 32], Option<(String, String)>>,
 }
 
 #[near_bindgen]
@@ -68,7 +68,7 @@ impl MpcContract {
                 threshold,
                 pk_votes: PkVotes::new(),
             }),
-            pending_requests: LookupMap::new(b"m"),
+            pending_requests: TreeMap::new(b"m"),
         }
     }
 
@@ -296,6 +296,9 @@ impl MpcContract {
     #[allow(unused_variables)]
     /// `key_version` must be less than or equal to the value at `latest_key_version`
     pub fn sign(&mut self, payload: [u8; 32], path: String, key_version: u32) -> Promise {
+        if self.pending_requests.len() > 8 {
+            env::panic_str("Too many pending requests. Please, try again later.");
+        }
         let latest_key_version: u32 = self.latest_key_version();
         assert!(
             key_version <= latest_key_version,
@@ -337,6 +340,10 @@ impl MpcContract {
                     PromiseOrValue::Value(signature)
                 }
                 None => {
+                    if depth > 30 {
+                        self.pending_requests.remove(&payload);
+                        env::panic_str("Signature was not provided in time. Please, try again.");
+                    }
                     log!(&format!(
                         "sign_helper: signature not ready yet (depth={})",
                         depth
@@ -358,7 +365,9 @@ impl MpcContract {
             big_r,
             s
         );
-        self.pending_requests.insert(&payload, &Some((big_r, s)));
+        if self.pending_requests.contains_key(&payload) {
+            self.pending_requests.insert(&payload, &Some((big_r, s)));
+        }
     }
 
     #[private]
@@ -370,8 +379,14 @@ impl MpcContract {
         }
         Self {
             protocol_state: ProtocolContractState::NotInitialized,
-            pending_requests: LookupMap::new(b"m"),
+            pending_requests: TreeMap::new(b"m"),
         }
+    }
+
+    #[private]
+    pub fn clean_requests(&mut self) {
+        log!("clean requests");
+        self.pending_requests.clear();
     }
 
     /// This is the root public key combined from all the public keys of the participants.
