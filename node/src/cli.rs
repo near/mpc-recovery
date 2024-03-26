@@ -61,7 +61,7 @@ pub enum Cli {
         #[arg(long, env("MPC_RECOVERY_MIN_TRIPLES"), default_value("20"))]
         min_triples: usize,
         /// At maximum, how many triples to stockpile on this node.
-        #[arg(long, env("MPC_RECOVERY_MAX_TRIPLES"), default_value("560"))]
+        #[arg(long, env("MPC_RECOVERY_MAX_TRIPLES"), default_value("640"))]
         max_triples: usize,
 
         /// At maximum, how many triple protocols can this current node introduce
@@ -87,7 +87,7 @@ pub enum Cli {
         min_presignatures: usize,
 
         /// At maximum, how many presignatures to stockpile on the network.
-        #[arg(long, env("MPC_RECOVERY_MAX_PRESIGNATURES"), default_value("280"))]
+        #[arg(long, env("MPC_RECOVERY_MAX_PRESIGNATURES"), default_value("320"))]
         max_presignatures: usize,
     },
 }
