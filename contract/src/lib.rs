@@ -358,15 +358,24 @@ impl MpcContract {
     }
 
     pub fn respond(&mut self, payload: [u8; 32], big_r: String, s: String) {
-        log!(
-            "respond: signer={}, payload={:?} big_r={} s={}",
-            env::signer_account_id(),
-            payload,
-            big_r,
-            s
-        );
-        if self.pending_requests.contains_key(&payload) {
-            self.pending_requests.insert(&payload, &Some((big_r, s)));
+        if let ProtocolContractState::Running(state) = &self.protocol_state {
+            let signer = env::signer_account_id();
+            if state.participants.contains_key(&signer) {
+                log!(
+                    "respond: signer={}, payload={:?} big_r={} s={}",
+                    signer,
+                    payload,
+                    big_r,
+                    s
+                );
+                if self.pending_requests.contains_key(&payload) {
+                    self.pending_requests.insert(&payload, &Some((big_r, s)));
+                }
+            } else {
+                env::panic_str("only participants can respond");
+            }
+        } else {
+            env::panic_str("protocol is not in a running state");
         }
     }
 
