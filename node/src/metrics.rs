@@ -170,6 +170,85 @@ pub(crate) static MPC_CONTRACT_VERSION: Lazy<IntGaugeVec> = Lazy::new(|| {
     .unwrap()
 });
 
+pub(crate) static NUM_TOTAL_HISTORICAL_TRIPLE_GENERATORS: Lazy<IntGaugeVec> = Lazy::new(|| {
+    try_create_int_gauge_vec(
+        "multichain_num_total_historical_triple_generators",
+        "number of all triple generators historically on the node",
+        &["node_account_id"],
+    )
+    .unwrap()
+});
+
+pub(crate) static NUM_TOTAL_HISTORICAL_TRIPLE_GENERATORS_SUCCESS: Lazy<IntGaugeVec> =
+    Lazy::new(|| {
+        try_create_int_gauge_vec(
+            "multichain_num_total_historical_triple_generators_success",
+            "number of all successful triple generators historically on the node",
+            &["node_account_id"],
+        )
+        .unwrap()
+    });
+
+pub(crate) static NUM_TOTAL_HISTORICAL_TRIPLE_GENERATORS_MINE: Lazy<IntGaugeVec> =
+    Lazy::new(|| {
+        try_create_int_gauge_vec(
+            "multichain_num_total_historical_triple_generators_mine",
+            "number of mine triple generators historically on the node",
+            &["node_account_id"],
+        )
+        .unwrap()
+    });
+
+pub(crate) static NUM_TOTAL_HISTORICAL_TRIPLE_GENERATORS_MINE_SUCCESS: Lazy<IntGaugeVec> =
+    Lazy::new(|| {
+        try_create_int_gauge_vec(
+            "multichain_num_total_historical_triple_generators_mine_success",
+            "number of successful mine triple generators historically on the node",
+            &["node_account_id"],
+        )
+        .unwrap()
+    });
+
+pub(crate) static NUM_TOTAL_HISTORICAL_PRESIGNATURE_GENERATORS: Lazy<IntGaugeVec> =
+    Lazy::new(|| {
+        try_create_int_gauge_vec(
+            "multichain_num_total_historical_presignature_generators",
+            "number of all presignature generators historically on the node",
+            &["node_account_id"],
+        )
+        .unwrap()
+    });
+
+pub(crate) static NUM_TOTAL_HISTORICAL_PRESIGNATURE_GENERATORS_SUCCESS: Lazy<IntGaugeVec> =
+    Lazy::new(|| {
+        try_create_int_gauge_vec(
+            "multichain_num_total_historical_presignature_generators_success",
+            "number of all successful presignature generators historically on the node",
+            &["node_account_id"],
+        )
+        .unwrap()
+    });
+
+pub(crate) static NUM_TOTAL_HISTORICAL_PRESIGNATURE_GENERATORS_MINE: Lazy<IntGaugeVec> =
+    Lazy::new(|| {
+        try_create_int_gauge_vec(
+            "multichain_num_total_historical_presignature_generators_mine",
+            "number of mine presignature generators historically on the node",
+            &["node_account_id"],
+        )
+        .unwrap()
+    });
+
+pub(crate) static NUM_TOTAL_HISTORICAL_PRESIGNATURE_GENERATORS_MINE_SUCCESS: Lazy<IntGaugeVec> =
+    Lazy::new(|| {
+        try_create_int_gauge_vec(
+            "multichain_num_total_historical_presignature_generators_mine_success",
+            "number of mine presignature generators historically on the node",
+            &["node_account_id"],
+        )
+        .unwrap()
+    });
+
 pub fn try_create_int_gauge_vec(name: &str, help: &str, labels: &[&str]) -> Result<IntGaugeVec> {
     check_metric_multichain_prefix(name)?;
     let opts = Opts::new(name, help);
