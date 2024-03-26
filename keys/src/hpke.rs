@@ -155,4 +155,26 @@ mod tests {
         let pk = super::PublicKey::try_from_bytes(&hex::decode(pk_hex).unwrap()).unwrap();
         assert_eq!(sk.public_key(), pk);
     }
+
+    fn hex_to_byte_array(hex_str: &str) -> Result<Vec<u8>, hex::FromHexError> {
+        hex::decode(hex_str)
+    }
+    
+    fn byte_array_to_hex(bytes: &[u8]) -> String {
+        hex::encode(bytes)
+    }
+
+    #[test]
+    fn test_decode() {
+        // Hexadecimal string to byte array
+        let hex_str = "b10c6cd1d7c8ae6b5fbbcb71fcd801b8a0c43926ee14d0d36443dcbb3badc936";
+        match hex_to_byte_array(hex_str) {
+            Ok(bytes) => println!("Byte array: {:?}", bytes),
+            Err(e) => println!("Error decoding hex string: {:?}", e),
+        }
+        // Byte array to hexadecimal string
+        let bytes = [177, 12, 108, 209, 215, 200, 174, 107, 95, 187, 203, 113, 252, 216, 1, 184, 160, 196, 57, 38, 238, 20, 208, 211, 100, 67, 220, 187, 59, 173, 201, 54];
+        let hex_str = byte_array_to_hex(&bytes);
+        println!("Hexadecimal string: {}", hex_str);
+    }
 }
