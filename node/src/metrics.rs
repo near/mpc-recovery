@@ -189,21 +189,11 @@ pub(crate) static NUM_TOTAL_HISTORICAL_TRIPLE_GENERATORS_SUCCESS: Lazy<IntGaugeV
         .unwrap()
     });
 
-pub(crate) static NUM_TOTAL_HISTORICAL_TRIPLE_GENERATORS_MINE: Lazy<IntGaugeVec> =
+pub(crate) static NUM_TOTAL_HISTORICAL_TRIPLE_GENERATIONS_MINE_SUCCESS: Lazy<IntGaugeVec> =
     Lazy::new(|| {
         try_create_int_gauge_vec(
-            "multichain_num_total_historical_triple_generators_mine",
-            "number of mine triple generators historically on the node",
-            &["node_account_id"],
-        )
-        .unwrap()
-    });
-
-pub(crate) static NUM_TOTAL_HISTORICAL_TRIPLE_GENERATORS_MINE_SUCCESS: Lazy<IntGaugeVec> =
-    Lazy::new(|| {
-        try_create_int_gauge_vec(
-            "multichain_num_total_historical_triple_generators_mine_success",
-            "number of successful mine triple generators historically on the node",
+            "multichain_num_total_historical_triple_generations_mine_success",
+            "number of successful triple generators that was mine historically on the node",
             &["node_account_id"],
         )
         .unwrap()

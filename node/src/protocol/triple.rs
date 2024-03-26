@@ -42,22 +42,15 @@ pub struct TripleGenerator {
     pub participants: Vec<Participant>,
     pub protocol: TripleProtocol,
     pub timestamp: Option<Instant>,
-    pub mine: bool,
 }
 
 impl TripleGenerator {
-    pub fn new(
-        id: TripleId,
-        participants: Vec<Participant>,
-        protocol: TripleProtocol,
-        mine: bool,
-    ) -> Self {
+    pub fn new(id: TripleId, participants: Vec<Participant>, protocol: TripleProtocol) -> Self {
         Self {
             id,
             participants,
             protocol,
             timestamp: None,
-            mine,
         }
     }
 
@@ -194,15 +187,11 @@ impl TripleManager {
             self.me,
             self.threshold,
         )?);
-        let mine = true;
         self.generators
-            .insert(id, TripleGenerator::new(id, participants, protocol, mine));
+            .insert(id, TripleGenerator::new(id, participants, protocol));
         self.queued.push_back(id);
         self.introduced.insert(id);
         crate::metrics::NUM_TOTAL_HISTORICAL_TRIPLE_GENERATORS
-            .with_label_values(&[&self.my_account_id.as_ref()])
-            .inc();
-        crate::metrics::NUM_TOTAL_HISTORICAL_TRIPLE_GENERATORS_MINE
             .with_label_values(&[&self.my_account_id.as_ref()])
             .inc();
         Ok(())
@@ -355,9 +344,7 @@ impl TripleManager {
                         self.me,
                         self.threshold,
                     )?);
-                    let mine = false;
-                    let generator =
-                        e.insert(TripleGenerator::new(id, participants, protocol, mine));
+                    let generator = e.insert(TripleGenerator::new(id, participants, protocol));
                     self.queued.push_back(id);
                     crate::metrics::NUM_TOTAL_HISTORICAL_TRIPLE_GENERATORS
                         .with_label_values(&[&self.my_account_id.as_ref()])
@@ -457,12 +444,6 @@ impl TripleManager {
                             .with_label_values(&[&self.my_account_id.as_ref()])
                             .inc();
 
-                        if generator.mine {
-                            crate::metrics::NUM_TOTAL_HISTORICAL_TRIPLE_GENERATORS_MINE_SUCCESS
-                                .with_label_values(&[&self.my_account_id.as_ref()])
-                                .inc();
-                        }
-
                         let triple = Triple {
                             id: *id,
                             share: output.0,
@@ -490,6 +471,9 @@ impl TripleManager {
 
                         if triple_is_mine {
                             self.mine.push_back(*id);
+                            crate::metrics::NUM_TOTAL_HISTORICAL_TRIPLE_GENERATIONS_MINE_SUCCESS
+                                .with_label_values(&[&self.my_account_id.as_ref()])
+                                .inc();
                         }
 
                         self.triples.insert(*id, triple.clone());
