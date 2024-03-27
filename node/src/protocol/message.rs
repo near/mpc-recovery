@@ -328,8 +328,10 @@ impl MessageHandler for RunningState {
                 );
                 queue.extend(leftover_messages);
             }
-            triple_manager.clear_failed_triples();
         }
+        triple_manager.clear_failed_triples();
+        triple_manager.clear_taken();
+        presignature_manager.clear_taken();
         Ok(())
     }
 }

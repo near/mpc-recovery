@@ -99,6 +99,9 @@ pub struct PresignatureManager {
     mine: VecDeque<PresignatureId>,
     /// The set of presignatures that were introduced to the system by the current node.
     introduced: HashSet<PresignatureId>,
+    /// The set of presignatures that were already taken. This will be maintained for at most
+    /// presignature timeout period just so messages are cycled through the system.
+    taken: HashMap<PresignatureId, Instant>,
 
     me: Participant,
     threshold: usize,
@@ -120,6 +123,7 @@ impl PresignatureManager {
             generators: HashMap::new(),
             mine: VecDeque::new(),
             introduced: HashSet::new(),
+            taken: HashMap::new(),
             me,
             threshold,
             epoch,
@@ -147,6 +151,11 @@ impl PresignatureManager {
     /// Returns if there are unspent presignatures available in the manager.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    pub fn clear_taken(&mut self) {
+        self.taken
+            .retain(|_, instant| instant.elapsed() < crate::types::PROTOCOL_PRESIG_TIMEOUT);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -288,7 +297,7 @@ impl PresignatureManager {
         public_key: &PublicKey,
         private_share: &SecretKeyShare,
     ) -> Result<&mut PresignatureProtocol, GenerationError> {
-        if self.presignatures.contains_key(&id) {
+        if self.presignatures.contains_key(&id) || self.taken.contains_key(&id) {
             Err(GenerationError::AlreadyGenerated)
         } else {
             match self.generators.entry(id) {
@@ -331,14 +340,18 @@ impl PresignatureManager {
     pub fn take_mine(&mut self) -> Option<Presignature> {
         tracing::info!(mine = ?self.mine, "my presignatures");
         let my_presignature_id = self.mine.pop_front()?;
+        self.taken.insert(my_presignature_id, Instant::now());
         Some(self.presignatures.remove(&my_presignature_id).unwrap())
     }
 
     pub fn take(&mut self, id: PresignatureId) -> Option<Presignature> {
+        self.taken.insert(id, Instant::now());
         self.presignatures.remove(&id)
     }
 
     pub fn insert_mine(&mut self, presig: Presignature) {
+        // Remove from taken list if it was there
+        self.taken.remove(&presig.id);
         self.mine.push_back(presig.id);
         self.presignatures.insert(presig.id, presig);
     }

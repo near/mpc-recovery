@@ -56,7 +56,11 @@ impl TripleGenerator {
     pub fn poke(&mut self) -> Result<Action<TripleGenerationOutput<Secp256k1>>, ProtocolError> {
         let timestamp = self.timestamp.get_or_insert_with(Instant::now);
         if timestamp.elapsed() > crate::types::PROTOCOL_TRIPLE_TIMEOUT {
-            tracing::info!(id = self.id, "triple protocol timed out");
+            tracing::info!(
+                id = self.id,
+                elapsed = ?timestamp.elapsed(),
+                "triple protocol timed out"
+            );
             return Err(ProtocolError::Other(
                 anyhow::anyhow!("triple protocol timed out").into(),
             ));
@@ -102,6 +106,10 @@ pub struct TripleManager {
     /// List of triple ids generation of which was initiated by the current node.
     pub mine: VecDeque<TripleId>,
 
+    /// The set of triple ids that were already taken. This will be maintained for at most
+    /// triple timeout period just so messages are cycled through the system.
+    pub taken: HashMap<TripleId, Instant>,
+
     pub me: Participant,
     pub threshold: usize,
     pub epoch: u64,
@@ -136,6 +144,7 @@ impl TripleManager {
             queued: VecDeque::new(),
             ongoing: HashSet::new(),
             introduced: HashSet::new(),
+            taken: HashMap::new(),
             mine,
             me,
             threshold,
@@ -173,6 +182,11 @@ impl TripleManager {
             .retain(|_, timestamp| timestamp.elapsed() < crate::types::FAILED_TRIPLES_TIMEOUT)
     }
 
+    pub fn clear_taken(&mut self) {
+        self.taken
+            .retain(|_, timestamp| timestamp.elapsed() < crate::types::PROTOCOL_TRIPLE_TIMEOUT)
+    }
+
     /// Starts a new Beaver triple generation protocol.
     pub fn generate(&mut self, participants: &Participants) -> Result<(), InitializationError> {
         let id = rand::random();
@@ -208,9 +222,9 @@ impl TripleManager {
                 false
             } else {
                 // We will always try to generate a new triple if we have less than the minimum
-                self.my_len() <= min_triples
-                    && self.introduced.len() <= max_concurrent_introduction
-                    && self.generators.len() <= max_concurrent_generation
+                self.my_len() < min_triples
+                    && self.introduced.len() < max_concurrent_introduction
+                    && self.generators.len() < max_concurrent_generation
             }
         };
 
@@ -239,6 +253,9 @@ impl TripleManager {
             let triple2 = self.triples.get(&id1).unwrap().clone();
             self.delete_triple_from_storage(&triple1, mine).await?;
             self.delete_triple_from_storage(&triple2, mine).await?;
+            self.taken.insert(id0, Instant::now());
+            self.taken.insert(id1, Instant::now());
+
             // only remove the triples locally when the datastore removal was successful
             Ok((
                 self.triples.remove(&id0).unwrap(),
@@ -305,6 +322,7 @@ impl TripleManager {
     pub async fn insert_mine(&mut self, triple: Triple) {
         self.mine.push_back(triple.id);
         self.triples.insert(triple.id, triple.clone());
+        self.taken.remove(&triple.id);
         self.insert_triples_to_storage(vec![triple]).await;
     }
 
@@ -318,7 +336,7 @@ impl TripleManager {
         id: TripleId,
         participants: &Participants,
     ) -> Result<Option<&mut TripleProtocol>, CryptographicError> {
-        if self.triples.contains_key(&id) {
+        if self.triples.contains_key(&id) || self.taken.contains_key(&id) {
             Ok(None)
         } else {
             let potential_len = self.potential_len();
@@ -331,7 +349,7 @@ impl TripleManager {
                     }
 
                     tracing::debug!(id, "joining protocol to generate a new triple");
-                    let participants: Vec<_> = participants.keys().cloned().collect();
+                    let participants = participants.keys_vec();
                     let protocol = Box::new(cait_sith::triples::generate_triple::<Secp256k1>(
                         &participants,
                         self.me,
