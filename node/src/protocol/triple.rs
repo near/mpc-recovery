@@ -338,7 +338,9 @@ impl TripleManager {
             let potential_len = self.potential_len();
             match self.generators.entry(id) {
                 Entry::Vacant(e) => {
-                    if potential_len >= self.triple_cfg.max_triples || self.used_triples.contains_key(&id) {
+                    if potential_len >= self.triple_cfg.max_triples
+                        || self.used_triples.contains_key(&id)
+                    {
                         // We are at the maximum amount of triples, we cannot generate more. So just in case a node
                         // sends more triple generation requests, reject them and have them tiemout.
                         return Ok(None);
