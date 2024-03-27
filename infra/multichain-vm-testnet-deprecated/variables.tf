@@ -118,6 +118,30 @@ variable "static_env" {
     {
       name  = "MPC_RECOVERY_INDEXER_S3_REGION"
       value = "eu-central-1"
+    },
+    {
+      name  = "MPC_RECOVERY_MIN_TRIPLES"
+      value = 20
+    },
+    {
+      name  = "MPC_RECOVERY_MAX_TRIPLES"
+      value = 640
+    },
+    {
+      name  = "MPC_RECOVERY_MIN_PRESIGNATURES"
+      value = 10
+    },
+    {
+      name  = "MPC_RECOVERY_MAX_PRESIGNATURES"
+      value = 320
+    },
+    {
+      name  = "MPC_RECOVERY_MAX_CONCURRENT_INTRODUCTION"
+      value = 2
+    },
+    {
+      name  = "MPC_RECOVERY_MAX_CONCURRENT_GENERATION"
+      value = 16
     }
   ]
 }
