@@ -73,6 +73,7 @@ impl TestTripleManagers {
                     DEFAULT_TEST_CONFIG,
                     vec![],
                     triple_storage,
+                    num.to_string().parse().unwrap(),
                 )
             })
             .collect();

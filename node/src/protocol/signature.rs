@@ -458,6 +458,11 @@ impl SignatureManager {
             crate::metrics::SIGN_LATENCY
                 .with_label_values(&[my_account_id])
                 .observe(time_added.elapsed().as_secs_f64());
+            if time_added.elapsed().as_secs() <= 30 {
+                crate::metrics::NUM_SIGN_SUCCESS_30S
+                    .with_label_values(&[my_account_id])
+                    .inc();
+            }
             tracing::info!(%receipt_id, big_r = signature.big_r.to_base58(), s = ?signature.s, status = ?response.status, "published signature response");
         }
         Ok(())

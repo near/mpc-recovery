@@ -43,12 +43,11 @@ async fn send_encrypted<U: IntoUrl>(
 ) -> Result<(), SendError> {
     let encrypted = SignedMessage::encrypt(message, from, sign_sk, cipher_pk)
         .map_err(|err| SendError::EncryptionError(err.to_string()))?;
-    tracing::debug!(?from, ciphertext = ?encrypted.text, "sending encrypted");
 
     let _span = tracing::info_span!("message_request");
     let mut url = url.into_url()?;
     url.set_path("msg");
-    tracing::debug!(%url, "making http request");
+    tracing::debug!(?from, to = %url, "making http request: sending encrypted message");
     let action = || async {
         let response = client
             .post(url.clone())

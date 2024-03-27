@@ -119,9 +119,11 @@ impl ConsensusProtocol for StartedState {
                         }
                         Ordering::Less => Err(ConsensusError::EpochRollback),
                         Ordering::Equal => {
-                            let account_id = ctx.my_account_id();
                             let sign_queue = ctx.sign_queue();
-                            match contract_state.participants.find_participant(account_id) {
+                            match contract_state
+                                .participants
+                                .find_participant(&ctx.my_account_id().clone())
+                            {
                                 Some(me) => {
                                     tracing::info!(
                                         "started: contract state is running and we are already a participant"
@@ -130,7 +132,7 @@ impl ConsensusProtocol for StartedState {
                                         me,
                                         contract_state.threshold,
                                         epoch,
-                                        account_id.clone(),
+                                        ctx.my_account_id().clone(),
                                         ctx.cfg(),
                                     );
                                     let triple_manager = TripleManager::new(
@@ -140,6 +142,7 @@ impl ConsensusProtocol for StartedState {
                                         ctx.cfg(),
                                         self.triple_data,
                                         ctx.triple_storage(),
+                                        ctx.my_account_id().clone(),
                                     );
                                     Ok(NodeState::Running(RunningState {
                                         epoch,
@@ -352,6 +355,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                         ctx.cfg(),
                         vec![],
                         ctx.triple_storage(),
+                        ctx.my_account_id().clone(),
                     );
 
                     Ok(NodeState::Running(RunningState {

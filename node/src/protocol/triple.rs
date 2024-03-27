@@ -12,6 +12,7 @@ use cait_sith::triples::{TripleGenerationOutput, TriplePub, TripleShare};
 use highway::{HighwayHash, HighwayHasher};
 use k256::elliptic_curve::group::GroupEncoding;
 use k256::Secp256k1;
+use near_lake_primitives::AccountId;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -56,7 +57,11 @@ impl TripleGenerator {
     pub fn poke(&mut self) -> Result<Action<TripleGenerationOutput<Secp256k1>>, ProtocolError> {
         let timestamp = self.timestamp.get_or_insert_with(Instant::now);
         if timestamp.elapsed() > crate::types::PROTOCOL_TRIPLE_TIMEOUT {
-            tracing::info!(id = self.id, "triple protocol timed out");
+            tracing::info!(
+                id = self.id,
+                elapsed = ?timestamp.elapsed(),
+                "triple protocol timed out"
+            );
             return Err(ProtocolError::Other(
                 anyhow::anyhow!("triple protocol timed out").into(),
             ));
@@ -102,6 +107,10 @@ pub struct TripleManager {
     /// List of triple ids generation of which was initiated by the current node.
     pub mine: VecDeque<TripleId>,
 
+    /// The set of triple ids that were already taken. This will be maintained for at most
+    /// triple timeout period just so messages are cycled through the system.
+    pub taken: HashMap<TripleId, Instant>,
+
     pub me: Participant,
     pub threshold: usize,
     pub epoch: u64,
@@ -109,6 +118,7 @@ pub struct TripleManager {
     pub triple_storage: LockTripleNodeStorageBox,
     /// triple generation protocols that failed.
     pub failed_triples: HashMap<TripleId, Instant>,
+    pub my_account_id: AccountId,
 }
 
 impl TripleManager {
@@ -119,6 +129,7 @@ impl TripleManager {
         cfg: Config,
         triple_data: Vec<TripleData>,
         triple_storage: LockTripleNodeStorageBox,
+        my_account_id: AccountId,
     ) -> Self {
         let mut mine: VecDeque<TripleId> = VecDeque::new();
         let mut all_triples = HashMap::new();
@@ -136,6 +147,7 @@ impl TripleManager {
             queued: VecDeque::new(),
             ongoing: HashSet::new(),
             introduced: HashSet::new(),
+            taken: HashMap::new(),
             mine,
             me,
             threshold,
@@ -143,6 +155,7 @@ impl TripleManager {
             triple_cfg: cfg.triple_cfg,
             triple_storage,
             failed_triples: HashMap::new(),
+            my_account_id,
         }
     }
 
@@ -173,6 +186,11 @@ impl TripleManager {
             .retain(|_, timestamp| timestamp.elapsed() < crate::types::FAILED_TRIPLES_TIMEOUT)
     }
 
+    pub fn clear_taken(&mut self) {
+        self.taken
+            .retain(|_, timestamp| timestamp.elapsed() < crate::types::TAKEN_TIMEOUT)
+    }
+
     /// Starts a new Beaver triple generation protocol.
     pub fn generate(&mut self, participants: &Participants) -> Result<(), InitializationError> {
         let id = rand::random();
@@ -187,6 +205,9 @@ impl TripleManager {
             .insert(id, TripleGenerator::new(id, participants, protocol));
         self.queued.push_back(id);
         self.introduced.insert(id);
+        crate::metrics::NUM_TOTAL_HISTORICAL_TRIPLE_GENERATORS
+            .with_label_values(&[&self.my_account_id.as_ref()])
+            .inc();
         Ok(())
     }
 
@@ -208,9 +229,9 @@ impl TripleManager {
                 false
             } else {
                 // We will always try to generate a new triple if we have less than the minimum
-                self.my_len() <= min_triples
-                    && self.introduced.len() <= max_concurrent_introduction
-                    && self.generators.len() <= max_concurrent_generation
+                self.my_len() < min_triples
+                    && self.introduced.len() < max_concurrent_introduction
+                    && self.generators.len() < max_concurrent_generation
             }
         };
 
@@ -239,6 +260,9 @@ impl TripleManager {
             let triple2 = self.triples.get(&id1).unwrap().clone();
             self.delete_triple_from_storage(&triple1, mine).await?;
             self.delete_triple_from_storage(&triple2, mine).await?;
+            self.taken.insert(id0, Instant::now());
+            self.taken.insert(id1, Instant::now());
+
             // only remove the triples locally when the datastore removal was successful
             Ok((
                 self.triples.remove(&id0).unwrap(),
@@ -305,6 +329,7 @@ impl TripleManager {
     pub async fn insert_mine(&mut self, triple: Triple) {
         self.mine.push_back(triple.id);
         self.triples.insert(triple.id, triple.clone());
+        self.taken.remove(&triple.id);
         self.insert_triples_to_storage(vec![triple]).await;
     }
 
@@ -318,7 +343,7 @@ impl TripleManager {
         id: TripleId,
         participants: &Participants,
     ) -> Result<Option<&mut TripleProtocol>, CryptographicError> {
-        if self.triples.contains_key(&id) {
+        if self.triples.contains_key(&id) || self.taken.contains_key(&id) {
             Ok(None)
         } else {
             let potential_len = self.potential_len();
@@ -331,7 +356,7 @@ impl TripleManager {
                     }
 
                     tracing::debug!(id, "joining protocol to generate a new triple");
-                    let participants: Vec<_> = participants.keys().cloned().collect();
+                    let participants = participants.keys_vec();
                     let protocol = Box::new(cait_sith::triples::generate_triple::<Secp256k1>(
                         &participants,
                         self.me,
@@ -339,6 +364,9 @@ impl TripleManager {
                     )?);
                     let generator = e.insert(TripleGenerator::new(id, participants, protocol));
                     self.queued.push_back(id);
+                    crate::metrics::NUM_TOTAL_HISTORICAL_TRIPLE_GENERATORS
+                        .with_label_values(&[&self.my_account_id.as_ref()])
+                        .inc();
                     Ok(Some(&mut generator.protocol))
                 }
                 Entry::Occupied(e) => Ok(Some(&mut e.into_mut().protocol)),
@@ -362,9 +390,6 @@ impl TripleManager {
         let mut messages = Vec::new();
         let mut result = Ok(());
         let mut triples_to_insert = Vec::new();
-        let triple_storage_read_lock = self.triple_storage.read().await;
-        let my_account_id = triple_storage_read_lock.account_id();
-        drop(triple_storage_read_lock);
         self.generators.retain(|id, generator| {
             if !self.ongoing.contains(id) {
                 // If the protocol is not ongoing, we should retain it for the next time
@@ -429,9 +454,13 @@ impl TripleManager {
 
                         if let Some(start_time) = generator.timestamp {
                             crate::metrics::TRIPLE_LATENCY
-                                .with_label_values(&[&my_account_id])
+                                .with_label_values(&[&self.my_account_id.as_ref()])
                                 .observe(start_time.elapsed().as_secs_f64());
                         }
+
+                        crate::metrics::NUM_TOTAL_HISTORICAL_TRIPLE_GENERATORS_SUCCESS
+                            .with_label_values(&[&self.my_account_id.as_ref()])
+                            .inc();
 
                         let triple = Triple {
                             id: *id,
@@ -460,6 +489,9 @@ impl TripleManager {
 
                         if triple_is_mine {
                             self.mine.push_back(*id);
+                            crate::metrics::NUM_TOTAL_HISTORICAL_TRIPLE_GENERATIONS_MINE_SUCCESS
+                                .with_label_values(&[&self.my_account_id.as_ref()])
+                                .inc();
                         }
 
                         self.triples.insert(*id, triple.clone());
