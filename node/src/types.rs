@@ -13,7 +13,7 @@ use crate::gcp::value::{FromValue, IntoValue, Value};
 use crate::gcp::{DatastoreResult, GcpService, KeyKind};
 use crate::protocol::contract::ResharingContractState;
 
-/// Default timeout for presig generation protocols. Times out after 20 minutes of being alive.
+/// Default timeout for triple generation protocols. Times out after 20 minutes of being alive.
 pub const PROTOCOL_TRIPLE_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 
 /// Default timeout for presig generation protocols. Times out after 1 minute of being alive since this should be shorted lived.
