@@ -112,6 +112,7 @@ impl MessageQueue {
         let mut errors = Vec::new();
         let mut participant_counter = HashMap::new();
         while let Some((info, msg, instant)) = self.deque.pop_front() {
+            let account_id = info.account_id.clone();
             if !participants.contains_key(&Participant::from(info.id)) {
                 if instant.elapsed() > message_type_to_timeout(&msg) {
                     errors.push(SendError::Timeout(format!(
@@ -125,6 +126,7 @@ impl MessageQueue {
                 continue;
             }
 
+            let start = Instant::now();
             if let Err(err) =
                 send_encrypted(from, &info.cipher_pk, sign_sk, client, &info.url, &msg).await
             {
@@ -138,6 +140,9 @@ impl MessageQueue {
                 failed.push_back((info, msg, instant));
                 errors.push(err);
             }
+            crate::metrics::SEND_ENCRYPTED_LATENCY
+                .with_label_values(&[&account_id.as_ref()])
+                .observe(start.elapsed().as_millis() as f64);
         }
         // only add the participant count if it hasn't been seen before.
         let counts = format!("{participant_counter:?}");
