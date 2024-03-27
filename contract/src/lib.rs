@@ -399,7 +399,6 @@ impl MpcContract {
         pub struct OldMpcContract {
             protocol_state: ProtocolContractState,
             pending_requests: LookupMap<[u8; 32], Option<(String, String)>>,
-            request_counter: u32,
         }
 
         let old_contract: OldMpcContract = env::state_read().expect("Old state doesn't exist");
@@ -418,7 +417,6 @@ impl MpcContract {
         pub struct OldMpcContract {
             protocol_state: ProtocolContractState,
             pending_requests: TreeMap<[u8; 32], Option<(String, String)>>,
-            request_counter: u32,
         }
 
         let old_contract: OldMpcContract = env::state_read().expect("Old state doesn't exist");
