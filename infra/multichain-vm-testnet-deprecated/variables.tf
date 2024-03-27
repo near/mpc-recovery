@@ -125,7 +125,7 @@ variable "static_env" {
     },
     {
       name  = "MPC_RECOVERY_MAX_TRIPLES"
-      value = 640
+      value = 240
     },
     {
       name  = "MPC_RECOVERY_MIN_PRESIGNATURES"
@@ -133,15 +133,15 @@ variable "static_env" {
     },
     {
       name  = "MPC_RECOVERY_MAX_PRESIGNATURES"
-      value = 320
+      value = 120
     },
     {
       name  = "MPC_RECOVERY_MAX_CONCURRENT_INTRODUCTION"
-      value = 2
+      value = 4
     },
     {
       name  = "MPC_RECOVERY_MAX_CONCURRENT_GENERATION"
-      value = 16
+      value = 32
     }
   ]
 }
