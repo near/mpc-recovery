@@ -155,7 +155,7 @@ impl PresignatureManager {
 
     pub fn clear_taken(&mut self) {
         self.taken
-            .retain(|_, instant| instant.elapsed() < crate::types::PROTOCOL_PRESIG_TIMEOUT);
+            .retain(|_, instant| instant.elapsed() < crate::types::TAKEN_TIMEOUT);
     }
 
     #[allow(clippy::too_many_arguments)]

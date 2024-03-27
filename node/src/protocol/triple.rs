@@ -184,7 +184,7 @@ impl TripleManager {
 
     pub fn clear_taken(&mut self) {
         self.taken
-            .retain(|_, timestamp| timestamp.elapsed() < crate::types::PROTOCOL_TRIPLE_TIMEOUT)
+            .retain(|_, timestamp| timestamp.elapsed() < crate::types::TAKEN_TIMEOUT)
     }
 
     /// Starts a new Beaver triple generation protocol.
