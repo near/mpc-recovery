@@ -1,7 +1,7 @@
 pub mod primitives;
 
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::collections::LookupMap;
+use near_sdk::collections::{LookupMap, TreeMap};
 use near_sdk::log;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault, Promise, PromiseOrValue, PublicKey};
@@ -406,7 +406,26 @@ impl MpcContract {
 
         Self {
             protocol_state: old_contract.protocol_state,
-            pending_requests: old_contract.pending_requests,
+            pending_requests: LookupMap::new(b"m"),
+            request_counter: 0,
+        }
+    }
+
+    #[private]
+    #[init(ignore_state)]
+    pub fn migrate_state_2() -> Self {
+        #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
+        pub struct OldMpcContract {
+            protocol_state: ProtocolContractState,
+            pending_requests: TreeMap<[u8; 32], Option<(String, String)>>,
+            request_counter: u32,
+        }
+
+        let old_contract: OldMpcContract = env::state_read().expect("Old state doesn't exist");
+
+        Self {
+            protocol_state: old_contract.protocol_state,
+            pending_requests: LookupMap::new(b"m"),
             request_counter: 0,
         }
     }
