@@ -109,6 +109,8 @@ pub struct TripleManager {
     pub triple_storage: LockTripleNodeStorageBox,
     /// triple generation protocols that failed.
     pub failed_triples: HashMap<TripleId, Instant>,
+    /// triple generation protocols that already used
+    pub used_triples: HashMap<TripleId, Instant>,
 }
 
 impl TripleManager {
@@ -143,6 +145,7 @@ impl TripleManager {
             triple_cfg: cfg.triple_cfg,
             triple_storage,
             failed_triples: HashMap::new(),
+            used_triples: HashMap::new(),
         }
     }
 
@@ -171,6 +174,12 @@ impl TripleManager {
     pub fn clear_failed_triples(&mut self) {
         self.failed_triples
             .retain(|_, timestamp| timestamp.elapsed() < crate::types::FAILED_TRIPLES_TIMEOUT)
+    }
+
+    /// Clears an entry from used triples if that triple protocol was created more than 2 hrs ago
+    pub fn clear_used_triples(&mut self) {
+        self.used_triples
+            .retain(|_, timestamp| timestamp.elapsed() < crate::types::USED_TRIPLES_TIMEOUT)
     }
 
     /// Starts a new Beaver triple generation protocol.
@@ -239,6 +248,8 @@ impl TripleManager {
             let triple2 = self.triples.get(&id1).unwrap().clone();
             self.delete_triple_from_storage(&triple1, mine).await?;
             self.delete_triple_from_storage(&triple2, mine).await?;
+            self.used_triples.insert(id0, Instant::now());
+            self.used_triples.insert(id1, Instant::now());
             // only remove the triples locally when the datastore removal was successful
             Ok((
                 self.triples.remove(&id0).unwrap(),
@@ -296,6 +307,8 @@ impl TripleManager {
                 tracing::warn!(?error, "take_two failed in take_two_mine.");
                 self.mine.push_front(id1);
                 self.mine.push_front(id0);
+                self.used_triples.remove(&id0);
+                self.used_triples.remove(&id1);
                 None
             }
             Ok(val) => Some(val),
@@ -305,6 +318,7 @@ impl TripleManager {
     pub async fn insert_mine(&mut self, triple: Triple) {
         self.mine.push_back(triple.id);
         self.triples.insert(triple.id, triple.clone());
+        self.used_triples.remove(&triple.id);
         self.insert_triples_to_storage(vec![triple]).await;
     }
 
@@ -324,7 +338,7 @@ impl TripleManager {
             let potential_len = self.potential_len();
             match self.generators.entry(id) {
                 Entry::Vacant(e) => {
-                    if potential_len >= self.triple_cfg.max_triples {
+                    if potential_len >= self.triple_cfg.max_triples || self.used_triples.contains_key(&id) {
                         // We are at the maximum amount of triples, we cannot generate more. So just in case a node
                         // sends more triple generation requests, reject them and have them tiemout.
                         return Ok(None);

@@ -25,6 +25,9 @@ pub const PROTOCOL_SIGNATURE_TIMEOUT: Duration = Duration::from_secs(60);
 /// Default invalidation time for failed triples. 120 mins
 pub const FAILED_TRIPLES_TIMEOUT: Duration = Duration::from_secs(120 * 60);
 
+/// Default invalidation time for used triples. 120 mins
+pub const USED_TRIPLES_TIMEOUT: Duration = Duration::from_secs(120 * 60);
+
 pub type SecretKeyShare = <Secp256k1 as CurveArithmetic>::Scalar;
 pub type PublicKey = <Secp256k1 as CurveArithmetic>::AffinePoint;
 pub type TripleProtocol =
