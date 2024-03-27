@@ -69,7 +69,7 @@ pub enum Cli {
         #[arg(
             long,
             env("MPC_RECOVERY_MAX_CONCURRENT_INTRODUCTION"),
-            default_value("4")
+            default_value("2")
         )]
         max_concurrent_introduction: usize,
 
@@ -78,7 +78,7 @@ pub enum Cli {
         #[arg(
             long,
             env("MPC_RECOVERY_MAX_CONCURRENT_GENERATION"),
-            default_value("32")
+            default_value("16")
         )]
         max_concurrent_generation: usize,
 
