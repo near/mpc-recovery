@@ -142,6 +142,10 @@ variable "static_env" {
     {
       name  = "MPC_RECOVERY_MAX_CONCURRENT_GENERATION"
       value = 16
+    },
+    {
+      name  = "MPC_RECOVERY_TRIPLE_TIMEOUT_SEC"
+      value = 1200
     }
   ]
 }

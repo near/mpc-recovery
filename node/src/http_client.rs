@@ -153,11 +153,11 @@ impl MessageQueue {
     }
 }
 
-const fn message_type_to_timeout(msg: &MpcMessage) -> Duration {
+fn message_type_to_timeout(msg: &MpcMessage) -> Duration {
     match msg {
         MpcMessage::Generating(_) => MESSAGE_TIMEOUT,
         MpcMessage::Resharing(_) => MESSAGE_TIMEOUT,
-        MpcMessage::Triple(_) => crate::types::PROTOCOL_TRIPLE_TIMEOUT,
+        MpcMessage::Triple(_) => crate::util::get_triple_timeout(),
         MpcMessage::Presignature(_) => crate::types::PROTOCOL_PRESIG_TIMEOUT,
         MpcMessage::Signature(_) => crate::types::PROTOCOL_SIGNATURE_TIMEOUT,
     }
