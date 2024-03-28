@@ -63,8 +63,9 @@ impl TestTripleManagers {
 
         let managers = (0..num_managers)
             .map(|num| {
+                let account_id = format!("account_{num}.testnet");
                 let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(
-                    storage::triple_storage::init(gcp_service.as_ref(), num.to_string()),
+                    storage::triple_storage::init(gcp_service.as_ref(), account_id.clone()),
                 ));
                 TripleManager::new(
                     Participant::from(num),
@@ -73,7 +74,7 @@ impl TestTripleManagers {
                     DEFAULT_TEST_CONFIG,
                     vec![],
                     triple_storage,
-                    num.to_string().parse().unwrap(),
+                    account_id.parse().unwrap(),
                 )
             })
             .collect();
