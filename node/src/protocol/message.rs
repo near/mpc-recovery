@@ -267,6 +267,9 @@ impl MessageHandler for RunningState {
                     Err(presignature::GenerationError::AlreadyGenerated) => {
                         tracing::info!(id, "presignature already generated, nothing left to do")
                     }
+                    Err(presignature::GenerationError::Timeout) => {
+                        tracing::info!(id, "presignature msg already timed out")
+                    }
                     Err(presignature::GenerationError::TripleIsMissing(_)) => {
                         // Store the message until we are ready to process it
                         leftover_messages.push(message)
