@@ -376,12 +376,12 @@ where
     T: Serialize,
 {
     pub fn encrypt(
-        msg: T,
+        msg: &T,
         from: Participant,
         sign_sk: &near_crypto::SecretKey,
         cipher_pk: &hpke::PublicKey,
     ) -> Result<Ciphered, CryptographicError> {
-        let msg = serde_json::to_vec(&msg)?;
+        let msg = serde_json::to_vec(msg)?;
         let sig = sign_sk.sign(&msg);
         let msg = SignedMessage { msg, sig, from };
         let msg = serde_json::to_vec(&msg)?;
