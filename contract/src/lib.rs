@@ -5,6 +5,7 @@ use near_sdk::collections::TreeMap;
 use near_sdk::log;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault, Promise, PromiseOrValue, PublicKey};
+use primitives::ParticipantInfo;
 use primitives::{CandidateInfo, Candidates, Participants, PkVotes, Votes};
 use std::collections::{BTreeMap, HashSet};
 
@@ -67,6 +68,36 @@ impl MpcContract {
                 candidates: Candidates { candidates },
                 threshold,
                 pk_votes: PkVotes::new(),
+            }),
+            pending_requests: TreeMap::new(b"m"),
+        }
+    }
+
+    // This function can be used to transfer the MPC network to a new contract.
+    #[init]
+    pub fn init_running(
+        epoch: u64,
+        participants: BTreeMap<AccountId, ParticipantInfo>,
+        threshold: usize,
+        public_key: PublicKey,
+    ) -> Self {
+        log!(
+            "init_running: signer={}, epoch={}, participants={}, threshold={}, public_key={:?}",
+            env::signer_account_id(),
+            epoch,
+            serde_json::to_string(&participants).unwrap(),
+            threshold,
+            public_key
+        );
+        MpcContract {
+            protocol_state: ProtocolContractState::Running(RunningContractState {
+                epoch,
+                participants: Participants { participants },
+                threshold,
+                public_key,
+                candidates: Candidates::new(),
+                join_votes: Votes::new(),
+                leave_votes: Votes::new(),
             }),
             pending_requests: TreeMap::new(b"m"),
         }
