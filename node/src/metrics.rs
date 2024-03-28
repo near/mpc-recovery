@@ -248,6 +248,16 @@ pub(crate) static NUM_SIGN_SUCCESS_30S: Lazy<IntGaugeVec> = Lazy::new(|| {
         .unwrap()
 });
 
+pub(crate) static SEND_ENCRYPTED_LATENCY: Lazy<HistogramVec> = Lazy::new(|| {
+    try_create_histogram_vec(
+        "multichain_send_encrypted_ms",
+        "Latency of send encrypted.",
+        &["node_account_id"],
+        Some(exponential_buckets(0.5, 1.5, 20).unwrap()),
+    )
+    .unwrap()
+});
+
 pub(crate) static PROTOCOL_LATENCY_ITER_TOTAL: Lazy<HistogramVec> = Lazy::new(|| {
     try_create_histogram_vec(
         "multichain_protocol_iter_total",

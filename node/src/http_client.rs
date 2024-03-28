@@ -153,6 +153,7 @@ impl MessageQueue {
 
             for encrypted_partition in partitioned {
                 let info = participants.get(&Participant::from(id)).unwrap();
+                let start = Instant::now();
                 if let Err(err) =
                     send_encrypted_multi(from, client, &info.url, encrypted_partition).await
                 {
@@ -162,6 +163,10 @@ impl MessageQueue {
                     errors.push(err);
                     break;
                 }
+
+                crate::metrics::SEND_ENCRYPTED_LATENCY
+                    .with_label_values(&[info.account_id.as_ref()])
+                    .observe(start.elapsed().as_millis() as f64);
             }
         }
 
