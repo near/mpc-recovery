@@ -392,42 +392,6 @@ impl MpcContract {
         }
     }
 
-    #[private]
-    #[init(ignore_state)]
-    pub fn migrate_state() -> Self {
-        #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
-        pub struct OldMpcContract {
-            protocol_state: ProtocolContractState,
-            pending_requests: LookupMap<[u8; 32], Option<(String, String)>>,
-        }
-
-        let old_contract: OldMpcContract = env::state_read().expect("Old state doesn't exist");
-
-        Self {
-            protocol_state: old_contract.protocol_state,
-            pending_requests: LookupMap::new(b"m"),
-            request_counter: 0,
-        }
-    }
-
-    #[private]
-    #[init(ignore_state)]
-    pub fn migrate_state_2() -> Self {
-        #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
-        pub struct OldMpcContract {
-            protocol_state: ProtocolContractState,
-            pending_requests: TreeMap<[u8; 32], Option<(String, String)>>,
-        }
-
-        let old_contract: OldMpcContract = env::state_read().expect("Old state doesn't exist");
-
-        Self {
-            protocol_state: old_contract.protocol_state,
-            pending_requests: LookupMap::new(b"m"),
-            request_counter: 0,
-        }
-    }
-
     /// This is the root public key combined from all the public keys of the participants.
     pub fn public_key(&self) -> PublicKey {
         match &self.protocol_state {
