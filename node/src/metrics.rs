@@ -300,20 +300,20 @@ pub(crate) static PROTOCOL_LATENCY_ITER_MESSAGE: Lazy<HistogramVec> = Lazy::new(
 
 pub(crate) static NUM_SEND_ENCRYPTED_FAILURE: Lazy<IntGaugeVec> = Lazy::new(|| {
     try_create_int_gauge_vec(
-            "multichain_send_encrypted_failure",
-            "number of successful send encrypted",
-            &["node_account_id"],
-        )
-        .unwrap()
+        "multichain_send_encrypted_failure",
+        "number of successful send encrypted",
+        &["node_account_id"],
+    )
+    .unwrap()
 });
 
 pub(crate) static NUM_SEND_ENCRYPTED_TOTAL: Lazy<IntGaugeVec> = Lazy::new(|| {
     try_create_int_gauge_vec(
-            "multichain_send_encrypted_total",
-            "number total send encrypted",
-            &["node_account_id"],
-        )
-        .unwrap()
+        "multichain_send_encrypted_total",
+        "number total send encrypted",
+        &["node_account_id"],
+    )
+    .unwrap()
 });
 
 pub(crate) static FAILED_SEND_ENCRYPTED_LATENCY: Lazy<HistogramVec> = Lazy::new(|| {
@@ -325,7 +325,6 @@ pub(crate) static FAILED_SEND_ENCRYPTED_LATENCY: Lazy<HistogramVec> = Lazy::new(
     )
     .unwrap()
 });
-
 
 pub fn try_create_int_gauge_vec(name: &str, help: &str, labels: &[&str]) -> Result<IntGaugeVec> {
     check_metric_multichain_prefix(name)?;

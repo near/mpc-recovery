@@ -150,8 +150,8 @@ impl MessageQueue {
                 errors.push(err);
             } else {
                 crate::metrics::SEND_ENCRYPTED_LATENCY
-                .with_label_values(&[&account_id.as_ref()])
-                .observe(start.elapsed().as_millis() as f64);
+                    .with_label_values(&[&account_id.as_ref()])
+                    .observe(start.elapsed().as_millis() as f64);
             }
         }
         // only add the participant count if it hasn't been seen before.
