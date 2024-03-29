@@ -112,6 +112,7 @@ impl MessageQueue {
         let mut errors = Vec::new();
         let mut participant_counter = HashMap::new();
         while let Some((info, msg, instant)) = self.deque.pop_front() {
+            let account_id = info.account_id.clone();
             if !participants.contains_key(&Participant::from(info.id)) {
                 if instant.elapsed() > message_type_to_timeout(&msg) {
                     errors.push(SendError::Timeout(format!(
@@ -125,9 +126,19 @@ impl MessageQueue {
                 continue;
             }
 
+            let start = Instant::now();
+            crate::metrics::NUM_SEND_ENCRYPTED_TOTAL
+                .with_label_values(&[&account_id.as_ref()])
+                .inc();
             if let Err(err) =
                 send_encrypted(from, &info.cipher_pk, sign_sk, client, &info.url, &msg).await
             {
+                crate::metrics::NUM_SEND_ENCRYPTED_FAILURE
+                    .with_label_values(&[&account_id.as_ref()])
+                    .inc();
+                crate::metrics::FAILED_SEND_ENCRYPTED_LATENCY
+                    .with_label_values(&[&account_id.as_ref()])
+                    .observe(start.elapsed().as_millis() as f64);
                 if instant.elapsed() > message_type_to_timeout(&msg) {
                     errors.push(SendError::Timeout(format!(
                         "message has timed out: {err:?}"
@@ -137,6 +148,10 @@ impl MessageQueue {
 
                 failed.push_back((info, msg, instant));
                 errors.push(err);
+            } else {
+                crate::metrics::SEND_ENCRYPTED_LATENCY
+                    .with_label_values(&[&account_id.as_ref()])
+                    .observe(start.elapsed().as_millis() as f64);
             }
         }
         // only add the participant count if it hasn't been seen before.
@@ -153,11 +168,11 @@ impl MessageQueue {
     }
 }
 
-const fn message_type_to_timeout(msg: &MpcMessage) -> Duration {
+fn message_type_to_timeout(msg: &MpcMessage) -> Duration {
     match msg {
         MpcMessage::Generating(_) => MESSAGE_TIMEOUT,
         MpcMessage::Resharing(_) => MESSAGE_TIMEOUT,
-        MpcMessage::Triple(_) => crate::types::PROTOCOL_TRIPLE_TIMEOUT,
+        MpcMessage::Triple(_) => crate::util::get_triple_timeout(),
         MpcMessage::Presignature(_) => crate::types::PROTOCOL_PRESIG_TIMEOUT,
         MpcMessage::Signature(_) => crate::types::PROTOCOL_SIGNATURE_TIMEOUT,
     }

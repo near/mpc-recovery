@@ -229,6 +229,7 @@ impl MpcSignProtocol {
         let mut last_state_update = Instant::now();
         let mut last_pinged = Instant::now();
         loop {
+            let protocol_time = Instant::now();
             tracing::debug!("trying to advance mpc recovery protocol");
             loop {
                 let msg_result = self.receiver.try_recv();
@@ -285,6 +286,7 @@ impl MpcSignProtocol {
                 guard.clone()
             };
 
+            let crypto_time = Instant::now();
             let mut state = match state.progress(&mut self).await {
                 Ok(state) => state,
                 Err(err) => {
@@ -293,7 +295,11 @@ impl MpcSignProtocol {
                     continue;
                 }
             };
+            crate::metrics::PROTOCOL_LATENCY_ITER_CRYPTO
+                .with_label_values(&[&my_account_id])
+                .observe(crypto_time.elapsed().as_secs_f64());
 
+            let consensus_time = Instant::now();
             if let Some(contract_state) = contract_state {
                 state = match state.advance(&mut self, contract_state).await {
                     Ok(state) => state,
@@ -304,12 +310,19 @@ impl MpcSignProtocol {
                     }
                 };
             }
+            crate::metrics::PROTOCOL_LATENCY_ITER_CONSENSUS
+                .with_label_values(&[&my_account_id])
+                .observe(consensus_time.elapsed().as_secs_f64());
 
+            let message_time = Instant::now();
             if let Err(err) = state.handle(&self, &mut queue).await {
                 tracing::info!("protocol unable to handle messages: {err:?}");
                 tokio::time::sleep(Duration::from_millis(100)).await;
                 continue;
             }
+            crate::metrics::PROTOCOL_LATENCY_ITER_MESSAGE
+                .with_label_values(&[&my_account_id])
+                .observe(message_time.elapsed().as_secs_f64());
 
             let sleep_ms = match state {
                 NodeState::Generating(_) => 500,
@@ -325,6 +338,10 @@ impl MpcSignProtocol {
             let mut guard = self.state.write().await;
             *guard = state;
             drop(guard);
+
+            crate::metrics::PROTOCOL_LATENCY_ITER_TOTAL
+                .with_label_values(&[&my_account_id])
+                .observe(protocol_time.elapsed().as_secs_f64());
             tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
         }
     }

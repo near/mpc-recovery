@@ -248,6 +248,84 @@ pub(crate) static NUM_SIGN_SUCCESS_30S: Lazy<IntGaugeVec> = Lazy::new(|| {
         .unwrap()
 });
 
+pub(crate) static SEND_ENCRYPTED_LATENCY: Lazy<HistogramVec> = Lazy::new(|| {
+    try_create_histogram_vec(
+        "multichain_send_encrypted_ms",
+        "Latency of send encrypted.",
+        &["node_account_id"],
+        Some(exponential_buckets(0.5, 1.5, 20).unwrap()),
+    )
+    .unwrap()
+});
+
+pub(crate) static PROTOCOL_LATENCY_ITER_TOTAL: Lazy<HistogramVec> = Lazy::new(|| {
+    try_create_histogram_vec(
+        "multichain_protocol_iter_total",
+        "Latency of multichain protocol iter, start of protocol till end of iteration",
+        &["node_account_id"],
+        Some(exponential_buckets(0.001, 3.0, 20).unwrap()),
+    )
+    .unwrap()
+});
+
+pub(crate) static PROTOCOL_LATENCY_ITER_CRYPTO: Lazy<HistogramVec> = Lazy::new(|| {
+    try_create_histogram_vec(
+        "multichain_protocol_iter_crypto",
+        "Latency of multichain protocol iter, start of crypto iter till end",
+        &["node_account_id"],
+        Some(exponential_buckets(0.001, 2.0, 20).unwrap()),
+    )
+    .unwrap()
+});
+
+pub(crate) static PROTOCOL_LATENCY_ITER_CONSENSUS: Lazy<HistogramVec> = Lazy::new(|| {
+    try_create_histogram_vec(
+        "multichain_protocol_iter_consensus",
+        "Latency of multichain protocol iter, start of consensus iter till end",
+        &["node_account_id"],
+        Some(exponential_buckets(0.001, 2.0, 20).unwrap()),
+    )
+    .unwrap()
+});
+
+pub(crate) static PROTOCOL_LATENCY_ITER_MESSAGE: Lazy<HistogramVec> = Lazy::new(|| {
+    try_create_histogram_vec(
+        "multichain_protocol_iter_message",
+        "Latency of multichain protocol iter, start of message iter till end",
+        &["node_account_id"],
+        Some(exponential_buckets(0.001, 2.0, 20).unwrap()),
+    )
+    .unwrap()
+});
+
+pub(crate) static NUM_SEND_ENCRYPTED_FAILURE: Lazy<IntGaugeVec> = Lazy::new(|| {
+    try_create_int_gauge_vec(
+        "multichain_send_encrypted_failure",
+        "number of successful send encrypted",
+        &["node_account_id"],
+    )
+    .unwrap()
+});
+
+pub(crate) static NUM_SEND_ENCRYPTED_TOTAL: Lazy<IntGaugeVec> = Lazy::new(|| {
+    try_create_int_gauge_vec(
+        "multichain_send_encrypted_total",
+        "number total send encrypted",
+        &["node_account_id"],
+    )
+    .unwrap()
+});
+
+pub(crate) static FAILED_SEND_ENCRYPTED_LATENCY: Lazy<HistogramVec> = Lazy::new(|| {
+    try_create_histogram_vec(
+        "multichain_failed_send_encrypted_ms",
+        "Latency of failed send encrypted.",
+        &["node_account_id"],
+        Some(exponential_buckets(0.5, 1.5, 20).unwrap()),
+    )
+    .unwrap()
+});
+
 pub fn try_create_int_gauge_vec(name: &str, help: &str, labels: &[&str]) -> Result<IntGaugeVec> {
     check_metric_multichain_prefix(name)?;
     let opts = Opts::new(name, help);
