@@ -60,7 +60,13 @@ impl SignQueue {
         self.unorganized_requests.push(request);
     }
 
-    pub fn organize(&mut self, threshold: usize, active: &Participants, me: Participant, my_account_id: &AccountId) {
+    pub fn organize(
+        &mut self,
+        threshold: usize,
+        active: &Participants,
+        me: Participant,
+        my_account_id: &AccountId,
+    ) {
         for request in self.unorganized_requests.drain(..) {
             let mut rng = StdRng::from_seed(request.entropy);
             let subset = active.keys().choose_multiple(&mut rng, threshold);
