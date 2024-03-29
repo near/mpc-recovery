@@ -101,7 +101,8 @@ impl MpcContract {
                 join_votes: Votes::new(),
                 leave_votes: Votes::new(),
             }),
-            pending_requests: TreeMap::new(b"m"),
+            pending_requests: LookupMap::new(b"m"),
+            request_counter: 0,
         }
     }
 
