@@ -132,20 +132,15 @@ impl MessageQueue {
                     continue;
                 }
             };
-            let (encrypted, msgs) = encrypted
-                .entry(info.id)
-                .or_insert_with(|| (Vec::new(), Vec::new()));
-
-            encrypted.push(encrypted_msg);
-            msgs.push((info, msg, instant));
+            let encrypted = encrypted.entry(info.id).or_insert_with(Vec::new);
+            encrypted.push((encrypted_msg, (info, msg, instant)));
         }
 
         let mut compacted = 0;
-        for (id, (encrypted, msgs)) in encrypted {
-            let partitioned = partition_ciphered(encrypted);
-            compacted += partitioned.len();
-
-            for encrypted_partition in partitioned {
+        for (id, encrypted) in encrypted {
+            for partition in partition_ciphered_256kb(encrypted) {
+                let (encrypted_partition, msgs): (Vec<_>, Vec<_>) = partition.into_iter().unzip();
+                // guaranteed to unwrap due to our previous loop check:
                 let info = participants.get(&Participant::from(id)).unwrap();
                 let account_id = &info.account_id;
 
@@ -163,12 +158,10 @@ impl MessageQueue {
                         .observe(start.elapsed().as_millis() as f64);
 
                     // since we failed, put back all the messages related to this
-                    for (info, msg, instant) in msgs {
-                        failed.push_back((info, msg, instant));
-                    }
+                    failed.extend(msgs);
                     errors.push(err);
-                    break;
                 } else {
+                    compacted += msgs.len();
                     crate::metrics::SEND_ENCRYPTED_LATENCY
                         .with_label_values(&[account_id.as_ref()])
                         .observe(start.elapsed().as_millis() as f64);
@@ -198,13 +191,18 @@ impl MessageQueue {
     }
 }
 
-fn partition_ciphered(encrypted: Vec<Ciphered>) -> Vec<Vec<Ciphered>> {
-    let mut result: Vec<Vec<Ciphered>> = Vec::new();
-    let mut current_partition: Vec<Ciphered> = Vec::new();
+/// Encrypted message with a reference to the old message. Only the ciphered portion of this
+/// type will be sent over the wire, while the original message is kept just in case things
+/// go wrong somewhere and the message needs to be requeued to be sent later.
+type EncryptedMessage = (Ciphered, (ParticipantInfo, MpcMessage, Instant));
+
+fn partition_ciphered_256kb(encrypted: Vec<EncryptedMessage>) -> Vec<Vec<EncryptedMessage>> {
+    let mut result = Vec::new();
+    let mut current_partition = Vec::new();
     let mut current_size: usize = 0;
 
     for ciphered in encrypted {
-        let bytesize = ciphered.text.len();
+        let bytesize = ciphered.0.text.len();
         if current_size + bytesize > 256 * 1024 {
             // If adding this byte vector exceeds 256kb, start a new partition
             result.push(current_partition);
