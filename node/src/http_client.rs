@@ -33,7 +33,7 @@ pub enum SendError {
     ParticipantNotAlive(String),
 }
 
-async fn send_encrypted_multi<U: IntoUrl>(
+async fn send_encrypted<U: IntoUrl>(
     from: Participant,
     client: &Client,
     url: U,
@@ -41,7 +41,7 @@ async fn send_encrypted_multi<U: IntoUrl>(
 ) -> Result<(), SendError> {
     let _span = tracing::info_span!("message_request");
     let mut url = url.into_url()?;
-    url.set_path("msg_multi");
+    url.set_path("msg");
     tracing::debug!(?from, to = %url, "making http request: sending encrypted message");
     let action = || async {
         let response = client
@@ -111,25 +111,20 @@ impl MessageQueue {
         let uncompacted = self.deque.len();
         let mut encrypted = HashMap::new();
         while let Some((info, msg, instant)) = self.deque.pop_front() {
+            if instant.elapsed() > message_type_to_timeout(&msg) {
+                errors.push(SendError::Timeout(format!(
+                    "{} message has timed out: {info:?}",
+                    msg.typename(),
+                )));
+                continue;
+            }
+
             if !participants.contains_key(&Participant::from(info.id)) {
-                if instant.elapsed() > message_type_to_timeout(&msg) {
-                    errors.push(SendError::Timeout(format!(
-                        "message has timed out on offline node: {info:?}",
-                    )));
-                    continue;
-                }
                 let counter = participant_counter.entry(info.id).or_insert(0);
                 *counter += 1;
                 failed.push_back((info, msg, instant));
                 continue;
             }
-            if instant.elapsed() > message_type_to_timeout(&msg) {
-                errors.push(SendError::Timeout(format!(
-                    "message has timed out: {info:?}"
-                )));
-                continue;
-            }
-
             let encrypted_msg = match SignedMessage::encrypt(&msg, from, sign_sk, &info.cipher_pk) {
                 Ok(encrypted) => encrypted,
                 Err(err) => {
@@ -158,8 +153,7 @@ impl MessageQueue {
                 crate::metrics::NUM_SEND_ENCRYPTED_TOTAL
                     .with_label_values(&[account_id.as_ref()])
                     .inc();
-                if let Err(err) =
-                    send_encrypted_multi(from, client, &info.url, encrypted_partition).await
+                if let Err(err) = send_encrypted(from, client, &info.url, encrypted_partition).await
                 {
                     crate::metrics::NUM_SEND_ENCRYPTED_FAILURE
                         .with_label_values(&[account_id.as_ref()])
@@ -168,6 +162,7 @@ impl MessageQueue {
                         .with_label_values(&[account_id.as_ref()])
                         .observe(start.elapsed().as_millis() as f64);
 
+                    // since we failed, put back all the messages related to this
                     for (info, msg, instant) in msgs {
                         failed.push_back((info, msg, instant));
                     }
@@ -211,7 +206,7 @@ fn partition_ciphered(encrypted: Vec<Ciphered>) -> Vec<Vec<Ciphered>> {
     for ciphered in encrypted {
         let bytesize = ciphered.text.len();
         if current_size + bytesize > 256 * 1024 {
-            // If adding this byte vector exceeds 1MB, start a new partition
+            // If adding this byte vector exceeds 256kb, start a new partition
             result.push(current_partition);
             current_partition = Vec::new();
             current_size = 0;

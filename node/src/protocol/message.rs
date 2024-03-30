@@ -77,6 +77,18 @@ pub enum MpcMessage {
     Signature(SignatureMessage),
 }
 
+impl MpcMessage {
+    pub const fn typename(&self) -> &'static str {
+        match self {
+            MpcMessage::Generating(_) => "Generating",
+            MpcMessage::Resharing(_) => "Resharing",
+            MpcMessage::Triple(_) => "Triple",
+            MpcMessage::Presignature(_) => "Presignature",
+            MpcMessage::Signature(_) => "Signature",
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct MpcMessageQueue {
     generating: VecDeque<GeneratingMessage>,

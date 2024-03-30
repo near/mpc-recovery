@@ -45,7 +45,6 @@ pub async fn run(
             }),
         )
         .route("/msg", post(msg))
-        .route("/msg_multi", post(msg_multi))
         .route("/state", get(state))
         .route("/metrics", get(metrics))
         .layer(Extension(Arc::new(axum_state)));
@@ -68,27 +67,6 @@ pub struct MsgRequest {
 
 #[tracing::instrument(level = "debug", skip_all)]
 async fn msg(
-    Extension(state): Extension<Arc<AxumState>>,
-    WithRejection(Json(encrypted), _): WithRejection<Json<Ciphered>, Error>,
-) -> Result<()> {
-    let message =
-        match SignedMessage::decrypt(&state.cipher_sk, &state.protocol_state, encrypted).await {
-            Ok(msg) => msg,
-            Err(err) => {
-                tracing::error!(?err, "failed to decrypt or verify an encrypted message");
-                return Err(err.into());
-            }
-        };
-
-    if let Err(err) = state.sender.send(message).await {
-        tracing::error!(?err, "failed to forward an encrypted protocol message");
-        return Err(err.into());
-    }
-    Ok(())
-}
-
-#[tracing::instrument(level = "debug", skip_all)]
-async fn msg_multi(
     Extension(state): Extension<Arc<AxumState>>,
     WithRejection(Json(encrypted), _): WithRejection<Json<Vec<Ciphered>>, Error>,
 ) -> Result<()> {
