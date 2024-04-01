@@ -200,7 +200,7 @@ impl TripleManager {
         self.queued.push_back(id);
         self.introduced.insert(id);
         crate::metrics::NUM_TOTAL_HISTORICAL_TRIPLE_GENERATORS
-            .with_label_values(&[self.my_account_id.as_ref()])
+            .with_label_values(&[&self.my_account_id])
             .inc();
         Ok(())
     }
@@ -342,7 +342,7 @@ impl TripleManager {
                     let generator = e.insert(TripleGenerator::new(id, participants, protocol));
                     self.queued.push_back(id);
                     crate::metrics::NUM_TOTAL_HISTORICAL_TRIPLE_GENERATORS
-                        .with_label_values(&[self.my_account_id.as_ref()])
+                        .with_label_values(&[&self.my_account_id])
                         .inc();
                     Ok(Some(&mut generator.protocol))
                 }
@@ -431,12 +431,12 @@ impl TripleManager {
 
                         if let Some(start_time) = generator.timestamp {
                             crate::metrics::TRIPLE_LATENCY
-                                .with_label_values(&[self.my_account_id.as_ref()])
+                                .with_label_values(&[&self.my_account_id])
                                 .observe(start_time.elapsed().as_secs_f64());
                         }
 
                         crate::metrics::NUM_TOTAL_HISTORICAL_TRIPLE_GENERATORS_SUCCESS
-                            .with_label_values(&[self.my_account_id.as_ref()])
+                            .with_label_values(&[&self.my_account_id])
                             .inc();
 
                         let triple = Triple {
@@ -467,7 +467,7 @@ impl TripleManager {
                         if triple_is_mine {
                             self.mine.push_back(*id);
                             crate::metrics::NUM_TOTAL_HISTORICAL_TRIPLE_GENERATIONS_MINE_SUCCESS
-                                .with_label_values(&[self.my_account_id.as_ref()])
+                                .with_label_values(&[&self.my_account_id])
                                 .inc();
                         }
 

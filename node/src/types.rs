@@ -6,6 +6,7 @@ use cait_sith::triples::TripleGenerationOutput;
 use cait_sith::{protocol::Protocol, KeygenOutput};
 use cait_sith::{FullSignature, PresignOutput};
 use k256::{elliptic_curve::CurveArithmetic, Secp256k1};
+use near_lake_primitives::AccountId;
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
 use crate::gcp::error::ConvertError;
@@ -148,7 +149,7 @@ impl ReshareProtocol {
 
 #[derive(Clone, Debug)]
 pub struct LatestBlockHeight {
-    pub account_id: String,
+    pub account_id: AccountId,
     pub block_height: near_primitives::types::BlockHeight,
 }
 
@@ -181,7 +182,7 @@ impl IntoValue for &LatestBlockHeight {
             let mut properties = std::collections::HashMap::new();
             properties.insert(
                 "account_id".to_string(),
-                Value::StringValue(self.account_id.clone()),
+                Value::StringValue(self.account_id.to_string()),
             );
             properties.insert(
                 "block_height".to_string(),
@@ -213,7 +214,11 @@ impl FromValue for LatestBlockHeight {
                 let account_id = properties
                     .remove("account_id")
                     .ok_or_else(|| ConvertError::MissingProperty("account_id".to_string()))?;
-                let account_id = String::from_value(account_id)?;
+                let account_id = String::from_value(account_id)?.parse().map_err(|err| {
+                    ConvertError::MalformedProperty(format!(
+                        "LatestBlockHeight failed to parse account_id: {err:?}",
+                    ))
+                })?;
 
                 let block_height = properties
                     .remove("block_height")

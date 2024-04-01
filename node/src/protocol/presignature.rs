@@ -220,10 +220,10 @@ impl PresignatureManager {
         self.generators.insert(id, generator);
         self.introduced.insert(id);
         crate::metrics::NUM_TOTAL_HISTORICAL_PRESIGNATURE_GENERATORS
-            .with_label_values(&[self.my_account_id.as_ref()])
+            .with_label_values(&[&self.my_account_id])
             .inc();
         crate::metrics::NUM_TOTAL_HISTORICAL_PRESIGNATURE_GENERATORS_MINE
-            .with_label_values(&[self.my_account_id.as_ref()])
+            .with_label_values(&[&self.my_account_id])
             .inc();
         Ok(())
     }
@@ -334,7 +334,7 @@ impl PresignatureManager {
                     )?;
                     let generator = entry.insert(generator);
                     crate::metrics::NUM_TOTAL_HISTORICAL_PRESIGNATURE_GENERATORS
-                        .with_label_values(&[self.my_account_id.as_ref()])
+                        .with_label_values(&[&self.my_account_id])
                         .inc();
                     Ok(&mut generator.protocol)
                 }
@@ -430,16 +430,16 @@ impl PresignatureManager {
                             tracing::info!(id, "assigning presignature to myself");
                             self.mine.push_back(*id);
                             crate::metrics::NUM_TOTAL_HISTORICAL_PRESIGNATURE_GENERATORS_MINE_SUCCESS
-                                .with_label_values(&[self.my_account_id.as_ref()])
+                                .with_label_values(&[&self.my_account_id])
                                 .inc();
                         }
                         self.introduced.remove(id);
 
                         crate::metrics::PRESIGNATURE_LATENCY
-                            .with_label_values(&[self.my_account_id.as_ref()])
+                            .with_label_values(&[&self.my_account_id])
                             .observe(generator.timestamp.elapsed().as_secs_f64());
                         crate::metrics::NUM_TOTAL_HISTORICAL_PRESIGNATURE_GENERATORS_SUCCESS
-                            .with_label_values(&[self.my_account_id.as_ref()])
+                            .with_label_values(&[&self.my_account_id])
                             .inc();
                         // Do not retain the protocol
                         return false;

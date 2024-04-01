@@ -41,27 +41,32 @@ impl TestTripleManagers {
             .map(Participant::from)
             .for_each(|p| participants.insert(&p, ParticipantInfo::new(p.into())));
 
-        let gcp_service = if let Some(url) = datastore_url {
-            let storage_options = storage::Options {
-                gcp_project_id: "triple-test".to_string(),
-                sk_share_secret_id: None,
-                gcp_datastore_url: Some(url),
-                env: "triple-test".to_string(),
+        let mut services = Vec::with_capacity(num_managers as usize);
+        for num in 0..num_managers {
+            let service = if let Some(url) = &datastore_url {
+                let account_id = format!("account_{num}.testnet").parse().unwrap();
+                let storage_options = storage::Options {
+                    gcp_project_id: "triple-test".to_string(),
+                    sk_share_secret_id: None,
+                    gcp_datastore_url: Some(url.clone()),
+                    env: "triple-test".to_string(),
+                };
+                Some(
+                    GcpService::init(&account_id, &storage_options)
+                        .await
+                        .unwrap(),
+                )
+            } else {
+                None
             };
-            Some(
-                GcpService::init("mpc.near", &storage_options)
-                    .await
-                    .unwrap(),
-            )
-        } else {
-            None
-        };
+            services.push(service);
+        }
 
         let managers = (0..num_managers)
             .map(|num| {
-                let account_id = format!("account_{num}.testnet");
+                let account_id = format!("account_{num}.testnet").parse().unwrap();
                 let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(
-                    storage::triple_storage::init(gcp_service.as_ref(), account_id.clone()),
+                    storage::triple_storage::init(services[num as usize].as_ref(), &account_id),
                 ));
                 TripleManager::new(
                     Participant::from(num),
@@ -70,7 +75,7 @@ impl TestTripleManagers {
                     DEFAULT_TEST_CONFIG,
                     vec![],
                     triple_storage,
-                    &account_id.parse().unwrap(),
+                    &account_id,
                 )
             })
             .collect();

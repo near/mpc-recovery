@@ -82,7 +82,7 @@ impl SignQueue {
                 let proposer_requests = self.requests.entry(proposer).or_default();
                 proposer_requests.insert(request.receipt_id, request);
                 crate::metrics::NUM_SIGN_REQUESTS_MINE
-                    .with_label_values(&[my_account_id.as_ref()])
+                    .with_label_values(&[&my_account_id])
                     .inc();
             } else {
                 tracing::info!(

@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use google_datastore1::api::{
     Filter, Key, PathElement, PropertyFilter, PropertyReference, Value as DatastoreValue,
 };
+use near_lake_primitives::AccountId;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -40,7 +41,7 @@ impl Keyable for TripleKey<'_> {
 
 #[derive(Clone, Debug)]
 pub struct TripleData {
-    pub account_id: String,
+    pub account_id: AccountId,
     pub triple: Triple,
     pub mine: bool,
 }
@@ -94,7 +95,11 @@ impl FromValue for TripleData {
                 let (_, account_id) = properties
                     .remove_entry("account_id")
                     .ok_or_else(|| ConvertError::MissingProperty("account_id".to_string()))?;
-                let account_id = String::from_value(account_id)?;
+                let account_id = String::from_value(account_id)?.parse().map_err(|err| {
+                    ConvertError::MalformedProperty(format!(
+                        "TripleData failed to parse account_id: {err:?}"
+                    ))
+                })?;
 
                 let (_, triple_share) = properties
                     .remove_entry("triple_share")
@@ -140,14 +145,14 @@ pub trait TripleNodeStorage {
     async fn insert(&mut self, triple: Triple, mine: bool) -> TripleResult<()>;
     async fn delete(&mut self, id: TripleId) -> TripleResult<()>;
     async fn load(&self) -> TripleResult<Vec<TripleData>>;
-    fn account_id(&self) -> &str;
+    fn account_id(&self) -> &AccountId;
 }
 
 #[derive(Clone)]
 struct MemoryTripleNodeStorage {
     triples: HashMap<TripleId, Triple>,
     mine: HashSet<TripleId>,
-    account_id: String,
+    account_id: AccountId,
 }
 
 #[async_trait]
@@ -171,7 +176,7 @@ impl TripleNodeStorage for MemoryTripleNodeStorage {
         for (triple_id, triple) in self.triples.clone() {
             let mine = self.mine.contains(&triple_id);
             res.push(TripleData {
-                account_id: self.account_id().into(),
+                account_id: self.account_id().clone(),
                 triple,
                 mine,
             });
@@ -179,22 +184,22 @@ impl TripleNodeStorage for MemoryTripleNodeStorage {
         Ok(res)
     }
 
-    fn account_id(&self) -> &str {
-        self.account_id.as_ref()
+    fn account_id(&self) -> &AccountId {
+        &self.account_id
     }
 }
 
 #[derive(Clone)]
 struct DataStoreTripleNodeStorage {
     datastore: DatastoreService,
-    account_id: String,
+    account_id: AccountId,
 }
 
 impl DataStoreTripleNodeStorage {
-    fn new(datastore: DatastoreService, account_id: String) -> Self {
+    fn new(datastore: DatastoreService, account_id: &AccountId) -> Self {
         Self {
             datastore,
-            account_id,
+            account_id: account_id.clone(),
         }
     }
 }
@@ -205,7 +210,7 @@ impl TripleNodeStorage for DataStoreTripleNodeStorage {
         tracing::debug!(id = triple.id, "inserting triples using datastore");
         self.datastore
             .upsert(TripleData {
-                account_id: self.account_id().into(),
+                account_id: self.account_id().clone(),
                 triple,
                 mine,
             })
@@ -249,7 +254,7 @@ impl TripleNodeStorage for DataStoreTripleNodeStorage {
                 )
             })?;
             let triple_data = TripleData::from_value(entity.into_value())?;
-            if triple_data.account_id == self.account_id() {
+            if &triple_data.account_id == self.account_id() {
                 res.push(triple_data);
             }
         }
@@ -257,8 +262,8 @@ impl TripleNodeStorage for DataStoreTripleNodeStorage {
         Ok(res)
     }
 
-    fn account_id(&self) -> &str {
-        self.account_id.as_ref()
+    fn account_id(&self) -> &AccountId {
+        &self.account_id
     }
 }
 
@@ -270,7 +275,7 @@ pub struct TripleStorage {
 
 pub type LockTripleNodeStorageBox = Arc<RwLock<TripleNodeStorageBox>>;
 
-pub fn init(gcp_service: Option<&GcpService>, account_id: String) -> TripleNodeStorageBox {
+pub fn init(gcp_service: Option<&GcpService>, account_id: &AccountId) -> TripleNodeStorageBox {
     match gcp_service {
         Some(gcp) => Box::new(DataStoreTripleNodeStorage::new(
             gcp.datastore.clone(),
@@ -279,7 +284,7 @@ pub fn init(gcp_service: Option<&GcpService>, account_id: String) -> TripleNodeS
         _ => Box::new(MemoryTripleNodeStorage {
             triples: HashMap::new(),
             mine: HashSet::new(),
-            account_id,
+            account_id: account_id.clone(),
         }) as TripleNodeStorageBox,
     }
 }
