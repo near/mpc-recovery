@@ -368,7 +368,7 @@ impl MpcContract {
                     s
                 );
                 if self.pending_requests.contains_key(&payload) {
-                    self.pending_requests.insert(&payload, &Some((big_r, s)));
+                    self.add_request(&payload, &Some((big_r, s)))
                 }
             } else {
                 env::panic_str("only participants can respond");
@@ -390,6 +390,12 @@ impl MpcContract {
             pending_requests: LookupMap::new(b"m"),
             request_counter: 0,
         }
+    }
+
+    #[private]
+    pub fn clean_payloads(&mut self) {
+        log!("clean_payloads");
+        self.pending_requests = LookupMap::new(b"m");
     }
 
     /// This is the root public key combined from all the public keys of the participants.
