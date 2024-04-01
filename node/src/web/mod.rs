@@ -147,11 +147,10 @@ async fn metrics() -> (StatusCode, String) {
         let mut buffer = vec![];
         encoder
             .encode(&prometheus::gather(), &mut buffer)
-            .with_context(|| "failed to encode metrics")?;
+            .context("failed to encode metrics")?;
 
-        let response = String::from_utf8(buffer.clone())
-            .with_context(|| "failed to convert bytes to string")?;
-        buffer.clear();
+        let response =
+            String::from_utf8(buffer).with_context(|| "failed to convert bytes to string")?;
 
         Ok::<String, anyhow::Error>(response)
     };

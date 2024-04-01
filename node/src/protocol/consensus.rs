@@ -122,7 +122,7 @@ impl ConsensusProtocol for StartedState {
                             let sign_queue = ctx.sign_queue();
                             match contract_state
                                 .participants
-                                .find_participant(&ctx.my_account_id().clone())
+                                .find_participant(ctx.my_account_id())
                             {
                                 Some(me) => {
                                     tracing::info!(
@@ -132,7 +132,7 @@ impl ConsensusProtocol for StartedState {
                                         me,
                                         contract_state.threshold,
                                         epoch,
-                                        ctx.my_account_id().clone(),
+                                        ctx.my_account_id(),
                                         ctx.cfg(),
                                     );
                                     let triple_manager = TripleManager::new(
@@ -142,7 +142,7 @@ impl ConsensusProtocol for StartedState {
                                         ctx.cfg(),
                                         self.triple_data,
                                         ctx.triple_storage(),
-                                        ctx.my_account_id().clone(),
+                                        ctx.my_account_id(),
                                     );
                                     Ok(NodeState::Running(RunningState {
                                         epoch,
@@ -355,7 +355,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                         ctx.cfg(),
                         vec![],
                         ctx.triple_storage(),
-                        ctx.my_account_id().clone(),
+                        ctx.my_account_id(),
                     );
 
                     Ok(NodeState::Running(RunningState {
@@ -370,7 +370,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                             me,
                             self.threshold,
                             self.epoch,
-                            ctx.my_account_id().clone(),
+                            ctx.my_account_id(),
                             ctx.cfg(),
                         ))),
                         signature_manager: Arc::new(RwLock::new(SignatureManager::new(
@@ -625,8 +625,8 @@ impl ConsensusProtocol for JoiningState {
                         let participant_account_ids_to_vote = contract_state
                             .participants
                             .iter()
-                            .map(|(_, info)| info.account_id.clone())
-                            .filter(|id| !votes.contains(id))
+                            .map(|(_, info)| &info.account_id)
+                            .filter(|id| !votes.contains(*id))
                             .map(|id| id.to_string())
                             .collect::<Vec<_>>();
                         if !participant_account_ids_to_vote.is_empty() {

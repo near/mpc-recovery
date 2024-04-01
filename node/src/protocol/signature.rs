@@ -401,7 +401,7 @@ impl SignatureManager {
                             delta: generator.delta,
                             epoch: self.epoch,
                             from: self.me,
-                            data: data.clone(),
+                            data,
                         },
                     )),
                     Action::Return(output) => {

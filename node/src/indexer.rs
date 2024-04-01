@@ -85,7 +85,13 @@ async fn handle_block(
 ) -> anyhow::Result<()> {
     for action in block.actions().cloned().collect::<Vec<_>>() {
         if action.receiver_id() == ctx.mpc_contract_id {
-            let receipt = block.receipt_by_id(&action.receipt_id()).unwrap();
+            let receipt =
+                anyhow::Context::with_context(block.receipt_by_id(&action.receipt_id()), || {
+                    format!(
+                        "indexer unable to find block for receipt_id={}",
+                        action.receipt_id()
+                    )
+                })?;
             let ExecutionStatus::SuccessReceiptId(receipt_id) = receipt.status() else {
                 continue;
             };

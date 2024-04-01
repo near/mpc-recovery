@@ -112,7 +112,7 @@ impl CryptographicProtocol for GeneratingState {
 
                     return Ok(NodeState::Generating(self));
                 }
-                Action::SendMany(m) => {
+                Action::SendMany(data) => {
                     tracing::debug!("generating: sending a message to many participants");
                     let mut messages = self.messages.write().await;
                     for (p, info) in ctx.mesh().active_participants().iter() {
@@ -124,19 +124,19 @@ impl CryptographicProtocol for GeneratingState {
                             info.clone(),
                             MpcMessage::Generating(GeneratingMessage {
                                 from: ctx.me().await,
-                                data: m.clone(),
+                                data: data.clone(),
                             }),
                         );
                     }
                 }
-                Action::SendPrivate(to, m) => {
+                Action::SendPrivate(to, data) => {
                     tracing::debug!("generating: sending a private message to {to:?}");
                     let info = self.fetch_participant(&to)?;
                     self.messages.write().await.push(
                         info.clone(),
                         MpcMessage::Generating(GeneratingMessage {
                             from: ctx.me().await,
-                            data: m.clone(),
+                            data,
                         }),
                     );
                 }
@@ -260,11 +260,12 @@ impl CryptographicProtocol for ResharingState {
 
                     return Ok(NodeState::Resharing(self));
                 }
-                Action::SendMany(m) => {
+                Action::SendMany(data) => {
                     tracing::debug!("resharing: sending a message to all participants");
+                    let me = ctx.me().await;
                     let mut messages = self.messages.write().await;
-                    for (p, info) in self.new_participants.clone() {
-                        if p == ctx.me().await {
+                    for (p, info) in self.new_participants.iter() {
+                        if p == &me {
                             // Skip yourself, cait-sith never sends messages to oneself
                             continue;
                         }
@@ -273,13 +274,13 @@ impl CryptographicProtocol for ResharingState {
                             info.clone(),
                             MpcMessage::Resharing(ResharingMessage {
                                 epoch: self.old_epoch,
-                                from: ctx.me().await,
-                                data: m.clone(),
+                                from: me,
+                                data: data.clone(),
                             }),
                         )
                     }
                 }
-                Action::SendPrivate(to, m) => {
+                Action::SendPrivate(to, data) => {
                     tracing::debug!("resharing: sending a private message to {to:?}");
                     match self.new_participants.get(&to) {
                         Some(info) => self.messages.write().await.push(
@@ -287,7 +288,7 @@ impl CryptographicProtocol for ResharingState {
                             MpcMessage::Resharing(ResharingMessage {
                                 epoch: self.old_epoch,
                                 from: ctx.me().await,
-                                data: m.clone(),
+                                data,
                             }),
                         ),
                         None => return Err(CryptographicError::UnknownParticipant(to)),
@@ -345,7 +346,7 @@ impl CryptographicProtocol for RunningState {
         let mut triple_manager = self.triple_manager.write().await;
         let my_account_id = triple_manager.my_account_id.clone();
         crate::metrics::MESSAGE_QUEUE_SIZE
-            .with_label_values(&[&my_account_id.as_ref()])
+            .with_label_values(&[my_account_id.as_ref()])
             .set(messages.len() as i64);
         triple_manager.stockpile(active)?;
         for (p, msg) in triple_manager.poke().await? {
@@ -354,16 +355,16 @@ impl CryptographicProtocol for RunningState {
         }
 
         crate::metrics::NUM_TRIPLES_MINE
-            .with_label_values(&[&my_account_id.as_ref()])
+            .with_label_values(&[my_account_id.as_ref()])
             .set(triple_manager.mine.len() as i64);
         crate::metrics::NUM_TRIPLES_TOTAL
-            .with_label_values(&[&my_account_id.as_ref()])
+            .with_label_values(&[my_account_id.as_ref()])
             .set(triple_manager.triples.len() as i64);
         crate::metrics::NUM_TRIPLE_GENERATORS_INTRODUCED
-            .with_label_values(&[&my_account_id.as_ref()])
+            .with_label_values(&[my_account_id.as_ref()])
             .set(triple_manager.introduced.len() as i64);
         crate::metrics::NUM_TRIPLE_GENERATORS_TOTAL
-            .with_label_values(&[&my_account_id.as_ref()])
+            .with_label_values(&[my_account_id.as_ref()])
             .set(triple_manager.ongoing.len() as i64);
 
         let mut presignature_manager = self.presignature_manager.write().await;
@@ -382,25 +383,25 @@ impl CryptographicProtocol for RunningState {
         }
 
         crate::metrics::NUM_PRESIGNATURES_MINE
-            .with_label_values(&[&my_account_id.as_ref()])
+            .with_label_values(&[my_account_id.as_ref()])
             .set(presignature_manager.my_len() as i64);
         crate::metrics::NUM_PRESIGNATURES_TOTAL
-            .with_label_values(&[&my_account_id.as_ref()])
+            .with_label_values(&[my_account_id.as_ref()])
             .set(presignature_manager.len() as i64);
         crate::metrics::NUM_PRESIGNATURE_GENERATORS_TOTAL
-            .with_label_values(&[&my_account_id.as_ref()])
+            .with_label_values(&[my_account_id.as_ref()])
             .set(presignature_manager.potential_len() as i64 - presignature_manager.len() as i64);
 
         let mut sign_queue = self.sign_queue.write().await;
         crate::metrics::SIGN_QUEUE_SIZE
-            .with_label_values(&[&my_account_id.as_ref()])
+            .with_label_values(&[my_account_id.as_ref()])
             .set(sign_queue.len() as i64);
 
         let mut signature_manager = self.signature_manager.write().await;
         sign_queue.organize(self.threshold, active, ctx.me().await, &my_account_id);
         let my_requests = sign_queue.my_requests(ctx.me().await);
         crate::metrics::SIGN_QUEUE_MINE_SIZE
-            .with_label_values(&[&my_account_id.as_ref()])
+            .with_label_values(&[my_account_id.as_ref()])
             .set(my_requests.len() as i64);
         let mut failed_presigs = Vec::new();
         while presignature_manager.my_len() > 0 {
@@ -459,7 +460,7 @@ impl CryptographicProtocol for RunningState {
         }
         drop(presignature_manager);
         for (p, msg) in signature_manager.poke() {
-            let info = self.participants.get(&p).unwrap();
+            let info = self.fetch_participant(&p)?;
             messages.push(info.clone(), MpcMessage::Signature(msg));
         }
         signature_manager

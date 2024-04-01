@@ -348,10 +348,10 @@ impl MpcSignProtocol {
 }
 
 async fn get_my_participant(protocol: &MpcSignProtocol) -> Participant {
-    let my_near_acc_id = protocol.ctx.account_id.clone();
+    let my_near_acc_id = &protocol.ctx.account_id;
     let state = protocol.state.read().await;
     let participant_info = state
-        .find_participant_info(&my_near_acc_id)
+        .find_participant_info(my_near_acc_id)
         .unwrap_or_else(|| {
             tracing::error!("could not find participant info for {my_near_acc_id}");
             panic!("could not find participant info for {my_near_acc_id}");
