@@ -60,7 +60,13 @@ impl SignQueue {
         self.unorganized_requests.push(request);
     }
 
-    pub fn organize(&mut self, threshold: usize, active: &Participants, me: Participant) {
+    pub fn organize(
+        &mut self,
+        threshold: usize,
+        active: &Participants,
+        me: Participant,
+        my_account_id: &AccountId,
+    ) {
         for request in self.unorganized_requests.drain(..) {
             let mut rng = StdRng::from_seed(request.entropy);
             let subset = active.keys().choose_multiple(&mut rng, threshold);
@@ -75,6 +81,9 @@ impl SignQueue {
                 );
                 let proposer_requests = self.requests.entry(proposer).or_default();
                 proposer_requests.insert(request.receipt_id, request);
+                crate::metrics::NUM_SIGN_REQUESTS_MINE
+                    .with_label_values(&[my_account_id.as_ref()])
+                    .inc();
             } else {
                 tracing::info!(
                     receipt_id = %request.receipt_id,

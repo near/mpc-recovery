@@ -23,6 +23,15 @@ pub(crate) static NUM_SIGN_REQUESTS: Lazy<IntGaugeVec> = Lazy::new(|| {
     .unwrap()
 });
 
+pub(crate) static NUM_SIGN_REQUESTS_MINE: Lazy<IntGaugeVec> = Lazy::new(|| {
+    try_create_int_gauge_vec(
+        "multichain_sign_requests_count_mine",
+        "number of multichain sign requests, marked by sign requests indexed",
+        &["node_account_id"],
+    )
+    .unwrap()
+});
+
 pub(crate) static NUM_SIGN_SUCCESS: Lazy<IntGaugeVec> = Lazy::new(|| {
     try_create_int_gauge_vec(
         "multichain_sign_requests_success",
