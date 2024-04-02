@@ -170,10 +170,10 @@ pub(crate) static MESSAGE_QUEUE_SIZE: Lazy<IntGaugeVec> = Lazy::new(|| {
     .unwrap()
 });
 
-pub(crate) static MPC_CONTRACT_VERSION: Lazy<IntGaugeVec> = Lazy::new(|| {
+pub(crate) static NODE_VERSION: Lazy<IntGaugeVec> = Lazy::new(|| {
     try_create_int_gauge_vec(
-        "multichain_contract_version",
-        "contract version, the contract is of form v[x].multichain-mpc.testnet",
+        "node_version",
+        "node semantic version",
         &["node_account_id"],
     )
     .unwrap()
