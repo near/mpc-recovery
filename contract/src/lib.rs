@@ -49,6 +49,10 @@ pub enum ProtocolContractState {
 }
 
 #[near_bindgen]
+pub enum VersionedMpcContract {
+    V0(MpcContract),
+}
+
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct MpcContract {
     protocol_state: ProtocolContractState,
@@ -56,60 +60,42 @@ pub struct MpcContract {
     request_counter: u32,
 }
 
-#[near_bindgen]
 impl MpcContract {
-    #[init]
-    pub fn init(threshold: usize, candidates: BTreeMap<AccountId, CandidateInfo>) -> Self {
-        log!(
-            "init: signer={}, treshhold={}, candidates={}",
-            env::signer_account_id(),
-            threshold,
-            serde_json::to_string(&candidates).unwrap()
-        );
-        MpcContract {
-            protocol_state: ProtocolContractState::Initializing(InitializingContractState {
-                candidates: Candidates { candidates },
-                threshold,
-                pk_votes: PkVotes::new(),
-            }),
-            pending_requests: LookupMap::new(b"m"),
-            request_counter: 0,
+    fn add_request(&mut self, payload: &[u8; 32], signature: &Option<(String, String)>) {
+        if self.request_counter > 8 {
+            env::panic_str("Too many pending requests. Please, try again later.");
         }
+        if !self.pending_requests.contains_key(payload) {
+            self.request_counter += 1;
+        }
+        self.pending_requests.insert(payload, signature);
     }
 
-    // This function can be used to transfer the MPC network to a new contract.
-    #[init]
-    pub fn init_running(
-        epoch: u64,
-        participants: BTreeMap<AccountId, ParticipantInfo>,
-        threshold: usize,
-        public_key: PublicKey,
-    ) -> Self {
-        log!(
-            "init_running: signer={}, epoch={}, participants={}, threshold={}, public_key={:?}",
-            env::signer_account_id(),
-            epoch,
-            serde_json::to_string(&participants).unwrap(),
-            threshold,
-            public_key
-        );
-        MpcContract {
-            protocol_state: ProtocolContractState::Running(RunningContractState {
-                epoch,
-                participants: Participants { participants },
-                threshold,
-                public_key,
-                candidates: Candidates::new(),
-                join_votes: Votes::new(),
-                leave_votes: Votes::new(),
-            }),
-            pending_requests: LookupMap::new(b"m"),
-            request_counter: 0,
-        }
+    fn remove_request(&mut self, payload: &[u8; 32]) {
+        self.pending_requests.remove(payload);
+        self.request_counter -= 1;
     }
 
-    pub fn state(self) -> ProtocolContractState {
-        self.protocol_state
+    pub fn respond(&mut self, payload: [u8; 32], big_r: String, s: String) {
+        if let ProtocolContractState::Running(state) = &self.protocol_state {
+            let signer = env::signer_account_id();
+            if state.participants.contains_key(&signer) {
+                log!(
+                    "respond: signer={}, payload={:?} big_r={} s={}",
+                    signer,
+                    payload,
+                    big_r,
+                    s
+                );
+                if self.pending_requests.contains_key(&payload) {
+                    self.pending_requests.insert(&payload, &Some((big_r, s)));
+                }
+            } else {
+                env::panic_str("only participants can respond");
+            }
+        } else {
+            env::panic_str("protocol is not in a running state");
+        }
     }
 
     pub fn join(
@@ -331,38 +317,97 @@ impl MpcContract {
             _ => env::panic_str("protocol is not resharing right now"),
         }
     }
+}
 
-    #[allow(unused_variables)]
-    /// `key_version` must be less than or equal to the value at `latest_key_version`
-    pub fn sign(&mut self, payload: [u8; 32], path: String, key_version: u32) -> Promise {
-        let latest_key_version: u32 = self.latest_key_version();
-        assert!(
-            key_version <= latest_key_version,
-            "This version of the signer contract doesn't support versions greater than {}",
-            latest_key_version,
-        );
-        // Make sure sign call will not run out of gas doing recursive calls because the payload will never be removed
-        assert!(
-            env::prepaid_gas() >= GAS_FOR_SIGN_CALL,
-            "Insufficient gas provided. Provided: {} Required: {}",
-            env::prepaid_gas(),
-            GAS_FOR_SIGN_CALL
-        );
+#[near_bindgen]
+impl VersionedMpcContract {
+    #[init]
+    pub fn init(threshold: usize, candidates: BTreeMap<AccountId, CandidateInfo>) -> Self {
         log!(
-            "sign: signer={}, predecessor={}, payload={:?}, path={:?}, key_version={}",
+            "init: signer={}, treshhold={}, candidates={}",
             env::signer_account_id(),
-            env::predecessor_account_id(),
-            payload,
-            path,
-            key_version
+            threshold,
+            serde_json::to_string(&candidates).unwrap()
         );
-        match self.pending_requests.get(&payload) {
-            None => {
-                self.add_request(&payload, None);
-                log!(&serde_json::to_string(&near_sdk::env::random_seed_array()).unwrap());
-                Self::ext(env::current_account_id()).sign_helper(payload, 0)
+        Self::V0(MpcContract {
+            protocol_state: ProtocolContractState::Initializing(InitializingContractState {
+                candidates: Candidates { candidates },
+                threshold,
+                pk_votes: PkVotes::new(),
+            }),
+            pending_requests: LookupMap::new(b"m"),
+            request_counter: 0,
+        })
+    }
+
+    /// Key versions refer new versions of the root key that we may choose to generate on cohort changes
+    /// Older key versions will always work but newer key versions were never held by older signers
+    /// Newer key versions may also add new security features, like only existing within a secure enclave
+    /// Currently only 0 is a valid key version
+    pub const fn latest_key_version(&self) -> u32 {
+        0
+    }
+
+    pub fn state(self) -> ProtocolContractState {
+        match self {
+            Self::V0(mpc_contract) => mpc_contract.protocol_state,
+        }
+    }
+
+    pub fn join(
+        &mut self,
+        url: String,
+        cipher_pk: primitives::hpke::PublicKey,
+        sign_pk: PublicKey,
+    ) {
+        match self {
+            Self::V0(mpc_contract) => mpc_contract.join(url, cipher_pk, sign_pk),
+        }
+    }
+
+    pub fn vote_join(&mut self, candidate_account_id: AccountId) -> bool {
+        match self {
+            Self::V0(mpc_contract) => mpc_contract.vote_join(candidate_account_id),
+        }
+    }
+
+    pub fn vote_leave(&mut self, acc_id_to_leave: AccountId) -> bool {
+        match self {
+            Self::V0(mpc_contract) => mpc_contract.vote_leave(acc_id_to_leave),
+        }
+    }
+
+    pub fn vote_pk(&mut self, public_key: PublicKey) -> bool {
+        match self {
+            Self::V0(mpc_contract) => mpc_contract.vote_pk(public_key),
+        }
+    }
+
+    pub fn vote_reshared(&mut self, epoch: u64) -> bool {
+        match self {
+            Self::V0(mpc_contract) => mpc_contract.vote_reshared(epoch),
+        }
+    }
+
+    fn get_signature_per_payload(&self, payload: [u8; 32]) -> Option<Option<(String, String)>> {
+        match self {
+            Self::V0(mpc_contract) => mpc_contract.pending_requests.get(&payload),
+        }
+    }
+
+    fn remove_request(&mut self, payload: &[u8; 32]) {
+        match self {
+            Self::V0(mpc_contract) => {
+                mpc_contract.remove_request(payload);
             }
-            Some(_) => env::panic_str("Signature for this payload already requested"),
+        }
+    }
+
+    fn add_request(&mut self, payload: &[u8; 32], signature: &Option<(String, String)>) {
+        match self {
+            Self::V0(mpc_contract) => {
+                mpc_contract.add_request(payload, signature);
+            }
         }
     }
 
@@ -372,7 +417,7 @@ impl MpcContract {
         payload: [u8; 32],
         depth: usize,
     ) -> PromiseOrValue<(String, String)> {
-        if let Some(signature) = self.pending_requests.get(&payload) {
+        if let Some(signature) = self.get_signature_per_payload(payload) {
             match signature {
                 Some(signature) => {
                     log!(
@@ -418,44 +463,39 @@ impl MpcContract {
     }
 
     pub fn respond(&mut self, payload: [u8; 32], big_r: String, s: String) {
-        if let ProtocolContractState::Running(state) = &self.protocol_state {
-            let signer = env::signer_account_id();
-            if state.participants.contains_key(&signer) {
-                log!(
-                    "respond: signer={}, payload={:?} big_r={} s={}",
-                    signer,
-                    payload,
-                    big_r,
-                    s
-                );
-                self.add_signature(&payload, (big_r, s));
-            } else {
-                env::panic_str("only participants can respond");
-            }
-        } else {
-            env::panic_str("protocol is not in a running state");
+        match self {
+            Self::V0(mpc_contract) => mpc_contract.respond(payload, big_r, s),
         }
     }
 
-    /// This is the root public key combined from all the public keys of the participants.
-    pub fn public_key(&self) -> PublicKey {
-        match &self.protocol_state {
-            ProtocolContractState::Running(state) => state.public_key.clone(),
-            ProtocolContractState::Resharing(state) => state.public_key.clone(),
-            _ => env::panic_str("public key not available (protocol is not running or resharing)"),
+    #[allow(unused_variables)]
+    /// `key_version` must be less than or equal to the value at `latest_key_version`
+    pub fn sign(&mut self, payload: [u8; 32], path: String, key_version: u32) -> Promise {
+        let latest_key_version: u32 = self.latest_key_version();
+        assert!(
+            key_version <= latest_key_version,
+            "This version of the signer contract doesn't support versions greater than {}",
+            latest_key_version,
+        );
+        log!(
+            "sign: signer={}, payload={:?}, path={:?}, key_version={}",
+            env::signer_account_id(),
+            payload,
+            path,
+            key_version
+        );
+        match self.get_signature_per_payload(payload) {
+            None => {
+                self.add_request(&payload, &None);
+                log!(&serde_json::to_string(&near_sdk::env::random_seed_array()).unwrap());
+                Self::ext(env::current_account_id()).sign_helper(payload, 0)
+            }
+            Some(_) => env::panic_str("Signature for this payload already requested"),
         }
     }
 
     pub fn version(&self) -> String {
         env!("CARGO_PKG_VERSION").to_string()
-    }
-
-    /// Key versions refer new versions of the root key that we may choose to generate on cohort changes
-    /// Older key versions will always work but newer key versions were never held by older signers
-    /// Newer key versions may also add new security features, like only existing within a secure enclave
-    /// Currently only 0 is a valid key version
-    pub const fn latest_key_version(&self) -> u32 {
-        0
     }
 
     fn add_signature(&mut self, payload: &[u8; 32], signature: (String, String)) {
@@ -487,11 +527,11 @@ impl MpcContract {
         for key in keys.iter() {
             env::storage_remove(&key.0);
         }
-        Self {
+        Self::V0(MpcContract {
             protocol_state: ProtocolContractState::NotInitialized,
             pending_requests: LookupMap::new(b"m"),
             request_counter: 0,
-        }
+        })
     }
 
     #[private]
@@ -501,5 +541,14 @@ impl MpcContract {
             self.pending_requests.remove(payload);
         }
         self.request_counter = counter;
+    }
+
+    /// This is the root public key combined from all the public keys of the participants.
+    pub fn public_key(self) -> PublicKey {
+        match self.state() {
+            ProtocolContractState::Running(state) => state.public_key.clone(),
+            ProtocolContractState::Resharing(state) => state.public_key.clone(),
+            _ => env::panic_str("public key not available (protocol is not running or resharing)"),
+        }
     }
 }
