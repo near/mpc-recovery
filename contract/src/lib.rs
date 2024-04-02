@@ -429,7 +429,7 @@ impl MpcContract {
     pub fn clean_payloads(&mut self, payloads: Vec<[u8; 32]>, counter: u32) {
         log!("clean_payloads");
         for payload in payloads.iter() {
-            self.pending_requests.remove(&payload);
+            self.pending_requests.remove(payload);
         }
         self.request_counter = counter;
     }
