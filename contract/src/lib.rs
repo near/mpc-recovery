@@ -378,26 +378,6 @@ impl MpcContract {
         }
     }
 
-    #[private]
-    #[init(ignore_state)]
-    pub fn clean(keys: Vec<near_sdk::json_types::Base64VecU8>) -> Self {
-        log!("clean: keys={:?}", keys);
-        for key in keys.iter() {
-            env::storage_remove(&key.0);
-        }
-        Self {
-            protocol_state: ProtocolContractState::NotInitialized,
-            pending_requests: LookupMap::new(b"m"),
-            request_counter: 0,
-        }
-    }
-
-    #[private]
-    pub fn clean_payloads(&mut self) {
-        log!("clean_payloads");
-        self.pending_requests = LookupMap::new(b"m");
-    }
-
     /// This is the root public key combined from all the public keys of the participants.
     pub fn public_key(&self) -> PublicKey {
         match &self.protocol_state {
@@ -428,5 +408,29 @@ impl MpcContract {
     fn remove_request(&mut self, payload: &[u8; 32]) {
         self.pending_requests.remove(payload);
         self.request_counter -= 1;
+    }
+
+    // Helper functions
+    #[private]
+    #[init(ignore_state)]
+    pub fn clean(keys: Vec<near_sdk::json_types::Base64VecU8>) -> Self {
+        log!("clean: keys={:?}", keys);
+        for key in keys.iter() {
+            env::storage_remove(&key.0);
+        }
+        Self {
+            protocol_state: ProtocolContractState::NotInitialized,
+            pending_requests: LookupMap::new(b"m"),
+            request_counter: 0,
+        }
+    }
+
+    #[private]
+    pub fn clean_payloads(&mut self, payloads: Vec<[u8; 32]>, counter: u32) {
+        log!("clean payloads");
+        for payload in payloads.iter() {
+            self.pending_requests.remove(&payload);
+        }
+        self.request_counter = counter;
     }
 }
