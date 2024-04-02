@@ -172,7 +172,7 @@ pub(crate) static MESSAGE_QUEUE_SIZE: Lazy<IntGaugeVec> = Lazy::new(|| {
 
 pub(crate) static NODE_VERSION: Lazy<IntGaugeVec> = Lazy::new(|| {
     try_create_int_gauge_vec(
-        "node_version",
+        "multichain_node_version",
         "node semantic version",
         &["node_account_id"],
     )
