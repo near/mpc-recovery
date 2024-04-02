@@ -85,7 +85,13 @@ async fn handle_block(
 ) -> anyhow::Result<()> {
     for action in block.actions().cloned().collect::<Vec<_>>() {
         if action.receiver_id() == ctx.mpc_contract_id {
-            let receipt = block.receipt_by_id(&action.receipt_id()).unwrap();
+            let receipt =
+                anyhow::Context::with_context(block.receipt_by_id(&action.receipt_id()), || {
+                    format!(
+                        "indexer unable to find block for receipt_id={}",
+                        action.receipt_id()
+                    )
+                })?;
             let ExecutionStatus::SuccessReceiptId(receipt_id) = receipt.status() else {
                 continue;
             };
@@ -128,7 +134,7 @@ async fn handle_block(
                             time_added: Instant::now(),
                         });
                         crate::metrics::NUM_SIGN_REQUESTS
-                            .with_label_values(&[&ctx.gcp_service.account_id.to_string()])
+                            .with_label_values(&[&ctx.gcp_service.account_id])
                             .inc();
                         drop(queue);
                     }
@@ -145,7 +151,7 @@ async fn handle_block(
         .await?;
 
     crate::metrics::LATEST_BLOCK_HEIGHT
-        .with_label_values(&[&ctx.gcp_service.account_id.to_string()])
+        .with_label_values(&[&ctx.gcp_service.account_id])
         .set(block.block_height() as i64);
 
     if block.block_height() % 1000 == 0 {
@@ -181,7 +187,7 @@ pub fn run(
             Err(err) => {
                 tracing::error!(%err, "failed to fetch latest block height; using start_block_height={} instead", options.start_block_height);
                 LatestBlockHeight {
-                    account_id: node_account_id.to_string(),
+                    account_id: node_account_id.clone(),
                     block_height: options.start_block_height,
                 }
             }

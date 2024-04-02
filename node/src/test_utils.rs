@@ -1,18 +1,14 @@
-use std::{collections::HashMap, fs::OpenOptions, ops::Range};
-
 use crate::protocol::contract::primitives::Participants;
-use crate::protocol::triple::TripleConfig;
+use crate::protocol::presignature::{GenerationError, PresignatureConfig};
+use crate::protocol::triple::{Triple, TripleConfig, TripleId, TripleManager};
 use crate::protocol::{Config, ParticipantInfo};
+use crate::storage::triple_storage::LockTripleNodeStorageBox;
 use crate::{gcp::GcpService, protocol::message::TripleMessage, storage};
+
 use cait_sith::protocol::{InitializationError, Participant, ProtocolError};
 use std::io::prelude::*;
+use std::{collections::HashMap, fs::OpenOptions, ops::Range};
 
-use crate::protocol::presignature::{GenerationError, PresignatureConfig};
-use crate::protocol::triple::Triple;
-use crate::protocol::triple::TripleId;
-use crate::protocol::triple::TripleManager;
-use crate::storage::triple_storage::LockTripleNodeStorageBox;
-use crate::storage::triple_storage::TripleData;
 use itertools::multiunzip;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -45,27 +41,32 @@ impl TestTripleManagers {
             .map(Participant::from)
             .for_each(|p| participants.insert(&p, ParticipantInfo::new(p.into())));
 
-        let gcp_service = if let Some(url) = datastore_url {
-            let storage_options = storage::Options {
-                gcp_project_id: "triple-test".to_string(),
-                sk_share_secret_id: None,
-                gcp_datastore_url: Some(url),
-                env: "triple-test".to_string(),
+        let mut services = Vec::with_capacity(num_managers as usize);
+        for num in 0..num_managers {
+            let service = if let Some(url) = &datastore_url {
+                let account_id = format!("account_{num}.testnet").parse().unwrap();
+                let storage_options = storage::Options {
+                    gcp_project_id: "triple-test".to_string(),
+                    sk_share_secret_id: None,
+                    gcp_datastore_url: Some(url.clone()),
+                    env: "triple-test".to_string(),
+                };
+                Some(
+                    GcpService::init(&account_id, &storage_options)
+                        .await
+                        .unwrap(),
+                )
+            } else {
+                None
             };
-            Some(
-                GcpService::init("mpc.near", &storage_options)
-                    .await
-                    .unwrap(),
-            )
-        } else {
-            None
-        };
+            services.push(service);
+        }
 
         let managers = (0..num_managers)
             .map(|num| {
-                let account_id = format!("account_{num}.testnet");
+                let account_id = format!("account_{num}.testnet").parse().unwrap();
                 let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(
-                    storage::triple_storage::init(gcp_service.as_ref(), account_id.clone()),
+                    storage::triple_storage::init(services[num as usize].as_ref(), &account_id),
                 ));
                 TripleManager::new(
                     Participant::from(num),
@@ -74,7 +75,7 @@ impl TestTripleManagers {
                     DEFAULT_TEST_CONFIG,
                     vec![],
                     triple_storage,
-                    account_id.parse().unwrap(),
+                    &account_id,
                 )
             })
             .collect();
@@ -153,11 +154,8 @@ impl TestTripleManagers {
         index: usize,
         triple_id0: u64,
         triple_id1: u64,
-        mine: bool,
     ) -> Result<(Triple, Triple), GenerationError> {
-        self.managers[index]
-            .take_two(triple_id0, triple_id1, mine)
-            .await
+        self.managers[index].take_two(triple_id0, triple_id1).await
     }
 
     fn triples(&self, index: usize) -> HashMap<TripleId, Triple> {
@@ -179,7 +177,7 @@ pub async fn test_triple_generation(datastore_url: Option<String>) {
     // Generate 5 triples
     let mut tm = TestTripleManagers::new(5, datastore_url).await;
     for _ in 0..M {
-        Arc::new(tm.generate(0));
+        tm.generate(0).unwrap();
     }
     tm.poke_until_quiet().await.unwrap();
 
@@ -243,19 +241,21 @@ pub async fn test_triple_generation(datastore_url: Option<String>) {
         let local_mine = mines.get(i).unwrap();
         let local_triples = triples.get(i).unwrap();
         let triple_store = triple_stores.get(i).unwrap();
-        let triple_read_lock = triple_store.read().await;
-        let datastore_loaded_triples_res = triple_read_lock.load().await;
-        drop(triple_read_lock);
-        assert!(
-            datastore_loaded_triples_res.is_ok(),
-            "the triple loading result should return Ok"
-        );
-        let datastore_loaded_triples = datastore_loaded_triples_res.ok().unwrap();
-        assert_eq!(
-            datastore_loaded_triples.len(),
-            local_triples.len(),
-            "the number of triples loaded from datastore and stored locally should match"
-        );
+
+        let datastore_loaded_triples = {
+            let triple_store = triple_store.read().await;
+            let datastore_loaded_triples = triple_store
+                .load()
+                .await
+                .expect("the triple loading result should return Ok");
+            assert_eq!(
+                datastore_loaded_triples.len(),
+                local_triples.len(),
+                "the number of triples loaded from datastore and stored locally should match"
+            );
+            datastore_loaded_triples
+        };
+
         for loaded_triple_data in datastore_loaded_triples {
             let loaded_triple = loaded_triple_data.triple;
             assert!(
@@ -304,7 +304,7 @@ pub async fn test_triple_deletion(datastore_url: Option<String>) {
     // Generate 3 triples
     let mut tm = TestTripleManagers::new(2, datastore_url).await;
     for _ in 0..3 {
-        Arc::new(tm.generate(0));
+        tm.generate(0).unwrap();
     }
     tm.poke_until_quiet().await.unwrap();
 
@@ -319,76 +319,72 @@ pub async fn test_triple_deletion(datastore_url: Option<String>) {
         assert_eq!(triples.len(), 3);
         let triple0 = triples.get(&id0).unwrap();
         assert!(
-            tm.take_two(i, id0, id1, true).await.is_ok(),
+            tm.take_two(i, id0, id1).await.is_ok(),
             "take_two for participant 0 should succeed for id0 and id1"
         );
 
         let triple_storage = tm.triple_storage(i);
-        let read_lock = triple_storage.read().await;
-        let loaded_triples_res = read_lock.load().await;
-        drop(read_lock);
-        assert!(loaded_triples_res.is_ok());
-        let loaded_triples = loaded_triples_res.unwrap();
-        assert_eq!(
-            loaded_triples.len(),
-            1,
-            "the triples left in store for participant 0 should be 1"
-        );
+        {
+            let triple_storage = triple_storage.read().await;
+            let loaded_triples = triple_storage
+                .load()
+                .await
+                .expect("expected triples to load successfully");
+            assert_eq!(
+                loaded_triples.len(),
+                1,
+                "the triples left in store for participant 0 should be 1"
+            );
+        }
 
         //verify that if in take_two, one of the triples were accidentally deleted, double deletion will not cause issue
-        let mut write_lock = triple_storage.write().await;
-        let del_res_mine_false = write_lock
-            .delete(TripleData {
-                account_id: "0".to_string(),
-                triple: triple0.clone(),
-                mine: false,
-            })
-            .await;
-        let del_res_mine_true = write_lock
-            .delete(TripleData {
-                account_id: "0".to_string(),
-                triple: triple0.clone(),
-                mine: true,
-            })
-            .await;
-        drop(write_lock);
-        assert!(
-            del_res_mine_false.is_ok() && del_res_mine_true.is_ok(),
-            "repeatedly deleting a triple won't err out"
-        );
-        let read_lock = triple_storage.read().await;
-        let loaded_triples_res = read_lock.load().await;
-        drop(read_lock);
-        assert!(loaded_triples_res.is_ok());
-        let loaded_triples = loaded_triples_res.unwrap();
-        assert!(
-            loaded_triples.len() == 1,
-            "the triples left in store for participant 0 should still be 1"
-        );
+        {
+            let mut triple_storage = triple_storage.write().await;
+            let del_res_mine_false = triple_storage.delete(triple0.id).await;
+            let del_res_mine_true = triple_storage.delete(triple0.id).await;
+            assert!(
+                del_res_mine_false.is_ok() && del_res_mine_true.is_ok(),
+                "repeatedly deleting a triple won't err out"
+            );
+        };
+
+        {
+            let triple_storage = triple_storage.read().await;
+            let loaded_triples = triple_storage
+                .load()
+                .await
+                .expect("expected to be able to load recently added triple");
+            assert_eq!(
+                loaded_triples.len(),
+                1,
+                "the triples left in store for participant 0 should still be 1"
+            );
+        }
 
         //insert triple0 and delete it with the wrong mine value, that does not impact deletion success
-        let mut write_lock = triple_storage.write().await;
-        let _insert_result = write_lock
-            .insert(TripleData {
-                account_id: "0".to_string(),
-                triple: triple0.clone(),
-                mine: true,
-            })
-            .await;
-        let _del_res_mine_false = write_lock
-            .delete(TripleData {
-                account_id: "0".to_string(),
-                triple: triple0.clone(),
-                mine: false,
-            })
-            .await;
-        drop(write_lock);
-        let read_lock = triple_storage.read().await;
-        let loaded_triples_res = read_lock.load().await;
-        drop(read_lock);
-        assert!(
-            loaded_triples_res.unwrap().len() == 1,
-            "the triples left in store for participant 0 should still be 1"
-        );
+        {
+            let mut triple_storage = triple_storage.write().await;
+            triple_storage
+                .insert(triple0.clone(), true)
+                .await
+                .expect("expected insert to succeed");
+            triple_storage
+                .delete(triple0.id)
+                .await
+                .expect("expected delete to succeed");
+        }
+
+        {
+            let triple_storage = triple_storage.read().await;
+            let loaded = triple_storage
+                .load()
+                .await
+                .expect("expected to be able to load at least one triple");
+            assert_eq!(
+                loaded.len(),
+                1,
+                "the triples left in store for participant 0 should still be 1"
+            );
+        }
     }
 }

@@ -156,10 +156,10 @@ impl Participants {
             .any(|participant_info| participant_info.account_id == *account_id)
     }
 
-    pub fn account_ids(&self) -> Vec<AccountId> {
+    pub fn account_ids(&self) -> Vec<&AccountId> {
         self.participants
             .values()
-            .map(|participant_info| participant_info.account_id.clone())
+            .map(|participant_info| &participant_info.account_id)
             .collect()
     }
 

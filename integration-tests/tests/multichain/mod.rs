@@ -296,7 +296,7 @@ async fn test_latest_block_height() -> anyhow::Result<()> {
             // test manually updating the latest block height
             let gcp_service = gcp_services[0].clone();
             let latest = LatestBlockHeight {
-                account_id: gcp_service.account_id.to_string(),
+                account_id: gcp_service.account_id.clone(),
                 block_height: 1000,
             };
             latest.store(&gcp_service).await?;

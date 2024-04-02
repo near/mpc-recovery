@@ -136,8 +136,11 @@ impl Nodes<'_> {
         Ok(())
     }
 
-    pub async fn triple_storage(&self, account_id: String) -> anyhow::Result<TripleNodeStorageBox> {
-        let gcp_service = GcpService::init(&account_id, &self.ctx().storage_options).await?;
+    pub async fn triple_storage(
+        &self,
+        account_id: &AccountId,
+    ) -> anyhow::Result<TripleNodeStorageBox> {
+        let gcp_service = GcpService::init(account_id, &self.ctx().storage_options).await?;
         Ok(storage::triple_storage::init(
             Some(&gcp_service),
             account_id,
