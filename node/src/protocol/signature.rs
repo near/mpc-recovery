@@ -442,6 +442,11 @@ impl SignatureManager {
             // let signature = r_s.append(tag);
             // let signature = Secp256K1Signature::try_from(signature.as_slice()).unwrap();
             // let signature = Signature::SECP256K1(signature);
+            let payload_hashed_rev = {
+                let mut rev = payload;
+                rev.reverse();
+                rev
+            };
             let response = rpc_client
                 .send_tx(
                     signer,
@@ -450,7 +455,7 @@ impl SignatureManager {
                         FunctionCallAction {
                             method_name: "respond".to_string(),
                             args: serde_json::to_vec(&serde_json::json!({
-                                "payload": payload,
+                                "payload": payload_hashed_rev,
                                 "big_r": signature.big_r,
                                 "s": signature.s
                             }))

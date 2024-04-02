@@ -115,11 +115,16 @@ async fn handle_block(
                         let epsilon =
                             kdf::derive_epsilon(&action.predecessor_id(), &sign_payload.path);
                         let delta = kdf::derive_delta(receipt_id, entropy);
+                        let payload_rev = {
+                            let mut rev = sign_payload.payload;
+                            rev.reverse();
+                            rev
+                        };
                         tracing::info!(
                             receipt_id = %receipt_id,
                             caller_id = receipt.predecessor_id().to_string(),
                             our_account = ctx.node_account_id.to_string(),
-                            payload = hex::encode(sign_payload.payload),
+                            payload = hex::encode(payload_rev),
                             key_version = sign_payload.key_version,
                             entropy = hex::encode(entropy),
                             "indexed new `sign` function call"
@@ -127,7 +132,7 @@ async fn handle_block(
                         let mut queue = ctx.queue.write().await;
                         queue.add(SignRequest {
                             receipt_id,
-                            msg_hash: sign_payload.payload,
+                            msg_hash: payload_rev,
                             epsilon,
                             delta,
                             entropy,

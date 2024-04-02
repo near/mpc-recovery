@@ -201,7 +201,7 @@ async fn test_key_derivation() -> anyhow::Result<()> {
                 let (_, payload_hashed, account, tx_hash) = actions::request_sign(&ctx).await?;
                 let payload_hashed_rev = {
                     let mut rev = payload_hashed;
-                    rev.reverse();
+                    // rev.reverse();
                     rev
                 };
                 let sig = wait_for::signature_responded(&ctx, tx_hash).await?;
