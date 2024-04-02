@@ -401,6 +401,10 @@ impl MpcContract {
         }
     }
 
+    pub fn version(&self) -> String {
+        env!("CARGO_PKG_VERSION").to_string()
+    }
+
     /// Key versions refer new versions of the root key that we may choose to generate on cohort changes
     /// Older key versions will always work but newer key versions were never held by older signers
     /// Newer key versions may also add new security features, like only existing within a secure enclave
