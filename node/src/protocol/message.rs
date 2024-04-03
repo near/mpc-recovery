@@ -347,6 +347,7 @@ impl MessageHandler for RunningState {
         triple_manager.clear_failed_triples();
         triple_manager.clear_taken();
         presignature_manager.clear_taken();
+        presignature_manager.clear_requested();
         Ok(())
     }
 }
