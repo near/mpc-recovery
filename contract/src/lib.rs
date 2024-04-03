@@ -2,11 +2,13 @@ pub mod primitives;
 
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::LookupMap;
-use near_sdk::log;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault, Promise, PromiseOrValue, PublicKey};
+use near_sdk::{log, Gas};
 use primitives::{CandidateInfo, Candidates, Participants, PkVotes, Votes};
 use std::collections::{BTreeMap, HashSet};
+
+const GAS_FOR_SIGN_CALL: Gas = Gas::from_gas(3 * 100_000_000_000_000);
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
 pub struct InitializingContractState {
@@ -304,9 +306,16 @@ impl MpcContract {
             "This version of the signer contract doesn't support versions greater than {}",
             latest_key_version,
         );
+        assert!(
+            env::prepaid_gas() >= GAS_FOR_SIGN_CALL,
+            "Insufficient gas provided. Provided: {} Required: {}",
+            env::prepaid_gas(),
+            GAS_FOR_SIGN_CALL
+        );
         log!(
-            "sign: signer={}, payload={:?}, path={:?}, key_version={}",
+            "sign: signer={}, predecessor={}, payload={:?}, path={:?}, key_version={}",
             env::signer_account_id(),
+            env::predecessor_account_id(),
             payload,
             path,
             key_version
