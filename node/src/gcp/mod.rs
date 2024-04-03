@@ -19,6 +19,7 @@ use google_secretmanager1::oauth2::{
 use google_secretmanager1::SecretManager;
 use hyper::client::HttpConnector;
 use hyper_rustls::HttpsConnector;
+use near_lake_primitives::AccountId;
 
 pub type SecretResult<T> = std::result::Result<T, error::SecretStorageError>;
 
@@ -81,6 +82,10 @@ pub struct DatastoreService {
 }
 
 pub type DatastoreResult<T> = std::result::Result<T, error::DatastoreStorageError>;
+
+pub trait Keyable: KeyKind {
+    fn key(&self) -> Key;
+}
 
 pub trait KeyKind {
     fn kind() -> String;
@@ -281,18 +286,10 @@ impl DatastoreService {
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
-    pub async fn delete<T: IntoValue + KeyKind>(&self, value: T) -> DatastoreResult<()> {
-        let kind: String = format!("{}-{}", T::kind(), self.env);
-        let mut entity = Entity::from_value(value.into_value())?;
-        let path_element = entity
-            .key
-            .as_mut()
-            .and_then(|k| k.path.as_mut())
-            .and_then(|p| p.first_mut());
-        if let Some(path_element) = path_element {
-            // We can't create multiple datastore databases in GCP, so we have to suffix
-            // type kinds with env (`dev`, `prod`).
-            path_element.kind = Some(kind)
+    pub async fn delete<T: Keyable>(&self, keyable: T) -> DatastoreResult<()> {
+        let mut key = keyable.key();
+        if let Some(path) = key.path.as_mut().and_then(|p| p.first_mut()) {
+            path.kind = Some(format!("{}-{}", T::kind(), self.env));
         }
 
         let request = CommitRequest {
@@ -300,7 +297,7 @@ impl DatastoreService {
             mode: Some(String::from("NON_TRANSACTIONAL")),
             mutations: Some(vec![Mutation {
                 insert: None,
-                delete: entity.key,
+                delete: Some(key),
                 update: None,
                 base_version: None,
                 upsert: None,
@@ -324,12 +321,12 @@ pub struct GcpService {
     pub project_id: String,
     pub datastore: DatastoreService,
     pub secret_manager: SecretManagerService,
-    pub account_id: String,
+    pub account_id: AccountId,
 }
 
 impl GcpService {
     pub async fn init(
-        account_id: &str,
+        account_id: &AccountId,
         storage_options: &storage::Options,
     ) -> anyhow::Result<Self> {
         let project_id = storage_options.gcp_project_id.clone();
@@ -365,7 +362,7 @@ impl GcpService {
         };
 
         Ok(Self {
-            account_id: account_id.to_string(),
+            account_id: account_id.clone(),
             datastore: DatastoreService {
                 datastore,
                 project_id: project_id.clone(),

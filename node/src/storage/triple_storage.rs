@@ -1,4 +1,4 @@
-use crate::gcp::error;
+use crate::gcp::{error, Keyable};
 use crate::gcp::{
     error::ConvertError,
     value::{FromValue, IntoValue, Value},
@@ -10,13 +10,38 @@ use async_trait::async_trait;
 use google_datastore1::api::{
     Filter, Key, PathElement, PropertyFilter, PropertyReference, Value as DatastoreValue,
 };
+use near_lake_primitives::AccountId;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+pub struct TripleKey<'a> {
+    pub account_id: &'a str,
+    pub triple_id: TripleId,
+}
+
+impl KeyKind for TripleKey<'_> {
+    fn kind() -> String {
+        "triples".to_string()
+    }
+}
+
+impl Keyable for TripleKey<'_> {
+    fn key(&self) -> Key {
+        Key {
+            path: Some(vec![PathElement {
+                kind: None,
+                name: Some(format!("{}/{}", self.account_id, self.triple_id)),
+                id: None,
+            }]),
+            partition_id: None,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct TripleData {
-    pub account_id: String,
+    pub account_id: AccountId,
     pub triple: Triple,
     pub mine: bool,
 }
@@ -29,10 +54,14 @@ impl KeyKind for TripleData {
 
 impl IntoValue for TripleData {
     fn into_value(self) -> Value {
+        let triple_key = TripleKey {
+            account_id: &self.account_id,
+            triple_id: self.triple.id,
+        };
         let mut properties = HashMap::new();
         properties.insert(
             "account_id".to_string(),
-            Value::StringValue(self.account_id.clone()),
+            Value::StringValue(self.account_id.to_string()),
         );
         properties.insert(
             "triple_id".to_string(),
@@ -48,14 +77,7 @@ impl IntoValue for TripleData {
         );
         properties.insert("mine".to_string(), Value::BooleanValue(self.mine));
         Value::EntityValue {
-            key: Key {
-                path: Some(vec![PathElement {
-                    kind: Some(TripleData::kind()),
-                    name: Some(format!("{}/{}", self.account_id, &self.triple.id)),
-                    id: None,
-                }]),
-                partition_id: None,
-            },
+            key: triple_key.key(),
             properties,
         }
     }
@@ -73,7 +95,11 @@ impl FromValue for TripleData {
                 let (_, account_id) = properties
                     .remove_entry("account_id")
                     .ok_or_else(|| ConvertError::MissingProperty("account_id".to_string()))?;
-                let account_id = String::from_value(account_id)?;
+                let account_id = String::from_value(account_id)?.parse().map_err(|err| {
+                    ConvertError::MalformedProperty(format!(
+                        "TripleData failed to parse account_id: {err:?}"
+                    ))
+                })?;
 
                 let (_, triple_share) = properties
                     .remove_entry("triple_share")
@@ -116,36 +142,32 @@ type TripleResult<T> = std::result::Result<T, error::DatastoreStorageError>;
 
 #[async_trait]
 pub trait TripleNodeStorage {
-    async fn insert(&mut self, data: TripleData) -> TripleResult<()>;
-    async fn delete(&mut self, data: TripleData) -> TripleResult<()>;
+    async fn insert(&mut self, triple: Triple, mine: bool) -> TripleResult<()>;
+    async fn delete(&mut self, id: TripleId) -> TripleResult<()>;
     async fn load(&self) -> TripleResult<Vec<TripleData>>;
-    fn account_id(&self) -> String;
+    fn account_id(&self) -> &AccountId;
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 struct MemoryTripleNodeStorage {
     triples: HashMap<TripleId, Triple>,
     mine: HashSet<TripleId>,
-    account_id: String,
+    account_id: AccountId,
 }
 
 #[async_trait]
 impl TripleNodeStorage for MemoryTripleNodeStorage {
-    async fn insert(&mut self, data: TripleData) -> TripleResult<()> {
-        let triple = data.triple.clone();
-        let triple_id = data.triple.id;
-        self.triples.insert(triple_id, triple);
-        if data.mine {
-            self.mine.insert(triple_id);
+    async fn insert(&mut self, triple: Triple, mine: bool) -> TripleResult<()> {
+        if mine {
+            self.mine.insert(triple.id);
         }
+        self.triples.insert(triple.id, triple);
         Ok(())
     }
 
-    async fn delete(&mut self, data: TripleData) -> TripleResult<()> {
-        self.triples.remove(&data.triple.id);
-        if data.mine {
-            self.mine.remove(&data.triple.id);
-        }
+    async fn delete(&mut self, id: TripleId) -> TripleResult<()> {
+        self.triples.remove(&id);
+        self.mine.remove(&id);
         Ok(())
     }
 
@@ -154,7 +176,7 @@ impl TripleNodeStorage for MemoryTripleNodeStorage {
         for (triple_id, triple) in self.triples.clone() {
             let mine = self.mine.contains(&triple_id);
             res.push(TripleData {
-                account_id: self.account_id(),
+                account_id: self.account_id().clone(),
                 triple,
                 mine,
             });
@@ -162,43 +184,53 @@ impl TripleNodeStorage for MemoryTripleNodeStorage {
         Ok(res)
     }
 
-    fn account_id(&self) -> String {
-        self.account_id.clone()
+    fn account_id(&self) -> &AccountId {
+        &self.account_id
     }
 }
 
 #[derive(Clone)]
 struct DataStoreTripleNodeStorage {
     datastore: DatastoreService,
-    account_id: String,
+    account_id: AccountId,
 }
 
 impl DataStoreTripleNodeStorage {
-    fn new(datastore: DatastoreService, account_id: String) -> Self {
+    fn new(datastore: DatastoreService, account_id: &AccountId) -> Self {
         Self {
             datastore,
-            account_id,
+            account_id: account_id.clone(),
         }
     }
 }
 
 #[async_trait]
 impl TripleNodeStorage for DataStoreTripleNodeStorage {
-    async fn insert(&mut self, data: TripleData) -> TripleResult<()> {
-        tracing::debug!("inserting triples using datastore");
-        self.datastore.upsert(data).await?;
+    async fn insert(&mut self, triple: Triple, mine: bool) -> TripleResult<()> {
+        tracing::debug!(id = triple.id, "inserting triples using datastore");
+        self.datastore
+            .upsert(TripleData {
+                account_id: self.account_id().clone(),
+                triple,
+                mine,
+            })
+            .await?;
         Ok(())
     }
 
-    async fn delete(&mut self, data: TripleData) -> TripleResult<()> {
-        tracing::debug!("deleting triples using datastore");
-        self.datastore.delete(data).await?;
+    async fn delete(&mut self, id: TripleId) -> TripleResult<()> {
+        tracing::debug!(id, "deleting triples using datastore");
+        self.datastore
+            .delete(TripleKey {
+                account_id: &self.account_id,
+                triple_id: id,
+            })
+            .await?;
         Ok(())
     }
 
     async fn load(&self) -> TripleResult<Vec<TripleData>> {
         tracing::debug!("loading triples using datastore");
-        let account_id_val = DatastoreValue::from_value(self.account_id().into_value())?;
         let filter = if self.datastore.is_emulator() {
             None
         } else {
@@ -209,26 +241,29 @@ impl TripleNodeStorage for DataStoreTripleNodeStorage {
                     property: Some(PropertyReference {
                         name: Some("account_id".to_string()),
                     }),
-                    value: Some(account_id_val),
+                    value: Some(DatastoreValue::from_value(self.account_id().into_value())?),
                 }),
             })
         };
         let response = self.datastore.fetch_entities::<TripleData>(filter).await?;
         let mut res: Vec<TripleData> = vec![];
         for entity_result in response {
-            let entity = entity_result.entity.unwrap();
-            let entity_value = entity.into_value();
-            let triple_data = TripleData::from_value(entity_value).unwrap();
-            if triple_data.account_id == self.account_id() {
+            let entity = entity_result.entity.ok_or_else(|| {
+                error::DatastoreStorageError::FetchEntitiesError(
+                    "entity was not able to unwrapped".to_string(),
+                )
+            })?;
+            let triple_data = TripleData::from_value(entity.into_value())?;
+            if &triple_data.account_id == self.account_id() {
                 res.push(triple_data);
             }
         }
-        tracing::debug!("loading triples success");
+        tracing::debug!(count = res.len(), "loading triples success");
         Ok(res)
     }
 
-    fn account_id(&self) -> String {
-        self.account_id.clone()
+    fn account_id(&self) -> &AccountId {
+        &self.account_id
     }
 }
 
@@ -240,7 +275,7 @@ pub struct TripleStorage {
 
 pub type LockTripleNodeStorageBox = Arc<RwLock<TripleNodeStorageBox>>;
 
-pub fn init(gcp_service: Option<&GcpService>, account_id: String) -> TripleNodeStorageBox {
+pub fn init(gcp_service: Option<&GcpService>, account_id: &AccountId) -> TripleNodeStorageBox {
     match gcp_service {
         Some(gcp) => Box::new(DataStoreTripleNodeStorage::new(
             gcp.datastore.clone(),
@@ -249,7 +284,7 @@ pub fn init(gcp_service: Option<&GcpService>, account_id: String) -> TripleNodeS
         _ => Box::new(MemoryTripleNodeStorage {
             triples: HashMap::new(),
             mine: HashSet::new(),
-            account_id,
+            account_id: account_id.clone(),
         }) as TripleNodeStorageBox,
     }
 }

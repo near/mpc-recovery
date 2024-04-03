@@ -205,7 +205,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                     let key_storage =
                         storage::secret_storage::init(Some(&gcp_service), &storage_options);
                     let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(
-                        storage::triple_storage::init(Some(&gcp_service), account_id.to_string()),
+                        storage::triple_storage::init(Some(&gcp_service), &account_id),
                     ));
 
                     let my_address = my_address.unwrap_or_else(|| {
