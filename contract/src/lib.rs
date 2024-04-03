@@ -313,7 +313,7 @@ impl MpcContract {
         );
         match self.pending_requests.get(&payload) {
             None => {
-                self.add_request(&payload, &None);
+                self.add_request(&payload, None);
                 log!(&serde_json::to_string(&near_sdk::env::random_seed_array()).unwrap());
                 Self::ext(env::current_account_id()).sign_helper(payload, 0)
             }
@@ -367,9 +367,7 @@ impl MpcContract {
                     big_r,
                     s
                 );
-                if self.pending_requests.contains_key(&payload) {
-                    self.add_request(&payload, &Some((big_r, s)))
-                }
+                self.add_signature(&payload, (big_r, s));
             } else {
                 env::panic_str("only participants can respond");
             }
@@ -395,14 +393,20 @@ impl MpcContract {
         0
     }
 
-    fn add_request(&mut self, payload: &[u8; 32], signature: &Option<(String, String)>) {
+    fn add_signature(&mut self, payload: &[u8; 32], signature: (String, String)) {
+        if self.pending_requests.contains_key(payload) {
+            self.pending_requests.insert(payload, &Some(signature));
+        }
+    }
+
+    fn add_request(&mut self, payload: &[u8; 32], signature: Option<(String, String)>) {
         if self.request_counter > 8 {
             env::panic_str("Too many pending requests. Please, try again later.");
         }
         if !self.pending_requests.contains_key(payload) {
             self.request_counter += 1;
         }
-        self.pending_requests.insert(payload, signature);
+        self.pending_requests.insert(payload, &signature);
     }
 
     fn remove_request(&mut self, payload: &[u8; 32]) {
