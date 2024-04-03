@@ -72,6 +72,30 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
                 "public key must stay the same"
             );
 
+            // vote for a node to leave (the new one)
+            let vote_futures = participant_accounts
+                .iter()
+                .map(|account| {
+                    let result = account
+                        .call(ctx.nodes.ctx().mpc_contract.id(), "vote_leave")
+                        .args_json(serde_json::json!({
+                            "acc_id_to_leave": new_node_account.id()
+                        }))
+                        .transact();
+                    result
+                })
+                .collect::<Vec<_>>();
+
+            futures::future::join_all(vote_futures).await;
+
+            let state_2 = wait_for::running_mpc(&ctx, 2).await?;
+            assert_eq!(state_1.participants.len(), 3);
+
+            assert_eq!(
+                state_1.public_key, state_2.public_key,
+                "public key must stay the same"
+            );
+
             Ok(())
         })
     })
