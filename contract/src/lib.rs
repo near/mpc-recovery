@@ -338,6 +338,7 @@ impl MpcContract {
             "This version of the signer contract doesn't support versions greater than {}",
             latest_key_version,
         );
+        // Make sure sign call will not run out of gas doing recursive calls because the payload will never be removed
         assert!(
             env::prepaid_gas() >= GAS_FOR_SIGN_CALL,
             "Insufficient gas provided. Provided: {} Required: {}",
