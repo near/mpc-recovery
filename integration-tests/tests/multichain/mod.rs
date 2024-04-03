@@ -199,11 +199,6 @@ async fn test_key_derivation() -> anyhow::Result<()> {
             for _ in 0..3 {
                 let mpc_pk: k256::AffinePoint = state_0.public_key.clone().into_affine_point();
                 let (_, payload_hashed, account, tx_hash) = actions::request_sign(&ctx).await?;
-                let payload_hashed_rev = {
-                    let mut rev = payload_hashed;
-                    // rev.reverse();
-                    rev
-                };
                 let sig = wait_for::signature_responded(&ctx, tx_hash).await?;
 
                 let hd_path = "test";
@@ -234,7 +229,7 @@ async fn test_key_derivation() -> anyhow::Result<()> {
                     signature
                 };
                 let recovered_addr = web3::signing::recover(
-                    &payload_hashed_rev,
+                    &payload_hashed,
                     &signature_for_recovery,
                     multichain_sig.recovery_id as i32,
                 )
