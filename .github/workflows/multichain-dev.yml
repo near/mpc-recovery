@@ -11,6 +11,7 @@ env:
 
 jobs:
   build-mpc-recovery:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -30,6 +31,7 @@ jobs:
           tags: "${{ env.IMAGE }}:${{ env.TAG }}"
 
   deploy:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     needs: build-mpc-recovery
     steps:
