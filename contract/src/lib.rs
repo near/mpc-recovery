@@ -216,6 +216,9 @@ impl MpcContract {
                 if !participants.contains_key(&acc_id_to_leave) {
                     env::panic_str("account to leave is not in the participant set");
                 }
+                if participants.len() <= *threshold {
+                    env::panic_str("the number of participants can not go below the threshold");
+                }
                 let voted = leave_votes.entry(acc_id_to_leave.clone());
                 voted.insert(signer_account_id);
                 if voted.len() >= *threshold {

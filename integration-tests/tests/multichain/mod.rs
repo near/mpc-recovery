@@ -16,23 +16,15 @@ use test_log::test;
 
 #[test(tokio::test)]
 async fn test_multichain_reshare() -> anyhow::Result<()> {
-    with_multichain_nodes(MultichainConfig::default(), |mut ctx| {
+    let config = MultichainConfig {
+        nodes: 3,
+        threshold: 2,
+        ..MultichainConfig::default()
+    };
+    with_multichain_nodes(&config, |mut ctx| {
         Box::pin(async move {
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
-            assert_eq!(state_0.participants.len(), 3);
-
-            let new_node_account = ctx.nodes.ctx().worker.dev_create_account().await?;
-
-            ctx.nodes
-                .start_node(
-                    new_node_account.id(),
-                    new_node_account.secret_key(),
-                    &ctx.cfg,
-                )
-                .await?;
-
-            // Wait for new node to add itself as a candidate
-            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+            assert_eq!(state_0.participants.len(), config.nodes);
 
             let participant_accounts: Vec<Account> = ctx
                 .nodes
@@ -45,8 +37,82 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
                         &ctx.nodes.ctx().worker,
                     )
                 })
-                .filter(|account| account.id() != new_node_account.id())
                 .collect();
+
+            let leaving_node_1 = participant_accounts[0].id();
+
+            // Vote for oane of the participants to leave
+            let vote_futures = participant_accounts
+                .iter()
+                .filter(|account| account.id() != leaving_node_1)
+                .map(|account| {
+                    let result = account
+                        .call(ctx.nodes.ctx().mpc_contract.id(), "vote_leave")
+                        .args_json(serde_json::json!({
+                            "acc_id_to_leave": leaving_node_1
+                        }))
+                        .transact();
+                    result
+                })
+                .collect::<Vec<_>>();
+
+            futures::future::join_all(vote_futures)
+                .await
+                .iter()
+                .for_each(|result| {
+                    assert!(result.as_ref().unwrap().failures().len() == 0);
+                });
+
+            let state_1 = wait_for::running_mpc(&ctx, 1).await?;
+            assert_eq!(state_1.participants.len(), config.nodes - 1);
+
+            assert_eq!(
+                state_0.public_key, state_1.public_key,
+                "public key must stay the same"
+            );
+
+            let participant_accounts = participant_accounts
+                .iter()
+                .filter(|account| account.id() != leaving_node_1)
+                .cloned()
+                .collect::<Vec<_>>();
+
+            // Vote for another participant to leave (must fail because of the treshold limit)
+            let leaving_node_2 = participant_accounts[0].id();
+            let vote_futures = participant_accounts
+                .iter()
+                .filter(|account| account.id() != leaving_node_2)
+                .map(|account| {
+                    let result = account
+                        .call(ctx.nodes.ctx().mpc_contract.id(), "vote_leave")
+                        .args_json(serde_json::json!({
+                            "acc_id_to_leave": leaving_node_2
+                        }))
+                        .transact();
+                    result
+                })
+                .collect::<Vec<_>>();
+
+            futures::future::join_all(vote_futures)
+                .await
+                .iter()
+                .for_each(|result| {
+                    assert!(result.as_ref().unwrap().failures()[0].is_failure());
+                });
+
+            // Add new participant
+            let new_node_account = ctx.nodes.ctx().worker.dev_create_account().await?;
+
+            ctx.nodes
+                .start_node(
+                    new_node_account.id(),
+                    new_node_account.secret_key(),
+                    &ctx.cfg,
+                )
+                .await?;
+
+            // Wait for new node to add itself as a candidate
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 
             // vote for new node
             let vote_futures = participant_accounts
@@ -62,34 +128,15 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
                 })
                 .collect::<Vec<_>>();
 
-            futures::future::join_all(vote_futures).await;
-
-            let state_1 = wait_for::running_mpc(&ctx, 1).await?;
-            assert_eq!(state_1.participants.len(), 4);
-
-            assert_eq!(
-                state_0.public_key, state_1.public_key,
-                "public key must stay the same"
-            );
-
-            // vote for a node to leave (the new one)
-            let vote_futures = participant_accounts
+            futures::future::join_all(vote_futures)
+                .await
                 .iter()
-                .map(|account| {
-                    let result = account
-                        .call(ctx.nodes.ctx().mpc_contract.id(), "vote_leave")
-                        .args_json(serde_json::json!({
-                            "acc_id_to_leave": new_node_account.id()
-                        }))
-                        .transact();
-                    result
-                })
-                .collect::<Vec<_>>();
-
-            futures::future::join_all(vote_futures).await;
+                .for_each(|result| {
+                    assert!(result.as_ref().unwrap().failures().len() == 0);
+                });
 
             let state_2 = wait_for::running_mpc(&ctx, 2).await?;
-            assert_eq!(state_2.participants.len(), 3);
+            assert_eq!(state_2.participants.len(), config.nodes);
 
             assert_eq!(
                 state_1.public_key, state_2.public_key,
@@ -104,7 +151,7 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
 
 #[test(tokio::test)]
 async fn test_triples_and_presignatures() -> anyhow::Result<()> {
-    with_multichain_nodes(MultichainConfig::default(), |ctx| {
+    with_multichain_nodes(&MultichainConfig::default(), |ctx| {
         Box::pin(async move {
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
             assert_eq!(state_0.participants.len(), 3);
@@ -118,7 +165,7 @@ async fn test_triples_and_presignatures() -> anyhow::Result<()> {
 
 #[test(tokio::test)]
 async fn test_signature_basic() -> anyhow::Result<()> {
-    with_multichain_nodes(MultichainConfig::default(), |ctx| {
+    with_multichain_nodes(&MultichainConfig::default(), |ctx| {
         Box::pin(async move {
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
             assert_eq!(state_0.participants.len(), 3);
@@ -132,7 +179,7 @@ async fn test_signature_basic() -> anyhow::Result<()> {
 
 #[test(tokio::test)]
 async fn test_signature_offline_node() -> anyhow::Result<()> {
-    with_multichain_nodes(MultichainConfig::default(), |mut ctx| {
+    with_multichain_nodes(&MultichainConfig::default(), |mut ctx| {
         Box::pin(async move {
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
             assert_eq!(state_0.participants.len(), 3);
@@ -195,7 +242,7 @@ async fn test_signature_large_stockpile() -> anyhow::Result<()> {
         threshold: THRESHOLD,
     };
 
-    with_multichain_nodes(config, |ctx| {
+    with_multichain_nodes(&config, |ctx| {
         Box::pin(async move {
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
             assert_eq!(state_0.participants.len(), NODES);
@@ -213,7 +260,7 @@ async fn test_signature_large_stockpile() -> anyhow::Result<()> {
 
 #[test(tokio::test)]
 async fn test_key_derivation() -> anyhow::Result<()> {
-    with_multichain_nodes(MultichainConfig::default(), |ctx| {
+    with_multichain_nodes(&MultichainConfig::default(), |ctx| {
         Box::pin(async move {
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
             assert_eq!(state_0.participants.len(), 3);
@@ -304,7 +351,7 @@ async fn test_triples_persistence_for_deletion() -> anyhow::Result<()> {
 
 #[test(tokio::test)]
 async fn test_latest_block_height() -> anyhow::Result<()> {
-    with_multichain_nodes(MultichainConfig::default(), |ctx| {
+    with_multichain_nodes(&MultichainConfig::default(), |ctx| {
         Box::pin(async move {
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
             assert_eq!(state_0.participants.len(), 3);
