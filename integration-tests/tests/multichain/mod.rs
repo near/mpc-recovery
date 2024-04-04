@@ -60,7 +60,7 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
                 .await
                 .iter()
                 .for_each(|result| {
-                    assert!(result.as_ref().unwrap().failures().len() == 0);
+                    assert!(result.as_ref().unwrap().failures().is_empty());
                 });
 
             let state_1 = wait_for::running_mpc(&ctx, 1).await?;
@@ -107,7 +107,7 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
                 .start_node(
                     new_node_account.id(),
                     new_node_account.secret_key(),
-                    &ctx.cfg,
+                    ctx.cfg,
                 )
                 .await?;
 
@@ -132,7 +132,7 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
                 .await
                 .iter()
                 .for_each(|result| {
-                    assert!(result.as_ref().unwrap().failures().len() == 0);
+                    assert!(result.as_ref().unwrap().failures().is_empty());
                 });
 
             let state_2 = wait_for::running_mpc(&ctx, 2).await?;
