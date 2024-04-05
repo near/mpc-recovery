@@ -14,6 +14,12 @@ on:
         required: true
       tag:
         description: Image tag that you wish to deploy, either by SHA or Version/latest
+      node_group:
+        type: choice
+        options:
+          - partner
+          - internal
+        description: Do you want to deploy the Parner nodes or internal Pagoda nodes?
 
 jobs:
   build-mpc-recovery:
@@ -27,8 +33,18 @@ jobs:
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_PROD }}
 
-      - name: Build Docker image and push to Google Artifact Registry
+      - name: Build Docker image and push to internal Google Artifact Registry
+        if: ${{ github.event.inputs.node_group == 'internal' }}
         id: docker-push-tagged
+        uses: docker/build-push-action@v4
+        with:
+          push: true
+          file: ./Dockerfile.multichain
+          tags: "${{ github.event.inputs.image }}:${{ github.event.inputs.tag }}"
+      
+      - name: Build Docker image and deploy partner nodes
+        if: ${{ github.event.inputs.node_group == 'partner' }}
+        id: docker-push-tagged-partner
         uses: docker/build-push-action@v4
         with:
           push: true
@@ -36,6 +52,7 @@ jobs:
           tags: "${{ github.event.inputs.image }}:${{ github.event.inputs.tag }}"
 
   deploy:
+    if: ${{ github.event.inputs.node_group == 'internal' }}
     runs-on: ubuntu-latest
     needs: build-mpc-recovery
     steps:
@@ -51,5 +68,8 @@ jobs:
         run: 'gcloud config set project pagoda-discovery-platform-prod'
 
       - name: 'Update Nodes'
-        run: 'gcloud compute instances update-container multichain-${{ github.event.inputs.network }}-0 --zone us-central1-a --container-image=${{ github.event.inputs.image }}:${{ github.event.inputs.tag }} & gcloud compute instances update-container multichain-${{ github.event.inputs.network }}-1 --zone us-central1-a --container-image=${{ github.event.inputs.image }}:${{ github.event.inputs.tag }} & gcloud compute instances update-container multichain-${{ github.event.inputs.network }}-2 --zone us-central1-a --container-image=${{ github.event.inputs.image }}:${{ github.event.inputs.tag }}'
+        run: |
+          gcloud compute instances update-container multichain-${{ github.event.inputs.network }}-0 --zone us-central1-a --container-image=${{ github.event.inputs.image }}:${{ github.event.inputs.tag }} & \
+          gcloud compute instances update-container multichain-${{ github.event.inputs.network }}-1 --zone us-central1-a --container-image=${{ github.event.inputs.image }}:${{ github.event.inputs.tag }} & \
+          gcloud compute instances update-container multichain-${{ github.event.inputs.network }}-2 --zone us-central1-a --container-image=${{ github.event.inputs.image }}:${{ github.event.inputs.tag }}
 

@@ -1,0 +1,31 @@
+name: Deploy Dev Smart Contract
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - develop
+  workflow_dispatch:
+
+jobs:
+  deploy-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: add JSON contract
+        run: 'echo "${{ secrets.DEV_CONTRACT_JSON }}" >> ~/.near-credentials/testnet/v5.multichain-mpc-dev.testnet.json'
+
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'latest'
+
+      - name: Install near-cli
+        run: 'npm install -g near-cli'
+
+      - name: Install Rust
+        run: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+
+      - name: Cargo Build
+        run: |
+          cd ./contract && cargo build --target wasm32-unknown-unknown --release \
+          cd .. && near deploy v5.multichain-mpc-dev.testnet target/wasm32-unknown-unknown/release/mpc_contract.was
