@@ -4,6 +4,7 @@ use crate::with_multichain_nodes;
 use actions::wait_for;
 use k256::elliptic_curve::point::AffineCoordinates;
 use mpc_recovery_integration_tests::env::containers::DockerClient;
+use mpc_recovery_integration_tests::multichain::utils::{vote_join, vote_leave};
 use mpc_recovery_integration_tests::multichain::MultichainConfig;
 use mpc_recovery_node::kdf::{self, x_coordinate};
 use mpc_recovery_node::protocol::presignature::PresignatureConfig;
@@ -22,42 +23,20 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
             assert_eq!(state_0.participants.len(), config.nodes);
 
-            let participant_accounts: Vec<Account> = ctx
-                .nodes
-                .near_acc_sk()
-                .iter()
-                .map(|(account_id, account_sk)| {
-                    Account::from_secret_key(
-                        account_id.clone(),
-                        account_sk.clone(),
-                        &ctx.nodes.ctx().worker,
-                    )
-                })
-                .collect();
+            let participants: Vec<Account> = ctx.nodes.near_accounts();
 
-            let leaving_node_1 = participant_accounts[0].id();
+            let leaving_node_1 = participants[0].id();
 
-            // Vote for oane of the participants to leave
-            let vote_futures = participant_accounts
-                .iter()
-                .filter(|account| account.id() != leaving_node_1)
-                .map(|account| {
-                    let result = account
-                        .call(ctx.nodes.ctx().mpc_contract.id(), "vote_leave")
-                        .args_json(serde_json::json!({
-                            "acc_id_to_leave": leaving_node_1
-                        }))
-                        .transact();
-                    result
-                })
-                .collect::<Vec<_>>();
-
-            futures::future::join_all(vote_futures)
-                .await
-                .iter()
-                .for_each(|result| {
-                    assert!(result.as_ref().unwrap().failures().is_empty());
-                });
+            // Vote for one of the participants to leave
+            let results = vote_leave(
+                &participants,
+                ctx.nodes.ctx().mpc_contract.id(),
+                leaving_node_1,
+            )
+            .await;
+            results.iter().for_each(|result| {
+                assert!(result.as_ref().unwrap().failures().is_empty());
+            });
 
             let state_1 = wait_for::running_mpc(&ctx, 1).await?;
             assert_eq!(state_1.participants.len(), config.nodes - 1);
@@ -67,7 +46,7 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
                 "public key must stay the same"
             );
 
-            let participant_accounts = participant_accounts
+            let participant_accounts = participants
                 .iter()
                 .filter(|account| account.id() != leaving_node_1)
                 .cloned()
@@ -75,26 +54,15 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
 
             // Vote for another participant to leave (must fail because of the treshold limit)
             let leaving_node_2 = participant_accounts[0].id();
-            let vote_futures = participant_accounts
-                .iter()
-                .filter(|account| account.id() != leaving_node_2)
-                .map(|account| {
-                    let result = account
-                        .call(ctx.nodes.ctx().mpc_contract.id(), "vote_leave")
-                        .args_json(serde_json::json!({
-                            "acc_id_to_leave": leaving_node_2
-                        }))
-                        .transact();
-                    result
-                })
-                .collect::<Vec<_>>();
-
-            futures::future::join_all(vote_futures)
-                .await
-                .iter()
-                .for_each(|result| {
-                    assert!(result.as_ref().unwrap().failures()[0].is_failure());
-                });
+            let results = vote_leave(
+                &participants,
+                ctx.nodes.ctx().mpc_contract.id(),
+                leaving_node_2,
+            )
+            .await;
+            results.iter().for_each(|result| {
+                assert!(result.as_ref().unwrap().failures()[0].is_failure());
+            });
 
             // Add new participant
             let new_node_account = ctx.nodes.ctx().worker.dev_create_account().await?;
@@ -111,25 +79,13 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 
             // vote for new node
-            let vote_futures = participant_accounts
-                .iter()
-                .map(|account| {
-                    let result = account
-                        .call(ctx.nodes.ctx().mpc_contract.id(), "vote_join")
-                        .args_json(serde_json::json!({
-                            "candidate_account_id": new_node_account.id()
-                        }))
-                        .transact();
-                    result
-                })
-                .collect::<Vec<_>>();
-
-            futures::future::join_all(vote_futures)
-                .await
-                .iter()
-                .for_each(|result| {
-                    assert!(result.as_ref().unwrap().failures().is_empty());
-                });
+            assert!(vote_join(
+                &participant_accounts,
+                ctx.nodes.ctx().mpc_contract.id(),
+                new_node_account.id()
+            )
+            .await
+            .is_ok());
 
             let state_2 = wait_for::running_mpc(&ctx, 2).await?;
             assert_eq!(state_2.participants.len(), config.nodes);
