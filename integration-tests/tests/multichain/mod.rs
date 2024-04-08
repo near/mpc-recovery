@@ -46,14 +46,14 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
                 "public key must stay the same"
             );
 
-            let participant_accounts = participants
+            let participants = participants
                 .iter()
                 .filter(|account| account.id() != leaving_node_1)
                 .cloned()
                 .collect::<Vec<_>>();
 
             // Vote for another participant to leave (must fail because of the treshold limit)
-            let leaving_node_2 = participant_accounts[0].id();
+            let leaving_node_2 = participants[0].id();
             let results = vote_leave(
                 &participants,
                 ctx.nodes.ctx().mpc_contract.id(),
@@ -80,7 +80,7 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
 
             // vote for new node
             assert!(vote_join(
-                &participant_accounts,
+                &participants,
                 ctx.nodes.ctx().mpc_contract.id(),
                 new_node_account.id()
             )
@@ -91,7 +91,7 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
             assert_eq!(state_2.participants.len(), config.nodes);
 
             assert_eq!(
-                state_1.public_key, state_2.public_key,
+                state_0.public_key, state_2.public_key,
                 "public key must stay the same"
             );
 
