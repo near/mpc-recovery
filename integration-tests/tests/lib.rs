@@ -65,10 +65,10 @@ pub struct MultichainTestContext<'a> {
     rpc_client: near_fetch::Client,
     jsonrpc_client: JsonRpcClient,
     http_client: reqwest::Client,
-    cfg: &'a MultichainConfig,
+    cfg: MultichainConfig,
 }
 
-async fn with_multichain_nodes<F>(cfg: &MultichainConfig, f: F) -> anyhow::Result<()>
+async fn with_multichain_nodes<F>(cfg: MultichainConfig, f: F) -> anyhow::Result<()>
 where
     F: for<'a> FnOnce(MultichainTestContext<'a>) -> BoxFuture<'a, anyhow::Result<()>>,
 {

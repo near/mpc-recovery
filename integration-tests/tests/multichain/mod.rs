@@ -16,12 +16,8 @@ use test_log::test;
 
 #[test(tokio::test)]
 async fn test_multichain_reshare() -> anyhow::Result<()> {
-    let config = MultichainConfig {
-        nodes: 3,
-        threshold: 2,
-        ..MultichainConfig::default()
-    };
-    with_multichain_nodes(&config, |mut ctx| {
+    let config = MultichainConfig::default();
+    with_multichain_nodes(config.clone(), |mut ctx| {
         Box::pin(async move {
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
             assert_eq!(state_0.participants.len(), config.nodes);
@@ -107,7 +103,7 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
                 .start_node(
                     new_node_account.id(),
                     new_node_account.secret_key(),
-                    ctx.cfg,
+                    &ctx.cfg,
                 )
                 .await?;
 
@@ -151,7 +147,7 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
 
 #[test(tokio::test)]
 async fn test_triples_and_presignatures() -> anyhow::Result<()> {
-    with_multichain_nodes(&MultichainConfig::default(), |ctx| {
+    with_multichain_nodes(MultichainConfig::default(), |ctx| {
         Box::pin(async move {
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
             assert_eq!(state_0.participants.len(), 3);
@@ -165,7 +161,7 @@ async fn test_triples_and_presignatures() -> anyhow::Result<()> {
 
 #[test(tokio::test)]
 async fn test_signature_basic() -> anyhow::Result<()> {
-    with_multichain_nodes(&MultichainConfig::default(), |ctx| {
+    with_multichain_nodes(MultichainConfig::default(), |ctx| {
         Box::pin(async move {
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
             assert_eq!(state_0.participants.len(), 3);
@@ -179,7 +175,7 @@ async fn test_signature_basic() -> anyhow::Result<()> {
 
 #[test(tokio::test)]
 async fn test_signature_offline_node() -> anyhow::Result<()> {
-    with_multichain_nodes(&MultichainConfig::default(), |mut ctx| {
+    with_multichain_nodes(MultichainConfig::default(), |mut ctx| {
         Box::pin(async move {
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
             assert_eq!(state_0.participants.len(), 3);
@@ -242,7 +238,7 @@ async fn test_signature_large_stockpile() -> anyhow::Result<()> {
         threshold: THRESHOLD,
     };
 
-    with_multichain_nodes(&config, |ctx| {
+    with_multichain_nodes(config, |ctx| {
         Box::pin(async move {
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
             assert_eq!(state_0.participants.len(), NODES);
@@ -260,7 +256,7 @@ async fn test_signature_large_stockpile() -> anyhow::Result<()> {
 
 #[test(tokio::test)]
 async fn test_key_derivation() -> anyhow::Result<()> {
-    with_multichain_nodes(&MultichainConfig::default(), |ctx| {
+    with_multichain_nodes(MultichainConfig::default(), |ctx| {
         Box::pin(async move {
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
             assert_eq!(state_0.participants.len(), 3);
@@ -351,7 +347,7 @@ async fn test_triples_persistence_for_deletion() -> anyhow::Result<()> {
 
 #[test(tokio::test)]
 async fn test_latest_block_height() -> anyhow::Result<()> {
-    with_multichain_nodes(&MultichainConfig::default(), |ctx| {
+    with_multichain_nodes(MultichainConfig::default(), |ctx| {
         Box::pin(async move {
             let state_0 = wait_for::running_mpc(&ctx, 0).await?;
             assert_eq!(state_0.participants.len(), 3);
