@@ -219,12 +219,9 @@ impl MpcSignProtocol {
         crate::metrics::NODE_RUNNING
             .with_label_values(&[&my_account_id])
             .set(1);
-        let mpc_contract_version = get_contract_version(&self.ctx.mpc_contract_id);
-        if let Ok(version) = mpc_contract_version {
-            crate::metrics::MPC_CONTRACT_VERSION
-                .with_label_values(&[&my_account_id])
-                .set(version);
-        }
+        crate::metrics::NODE_VERSION
+            .with_label_values(&[&my_account_id])
+            .set(node_version());
         let mut queue = MpcMessageQueue::default();
         let mut last_state_update = Instant::now();
         let mut last_pinged = Instant::now();
@@ -359,9 +356,9 @@ async fn get_my_participant(protocol: &MpcSignProtocol) -> Participant {
     participant_info.id.into()
 }
 
-fn get_contract_version(mpc_contract_account: &AccountId) -> Result<i64, std::num::ParseIntError> {
-    let mpc_contract_id = mpc_contract_account.as_str();
-    let parts: Vec<&str> = mpc_contract_id.split('.').collect();
-    let version_str = parts[0].trim_start_matches('v');
-    version_str.parse::<i64>()
+fn node_version() -> i64 {
+    env!("CARGO_PKG_VERSION")
+        .split('.')
+        .map(|s| s.parse::<i64>().unwrap())
+        .fold(0, |acc, x| acc * 1000 + x)
 }
