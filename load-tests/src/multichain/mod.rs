@@ -16,7 +16,7 @@ use crate::fastauth::primitives::UserSession;
 pub async fn multichain_sign(user: &mut GooseUser) -> TransactionResult {
     tracing::info!("multichain_sign");
 
-    let sesion = user
+    let session = user
         .get_session_data::<UserSession>()
         .expect("Session Data must be set");
 
@@ -25,9 +25,9 @@ pub async fn multichain_sign(user: &mut GooseUser) -> TransactionResult {
     let testnet_rpc_url = "https://rpc.testnet.near.org".to_string();
 
     let signer = InMemorySigner {
-        account_id: sesion.near_account_id.clone(),
-        public_key: sesion.fa_sk.public_key(),
-        secret_key: sesion.fa_sk.clone(),
+        account_id: session.near_account_id.clone(),
+        public_key: session.fa_sk.public_key(),
+        secret_key: session.fa_sk.clone(),
     };
 
     let connector = JsonRpcClient::new_client();
@@ -43,8 +43,8 @@ pub async fn multichain_sign(user: &mut GooseUser) -> TransactionResult {
     tracing::info!("requesting signature for: {:?}", payload_hashed);
 
     let transaction = Transaction {
-        signer_id: sesion.near_account_id.clone(),
-        public_key: sesion.fa_sk.public_key(),
+        signer_id: session.near_account_id.clone(),
+        public_key: session.fa_sk.public_key(),
         nonce,
         receiver_id: multichain_contract_id,
         block_hash,

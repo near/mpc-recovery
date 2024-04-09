@@ -2,7 +2,8 @@ pub mod fastauth;
 pub mod multichain;
 
 use fastauth::{
-    claim_oidc, mpc_public_key, new_account, prepare_user_credentials, sign, user_credentials,
+    claim_oidc, delete_user_account, mpc_public_key, new_account, prepare_user_credentials, sign,
+    user_credentials,
 };
 use goose::prelude::*;
 use multichain::multichain_sign;
@@ -29,7 +30,8 @@ async fn main() -> Result<(), GooseError> {
                 .register_transaction(transaction!(multichain_sign).set_sequence(8))
                 .register_transaction(transaction!(multichain_sign).set_sequence(9))
                 .register_transaction(transaction!(multichain_sign).set_sequence(10))
-                .register_transaction(transaction!(multichain_sign).set_sequence(11)),
+                .register_transaction(transaction!(multichain_sign).set_sequence(11))
+                .register_transaction(transaction!(delete_user_account).set_sequence(12)),
         )
         .register_scenario(
             scenario!("fastAuthRegistration")
