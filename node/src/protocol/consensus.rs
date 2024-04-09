@@ -19,7 +19,6 @@ use crate::types::{KeygenProtocol, ReshareProtocol, SecretKeyShare};
 use crate::util::AffinePointExt;
 use async_trait::async_trait;
 use cait_sith::protocol::InitializationError;
-use mpc_keys::hpke;
 use near_crypto::InMemorySigner;
 use near_primitives::transaction::{Action, FunctionCallAction};
 use near_primitives::types::AccountId;
@@ -36,12 +35,9 @@ pub trait ConsensusCtx {
     fn mpc_contract_id(&self) -> &AccountId;
     fn my_address(&self) -> &Url;
     fn sign_queue(&self) -> Arc<RwLock<SignQueue>>;
-    fn cipher_pk(&self) -> &hpke::PublicKey;
-    fn sign_pk(&self) -> near_crypto::PublicKey;
-    fn sign_sk(&self) -> &near_crypto::SecretKey;
     fn secret_storage(&self) -> &SecretNodeStorageBox;
-    fn triple_storage(&mut self) -> LockTripleNodeStorageBox;
-    fn cfg(&self) -> Config;
+    fn triple_storage(&self) -> LockTripleNodeStorageBox;
+    fn cfg(&self) -> &Config;
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -91,7 +87,7 @@ pub trait ConsensusProtocol {
 impl ConsensusProtocol for StartedState {
     async fn advance<C: ConsensusCtx + Send + Sync>(
         self,
-        mut ctx: C,
+        ctx: C,
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
         match self.persistent_node_data {
@@ -133,13 +129,13 @@ impl ConsensusProtocol for StartedState {
                                         contract_state.threshold,
                                         epoch,
                                         ctx.my_account_id(),
-                                        ctx.cfg(),
+                                        &ctx.cfg().presig_cfg,
                                     );
                                     let triple_manager = TripleManager::new(
                                         me,
                                         contract_state.threshold,
                                         epoch,
-                                        ctx.cfg(),
+                                        &ctx.cfg().triple_cfg,
                                         self.triple_data,
                                         ctx.triple_storage(),
                                         ctx.my_account_id(),
@@ -292,7 +288,7 @@ impl ConsensusProtocol for GeneratingState {
 impl ConsensusProtocol for WaitingForConsensusState {
     async fn advance<C: ConsensusCtx + Send + Sync>(
         self,
-        mut ctx: C,
+        ctx: C,
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
         match contract_state {
@@ -352,7 +348,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                         me,
                         self.threshold,
                         self.epoch,
-                        ctx.cfg(),
+                        &ctx.cfg().triple_cfg,
                         vec![],
                         ctx.triple_storage(),
                         ctx.my_account_id(),
@@ -371,7 +367,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
                             self.threshold,
                             self.epoch,
                             ctx.my_account_id(),
-                            ctx.cfg(),
+                            &ctx.cfg().presig_cfg,
                         ))),
                         signature_manager: Arc::new(RwLock::new(SignatureManager::new(
                             me,
@@ -627,7 +623,6 @@ impl ConsensusProtocol for JoiningState {
                             .iter()
                             .map(|(_, info)| &info.account_id)
                             .filter(|id| !votes.contains(*id))
-                            .map(|id| id.to_string())
                             .collect::<Vec<_>>();
                         if !participant_account_ids_to_vote.is_empty() {
                             tracing::info!(
@@ -643,8 +638,8 @@ impl ConsensusProtocol for JoiningState {
                         );
                         let args = serde_json::json!({
                             "url": ctx.my_address(),
-                            "cipher_pk": ctx.cipher_pk().to_bytes(),
-                            "sign_pk": ctx.sign_pk(),
+                            "cipher_pk": ctx.cfg().network_cfg.cipher_pk.to_bytes(),
+                            "sign_pk": ctx.cfg().network_cfg.sign_sk.public_key(),
                         });
                         ctx.rpc_client()
                             .send_tx(
@@ -706,7 +701,7 @@ impl ConsensusProtocol for NodeState {
 }
 
 async fn load_triples<C: ConsensusCtx + Send + Sync>(
-    mut ctx: C,
+    ctx: C,
 ) -> Result<Vec<TripleData>, ConsensusError> {
     let triple_storage = ctx.triple_storage();
     let read_lock = triple_storage.read().await;

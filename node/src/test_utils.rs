@@ -1,7 +1,7 @@
 use crate::protocol::contract::primitives::Participants;
-use crate::protocol::presignature::{GenerationError, PresignatureConfig};
+use crate::protocol::presignature::GenerationError;
 use crate::protocol::triple::{Triple, TripleConfig, TripleId, TripleManager};
-use crate::protocol::{Config, ParticipantInfo};
+use crate::protocol::ParticipantInfo;
 use crate::storage::triple_storage::LockTripleNodeStorageBox;
 use crate::{gcp::GcpService, protocol::message::TripleMessage, storage};
 
@@ -16,17 +16,11 @@ use tokio::sync::RwLock;
 
 // Constants to be used for testing.
 const STARTING_EPOCH: u64 = 0;
-const DEFAULT_TEST_CONFIG: Config = Config {
-    triple_cfg: TripleConfig {
-        min_triples: 2,
-        max_triples: 10,
-        max_concurrent_introduction: 4,
-        max_concurrent_generation: 16,
-    },
-    presig_cfg: PresignatureConfig {
-        min_presignatures: 2,
-        max_presignatures: 10,
-    },
+const TRIPLE_CFG: TripleConfig = TripleConfig {
+    min_triples: 2,
+    max_triples: 10,
+    max_concurrent_introduction: 4,
+    max_concurrent_generation: 16,
 };
 
 struct TestTripleManagers {
@@ -72,7 +66,7 @@ impl TestTripleManagers {
                     Participant::from(num),
                     num_managers as usize,
                     STARTING_EPOCH,
-                    DEFAULT_TEST_CONFIG,
+                    &TRIPLE_CFG,
                     vec![],
                     triple_storage,
                     &account_id,

@@ -1,6 +1,5 @@
 use super::message::PresignatureMessage;
 use super::triple::{Triple, TripleConfig, TripleId, TripleManager};
-use super::Config;
 use crate::gcp::error::DatastoreStorageError;
 use crate::protocol::contract::primitives::Participants;
 use crate::types::{PresignatureProtocol, PublicKey, SecretKeyShare};
@@ -116,7 +115,7 @@ impl PresignatureManager {
         threshold: usize,
         epoch: u64,
         my_account_id: &AccountId,
-        cfg: Config,
+        presig_cfg: &PresignatureConfig,
     ) -> Self {
         Self {
             presignatures: HashMap::new(),
@@ -128,7 +127,7 @@ impl PresignatureManager {
             threshold,
             epoch,
             my_account_id: my_account_id.clone(),
-            presig_cfg: cfg.presig_cfg,
+            presig_cfg: *presig_cfg,
         }
     }
 

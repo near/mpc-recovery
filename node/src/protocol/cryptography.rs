@@ -1,6 +1,7 @@
 use std::sync::PoisonError;
 
 use super::state::{GeneratingState, NodeState, ResharingState, RunningState};
+use super::Config;
 use crate::gcp::error::SecretStorageError;
 use crate::http_client::SendError;
 use crate::mesh::Mesh;
@@ -11,7 +12,6 @@ use crate::storage::secret_storage::SecretNodeStorageBox;
 use async_trait::async_trait;
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use k256::elliptic_curve::group::GroupEncoding;
-use mpc_keys::hpke;
 use near_crypto::InMemorySigner;
 use near_primitives::types::AccountId;
 
@@ -22,9 +22,8 @@ pub trait CryptographicCtx {
     fn rpc_client(&self) -> &near_fetch::Client;
     fn signer(&self) -> &InMemorySigner;
     fn mpc_contract_id(&self) -> &AccountId;
-    fn cipher_pk(&self) -> &hpke::PublicKey;
-    fn sign_sk(&self) -> &near_crypto::SecretKey;
     fn secret_storage(&mut self) -> &mut SecretNodeStorageBox;
+    fn cfg(&self) -> &Config;
 
     /// Active participants is the active participants at the beginning of each protocol loop.
     fn mesh(&self) -> &Mesh;
@@ -98,7 +97,7 @@ impl CryptographicProtocol for GeneratingState {
                         .await
                         .send_encrypted(
                             ctx.me().await,
-                            ctx.sign_sk(),
+                            &ctx.cfg().network_cfg.sign_sk,
                             ctx.http_client(),
                             ctx.mesh().active_participants(),
                         )
@@ -159,7 +158,7 @@ impl CryptographicProtocol for GeneratingState {
                         .await
                         .send_encrypted(
                             ctx.me().await,
-                            ctx.sign_sk(),
+                            &ctx.cfg().network_cfg.sign_sk,
                             ctx.http_client(),
                             ctx.mesh().active_participants(),
                         )
@@ -196,7 +195,7 @@ impl CryptographicProtocol for WaitingForConsensusState {
             .await
             .send_encrypted(
                 ctx.me().await,
-                ctx.sign_sk(),
+                &ctx.cfg().network_cfg.sign_sk,
                 ctx.http_client(),
                 ctx.mesh().active_participants(),
             )
@@ -247,7 +246,12 @@ impl CryptographicProtocol for ResharingState {
                         .messages
                         .write()
                         .await
-                        .send_encrypted(ctx.me().await, ctx.sign_sk(), ctx.http_client(), &active)
+                        .send_encrypted(
+                            ctx.me().await,
+                            &ctx.cfg().network_cfg.sign_sk,
+                            ctx.http_client(),
+                            &active,
+                        )
                         .await;
                     if !failures.is_empty() {
                         tracing::warn!(
@@ -302,7 +306,12 @@ impl CryptographicProtocol for ResharingState {
                         .messages
                         .write()
                         .await
-                        .send_encrypted(ctx.me().await, ctx.sign_sk(), ctx.http_client(), &active)
+                        .send_encrypted(
+                            ctx.me().await,
+                            &ctx.cfg().network_cfg.sign_sk,
+                            ctx.http_client(),
+                            &active,
+                        )
                         .await;
                     if !failures.is_empty() {
                         tracing::warn!(
@@ -473,7 +482,12 @@ impl CryptographicProtocol for RunningState {
             .await?;
         drop(signature_manager);
         let failures = messages
-            .send_encrypted(ctx.me().await, ctx.sign_sk(), ctx.http_client(), active)
+            .send_encrypted(
+                ctx.me().await,
+                &ctx.cfg().network_cfg.sign_sk,
+                ctx.http_client(),
+                active,
+            )
             .await;
         if !failures.is_empty() {
             tracing::warn!(

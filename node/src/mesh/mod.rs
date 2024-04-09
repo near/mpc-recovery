@@ -1,7 +1,24 @@
+use mpc_keys::hpke;
+
 use crate::protocol::contract::primitives::Participants;
 use crate::protocol::ProtocolState;
 
 pub mod connection;
+
+#[derive(Clone, Debug)]
+pub struct NetworkConfig {
+    pub sign_sk: near_crypto::SecretKey,
+    pub cipher_pk: hpke::PublicKey,
+}
+
+impl NetworkConfig {
+    pub fn test() -> Self {
+        Self {
+            sign_sk: near_crypto::SecretKey::from_seed(near_crypto::KeyType::ED25519, "test"),
+            cipher_pk: hpke::PublicKey::from_bytes(&[0; 32]),
+        }
+    }
+}
 
 #[derive(Default)]
 pub struct Mesh {

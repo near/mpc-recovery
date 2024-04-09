@@ -22,7 +22,7 @@ use self::cryptography::CryptographicCtx;
 use self::message::MessageCtx;
 use self::presignature::PresignatureConfig;
 use self::triple::TripleConfig;
-use crate::mesh::Mesh;
+use crate::mesh::{Mesh, NetworkConfig};
 use crate::protocol::consensus::ConsensusProtocol;
 use crate::protocol::cryptography::CryptographicProtocol;
 use crate::protocol::message::{MessageHandler, MpcMessageQueue};
@@ -40,12 +40,11 @@ use tokio::sync::mpsc::{self, error::TryRecvError};
 use tokio::sync::RwLock;
 use url::Url;
 
-use mpc_keys::hpke;
-
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Config {
     pub triple_cfg: TripleConfig,
     pub presig_cfg: PresignatureConfig,
+    pub network_cfg: NetworkConfig,
 }
 
 struct Ctx {
@@ -56,8 +55,6 @@ struct Ctx {
     rpc_client: near_fetch::Client,
     http_client: reqwest::Client,
     sign_queue: Arc<RwLock<SignQueue>>,
-    cipher_pk: hpke::PublicKey,
-    sign_sk: near_crypto::SecretKey,
     secret_storage: SecretNodeStorageBox,
     triple_storage: LockTripleNodeStorageBox,
     cfg: Config,
@@ -93,27 +90,15 @@ impl ConsensusCtx for &mut MpcSignProtocol {
         self.ctx.sign_queue.clone()
     }
 
-    fn cipher_pk(&self) -> &hpke::PublicKey {
-        &self.ctx.cipher_pk
-    }
-
-    fn sign_pk(&self) -> near_crypto::PublicKey {
-        self.ctx.sign_sk.public_key()
-    }
-
-    fn sign_sk(&self) -> &near_crypto::SecretKey {
-        &self.ctx.sign_sk
-    }
-
     fn secret_storage(&self) -> &SecretNodeStorageBox {
         &self.ctx.secret_storage
     }
 
-    fn cfg(&self) -> Config {
-        self.ctx.cfg
+    fn cfg(&self) -> &Config {
+        &self.ctx.cfg
     }
 
-    fn triple_storage(&mut self) -> LockTripleNodeStorageBox {
+    fn triple_storage(&self) -> LockTripleNodeStorageBox {
         self.ctx.triple_storage.clone()
     }
 }
@@ -140,16 +125,12 @@ impl CryptographicCtx for &mut MpcSignProtocol {
         &self.ctx.mpc_contract_id
     }
 
-    fn cipher_pk(&self) -> &hpke::PublicKey {
-        &self.ctx.cipher_pk
-    }
-
-    fn sign_sk(&self) -> &near_crypto::SecretKey {
-        &self.ctx.sign_sk
-    }
-
     fn secret_storage(&mut self) -> &mut SecretNodeStorageBox {
         &mut self.ctx.secret_storage
+    }
+
+    fn cfg(&self) -> &Config {
+        &self.ctx.cfg
     }
 
     fn mesh(&self) -> &Mesh {
@@ -184,7 +165,6 @@ impl MpcSignProtocol {
         signer: InMemorySigner,
         receiver: mpsc::Receiver<MpcMessage>,
         sign_queue: Arc<RwLock<SignQueue>>,
-        cipher_pk: hpke::PublicKey,
         secret_storage: SecretNodeStorageBox,
         triple_storage: LockTripleNodeStorageBox,
         cfg: Config,
@@ -197,8 +177,6 @@ impl MpcSignProtocol {
             rpc_client,
             http_client: reqwest::Client::new(),
             sign_queue,
-            cipher_pk,
-            sign_sk: signer.secret_key.clone(),
             signer,
             secret_storage,
             triple_storage,

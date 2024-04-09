@@ -1,4 +1,5 @@
 use crate::gcp::GcpService;
+use crate::mesh::NetworkConfig;
 use crate::protocol::presignature::PresignatureConfig;
 use crate::protocol::triple::TripleConfig;
 use crate::protocol::{Config, MpcSignProtocol, SignQueue};
@@ -8,6 +9,7 @@ use clap::Parser;
 use local_ip_address::local_ip;
 use near_crypto::{InMemorySigner, SecretKey};
 use near_primitives::types::AccountId;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use tracing_subscriber::EnvFilter;
@@ -48,6 +50,9 @@ pub enum Cli {
         /// The cipher secret key used to decrypt messages between nodes.
         #[arg(long, env("MPC_RECOVERY_CIPHER_SK"))]
         cipher_sk: String,
+        /// The secret key used to sign messages to be sent between nodes.
+        #[arg(long, env("MPC_RECOVERY_SIGN_SK"))]
+        sign_sk: String,
         /// NEAR Lake Indexer options
         #[clap(flatten)]
         indexer_options: indexer::Options,
@@ -103,6 +108,7 @@ impl Cli {
                 web_port,
                 cipher_pk,
                 cipher_sk,
+                sign_sk,
                 indexer_options,
                 my_address,
                 storage_options,
@@ -129,6 +135,8 @@ impl Cli {
                     cipher_pk,
                     "--cipher-sk".to_string(),
                     cipher_sk,
+                    "--sign-sk".to_string(),
+                    sign_sk,
                     "--min-triples".to_string(),
                     min_triples.to_string(),
                     "--max-triples".to_string(),
@@ -175,6 +183,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
             account_sk,
             cipher_pk,
             cipher_sk,
+            sign_sk,
             indexer_options,
             my_address,
             storage_options,
@@ -224,7 +233,6 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                         signer.clone(),
                         receiver,
                         sign_queue.clone(),
-                        hpke::PublicKey::try_from_bytes(&hex::decode(cipher_pk)?)?,
                         key_storage,
                         triple_storage,
                         Config {
@@ -237,6 +245,12 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                             presig_cfg: PresignatureConfig {
                                 min_presignatures,
                                 max_presignatures,
+                            },
+                            network_cfg: NetworkConfig {
+                                cipher_pk: hpke::PublicKey::try_from_bytes(&hex::decode(
+                                    cipher_pk,
+                                )?)?,
+                                sign_sk: SecretKey::from_str(&sign_sk)?,
                             },
                         },
                     );
