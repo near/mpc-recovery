@@ -20,7 +20,12 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
     let config = MultichainConfig::default();
     with_multichain_nodes(config.clone(), |mut ctx| {
         Box::pin(async move {
-            wait_for::running_mpc(&ctx, Some(0)).await?;
+            let state = wait_for::running_mpc(&ctx, Some(0)).await?;
+            assert!(state.threshold == 2);
+            assert!(state.participants.len() == 3);
+            assert!(ctx.remove_participant(None).await.is_ok());
+            // Going below T should error out
+            assert!(ctx.remove_participant(None).await.is_err());
             assert!(ctx.add_participant().await.is_ok());
             assert!(ctx.remove_participant(None).await.is_ok());
             Ok(())

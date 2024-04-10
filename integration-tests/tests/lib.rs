@@ -1,6 +1,7 @@
 mod mpc;
 mod multichain;
 
+use anyhow::anyhow;
 use std::str::FromStr;
 
 use curv::elliptic::curves::{Ed25519, Point};
@@ -159,9 +160,13 @@ impl MultichainTestContext<'_> {
         )
         .await;
 
-        results.iter().for_each(|result| {
-            assert!(result.as_ref().unwrap().failures().is_empty());
-        });
+        // Check if any result has failures, and return early with an error if so
+        if results
+            .iter()
+            .any(|result| !result.as_ref().unwrap().failures().is_empty())
+        {
+            return Err(anyhow!("Failed to vote_leave"));
+        }
 
         let new_state = wait_for::running_mpc(self, Some(state.epoch + 1)).await?;
         assert_eq!(state.participants.len(), new_state.participants.len() + 1);
