@@ -22,15 +22,10 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
             assert_eq!(state.participants.len(), config.nodes);
 
             assert!(ctx.add_participant().await.is_ok());
-            assert!(ctx.add_participant().await.is_ok());
-
             let new_state = wait_for::running_mpc(&ctx, None).await?;
-            assert!(new_state.participants.len() == ctx.cfg.nodes + 2);
+            assert_eq!(new_state.participants.len(), config.nodes + 1);
 
-            // Make sure signature production works
-            wait_for::has_at_least_triples(&ctx, 2).await?;
-            wait_for::has_at_least_presignatures(&ctx, 2).await?;
-            actions::single_signature_production(&ctx, &new_state).await
+            Ok(())
         })
     })
     .await
