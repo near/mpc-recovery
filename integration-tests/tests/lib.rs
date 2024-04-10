@@ -96,9 +96,9 @@ impl MultichainTestContext<'_> {
 
     pub async fn add_participant(&mut self) -> anyhow::Result<()> {
         let state = wait_for::running_mpc(self, None).await?;
-        let participants = self.participant_accounts().await?;
 
         let new_node_account = self.nodes.ctx().worker.dev_create_account().await?;
+        tracing::info!("Adding a new participant: {}", new_node_account.id());
         self.nodes
             .start_node(
                 new_node_account.id(),
@@ -110,8 +110,15 @@ impl MultichainTestContext<'_> {
         // Wait for new node to add itself as a candidate
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 
+        // T number of participants should vote
+        let participants = self.participant_accounts().await?;
+        let voting_participants = participants
+            .iter()
+            .take(state.threshold)
+            .cloned()
+            .collect::<Vec<_>>();
         assert!(vote_join(
-            participants,
+            voting_participants,
             self.nodes.ctx().mpc_contract.id(),
             new_node_account.id()
         )
@@ -136,9 +143,12 @@ impl MultichainTestContext<'_> {
         let participant_accounts = self.participant_accounts().await?;
         let leaving_account_id =
             leaving_account_id.unwrap_or_else(|| participant_accounts.last().unwrap().id());
+        tracing::info!("Removing participant: {}", leaving_account_id);
+
         let voting_accounts = participant_accounts
             .iter()
             .filter(|account| account.id() != leaving_account_id)
+            .take(state.threshold)
             .cloned()
             .collect::<Vec<Account>>();
 
