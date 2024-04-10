@@ -164,7 +164,7 @@ impl MultichainTestContext<'_> {
         });
 
         let new_state = wait_for::running_mpc(self, Some(state.epoch + 1)).await?;
-        assert_eq!(state.participants.len() + 1, new_state.participants.len());
+        assert_eq!(state.participants.len(), new_state.participants.len() + 1);
 
         assert_eq!(
             state.public_key, new_state.public_key,
