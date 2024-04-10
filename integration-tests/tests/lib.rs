@@ -78,11 +78,11 @@ pub struct MultichainTestContext<'a> {
 impl MultichainTestContext<'_> {
     pub async fn participant_accounts(&self) -> anyhow::Result<Vec<Account>> {
         let node_accounts: Vec<Account> = self.nodes.near_accounts();
-        let state = wait_for::running_mpc(&self, None).await?;
+        let state = wait_for::running_mpc(self, None).await?;
         let participant_ids = state.participants.keys().collect::<Vec<_>>();
         let participant_accounts: Vec<Account> = participant_ids
             .iter()
-            .map(|id| near_workspaces::types::AccountId::from_str(&id.to_string()).unwrap())
+            .map(|id| near_workspaces::types::AccountId::from_str(id.as_ref()).unwrap())
             .map(|id| {
                 node_accounts
                     .iter()
@@ -95,7 +95,7 @@ impl MultichainTestContext<'_> {
     }
 
     pub async fn add_participant(&mut self) -> anyhow::Result<()> {
-        let state = wait_for::running_mpc(&self, None).await?;
+        let state = wait_for::running_mpc(self, None).await?;
         let participants = self.participant_accounts().await?;
 
         let new_node_account = self.nodes.ctx().worker.dev_create_account().await?;
@@ -111,14 +111,14 @@ impl MultichainTestContext<'_> {
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 
         assert!(vote_join(
-            &participants,
+            participants,
             self.nodes.ctx().mpc_contract.id(),
             new_node_account.id()
         )
         .await
         .is_ok());
 
-        let new_state = wait_for::running_mpc(&self, Some(state.epoch + 1)).await?;
+        let new_state = wait_for::running_mpc(self, Some(state.epoch + 1)).await?;
         assert_eq!(new_state.participants.len(), state.participants.len() + 1);
         assert_eq!(
             state.public_key, new_state.public_key,
@@ -132,7 +132,7 @@ impl MultichainTestContext<'_> {
         &self,
         leaving_account_id: Option<&AccountId>,
     ) -> anyhow::Result<()> {
-        let state = wait_for::running_mpc(&self, None).await?;
+        let state = wait_for::running_mpc(self, None).await?;
         let participant_accounts = self.participant_accounts().await?;
         let leaving_account_id =
             leaving_account_id.unwrap_or_else(|| participant_accounts.last().unwrap().id());
@@ -143,7 +143,7 @@ impl MultichainTestContext<'_> {
             .collect::<Vec<Account>>();
 
         let results = vote_leave(
-            &voting_accounts,
+            voting_accounts,
             self.nodes.ctx().mpc_contract.id(),
             leaving_account_id,
         )
@@ -153,7 +153,7 @@ impl MultichainTestContext<'_> {
             assert!(result.as_ref().unwrap().failures().is_empty());
         });
 
-        let new_state = wait_for::running_mpc(&self, Some(state.epoch + 1)).await?;
+        let new_state = wait_for::running_mpc(self, Some(state.epoch + 1)).await?;
         assert_eq!(state.participants.len() + 1, new_state.participants.len());
 
         assert_eq!(

@@ -1,20 +1,19 @@
 use near_workspaces::{result::ExecutionFinalResult, Account, AccountId};
 
 pub async fn vote_join(
-    accounts: &Vec<Account>,
+    accounts: Vec<Account>,
     mpc_contract: &AccountId,
     account_id: &AccountId,
 ) -> anyhow::Result<()> {
     let vote_futures = accounts
         .iter()
         .map(|account| {
-            let result = account
-                .call(&mpc_contract, "vote_join")
+            account
+                .call(mpc_contract, "vote_join")
                 .args_json(serde_json::json!({
                     "candidate_account_id": account_id
                 }))
-                .transact();
-            result
+                .transact()
         })
         .collect::<Vec<_>>();
 
@@ -29,7 +28,7 @@ pub async fn vote_join(
 }
 
 pub async fn vote_leave(
-    accounts: &Vec<Account>,
+    accounts: Vec<Account>,
     mpc_contract: &AccountId,
     account_id: &AccountId,
 ) -> Vec<Result<ExecutionFinalResult, near_workspaces::error::Error>> {
@@ -37,13 +36,12 @@ pub async fn vote_leave(
         .iter()
         .filter(|account| account.id() != account_id)
         .map(|account| {
-            let result = account
+            account
                 .call(mpc_contract, "vote_leave")
                 .args_json(serde_json::json!({
                     "acc_id_to_leave": account_id
                 }))
-                .transact();
-            result
+                .transact()
         })
         .collect::<Vec<_>>();
 
