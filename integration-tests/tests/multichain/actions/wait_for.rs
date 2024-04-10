@@ -16,7 +16,7 @@ use near_primitives::views::FinalExecutionStatus;
 
 pub async fn running_mpc<'a>(
     ctx: &MultichainTestContext<'a>,
-    epoch: u64,
+    epoch: Option<u64>,
 ) -> anyhow::Result<RunningContractState> {
     let is_running = || async {
         let state: ProtocolContractState = ctx
@@ -25,17 +25,28 @@ pub async fn running_mpc<'a>(
             .await?;
 
         match state {
-            ProtocolContractState::Running(running) if running.epoch >= epoch => Ok(running),
-            ProtocolContractState::Running(running) => {
-                anyhow::bail!("running with an older epoch: {}", running.epoch)
-            }
+            ProtocolContractState::Running(running) => match epoch {
+                None => Ok(running),
+                Some(expected_epoch) if running.epoch >= expected_epoch => Ok(running),
+                Some(_) => {
+                    anyhow::bail!("running with an older epoch: {}", running.epoch)
+                }
+            },
             _ => anyhow::bail!("not running"),
         }
     };
+    let err_msg = format!(
+        "mpc did not reach {} in time",
+        if epoch.is_some() {
+            "expected epoch"
+        } else {
+            "running state"
+        }
+    );
     is_running
         .retry(&ExponentialBuilder::default().with_max_times(6))
         .await
-        .with_context(|| format!("mpc nodes did not reach epoch '{epoch}' before deadline"))
+        .with_context(|| err_msg)
 }
 
 pub async fn has_at_least_triples<'a>(
