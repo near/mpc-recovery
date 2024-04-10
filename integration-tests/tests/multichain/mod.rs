@@ -1,5 +1,7 @@
 pub mod actions;
 
+use std::str::FromStr;
+
 use crate::with_multichain_nodes;
 use actions::wait_for;
 use k256::elliptic_curve::point::AffineCoordinates;
@@ -69,7 +71,11 @@ async fn test_signature_offline_node() -> anyhow::Result<()> {
 
             // Kill the node then have presignature and signature generation only use the active set of nodes
             // to start generating presignatures and signatures.
-            ctx.nodes.kill_node(2).await?;
+            let account_id = near_workspaces::types::AccountId::from_str(
+                state_0.participants.keys().last().unwrap().clone().as_ref(),
+            )
+            .unwrap();
+            ctx.nodes.kill_node(&account_id).await?;
 
             // This could potentially fail and timeout the first time if the participant set picked up is the
             // one with the offline node. This is expected behavior for now if a user submits a request in between

@@ -128,14 +128,24 @@ impl Nodes<'_> {
         Ok(())
     }
 
-    pub async fn kill_node(&mut self, index: usize) -> anyhow::Result<()> {
+    pub async fn kill_node(&mut self, account_id: &AccountId) -> anyhow::Result<()> {
         match self {
             Nodes::Local { nodes, .. } => {
-                nodes[index].kill()?;
+                let (index, node) = nodes
+                    .iter_mut()
+                    .enumerate()
+                    .find(|(_, node)| node.account_id == *account_id)
+                    .unwrap();
+                node.kill()?;
                 nodes.remove(index);
             }
             Nodes::Docker { nodes, .. } => {
-                nodes[index].kill();
+                let (index, node) = nodes
+                    .iter_mut()
+                    .enumerate()
+                    .find(|(_, node)| node.account_id == *account_id)
+                    .unwrap();
+                node.kill();
                 nodes.remove(index);
             }
         }

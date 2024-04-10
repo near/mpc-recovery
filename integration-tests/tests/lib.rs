@@ -136,7 +136,7 @@ impl MultichainTestContext<'_> {
     }
 
     pub async fn remove_participant(
-        &self,
+        &mut self,
         leaving_account_id: Option<&AccountId>,
     ) -> anyhow::Result<()> {
         let state = wait_for::running_mpc(self, None).await?;
@@ -170,6 +170,8 @@ impl MultichainTestContext<'_> {
             state.public_key, new_state.public_key,
             "public key must stay the same"
         );
+
+        self.nodes.kill_node(leaving_account_id).await.unwrap();
         Ok(())
     }
 }
