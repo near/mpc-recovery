@@ -9,6 +9,7 @@ on:
 
 jobs:
   deploy-contract:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
       - name: add JSON contract
