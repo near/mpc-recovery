@@ -48,7 +48,7 @@ pub enum ProtocolContractState {
 }
 
 #[near_bindgen]
-#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(BorshDeserialize, BorshSerialize, Debug)]
 pub enum VersionedMpcContract {
     V0(MpcContract),
 }
@@ -59,7 +59,7 @@ impl Default for VersionedMpcContract {
     }
 }
 
-#[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
+#[derive(BorshDeserialize, BorshSerialize, PanicOnDefault, Debug)]
 pub struct MpcContract {
     protocol_state: ProtocolContractState,
     pending_requests: LookupMap<[u8; 32], Option<(String, String)>>,
@@ -88,12 +88,24 @@ impl MpcContract {
         }
     }
 
-    pub fn clean_payloads(&mut self, payloads: Vec<[u8; 32]>, counter: u32) {
+    fn clean_payloads(&mut self, payloads: Vec<[u8; 32]>, counter: u32) {
         log!("clean_payloads");
         for payload in payloads.iter() {
             self.pending_requests.remove(payload);
         }
         self.request_counter = counter;
+    }
+
+    pub fn test_init() -> Self {
+        MpcContract {
+            protocol_state: ProtocolContractState::Initializing(InitializingContractState {
+                candidates: Candidates::default(),
+                threshold: 2,
+                pk_votes: PkVotes::new(),
+            }),
+            pending_requests: LookupMap::new(b"m"),
+            request_counter: 2,
+        }
     }
 }
 
@@ -565,12 +577,12 @@ impl VersionedMpcContract {
 
     #[private]
     #[init(ignore_state)]
-    pub fn migrate_state() -> Self {
+    pub fn migrate_state_old_to_v0() -> Self {
         let old_contract: MpcContract = env::state_read().expect("Old state doesn't exist");
         Self::V0(MpcContract {
             protocol_state: old_contract.protocol_state,
-            pending_requests: LookupMap::new(b"m"),
-            request_counter: 0,
+            pending_requests: old_contract.pending_requests,
+            request_counter: old_contract.request_counter,
         })
     }
 }
