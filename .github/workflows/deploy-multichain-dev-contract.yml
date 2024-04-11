@@ -31,5 +31,5 @@ jobs:
 
       - name: Cargo Build
         run: |
-          source $HOME/.cargo/env && cd ./contract ; rustup target add wasm32-unknown-unknown && cargo build --target wasm32-unknown-unknown --release ; \
-          cd .. && near deploy v5.multichain-mpc-dev.testnet target/wasm32-unknown-unknown/release/mpc_contract.wasm
+          source $HOME/.cargo/env && cd ./contract ; rustup target add wasm32-unknown-unknown && cargo build --target wasm32-unknown-unknown --release && \
+          cd .. && (yes || true) | near deploy v5.multichain-mpc-dev.testnet target/wasm32-unknown-unknown/release/mpc_contract.wasm
