@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: add JSON contract
-        run: 'mkdir -p ~/.near-credentials/testnet && echo "${{ secrets.DEV_CONTRACT_JSON }}" > ~/.near-credentials/testnet/v5.multichain-mpc-dev.testnet.json'
+        run: mkdir -p ~/.near-credentials/testnet && echo '${{ secrets.DEV_CONTRACT_JSON }}' > ~/.near-credentials/testnet/v5.multichain-mpc-dev.testnet.json
 
       - uses: actions/checkout@v4
       - name: Use Node.js
@@ -26,7 +26,10 @@ jobs:
       - name: Install Rust
         run: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"
 
+      - name: debug
+        run: cat ~/.near-credentials/testnet/v5.multichain-mpc-dev.testnet.json
+
       - name: Cargo Build
         run: |
           source $HOME/.cargo/env && cd ./contract ; rustup target add wasm32-unknown-unknown && cargo build --target wasm32-unknown-unknown --release ; \
-          cd .. && near deploy v5.multichain-mpc-dev.testnet target/wasm32-unknown-unknown/release/mpc_contract.was
+          cd .. && near deploy v5.multichain-mpc-dev.testnet target/wasm32-unknown-unknown/release/mpc_contract.wasm
