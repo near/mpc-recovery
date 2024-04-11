@@ -4,8 +4,6 @@ on:
     types: [closed]
     branches:
       - develop
-  # temporary for testing
-  workflow_dispatch:
 
 jobs:
   deploy-contract:
