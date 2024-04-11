@@ -68,6 +68,10 @@ variable "cipher_sk_secret_id" {
   type = string
 }
 
+variable "sign_sk_secret_id" {
+  type = string
+}
+
 variable "aws_access_key_secret_id" {
   type = string
 }

@@ -99,10 +99,10 @@ resource "google_secret_manager_secret_iam_member" "sk_share_secret_manager" {
 }
 
 resource "google_project_iam_member" "datastore_iam_member" {
-  count = length(var.node_configs)
-  project   = var.project
-  role      = "roles/datastore.user"
-  member    = "serviceAccount:${google_service_account.service_account.email}"
+  count   = length(var.node_configs)
+  project = var.project
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.service_account.email}"
 }
 
 module "node" {
@@ -126,6 +126,7 @@ module "node" {
 
   account_sk_secret_id     = var.node_configs[count.index].account_sk_secret_id
   cipher_sk_secret_id      = var.node_configs[count.index].cipher_sk_secret_id
+  sign_sk_secret_id        = var.node_configs[count.index].sign_sk_secret_id
   aws_access_key_secret_id = var.aws_access_key_secret_id
   aws_secret_key_secret_id = var.aws_secret_key_secret_id
   sk_share_secret_id       = var.node_configs[count.index].sk_share_secret_id
@@ -133,6 +134,7 @@ module "node" {
   depends_on = [
     google_secret_manager_secret_iam_member.account_sk_secret_access,
     google_secret_manager_secret_iam_member.cipher_sk_secret_access,
+    google_secret_manager_secret_iam_member.sign_sk_secret_access,
     google_secret_manager_secret_iam_member.aws_access_key_secret_access,
     google_secret_manager_secret_iam_member.aws_secret_key_secret_access,
     google_secret_manager_secret_iam_member.sk_share_secret_access,

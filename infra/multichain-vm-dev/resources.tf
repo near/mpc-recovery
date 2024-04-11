@@ -24,6 +24,12 @@ data "google_secret_manager_secret_version" "cipher_sk_secret_id" {
   project = var.project_id
 }
 
+data "google_secret_manager_secret_version" "sign_sk_secret_id" {
+  count   = length(var.node_configs)
+  secret  = "multichain-sign-sk-dev-${count.index}"
+  project = var.project_id
+}
+
 data "google_secret_manager_secret_version" "sk_share_secret_id" {
   count   = length(var.node_configs)
   secret  = "multichain-sk-share-dev-${count.index}"

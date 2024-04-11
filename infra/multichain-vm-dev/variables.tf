@@ -68,6 +68,7 @@ variable "node_configs" {
     cipher_pk            = string
     account_sk_secret_id = string
     cipher_sk_secret_id  = string
+    sign_sk_secret_id    = string
     sk_share_secret_id   = string
   }))
 }

@@ -19,6 +19,7 @@ node_configs = [
     address              = "https://multichain-dev-0-7tk2cmmtcq-ue.a.run.app"
     account_sk_secret_id = "multichain-account-sk-dev-0"
     cipher_sk_secret_id  = "multichain-cipher-sk-dev-0"
+    sign_sk_secret_id    = "multichain-sign-sk-dev-0"
     sk_share_secret_id   = "multichain-sk-share-dev-0"
   },
   {
@@ -27,6 +28,7 @@ node_configs = [
     address              = "https://multichain-dev-1-7tk2cmmtcq-ue.a.run.app"
     account_sk_secret_id = "multichain-account-sk-dev-1"
     cipher_sk_secret_id  = "multichain-cipher-sk-dev-1"
+    sign_sk_secret_id    = "multichain-sign-sk-dev-1"
     sk_share_secret_id   = "multichain-sk-share-dev-1"
   },
   {
@@ -35,6 +37,7 @@ node_configs = [
     address              = "https://multichain-dev-2-7tk2cmmtcq-ue.a.run.app"
     account_sk_secret_id = "multichain-account-sk-dev-2"
     cipher_sk_secret_id  = "multichain-cipher-sk-dev-2"
+    sign_sk_secret_id    = "multichain-sign-sk-dev-2"
     sk_share_secret_id   = "multichain-sk-share-dev-2"
   }
 ]

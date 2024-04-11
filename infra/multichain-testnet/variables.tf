@@ -39,11 +39,12 @@ variable "indexer_options" {
 
 variable "node_configs" {
   type = list(object({
-    account_id            = string
+    account_id           = string
     cipher_pk            = string
     address              = string
     account_sk_secret_id = string
     cipher_sk_secret_id  = string
+    sign_sk_secret_id    = string
     sk_share_secret_id   = string
   }))
 }

@@ -36,6 +36,10 @@ module "gce-container" {
         value = data.google_secret_manager_secret_version.cipher_sk_secret_id[count.index].secret_data
       },
       {
+        name  = "MPC_RECOVERY_SIGN_SK"
+        value = data.google_secret_manager_secret_version.sign_sk_secret_id[count.index].secret_data
+      },
+      {
         name  = "AWS_ACCESS_KEY_ID"
         value = data.google_secret_manager_secret_version.aws_access_key_secret_id.secret_data
       },
@@ -48,16 +52,16 @@ module "gce-container" {
         value = "http://${google_compute_global_address.external_ips[count.index].address}"
       },
       {
-        name = "MPC_RECOVERY_SK_SHARE_SECRET_ID"
+        name  = "MPC_RECOVERY_SK_SHARE_SECRET_ID"
         value = var.node_configs["${count.index}"].sk_share_secret_id
       },
       {
-        name = "MPC_RECOVERY_ENV",
+        name  = "MPC_RECOVERY_ENV",
         value = var.env
       },
       {
-      name  = "MPC_RECOVERY_GCP_PROJECT_ID"
-      value = var.project_id
+        name  = "MPC_RECOVERY_GCP_PROJECT_ID"
+        value = var.project_id
       },
     ])
   }
@@ -70,17 +74,17 @@ resource "google_service_account" "service_account" {
 
 resource "google_project_iam_binding" "sa-roles" {
   for_each = toset([
-      "roles/datastore.user",
-      "roles/secretmanager.admin",
-      "roles/storage.objectAdmin",
-      "roles/iam.serviceAccountAdmin",
+    "roles/datastore.user",
+    "roles/secretmanager.admin",
+    "roles/storage.objectAdmin",
+    "roles/iam.serviceAccountAdmin",
   ])
 
   role = each.key
-  members = [ 
+  members = [
     "serviceAccount:${google_service_account.service_account.email}"
-   ]
-   project = var.project_id
+  ]
+  project = var.project_id
 }
 
 resource "google_compute_global_address" "external_ips" {
@@ -144,16 +148,16 @@ resource "google_compute_health_check" "multichain_healthcheck" {
 }
 
 resource "google_compute_global_forwarding_rule" "default" {
-  count      = length(var.node_configs)
-  name       = "multichain-partner-rule-${count.index}"
-  target     = google_compute_target_http_proxy.default[count.index].id
-  port_range = "80"
+  count                 = length(var.node_configs)
+  name                  = "multichain-partner-rule-${count.index}"
+  target                = google_compute_target_http_proxy.default[count.index].id
+  port_range            = "80"
   load_balancing_scheme = "EXTERNAL"
-  ip_address = google_compute_global_address.external_ips[count.index].address
+  ip_address            = google_compute_global_address.external_ips[count.index].address
 }
 
 resource "google_compute_target_http_proxy" "default" {
-  count      = length(var.node_configs)
+  count       = length(var.node_configs)
   name        = "multichain-partner-target-proxy-${count.index}"
   description = "a description"
   url_map     = google_compute_url_map.default[count.index].id

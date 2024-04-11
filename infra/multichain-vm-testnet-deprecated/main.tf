@@ -36,6 +36,10 @@ module "gce-container" {
         value = data.google_secret_manager_secret_version.cipher_sk_secret_id[count.index].secret_data
       },
       {
+        name  = "MPC_RECOVERY_SIGN_SK"
+        value = data.google_secret_manager_secret_version.sign_sk_secret_id[count.index].secret_data
+      },
+      {
         name  = "AWS_ACCESS_KEY_ID"
         value = data.google_secret_manager_secret_version.aws_access_key_secret_id.secret_data
       },

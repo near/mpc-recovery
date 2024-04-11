@@ -68,12 +68,13 @@ variable "node_configs" {
     cipher_pk            = string
     account_sk_secret_id = string
     cipher_sk_secret_id  = string
+    sign_sk_secret_id    = string
     sk_share_secret_id   = string
   }))
 }
 
 variable "env" {
-  type = string
+  type    = string
   default = "dev"
 }
 
@@ -119,6 +120,6 @@ variable "static_env" {
 }
 
 variable "create_network" {
-  default = false
+  default     = false
   description = "Do you want to create a new VPC network (true) or use default GCP network (false)?"
 }
