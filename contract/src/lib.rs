@@ -82,9 +82,9 @@ impl MpcContract {
         self.request_counter -= 1;
     }
 
-    fn check_and_insert_request(&mut self, payload: [u8; 32], big_r: String, s: String) {
-        if self.pending_requests.contains_key(&payload) {
-            self.pending_requests.insert(&payload, &Some((big_r, s)));
+    fn add_signature(&mut self, payload: &[u8; 32], signature: (String, String)) {
+        if self.pending_requests.contains_key(payload) {
+            self.pending_requests.insert(payload, &Some(signature));
         }
     }
 
@@ -426,10 +426,10 @@ impl VersionedMpcContract {
         }
     }
 
-    fn check_and_insert_request(&mut self, payload: [u8; 32], big_r: String, s: String) {
+    fn add_signature(&mut self, payload: &[u8; 32], signature: (String, String)) {
         match self {
             Self::V0(mpc_contract) => {
-                mpc_contract.check_and_insert_request(payload, big_r, s);
+                mpc_contract.add_signature(payload, signature);
             }
         }
     }
@@ -534,7 +534,7 @@ impl VersionedMpcContract {
                     big_r,
                     s
                 );
-                self.check_and_insert_request(payload, big_r, s);
+                self.add_signature(&payload, (big_r, s));
             } else {
                 env::panic_str("only participants can respond");
             }
