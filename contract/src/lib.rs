@@ -3,7 +3,7 @@ pub mod primitives;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::LookupMap;
 use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault, Promise, PromiseOrValue, PublicKey};
+use near_sdk::{env, near_bindgen, AccountId, Promise, PromiseOrValue, PublicKey};
 use near_sdk::{log, Gas};
 use primitives::{CandidateInfo, Candidates, ParticipantInfo, Participants, PkVotes, Votes};
 use std::collections::{BTreeMap, HashSet};
@@ -59,7 +59,7 @@ impl Default for VersionedMpcContract {
     }
 }
 
-#[derive(BorshDeserialize, BorshSerialize, PanicOnDefault, Debug)]
+#[derive(BorshDeserialize, BorshSerialize, Debug)]
 pub struct MpcContract {
     protocol_state: ProtocolContractState,
     pending_requests: LookupMap<[u8; 32], Option<(String, String)>>,
@@ -96,15 +96,15 @@ impl MpcContract {
         self.request_counter = counter;
     }
 
-    pub fn test_init() -> Self {
+    pub fn init(threshold: usize, candidates: BTreeMap<AccountId, CandidateInfo>) -> Self {
         MpcContract {
             protocol_state: ProtocolContractState::Initializing(InitializingContractState {
-                candidates: Candidates::default(),
-                threshold: 2,
+                candidates: Candidates { candidates },
+                threshold,
                 pk_votes: PkVotes::new(),
             }),
             pending_requests: LookupMap::new(b"m"),
-            request_counter: 2,
+            request_counter: 0,
         }
     }
 }
@@ -119,15 +119,7 @@ impl VersionedMpcContract {
             threshold,
             serde_json::to_string(&candidates).unwrap()
         );
-        Self::V0(MpcContract {
-            protocol_state: ProtocolContractState::Initializing(InitializingContractState {
-                candidates: Candidates { candidates },
-                threshold,
-                pk_votes: PkVotes::new(),
-            }),
-            pending_requests: LookupMap::new(b"m"),
-            request_counter: 0,
-        })
+        Self::V0(MpcContract::init(threshold, candidates))
     }
 
     // This function can be used to transfer the MPC network to a new contract.
