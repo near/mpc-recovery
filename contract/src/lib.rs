@@ -196,11 +196,11 @@ impl MpcContract {
         }
     }
 
-    pub fn vote_leave(&mut self, acc_id_to_leave: AccountId) -> bool {
+    pub fn vote_leave(&mut self, kick: AccountId) -> bool {
         log!(
-            "vote_leave: signer={}, acc_id_to_leave={}",
+            "vote_leave: signer={}, kick={}",
             env::signer_account_id(),
-            acc_id_to_leave
+            kick
         );
         match &mut self.protocol_state {
             ProtocolContractState::Running(RunningContractState {
@@ -215,17 +215,17 @@ impl MpcContract {
                 if !participants.contains_key(&signer_account_id) {
                     env::panic_str("calling account is not in the participant set");
                 }
-                if !participants.contains_key(&acc_id_to_leave) {
+                if !participants.contains_key(&kick) {
                     env::panic_str("account to leave is not in the participant set");
                 }
                 if participants.len() <= *threshold {
                     env::panic_str("the number of participants can not go below the threshold");
                 }
-                let voted = leave_votes.entry(acc_id_to_leave.clone());
+                let voted = leave_votes.entry(kick.clone());
                 voted.insert(signer_account_id);
                 if voted.len() >= *threshold {
                     let mut new_participants = participants.clone();
-                    new_participants.remove(&acc_id_to_leave);
+                    new_participants.remove(&kick);
                     self.protocol_state =
                         ProtocolContractState::Resharing(ResharingContractState {
                             old_epoch: *epoch,

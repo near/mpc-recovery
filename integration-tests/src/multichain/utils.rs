@@ -44,7 +44,7 @@ pub async fn vote_leave(
             account
                 .call(mpc_contract, "vote_leave")
                 .args_json(serde_json::json!({
-                    "acc_id_to_leave": account_id
+                    "kick": account_id
                 }))
                 .transact()
         })
