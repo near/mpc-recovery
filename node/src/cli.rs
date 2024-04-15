@@ -212,7 +212,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                     });
 
                     let key_storage =
-                        storage::secret_storage::init(Some(&gcp_service), &storage_options);
+                        storage::secret_storage::init(Some(&gcp_service), &storage_options, &account_id);
                     let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(
                         storage::triple_storage::init(Some(&gcp_service), &account_id),
                     ));
