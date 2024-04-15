@@ -17,6 +17,8 @@ use near_workspaces::{Account, AccountId, Contract, Worker};
 use serde_json::json;
 use std::collections::HashMap;
 
+use self::local::NodeConfig;
+
 const NETWORK: &str = "mpc_it_network";
 
 #[derive(Clone)]
@@ -128,16 +130,17 @@ impl Nodes<'_> {
         Ok(())
     }
 
-    pub async fn kill_node(&mut self, account_id: &AccountId) -> anyhow::Result<()> {
-        match self {
+    pub async fn kill_node(&mut self, account_id: &AccountId) -> anyhow::Result<NodeConfig>  {
+        let killed_node_config = match self {
             Nodes::Local { nodes, .. } => {
                 let (index, node) = nodes
                     .iter_mut()
                     .enumerate()
                     .find(|(_, node)| node.account_id == *account_id)
                     .unwrap();
-                node.kill()?;
+                let node_killed = node.kill()?;
                 nodes.remove(index);
+                node_killed
             }
             Nodes::Docker { nodes, .. } => {
                 let (index, node) = nodes
@@ -145,13 +148,32 @@ impl Nodes<'_> {
                     .enumerate()
                     .find(|(_, node)| node.account_id == *account_id)
                     .unwrap();
-                node.kill();
+                let node_killed = node.kill();
                 nodes.remove(index);
+                node_killed
             }
-        }
+        };
 
         // wait for the node to be removed from the network
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        Ok(killed_node_config)
+    }
+
+    pub async fn restart_node(
+        &mut self,
+        node_config: NodeConfig,
+    ) -> anyhow::Result<()> {
+        let account_id = node_config.account_id.clone();
+        tracing::info!(%account_id, "restarting node");
+        match self {
+            Nodes::Local { ctx, nodes } => {
+                nodes.push(local::Node::restart(ctx, node_config).await?)
+            }
+            Nodes::Docker { ctx, nodes } => {
+                nodes.push(containers::Node::restart(ctx, node_config).await?)
+            }
+        }
 
         Ok(())
     }
