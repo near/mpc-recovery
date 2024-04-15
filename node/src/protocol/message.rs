@@ -5,6 +5,7 @@ use super::triple::TripleId;
 use crate::gcp::error::SecretStorageError;
 use crate::http_client::SendError;
 use crate::mesh::Mesh;
+use crate::util;
 
 use async_trait::async_trait;
 use cait_sith::protocol::{InitializationError, MessageData, Participant, ProtocolError};
@@ -43,6 +44,8 @@ pub struct TripleMessage {
     pub epoch: u64,
     pub from: Participant,
     pub data: MessageData,
+    // UNIX timestamp as seconds since the epoch
+    pub timestamp: u64
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -53,6 +56,8 @@ pub struct PresignatureMessage {
     pub epoch: u64,
     pub from: Participant,
     pub data: MessageData,
+    // UNIX timestamp as seconds since the epoch
+    pub timestamp: u64
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -66,6 +71,8 @@ pub struct SignatureMessage {
     pub epoch: u64,
     pub from: Participant,
     pub data: MessageData,
+    // UNIX timestamp as seconds since the epoch
+    pub timestamp: u64
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -251,6 +258,11 @@ impl MessageHandler for RunningState {
         for (id, queue) in queue.presignature_bins.entry(self.epoch).or_default() {
             let mut leftover_messages = Vec::new();
             while let Some(message) = queue.pop_front() {
+                // Skip message if it already timed out
+                if util::is_elapsed_longer_than_timeout(message.timestamp, crate::types::PROTOCOL_PRESIG_TIMEOUT) {
+                    continue;
+                }
+                
                 match presignature_manager
                     .get_or_generate(
                         participants,
@@ -267,11 +279,12 @@ impl MessageHandler for RunningState {
                     Err(presignature::GenerationError::AlreadyGenerated) => {
                         tracing::info!(id, "presignature already generated, nothing left to do")
                     }
-                    Err(presignature::GenerationError::Timeout) => {
-                        tracing::info!(id, "presignature msg already timed out")
+                    Err(presignature::GenerationError::TripleIsGenerating(_)) => {
+                        // Store the message until triple gets generated
+                        leftover_messages.push(message)
                     }
                     Err(presignature::GenerationError::TripleIsMissing(_)) => {
-                        // Store the message until we are ready to process it
+                        // Store the message until triple is ready
                         leftover_messages.push(message)
                     }
                     Err(presignature::GenerationError::CaitSithInitializationError(error)) => {
@@ -296,6 +309,10 @@ impl MessageHandler for RunningState {
         for (receipt_id, queue) in queue.signature_bins.entry(self.epoch).or_default() {
             let mut leftover_messages = Vec::new();
             while let Some(message) = queue.pop_front() {
+                // Skip message if it already timed out
+                if util::is_elapsed_longer_than_timeout(message.timestamp, crate::types::PROTOCOL_SIGNATURE_TIMEOUT) {
+                    continue;
+                }
                 tracing::info!(
                     presignature_id = message.presignature_id,
                     "new signature message"
@@ -347,7 +364,6 @@ impl MessageHandler for RunningState {
         triple_manager.clear_failed_triples();
         triple_manager.clear_taken();
         presignature_manager.clear_taken();
-        presignature_manager.clear_requested();
         Ok(())
     }
 }

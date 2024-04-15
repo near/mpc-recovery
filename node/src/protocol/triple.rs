@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
+use chrono::Utc;
 
 /// Unique number used to identify a specific ongoing triple generation protocol.
 /// Without `TripleId` it would be unclear where to route incoming cait-sith triple generation
@@ -245,9 +246,17 @@ impl TripleManager {
         id1: TripleId,
     ) -> Result<(Triple, Triple), GenerationError> {
         if !self.triples.contains_key(&id0) {
-            Err(GenerationError::TripleIsMissing(id0))
+            if self.generators.contains_key(&id0) {
+                Err(GenerationError::TripleIsGenerating(id0))
+            } else {
+                Err(GenerationError::TripleIsMissing(id0))
+            }
         } else if !self.triples.contains_key(&id1) {
-            Err(GenerationError::TripleIsMissing(id1))
+            if self.generators.contains_key(&id1) {
+                Err(GenerationError::TripleIsGenerating(id1))
+            } else {
+                Err(GenerationError::TripleIsMissing(id1))
+            }
         } else {
             self.delete_triple_from_storage(id0).await?;
             self.delete_triple_from_storage(id1).await?;
@@ -405,6 +414,7 @@ impl TripleManager {
                                     epoch: self.epoch,
                                     from: self.me,
                                     data: data.clone(),
+                                    timestamp: Utc::now().timestamp() as u64
                                 },
                             ))
                         }
@@ -416,6 +426,7 @@ impl TripleManager {
                             epoch: self.epoch,
                             from: self.me,
                             data,
+                            timestamp: Utc::now().timestamp() as u64
                         },
                     )),
                     Action::Return(output) => {

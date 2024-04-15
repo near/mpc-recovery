@@ -18,6 +18,7 @@ use rand::SeedableRng;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
+use chrono::Utc;
 
 /// Duration for which completed signatures are retained.
 pub const COMPLETION_EXISTENCE_TIMEOUT: Duration = Duration::from_secs(120 * 60);
@@ -386,6 +387,7 @@ impl SignatureManager {
                                     epoch: self.epoch,
                                     from: self.me,
                                     data: data.clone(),
+                                    timestamp: Utc::now().timestamp() as u64
                                 },
                             ))
                         }
@@ -402,6 +404,7 @@ impl SignatureManager {
                             epoch: self.epoch,
                             from: self.me,
                             data,
+                            timestamp: Utc::now().timestamp() as u64
                         },
                     )),
                     Action::Return(output) => {
