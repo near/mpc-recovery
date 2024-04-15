@@ -6,6 +6,7 @@ use crate::types::{PublicKey, SignatureProtocol};
 use crate::util::{AffinePointExt, ScalarExt};
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::{FullSignature, PresignOutput};
+use chrono::Utc;
 use k256::{Scalar, Secp256k1};
 use near_crypto::Signer;
 use near_fetch::signer::ExposeAccountId;
@@ -18,7 +19,6 @@ use rand::SeedableRng;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
-use chrono::Utc;
 
 /// Duration for which completed signatures are retained.
 pub const COMPLETION_EXISTENCE_TIMEOUT: Duration = Duration::from_secs(120 * 60);

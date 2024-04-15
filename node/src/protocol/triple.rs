@@ -9,6 +9,7 @@ use crate::types::TripleProtocol;
 use crate::util::AffinePointExt;
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::triples::{TripleGenerationOutput, TriplePub, TripleShare};
+use chrono::Utc;
 use highway::{HighwayHash, HighwayHasher};
 use k256::elliptic_curve::group::GroupEncoding;
 use k256::Secp256k1;
@@ -17,7 +18,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
-use chrono::Utc;
 
 /// Unique number used to identify a specific ongoing triple generation protocol.
 /// Without `TripleId` it would be unclear where to route incoming cait-sith triple generation
@@ -414,7 +414,7 @@ impl TripleManager {
                                     epoch: self.epoch,
                                     from: self.me,
                                     data: data.clone(),
-                                    timestamp: Utc::now().timestamp() as u64
+                                    timestamp: Utc::now().timestamp() as u64,
                                 },
                             ))
                         }
@@ -426,7 +426,7 @@ impl TripleManager {
                             epoch: self.epoch,
                             from: self.me,
                             data,
-                            timestamp: Utc::now().timestamp() as u64
+                            timestamp: Utc::now().timestamp() as u64,
                         },
                     )),
                     Action::Return(output) => {

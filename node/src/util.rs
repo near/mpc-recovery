@@ -1,10 +1,10 @@
 use crate::types::PublicKey;
+use chrono::{DateTime, LocalResult, TimeZone, Utc};
 use k256::elliptic_curve::scalar::FromUintUnchecked;
 use k256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
 use k256::{AffinePoint, EncodedPoint, Scalar, U256};
 use std::env;
 use std::time::Duration;
-use chrono::{DateTime, LocalResult, TimeZone, Utc};
 
 pub trait NearPublicKeyExt {
     fn into_affine_point(self) -> PublicKey;
@@ -90,7 +90,8 @@ pub fn is_elapsed_longer_than_timeout(timestamp_sec: u64, timeout: Duration) -> 
         let now_datetime: DateTime<Utc> = Utc::now();
         // Calculate the difference in seconds
         let elapsed_duration = now_datetime.signed_duration_since(msg_timestamp);
-        let timeout = chrono::Duration::seconds(timeout.as_secs() as i64) + chrono::Duration::nanoseconds(timeout.subsec_nanos() as i64);
+        let timeout = chrono::Duration::seconds(timeout.as_secs() as i64)
+            + chrono::Duration::nanoseconds(timeout.subsec_nanos() as i64);
         elapsed_duration > timeout
     } else {
         false

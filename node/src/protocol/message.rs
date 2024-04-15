@@ -45,7 +45,7 @@ pub struct TripleMessage {
     pub from: Participant,
     pub data: MessageData,
     // UNIX timestamp as seconds since the epoch
-    pub timestamp: u64
+    pub timestamp: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -57,7 +57,7 @@ pub struct PresignatureMessage {
     pub from: Participant,
     pub data: MessageData,
     // UNIX timestamp as seconds since the epoch
-    pub timestamp: u64
+    pub timestamp: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -72,7 +72,7 @@ pub struct SignatureMessage {
     pub from: Participant,
     pub data: MessageData,
     // UNIX timestamp as seconds since the epoch
-    pub timestamp: u64
+    pub timestamp: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -259,10 +259,13 @@ impl MessageHandler for RunningState {
             let mut leftover_messages = Vec::new();
             while let Some(message) = queue.pop_front() {
                 // Skip message if it already timed out
-                if util::is_elapsed_longer_than_timeout(message.timestamp, crate::types::PROTOCOL_PRESIG_TIMEOUT) {
+                if util::is_elapsed_longer_than_timeout(
+                    message.timestamp,
+                    crate::types::PROTOCOL_PRESIG_TIMEOUT,
+                ) {
                     continue;
                 }
-                
+
                 match presignature_manager
                     .get_or_generate(
                         participants,
@@ -310,7 +313,10 @@ impl MessageHandler for RunningState {
             let mut leftover_messages = Vec::new();
             while let Some(message) = queue.pop_front() {
                 // Skip message if it already timed out
-                if util::is_elapsed_longer_than_timeout(message.timestamp, crate::types::PROTOCOL_SIGNATURE_TIMEOUT) {
+                if util::is_elapsed_longer_than_timeout(
+                    message.timestamp,
+                    crate::types::PROTOCOL_SIGNATURE_TIMEOUT,
+                ) {
                     continue;
                 }
                 tracing::info!(

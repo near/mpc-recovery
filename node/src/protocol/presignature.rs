@@ -7,12 +7,12 @@ use crate::types::{PresignatureProtocol, PublicKey, SecretKeyShare};
 use crate::util::AffinePointExt;
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::{KeygenOutput, PresignArguments, PresignOutput};
+use chrono::Utc;
 use k256::Secp256k1;
 use near_lake_primitives::AccountId;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Instant;
-use chrono::Utc;
 
 /// Unique number used to identify a specific ongoing presignature generation protocol.
 /// Without `PresignatureId` it would be unclear where to route incoming cait-sith presignature
@@ -313,34 +313,31 @@ impl PresignatureManager {
                     tracing::info!(id, "joining protocol to generate a new presignature");
                     let (triple0, triple1) = match triple_manager.take_two(triple0, triple1).await {
                         Ok(result) => result,
-                        Err(error) => {
-                            match error {
-                                GenerationError::TripleIsGenerating(_) => {
-                                    tracing::warn!(
+                        Err(error) => match error {
+                            GenerationError::TripleIsGenerating(_) => {
+                                tracing::warn!(
                                         ?error,
                                         id,
                                         triple0,
                                         triple1,
                                         "could not initiate non-introduced presignature: one triple is generating"
                                     );
-                                    return Err(error);
-                                }
-                                GenerationError::TripleIsMissing(_) => {
-                                    tracing::warn!(
+                                return Err(error);
+                            }
+                            GenerationError::TripleIsMissing(_) => {
+                                tracing::warn!(
                                         ?error,
                                         id,
                                         triple0,
                                         triple1,
                                         "could not initiate non-introduced presignature: one triple is missing"
                                     );
-                                    return Err(error);
-                                }
-                                _ => {
-                                    return Err(error);
-                                }
+                                return Err(error);
                             }
-                            
-                        }
+                            _ => {
+                                return Err(error);
+                            }
+                        },
                     };
                     let generator = Self::generate_internal(
                         participants,
