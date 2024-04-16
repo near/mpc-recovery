@@ -79,7 +79,9 @@ struct DiskNodeStorage {
 
 impl DiskNodeStorage {
     pub fn new(path: &str) -> Self {
-        Self { path: PathBuf::from(path) }
+        Self {
+            path: PathBuf::from(path),
+        }
     }
 }
 
@@ -114,16 +116,18 @@ impl SecretNodeStorage for DiskNodeStorage {
 
                 Ok(Some(data))
             }
-            _ => Ok(None)
+            _ => Ok(None),
         }
-
-        
     }
 }
 
 pub type SecretNodeStorageBox = Box<dyn SecretNodeStorage + Send + Sync>;
 
-pub fn init(gcp_service: Option<&GcpService>, opts: &Options, account_id: &AccountId) -> SecretNodeStorageBox {
+pub fn init(
+    gcp_service: Option<&GcpService>,
+    opts: &Options,
+    account_id: &AccountId,
+) -> SecretNodeStorageBox {
     match gcp_service {
         Some(gcp) if opts.sk_share_secret_id.is_some() => Box::new(SecretManagerNodeStorage::new(
             &gcp.secret_manager.clone(),

@@ -160,10 +160,7 @@ impl Nodes<'_> {
         Ok(killed_node_config)
     }
 
-    pub async fn restart_node(
-        &mut self,
-        node_config: NodeConfig,
-    ) -> anyhow::Result<()> {
+    pub async fn restart_node(&mut self, node_config: NodeConfig) -> anyhow::Result<()> {
         let account_id = node_config.account_id.clone();
         tracing::info!(%account_id, "restarting node");
         match self {

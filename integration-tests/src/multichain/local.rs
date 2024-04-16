@@ -142,7 +142,7 @@ impl Node {
             sign_sk,
             cipher_pk,
             cipher_sk,
-            cfg: cfg,
+            cfg,
             web_port,
             process,
         })
