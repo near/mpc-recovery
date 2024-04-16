@@ -28,7 +28,11 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
             assert!(ctx.remove_participant(None).await.is_err());
             assert!(ctx.add_participant().await.is_ok());
             assert!(ctx.remove_participant(None).await.is_ok());
-            Ok(())
+            // make sure signing works after reshare
+            let new_state = wait_for::running_mpc(&ctx, None).await?;
+            wait_for::has_at_least_triples(&ctx, 2).await?;
+            wait_for::has_at_least_presignatures(&ctx, 2).await?;
+            actions::single_signature_production(&ctx, &new_state).await
         })
     })
     .await
