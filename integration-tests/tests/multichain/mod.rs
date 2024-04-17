@@ -278,15 +278,18 @@ async fn test_latest_block_height() -> anyhow::Result<()> {
 async fn test_signature_offline_node_back_online() -> anyhow::Result<()> {
     with_multichain_nodes(MultichainConfig::default(), |mut ctx| {
         Box::pin(async move {
-            let state_0 = wait_for::running_mpc(&ctx, 0).await?;
+            let state_0 = wait_for::running_mpc(&ctx, Some(0)).await?;
             assert_eq!(state_0.participants.len(), 3);
             wait_for::has_at_least_triples(&ctx, 4).await?;
 
             // Kill the node then have presignature and signature generation only use the active set of nodes
             // to start generating presignatures and signatures.
-            let node_idx_to_kill = 2;
+            let account_id = near_workspaces::types::AccountId::from_str(
+                state_0.participants.keys().last().unwrap().clone().as_ref(),
+            )
+            .unwrap();
 
-            let killed_node_config = ctx.nodes.kill_node(node_idx_to_kill).await?;
+            let killed_node_config = ctx.nodes.kill_node(&account_id).await?;
 
             println!("node 2 is killed!");
             // This could potentially fail and timeout the first time if the participant set picked up is the
@@ -299,6 +302,7 @@ async fn test_signature_offline_node_back_online() -> anyhow::Result<()> {
             // comes in for resumeable MPC.
             if presig_res.is_err() || sig_res.is_err() {
                 // Retry if the first attempt failed.
+                wait_for::has_at_least_triples(&ctx, 4).await?;
                 wait_for::has_at_least_presignatures(&ctx, 2).await?;
                 actions::single_signature_production(&ctx, &state_0).await?;
             }
@@ -308,7 +312,8 @@ async fn test_signature_offline_node_back_online() -> anyhow::Result<()> {
 
             println!("node 2 is restarted!");
 
-            wait_for::has_at_least_presignatures(&ctx, 2).await?;
+            wait_for::has_at_least_triples(&ctx, 6).await?;
+            wait_for::has_at_least_presignatures(&ctx, 3).await?;
             actions::single_signature_production(&ctx, &state_0).await?;
 
             Ok(())

@@ -152,7 +152,7 @@ pub async fn has_at_least_presignatures<'a>(
     let mut state_views = Vec::new();
     for id in 0..ctx.nodes.len() {
         let state_view = is_enough_presignatures(id)
-            .retry(&ExponentialBuilder::default().with_max_times(6))
+            .retry(&ExponentialBuilder::default().with_max_times(15))
             .await
             .with_context(|| format!("mpc node '{id}' failed to generate '{expected_presignature_count}' presignatures before deadline"))?;
         state_views.push(state_view);
@@ -221,7 +221,7 @@ pub async fn signature_responded(
     };
 
     let signature = is_tx_ready
-        .retry(&ExponentialBuilder::default().with_max_times(6))
+        .retry(&ExponentialBuilder::default().with_max_times(15))
         .await
         .with_context(|| "failed to wait for signature response")?;
     Ok(signature)
