@@ -386,7 +386,8 @@ impl MpcContract {
                 None => {
                     // Make sure we have enough gas left to do 1 more call and clean up afterwards
                     // Observationally 30 calls < 300 TGas so 2 calls < 20 TGas
-                    if depth > 30 && env::prepaid_gas() > Gas::from_tgas(20) {
+                    // We keep one call back so we can cleanup then call panic on the next call
+                    if depth > 29 {
                         self.fail(
                             "Signature was not provided in time. Please, try again.",
                             payload,
