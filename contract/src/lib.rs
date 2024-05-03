@@ -388,10 +388,11 @@ impl MpcContract {
                     // Observationally 30 calls < 300 TGas so 2 calls < 20 TGas
                     // We keep one call back so we can cleanup then call panic on the next call
                     if depth > 29 {
-                        self.fail(
-                            "Signature was not provided in time. Please, try again.",
-                            payload,
-                        )
+                        self.remove_request(&payload);
+                        let self_id = env::current_account_id();
+                        PromiseOrValue::Promise(Self::ext(self_id).fail_helper(
+                            "Signature was not provided in time. Please, try again.".to_string(),
+                        ))
                     } else {
                         log!(&format!(
                             "sign_helper: signature not ready yet (depth={})",
@@ -405,18 +406,11 @@ impl MpcContract {
                 }
             }
         } else {
-            self.fail("unexpected request", payload)
+            env::panic_str("unexpected request")
         }
     }
 
-    /// Cleanup the state and fail
     /// This allows us to return a panic, without rolling back the state from this call
-    fn fail(&mut self, message: &str, payload: [u8; 32]) -> PromiseOrValue<(String, String)> {
-        self.remove_request(&payload);
-        let self_id = env::current_account_id();
-        PromiseOrValue::Promise(Self::ext(self_id).fail_helper(message.to_string()))
-    }
-
     #[private]
     pub fn fail_helper(&mut self, message: String) {
         env::panic_str(&message);
