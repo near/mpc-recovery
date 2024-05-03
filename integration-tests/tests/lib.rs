@@ -305,15 +305,18 @@ mod check {
     }
 }
 
+// Kept the dead code around because it will be useful in testing and it's implemented everywhere
 trait MpcCheck {
     type Response;
 
     fn assert_ok(self) -> anyhow::Result<Self::Response>;
     fn assert_bad_request_contains(self, expected: &str) -> anyhow::Result<Self::Response>;
     fn assert_unauthorized_contains(self, expected: &str) -> anyhow::Result<Self::Response>;
+    #[allow(dead_code)]
     fn assert_internal_error_contains(self, expected: &str) -> anyhow::Result<Self::Response>;
     fn assert_dependency_error_contains(self, expected: &str) -> anyhow::Result<Self::Response>;
 
+    #[allow(dead_code)]
     fn assert_bad_request(self) -> anyhow::Result<Self::Response>
     where
         Self: Sized,
@@ -326,6 +329,7 @@ trait MpcCheck {
     {
         self.assert_unauthorized_contains("")
     }
+    #[allow(dead_code)]
     fn assert_internal_error(self) -> anyhow::Result<Self::Response>
     where
         Self: Sized,

@@ -11,7 +11,6 @@ use crate::storage::secret_storage::SecretNodeStorageBox;
 use async_trait::async_trait;
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use k256::elliptic_curve::group::GroupEncoding;
-use mpc_keys::hpke;
 use near_crypto::InMemorySigner;
 use near_primitives::types::AccountId;
 
@@ -22,7 +21,6 @@ pub trait CryptographicCtx {
     fn rpc_client(&self) -> &near_fetch::Client;
     fn signer(&self) -> &InMemorySigner;
     fn mpc_contract_id(&self) -> &AccountId;
-    fn cipher_pk(&self) -> &hpke::PublicKey;
     fn sign_sk(&self) -> &near_crypto::SecretKey;
     fn secret_storage(&mut self) -> &mut SecretNodeStorageBox;
 

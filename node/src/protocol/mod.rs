@@ -140,10 +140,6 @@ impl CryptographicCtx for &mut MpcSignProtocol {
         &self.ctx.mpc_contract_id
     }
 
-    fn cipher_pk(&self) -> &hpke::PublicKey {
-        &self.ctx.cipher_pk
-    }
-
     fn sign_sk(&self) -> &near_crypto::SecretKey {
         &self.ctx.sign_sk
     }
