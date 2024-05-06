@@ -11,15 +11,6 @@ pub struct NetworkConfig {
     pub cipher_pk: hpke::PublicKey,
 }
 
-impl NetworkConfig {
-    pub fn test() -> Self {
-        Self {
-            sign_sk: near_crypto::SecretKey::from_seed(near_crypto::KeyType::ED25519, "test"),
-            cipher_pk: hpke::PublicKey::from_bytes(&[0; 32]),
-        }
-    }
-}
-
 #[derive(Default)]
 pub struct Mesh {
     /// Pool of connections to participants. Used to check who is alive in the network.
