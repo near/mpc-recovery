@@ -75,6 +75,48 @@ pub async fn request_sign(
     Ok((payload, payload_hashed, account, tx_hash))
 }
 
+pub async fn request_sign_non_random(
+    ctx: &MultichainTestContext<'_>,
+    account: Account,
+    payload: [u8; 32],
+    payload_hashed: [u8; 32],
+) -> anyhow::Result<([u8; 32], [u8; 32], Account, CryptoHash)> {
+    let signer = InMemorySigner {
+        account_id: account.id().clone(),
+        public_key: account.secret_key().public_key().clone().into(),
+        secret_key: account.secret_key().to_string().parse()?,
+    };
+    let (nonce, block_hash, _) = ctx
+        .rpc_client
+        .fetch_nonce(&signer.account_id, &signer.public_key)
+        .await?;
+    let tx_hash = ctx
+        .jsonrpc_client
+        .call(&RpcBroadcastTxAsyncRequest {
+            signed_transaction: Transaction {
+                nonce,
+                block_hash,
+                signer_id: signer.account_id.clone(),
+                public_key: signer.public_key.clone(),
+                receiver_id: ctx.nodes.ctx().mpc_contract.id().clone(),
+                actions: vec![Action::FunctionCall(FunctionCallAction {
+                    method_name: "sign".to_string(),
+                    args: serde_json::to_vec(&serde_json::json!({
+                        "payload": payload_hashed,
+                        "path": "test",
+                        "key_version": 0,
+                    }))?,
+                    gas: 300_000_000_000_000,
+                    deposit: 0,
+                })],
+            }
+            .sign(&signer),
+        })
+        .await?;
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    Ok((payload, payload_hashed, account, tx_hash))
+}
+
 pub async fn assert_signature(
     account_id: &near_workspaces::AccountId,
     mpc_pk_bytes: &[u8],
@@ -99,6 +141,22 @@ pub async fn single_signature_production(
     let mut mpc_pk_bytes = vec![0x04];
     mpc_pk_bytes.extend_from_slice(&state.public_key.as_bytes()[1..]);
     assert_signature(account.id(), &mpc_pk_bytes, &payload_hash, &signature).await;
+
+    Ok(())
+}
+
+pub async fn single_signature_production_per_payload(
+    ctx: &MultichainTestContext<'_>,
+    state: &RunningContractState,
+) -> anyhow::Result<()> {
+    let worker = &ctx.nodes.ctx().worker;
+    let account = worker.dev_create_account().await?;
+    let payload: [u8; 32] = rand::thread_rng().gen();
+    let payload_hashed = web3::signing::keccak256(&payload);
+    let signature = wait_for::signature_payload_responded(ctx, account.clone(), payload, payload_hashed).await?;
+    let mut mpc_pk_bytes = vec![0x04];
+    mpc_pk_bytes.extend_from_slice(&state.public_key.as_bytes()[1..]);
+    assert_signature(account.id(), &mpc_pk_bytes, &payload_hashed, &signature).await;
 
     Ok(())
 }

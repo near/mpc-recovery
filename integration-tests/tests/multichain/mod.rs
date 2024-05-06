@@ -319,7 +319,7 @@ async fn test_signature_offline_node_back_online() -> anyhow::Result<()> {
             println!("node 2 restarted: running presignature check");
             wait_for::has_at_least_mine_presignatures(&ctx, 1).await?;
             println!("node 2 restarted: running signature check");
-            actions::single_signature_production(&ctx, &state_0).await?;
+            actions::single_signature_production_per_payload(&ctx, &state_0).await?;
 
             Ok(())
         })
