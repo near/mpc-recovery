@@ -171,6 +171,8 @@ impl Nodes<'_> {
                 nodes.push(containers::Node::restart(ctx, node_config).await?)
             }
         }
+        // wait for the node to be added to the network
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         Ok(())
     }
