@@ -18,6 +18,8 @@ pub struct Options {
     /// GCP Datastore URL that will be used to load/store the node's triples and presignatures.
     #[arg(long, env("MPC_RECOVERY_GCP_DATASTORE_URL"))]
     pub gcp_datastore_url: Option<String>,
+    #[arg(long, env("MPC_RECOVERY_SK_SHARE_LOCAL_PATH"))]
+    pub sk_share_local_path: Option<String>,
 }
 
 impl Options {
@@ -33,6 +35,9 @@ impl Options {
         }
         if let Some(gcp_datastore_url) = self.gcp_datastore_url {
             opts.extend(vec!["--gcp-datastore-url".to_string(), gcp_datastore_url]);
+        }
+        if let Some(sk_share_local_path) = self.sk_share_local_path {
+            opts.extend(vec!["--sk-share-local-path".to_string(), sk_share_local_path]);
         }
 
         opts

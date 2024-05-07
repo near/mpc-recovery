@@ -297,7 +297,7 @@ async fn test_signature_offline_node_back_online() -> anyhow::Result<()> {
             // one with the offline node. This is expected behavior for now if a user submits a request in between
             // a node going offline and the system hasn't detected it yet.
             let presig_res = wait_for::has_at_least_mine_presignatures(&ctx, 1).await;
-            let sig_res = actions::single_signature_production(&ctx, &state_0).await;
+            let sig_res = actions::single_signature_production_per_payload(&ctx, &state_0).await;
 
             // Try again if the first attempt failed. This second portion should not be needed when the NEP
             // comes in for resumeable MPC.
@@ -306,7 +306,7 @@ async fn test_signature_offline_node_back_online() -> anyhow::Result<()> {
                 println!("node 2 killed: running presignature check");
                 wait_for::has_at_least_mine_presignatures(&ctx, 1).await?;
                 println!("node 2 killed: running signature check");
-                actions::single_signature_production(&ctx, &state_0).await?;
+                actions::single_signature_production_per_payload(&ctx, &state_0).await?;
             }
 
             // Start the killed node again

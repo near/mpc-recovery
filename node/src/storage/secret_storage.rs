@@ -134,9 +134,12 @@ pub fn init(
             opts.clone().sk_share_secret_id.unwrap().clone(),
         )) as SecretNodeStorageBox,
         _ => {
-            let path = format!("secret_manager_{account_id}");
-            Box::new(DiskNodeStorage::new(&path)) as SecretNodeStorageBox
-            //Box::<MemoryNodeStorage>::default() as SecretNodeStorageBox
+            if let Some(sk_share_local_path) = &opts.sk_share_local_path {
+                let path = format!("{sk_share_local_path}-{account_id}");
+                Box::new(DiskNodeStorage::new(&path)) as SecretNodeStorageBox
+            } else {
+                Box::<MemoryNodeStorage>::default() as SecretNodeStorageBox
+            }
         }
     }
 }

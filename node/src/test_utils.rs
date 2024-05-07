@@ -44,6 +44,7 @@ impl TestTripleManagers {
                     sk_share_secret_id: None,
                     gcp_datastore_url: Some(url.clone()),
                     env: "triple-test".to_string(),
+                    sk_share_local_path: None,
                 };
                 Some(
                     GcpService::init(&account_id, &storage_options)

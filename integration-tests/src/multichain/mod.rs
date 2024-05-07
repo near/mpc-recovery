@@ -255,11 +255,13 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
         crate::env::containers::Datastore::run(docker_client, docker_network, gcp_project_id)
             .await?;
 
+    let sk_share_local_path = "multichain-integration-secret-manager".to_string();
     let storage_options = mpc_recovery_node::storage::Options {
         env: "local-test".to_string(),
         gcp_project_id: "multichain-integration".to_string(),
         sk_share_secret_id: None,
         gcp_datastore_url: Some(datastore.local_address.clone()),
+        sk_share_local_path: Some(sk_share_local_path),
     };
     Ok(Context {
         docker_client,
