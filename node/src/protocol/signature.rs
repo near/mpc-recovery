@@ -200,6 +200,10 @@ impl SignatureManager {
         self.failed_generators.len()
     }
 
+    pub fn me(&self) -> Participant {
+        self.me
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn generate_internal(
         participants: &Participants,
@@ -239,13 +243,18 @@ impl SignatureManager {
         ))
     }
 
+    pub fn take_failed_generator(&mut self) -> Option<(CryptoHash, FailedGenerator)> {
+        self.failed_generators.pop_front()
+    }
+
     pub fn retry_failed_generation(
         &mut self,
+        receipt_id: CryptoHash,
+        failed_generator: &FailedGenerator,
         presignature: Presignature,
         participants: &Participants,
     ) -> Option<()> {
-        let (hash, failed_generator) = self.failed_generators.pop_front()?;
-        tracing::info!(receipt_id = %hash, participants = ?participants.keys().collect::<Vec<_>>(), "restarting failed protocol to generate signature");
+        tracing::info!(receipt_id = %receipt_id, participants = ?participants.keys().collect::<Vec<_>>(), "restarting failed protocol to generate signature");
         let generator = Self::generate_internal(
             participants,
             self.me,
@@ -258,7 +267,7 @@ impl SignatureManager {
             failed_generator.sign_request_timestamp,
         )
         .unwrap();
-        self.generators.insert(hash, generator);
+        self.generators.insert(receipt_id, generator);
         Some(())
     }
 
