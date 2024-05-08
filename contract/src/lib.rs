@@ -9,7 +9,7 @@ use primitives::ParticipantInfo;
 use primitives::{CandidateInfo, Candidates, Participants, PkVotes, Votes};
 use std::collections::{BTreeMap, HashSet};
 
-const GAS_FOR_SIGN_CALL: Gas = Gas::from_gas(3 * 100_000_000_000_000);
+const GAS_FOR_SIGN_CALL: Gas = Gas::from_gas(250_000_000_000_000);
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
 pub struct InitializingContractState {
@@ -387,7 +387,7 @@ impl MpcContract {
                     // Make sure we have enough gas left to do 1 more call and clean up afterwards
                     // Observationally 30 calls < 300 TGas so 2 calls < 20 TGas
                     // We keep one call back so we can cleanup then call panic on the next call
-                    if depth > 29 {
+                    if depth > 30 {
                         self.remove_request(&payload);
                         let self_id = env::current_account_id();
                         PromiseOrValue::Promise(Self::ext(self_id).fail_helper(
