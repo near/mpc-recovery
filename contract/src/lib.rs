@@ -387,7 +387,7 @@ impl MpcContract {
                     // Make sure we have enough gas left to do 1 more call and clean up afterwards
                     // Observationally 30 calls < 300 TGas so 2 calls < 20 TGas
                     // We keep one call back so we can cleanup then call panic on the next call
-                    if depth > 29 {
+                    if depth > 129 {
                         self.remove_request(&payload);
                         let self_id = env::current_account_id();
                         PromiseOrValue::Promise(Self::ext(self_id).fail_helper(
