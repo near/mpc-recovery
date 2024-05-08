@@ -406,7 +406,7 @@ impl CryptographicProtocol for RunningState {
             if let Some((receipt_id, failed_generator)) = signature_manager.take_failed_generator()
             {
                 // only retry the failed signature generator if the proposer of the signature is me
-                if true {
+                if failed_generator.proposer == signature_manager.me() {
                     let Some(presignature) = presignature_manager.take_mine() else {
                         break;
                     };
