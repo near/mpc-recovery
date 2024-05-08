@@ -9,7 +9,7 @@ use primitives::ParticipantInfo;
 use primitives::{CandidateInfo, Candidates, Participants, PkVotes, Votes};
 use std::collections::{BTreeMap, HashSet};
 
-const GAS_FOR_SIGN_CALL: Gas = Gas::from_gas(250_000_000_000_000);
+const GAS_FOR_SIGN_CALL: Gas = Gas::from_tgas(250);
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
 pub struct InitializingContractState {
