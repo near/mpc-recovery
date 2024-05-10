@@ -9,7 +9,6 @@ use clap::Parser;
 use local_ip_address::local_ip;
 use near_crypto::{InMemorySigner, SecretKey};
 use near_primitives::types::AccountId;
-use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use tracing_subscriber::EnvFilter;
@@ -52,7 +51,7 @@ pub enum Cli {
         cipher_sk: String,
         /// The secret key used to sign messages to be sent between nodes.
         #[arg(long, env("MPC_RECOVERY_SIGN_SK"))]
-        sign_sk: String,
+        sign_sk: Option<SecretKey>,
         /// NEAR Lake Indexer options
         #[clap(flatten)]
         indexer_options: indexer::Options,
@@ -135,8 +134,6 @@ impl Cli {
                     cipher_pk,
                     "--cipher-sk".to_string(),
                     cipher_sk,
-                    "--sign-sk".to_string(),
-                    sign_sk,
                     "--min-triples".to_string(),
                     min_triples.to_string(),
                     "--max-triples".to_string(),
@@ -150,6 +147,9 @@ impl Cli {
                     "--max-presignatures".to_string(),
                     max_presignatures.to_string(),
                 ];
+                if let Some(sign_sk) = sign_sk {
+                    args.extend(vec!["--sign-sk".to_string(), sign_sk.to_string()]);
+                }
                 if let Some(my_address) = my_address {
                     args.extend(vec!["--my-address".to_string(), my_address.to_string()]);
                 }
@@ -217,6 +217,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                         storage::triple_storage::init(Some(&gcp_service), &account_id),
                     ));
 
+                    let sign_sk = sign_sk.unwrap_or_else(|| account_sk.clone());
                     let my_address = my_address.unwrap_or_else(|| {
                         let my_ip = local_ip().unwrap();
                         Url::parse(&format!("http://{my_ip}:{web_port}")).unwrap()
@@ -250,7 +251,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                                 cipher_pk: hpke::PublicKey::try_from_bytes(&hex::decode(
                                     cipher_pk,
                                 )?)?,
-                                sign_sk: SecretKey::from_str(&sign_sk)?,
+                                sign_sk,
                             },
                         },
                     );

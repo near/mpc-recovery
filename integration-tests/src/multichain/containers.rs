@@ -53,7 +53,7 @@ impl<'a> Node<'a> {
             web_port: Self::CONTAINER_PORT,
             cipher_pk: hex::encode(cipher_pk.to_bytes()),
             cipher_sk: hex::encode(cipher_sk.to_bytes()),
-            sign_sk: sign_sk.to_string(),
+            sign_sk: Some(sign_sk),
             indexer_options: mpc_recovery_node::indexer::Options {
                 s3_bucket: ctx.localstack.s3_bucket.clone(),
                 s3_region: ctx.localstack.s3_region.clone(),
