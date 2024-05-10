@@ -79,12 +79,16 @@ resource "google_cloud_run_v2_service" "node" {
           }
         }
       }
-      env {
-        name = "MPC_RECOVERY_SIGN_SK"
-        value_source {
-          secret_key_ref {
-            secret  = var.sign_sk_secret_id
-            version = "latest"
+      // include sign_sk as ENV variable if it exists in secrets:
+      dynamic "env" {
+        for_each = var.sign_sk_secret_id == null ? [] : [1]
+        content {
+          name = "MPC_RECOVERY_SIGN_SK"
+          value_source {
+            secret_key_ref {
+              secret  = var.sign_sk_secret_id
+              version = "latest"
+            }
           }
         }
       }

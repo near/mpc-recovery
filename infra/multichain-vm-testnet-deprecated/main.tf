@@ -37,7 +37,7 @@ module "gce-container" {
       },
       {
         name  = "MPC_RECOVERY_SIGN_SK"
-        value = data.google_secret_manager_secret_version.sign_sk_secret_id[count.index].secret_data
+        value = data.google_secret_manager_secret_version.sign_sk_secret_id[count.index] ? data.google_secret_manager_secret_version.sign_sk_secret_id[count.index].secret_data : data.google_secret_manager_secret_version.account_sk_secret_id[count.index].secret_data
       },
       {
         name  = "AWS_ACCESS_KEY_ID"
@@ -52,11 +52,11 @@ module "gce-container" {
         value = "http://${google_compute_address.internal_ips[count.index].address}"
       },
       {
-        name = "MPC_RECOVERY_SK_SHARE_SECRET_ID"
+        name  = "MPC_RECOVERY_SK_SHARE_SECRET_ID"
         value = var.node_configs["${count.index}"].sk_share_secret_id
       },
       {
-        name = "MPC_RECOVERY_ENV",
+        name  = "MPC_RECOVERY_ENV",
         value = var.env
       }
     ])
