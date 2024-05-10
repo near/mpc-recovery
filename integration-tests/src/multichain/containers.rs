@@ -44,6 +44,7 @@ impl<'a> Node<'a> {
         let (cipher_sk, cipher_pk) = hpke::generate();
         let sign_sk =
             near_crypto::SecretKey::from_seed(near_crypto::KeyType::ED25519, "integration-test");
+        let sign_pk = sign_sk.public_key();
         let storage_options = ctx.storage_options.clone();
         let args = mpc_recovery_node::cli::Cli::Start {
             near_rpc: ctx.lake_indexer.rpc_host_address.clone(),
@@ -103,7 +104,7 @@ impl<'a> Node<'a> {
             local_address: format!("http://localhost:{host_port}"),
             cipher_pk,
             cipher_sk,
-            sign_pk: account_sk.public_key(),
+            sign_pk: sign_pk.to_string().parse()?,
         })
     }
 

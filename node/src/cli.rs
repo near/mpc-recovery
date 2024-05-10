@@ -148,10 +148,10 @@ impl Cli {
                     max_presignatures.to_string(),
                 ];
                 if let Some(sign_sk) = sign_sk {
-                    args.extend(vec!["--sign-sk".to_string(), sign_sk.to_string()]);
+                    args.extend(["--sign-sk".to_string(), sign_sk.to_string()]);
                 }
                 if let Some(my_address) = my_address {
-                    args.extend(vec!["--my-address".to_string(), my_address.to_string()]);
+                    args.extend(["--my-address".to_string(), my_address.to_string()]);
                 }
                 args.extend(indexer_options.into_str_args());
                 args.extend(storage_options.into_str_args());

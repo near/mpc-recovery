@@ -453,7 +453,8 @@ where
         ) {
             tracing::error!(from = ?from, "signed message erred out with invalid signature");
             return Err(CryptographicError::Encryption(
-                "invalid signature while verifying authenticity of encrypted ".to_string(),
+                "invalid signature while verifying authenticity of encrypted protocol message"
+                    .to_string(),
             ));
         }
 

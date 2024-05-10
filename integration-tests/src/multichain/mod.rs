@@ -331,7 +331,7 @@ pub async fn host(cfg: MultichainConfig, docker_client: &DockerClient) -> anyhow
                     account_id: account.id().to_string().parse().unwrap(),
                     url: node.address.clone(),
                     cipher_pk: node.cipher_pk.to_bytes(),
-                    sign_pk: node.account_sk.public_key().to_string().parse().unwrap(),
+                    sign_pk: node.sign_sk.public_key().to_string().parse().unwrap(),
                 },
             )
         })
