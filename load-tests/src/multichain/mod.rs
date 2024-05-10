@@ -1,8 +1,8 @@
-use std::{str::FromStr, time::Duration};
+use std::time::Duration;
 
 use goose::goose::{GooseMethod, GooseRequest, GooseUser, TransactionResult};
 use goose_eggs::{validate_and_load_static_assets, Validate};
-use near_crypto::{InMemorySigner, SecretKey};
+use near_crypto::InMemorySigner;
 use near_jsonrpc_client::JsonRpcClient;
 use near_primitives::{
     transaction::{Action, FunctionCallAction, Transaction},
@@ -11,20 +11,23 @@ use near_primitives::{
 use rand::Rng;
 use reqwest::header::CONTENT_TYPE;
 
+use crate::fastauth::primitives::UserSession;
+
 pub async fn multichain_sign(user: &mut GooseUser) -> TransactionResult {
     tracing::info!("multichain_sign");
 
-    // TODO: for better experience we can create real account in prepare_user_credentials and then get it from session
-    let account_id = AccountId::try_from("dev-1660670387515-45063246810397".to_string()).unwrap();
-    let secret_key = SecretKey::from_str("ed25519:4hc3qA3nTE8M63DB8jEZx9ZbHVUPdkMjUAoa11m4xtET7F6w4bk51TwQ3RzEcFhBtXvF6NYzFdiJduaGdJUvynAi").unwrap();
-    let public_key = secret_key.public_key();
-    let multichain_contract_id = AccountId::try_from("multichain0.testnet".to_string()).unwrap(); // TODO: pass in parameters
+    let session = user
+        .get_session_data::<UserSession>()
+        .expect("Session Data must be set");
+
+    let multichain_contract_id =
+        AccountId::try_from("v2.multichain-mpc.testnet".to_string()).unwrap();
     let testnet_rpc_url = "https://rpc.testnet.near.org".to_string();
 
     let signer = InMemorySigner {
-        account_id: account_id.clone(),
-        public_key: public_key.clone(),
-        secret_key,
+        account_id: session.near_account_id.clone(),
+        public_key: session.fa_sk.public_key(),
+        secret_key: session.fa_sk.clone(),
     };
 
     let connector = JsonRpcClient::new_client();
@@ -40,8 +43,8 @@ pub async fn multichain_sign(user: &mut GooseUser) -> TransactionResult {
     tracing::info!("requesting signature for: {:?}", payload_hashed);
 
     let transaction = Transaction {
-        signer_id: account_id.clone(),
-        public_key,
+        signer_id: session.near_account_id.clone(),
+        public_key: session.fa_sk.public_key(),
         nonce,
         receiver_id: multichain_contract_id,
         block_hash,
@@ -84,6 +87,9 @@ pub async fn multichain_sign(user: &mut GooseUser) -> TransactionResult {
         .build();
 
     let goose_response = user.request(goose_request).await?;
+
+    // let text = goose_response.response.unwrap().text().await.unwrap();
+    // tracing::info!("goose_response: {:?}", text);
 
     let rsp = goose_response.response.as_ref().unwrap();
 

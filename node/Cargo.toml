@@ -19,6 +19,7 @@ cait-sith = { git = "https://github.com/LIT-Protocol/cait-sith.git", features = 
     "k256",
 ], rev = "8ad2316"}
 clap = { version = "4.2", features = ["derive", "env"] }
+chrono = "0.4.24"
 google-datastore1 = "5"
 google-secretmanager1 = "5"
 hex = "0.4.3"

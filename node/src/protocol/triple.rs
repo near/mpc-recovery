@@ -8,6 +8,7 @@ use crate::types::TripleProtocol;
 use crate::util::AffinePointExt;
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::triples::{TripleGenerationOutput, TriplePub, TripleShare};
+use chrono::Utc;
 use highway::{HighwayHash, HighwayHasher};
 use k256::elliptic_curve::group::GroupEncoding;
 use k256::Secp256k1;
@@ -244,9 +245,17 @@ impl TripleManager {
         id1: TripleId,
     ) -> Result<(Triple, Triple), GenerationError> {
         if !self.triples.contains_key(&id0) {
-            Err(GenerationError::TripleIsMissing(id0))
+            if self.generators.contains_key(&id0) {
+                Err(GenerationError::TripleIsGenerating(id0))
+            } else {
+                Err(GenerationError::TripleIsMissing(id0))
+            }
         } else if !self.triples.contains_key(&id1) {
-            Err(GenerationError::TripleIsMissing(id1))
+            if self.generators.contains_key(&id1) {
+                Err(GenerationError::TripleIsGenerating(id1))
+            } else {
+                Err(GenerationError::TripleIsMissing(id1))
+            }
         } else {
             self.delete_triple_from_storage(id0).await?;
             self.delete_triple_from_storage(id1).await?;
@@ -404,6 +413,7 @@ impl TripleManager {
                                     epoch: self.epoch,
                                     from: self.me,
                                     data: data.clone(),
+                                    timestamp: Utc::now().timestamp() as u64,
                                 },
                             ))
                         }
@@ -415,6 +425,7 @@ impl TripleManager {
                             epoch: self.epoch,
                             from: self.me,
                             data,
+                            timestamp: Utc::now().timestamp() as u64,
                         },
                     )),
                     Action::Return(output) => {

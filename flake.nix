@@ -22,8 +22,8 @@
           # More agressively cache build artefacts
           # Uses more disk but speeds up compile times significantly
           env = {
-            SCCACHE_GHA_ENABLED = true;
-            RUSTC_WRAPPER = "sccache";
+            # SCCACHE_GHA_ENABLED = true;
+            # RUSTC_WRAPPER = "sccache";
           };
 
           # Everything in this list is added to your path
@@ -39,14 +39,11 @@
               # A nice LSP IDE backend
               rust-analyzer
 
-              # A very opinionated linter
-              clippy
-
               # Adds cargo, rustc and rustfmt
               (rustVersion.override {
 
                 # We need this for rust analyzer to jump to library code
-                extensions = [ "rust-src" ];
+                extensions = [ "rust-src" "clippy" "rustfmt" ];
 
                 # Add foreign compile targets here
                 targets = [

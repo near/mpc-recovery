@@ -146,15 +146,15 @@ impl MessageQueue {
 
                 let start = Instant::now();
                 crate::metrics::NUM_SEND_ENCRYPTED_TOTAL
-                    .with_label_values(&[&account_id])
+                    .with_label_values(&[account_id])
                     .inc();
                 if let Err(err) = send_encrypted(from, client, &info.url, encrypted_partition).await
                 {
                     crate::metrics::NUM_SEND_ENCRYPTED_FAILURE
-                        .with_label_values(&[&account_id])
+                        .with_label_values(&[account_id])
                         .inc();
                     crate::metrics::FAILED_SEND_ENCRYPTED_LATENCY
-                        .with_label_values(&[&account_id])
+                        .with_label_values(&[account_id])
                         .observe(start.elapsed().as_millis() as f64);
 
                     // since we failed, put back all the messages related to this
@@ -163,7 +163,7 @@ impl MessageQueue {
                 } else {
                     compacted += msgs.len();
                     crate::metrics::SEND_ENCRYPTED_LATENCY
-                        .with_label_values(&[&account_id])
+                        .with_label_values(&[account_id])
                         .observe(start.elapsed().as_millis() as f64);
                 }
             }

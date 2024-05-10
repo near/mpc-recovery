@@ -1,5 +1,7 @@
 pub mod actions;
 
+use std::str::FromStr;
+
 use crate::with_multichain_nodes;
 use actions::wait_for;
 use k256::elliptic_curve::point::AffineCoordinates;
@@ -11,68 +13,26 @@ use mpc_recovery_node::protocol::triple::TripleConfig;
 use mpc_recovery_node::test_utils;
 use mpc_recovery_node::types::LatestBlockHeight;
 use mpc_recovery_node::util::{NearPublicKeyExt, ScalarExt};
-use near_workspaces::Account;
 use test_log::test;
 
 #[test(tokio::test)]
 async fn test_multichain_reshare() -> anyhow::Result<()> {
-    with_multichain_nodes(MultichainConfig::default(), |mut ctx| {
+    let config = MultichainConfig::default();
+    with_multichain_nodes(config.clone(), |mut ctx| {
         Box::pin(async move {
-            let state_0 = wait_for::running_mpc(&ctx, 0).await?;
-            assert_eq!(state_0.participants.len(), 3);
-
-            let new_node_account = ctx.nodes.ctx().worker.dev_create_account().await?;
-
-            ctx.nodes
-                .start_node(
-                    new_node_account.id(),
-                    new_node_account.secret_key(),
-                    &ctx.cfg,
-                )
-                .await?;
-
-            // Wait for new node to add itself as a candidate
-            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-
-            let participant_accounts: Vec<Account> = ctx
-                .nodes
-                .near_acc_sk()
-                .iter()
-                .map(|(account_id, account_sk)| {
-                    Account::from_secret_key(
-                        account_id.clone(),
-                        account_sk.clone(),
-                        &ctx.nodes.ctx().worker,
-                    )
-                })
-                .filter(|account| account.id() != new_node_account.id())
-                .collect();
-
-            // vote for new node
-            let vote_futures = participant_accounts
-                .iter()
-                .map(|account| {
-                    let result = account
-                        .call(ctx.nodes.ctx().mpc_contract.id(), "vote_join")
-                        .args_json(serde_json::json!({
-                            "candidate_account_id": new_node_account.id()
-                        }))
-                        .transact();
-                    result
-                })
-                .collect::<Vec<_>>();
-
-            futures::future::join_all(vote_futures).await;
-
-            let state_1 = wait_for::running_mpc(&ctx, 1).await?;
-            assert_eq!(state_1.participants.len(), 4);
-
-            assert_eq!(
-                state_0.public_key, state_1.public_key,
-                "public key must stay the same"
-            );
-
-            Ok(())
+            let state = wait_for::running_mpc(&ctx, Some(0)).await?;
+            assert!(state.threshold == 2);
+            assert!(state.participants.len() == 3);
+            assert!(ctx.remove_participant(None).await.is_ok());
+            // Going below T should error out
+            assert!(ctx.remove_participant(None).await.is_err());
+            assert!(ctx.add_participant().await.is_ok());
+            assert!(ctx.remove_participant(None).await.is_ok());
+            // make sure signing works after reshare
+            let new_state = wait_for::running_mpc(&ctx, None).await?;
+            wait_for::has_at_least_triples(&ctx, 2).await?;
+            wait_for::has_at_least_presignatures(&ctx, 2).await?;
+            actions::single_signature_production(&ctx, &new_state).await
         })
     })
     .await
@@ -82,7 +42,7 @@ async fn test_multichain_reshare() -> anyhow::Result<()> {
 async fn test_triples_and_presignatures() -> anyhow::Result<()> {
     with_multichain_nodes(MultichainConfig::default(), |ctx| {
         Box::pin(async move {
-            let state_0 = wait_for::running_mpc(&ctx, 0).await?;
+            let state_0 = wait_for::running_mpc(&ctx, Some(0)).await?;
             assert_eq!(state_0.participants.len(), 3);
             wait_for::has_at_least_triples(&ctx, 2).await?;
             wait_for::has_at_least_presignatures(&ctx, 2).await?;
@@ -96,7 +56,7 @@ async fn test_triples_and_presignatures() -> anyhow::Result<()> {
 async fn test_signature_basic() -> anyhow::Result<()> {
     with_multichain_nodes(MultichainConfig::default(), |ctx| {
         Box::pin(async move {
-            let state_0 = wait_for::running_mpc(&ctx, 0).await?;
+            let state_0 = wait_for::running_mpc(&ctx, Some(0)).await?;
             assert_eq!(state_0.participants.len(), 3);
             wait_for::has_at_least_triples(&ctx, 2).await?;
             wait_for::has_at_least_presignatures(&ctx, 2).await?;
@@ -110,25 +70,30 @@ async fn test_signature_basic() -> anyhow::Result<()> {
 async fn test_signature_offline_node() -> anyhow::Result<()> {
     with_multichain_nodes(MultichainConfig::default(), |mut ctx| {
         Box::pin(async move {
-            let state_0 = wait_for::running_mpc(&ctx, 0).await?;
+            let state_0 = wait_for::running_mpc(&ctx, Some(0)).await?;
             assert_eq!(state_0.participants.len(), 3);
-            wait_for::has_at_least_triples(&ctx, 4).await?;
+            wait_for::has_at_least_triples(&ctx, 6).await?;
+            wait_for::has_at_least_mine_triples(&ctx, 2).await?;
 
             // Kill the node then have presignature and signature generation only use the active set of nodes
             // to start generating presignatures and signatures.
-            ctx.nodes.kill_node(2).await?;
+            let account_id = near_workspaces::types::AccountId::from_str(
+                state_0.participants.keys().last().unwrap().clone().as_ref(),
+            )
+            .unwrap();
+            ctx.nodes.kill_node(&account_id).await?;
 
             // This could potentially fail and timeout the first time if the participant set picked up is the
             // one with the offline node. This is expected behavior for now if a user submits a request in between
             // a node going offline and the system hasn't detected it yet.
-            let presig_res = wait_for::has_at_least_presignatures(&ctx, 2).await;
+            let presig_res = wait_for::has_at_least_mine_presignatures(&ctx, 1).await;
             let sig_res = actions::single_signature_production(&ctx, &state_0).await;
 
             // Try again if the first attempt failed. This second portion should not be needed when the NEP
             // comes in for resumeable MPC.
             if presig_res.is_err() || sig_res.is_err() {
                 // Retry if the first attempt failed.
-                wait_for::has_at_least_presignatures(&ctx, 2).await?;
+                wait_for::has_at_least_mine_presignatures(&ctx, 1).await?;
                 actions::single_signature_production(&ctx, &state_0).await?;
             }
 
@@ -173,7 +138,7 @@ async fn test_signature_large_stockpile() -> anyhow::Result<()> {
 
     with_multichain_nodes(config, |ctx| {
         Box::pin(async move {
-            let state_0 = wait_for::running_mpc(&ctx, 0).await?;
+            let state_0 = wait_for::running_mpc(&ctx, Some(0)).await?;
             assert_eq!(state_0.participants.len(), NODES);
             wait_for::has_at_least_triples(&ctx, triple_cfg.min_triples).await?;
             wait_for::has_at_least_presignatures(&ctx, SIGNATURE_AMOUNT).await?;
@@ -191,7 +156,7 @@ async fn test_signature_large_stockpile() -> anyhow::Result<()> {
 async fn test_key_derivation() -> anyhow::Result<()> {
     with_multichain_nodes(MultichainConfig::default(), |ctx| {
         Box::pin(async move {
-            let state_0 = wait_for::running_mpc(&ctx, 0).await?;
+            let state_0 = wait_for::running_mpc(&ctx, Some(0)).await?;
             assert_eq!(state_0.participants.len(), 3);
             wait_for::has_at_least_triples(&ctx, 6).await?;
             wait_for::has_at_least_presignatures(&ctx, 3).await?;
@@ -282,7 +247,7 @@ async fn test_triples_persistence_for_deletion() -> anyhow::Result<()> {
 async fn test_latest_block_height() -> anyhow::Result<()> {
     with_multichain_nodes(MultichainConfig::default(), |ctx| {
         Box::pin(async move {
-            let state_0 = wait_for::running_mpc(&ctx, 0).await?;
+            let state_0 = wait_for::running_mpc(&ctx, Some(0)).await?;
             assert_eq!(state_0.participants.len(), 3);
             wait_for::has_at_least_triples(&ctx, 2).await?;
             wait_for::has_at_least_presignatures(&ctx, 2).await?;

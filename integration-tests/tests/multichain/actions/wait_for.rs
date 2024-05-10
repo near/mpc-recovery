@@ -16,7 +16,7 @@ use near_primitives::views::FinalExecutionStatus;
 
 pub async fn running_mpc<'a>(
     ctx: &MultichainTestContext<'a>,
-    epoch: u64,
+    epoch: Option<u64>,
 ) -> anyhow::Result<RunningContractState> {
     let is_running = || async {
         let state: ProtocolContractState = ctx
@@ -25,17 +25,28 @@ pub async fn running_mpc<'a>(
             .await?;
 
         match state {
-            ProtocolContractState::Running(running) if running.epoch >= epoch => Ok(running),
-            ProtocolContractState::Running(running) => {
-                anyhow::bail!("running with an older epoch: {}", running.epoch)
-            }
+            ProtocolContractState::Running(running) => match epoch {
+                None => Ok(running),
+                Some(expected_epoch) if running.epoch >= expected_epoch => Ok(running),
+                Some(_) => {
+                    anyhow::bail!("running with an older epoch: {}", running.epoch)
+                }
+            },
             _ => anyhow::bail!("not running"),
         }
     };
+    let err_msg = format!(
+        "mpc did not reach {} in time",
+        if epoch.is_some() {
+            "expected epoch"
+        } else {
+            "running state"
+        }
+    );
     is_running
         .retry(&ExponentialBuilder::default().with_max_times(6))
         .await
-        .with_context(|| format!("mpc nodes did not reach epoch '{epoch}' before deadline"))
+        .with_context(|| err_msg)
 }
 
 pub async fn has_at_least_triples<'a>(
@@ -75,6 +86,43 @@ pub async fn has_at_least_triples<'a>(
     Ok(state_views)
 }
 
+pub async fn has_at_least_mine_triples<'a>(
+    ctx: &MultichainTestContext<'a>,
+    expected_mine_triple_count: usize,
+) -> anyhow::Result<Vec<StateView>> {
+    let is_enough_mine_triples = |id| {
+        move || async move {
+            let state_view: StateView = ctx
+                .http_client
+                .get(format!("{}/state", ctx.nodes.url(id)))
+                .send()
+                .await?
+                .json()
+                .await?;
+
+            match state_view {
+                StateView::Running {
+                    triple_mine_count, ..
+                } if triple_mine_count >= expected_mine_triple_count => Ok(state_view),
+                StateView::Running { .. } => {
+                    anyhow::bail!("node does not have enough mine triples yet")
+                }
+                StateView::NotRunning => anyhow::bail!("node is not running"),
+            }
+        }
+    };
+
+    let mut state_views = Vec::new();
+    for id in 0..ctx.nodes.len() {
+        let state_view = is_enough_mine_triples(id)
+            .retry(&ExponentialBuilder::default().with_max_times(15))
+            .await
+            .with_context(|| format!("mpc node '{id}' failed to generate '{expected_mine_triple_count}' triples before deadline"))?;
+        state_views.push(state_view);
+    }
+    Ok(state_views)
+}
+
 pub async fn has_at_least_presignatures<'a>(
     ctx: &MultichainTestContext<'a>,
     expected_presignature_count: usize,
@@ -107,6 +155,44 @@ pub async fn has_at_least_presignatures<'a>(
             .retry(&ExponentialBuilder::default().with_max_times(6))
             .await
             .with_context(|| format!("mpc node '{id}' failed to generate '{expected_presignature_count}' presignatures before deadline"))?;
+        state_views.push(state_view);
+    }
+    Ok(state_views)
+}
+
+pub async fn has_at_least_mine_presignatures<'a>(
+    ctx: &MultichainTestContext<'a>,
+    expected_mine_presignature_count: usize,
+) -> anyhow::Result<Vec<StateView>> {
+    let is_enough_mine_presignatures = |id| {
+        move || async move {
+            let state_view: StateView = ctx
+                .http_client
+                .get(format!("{}/state", ctx.nodes.url(id)))
+                .send()
+                .await?
+                .json()
+                .await?;
+
+            match state_view {
+                StateView::Running {
+                    presignature_mine_count,
+                    ..
+                } if presignature_mine_count >= expected_mine_presignature_count => Ok(state_view),
+                StateView::Running { .. } => {
+                    anyhow::bail!("node does not have enough mine presignatures yet")
+                }
+                StateView::NotRunning => anyhow::bail!("node is not running"),
+            }
+        }
+    };
+
+    let mut state_views = Vec::new();
+    for id in 0..ctx.nodes.len() {
+        let state_view = is_enough_mine_presignatures(id)
+            .retry(&ExponentialBuilder::default().with_max_times(6))
+            .await
+            .with_context(|| format!("mpc node '{id}' failed to generate '{expected_mine_presignature_count}' presignatures before deadline"))?;
         state_views.push(state_view);
     }
     Ok(state_views)

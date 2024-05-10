@@ -414,22 +414,30 @@ impl CryptographicProtocol for RunningState {
             .set(my_requests.len() as i64);
         let mut failed_presigs = Vec::new();
         while presignature_manager.my_len() > 0 {
-            if signature_manager.failed_len() > 0 {
-                let Some(presignature) = presignature_manager.take_mine() else {
-                    break;
-                };
-                let sig_participants = active.intersection(&[&presignature.participants]);
-                if sig_participants.len() < self.threshold {
-                    tracing::debug!(
-                        participants = ?sig_participants.keys_vec(),
-                        "running: we don't have enough participants to generate a failed signature"
-                    );
-                    failed_presigs.push(presignature);
-                    continue;
-                }
+            if let Some((receipt_id, failed_generator)) = signature_manager.take_failed_generator()
+            {
+                // only retry the failed signature generator if the proposer of the signature is me
+                if failed_generator.proposer == signature_manager.me() {
+                    let Some(presignature) = presignature_manager.take_mine() else {
+                        break;
+                    };
+                    let sig_participants = active.intersection(&[&presignature.participants]);
+                    if sig_participants.len() < self.threshold {
+                        tracing::debug!(
+                            participants = ?sig_participants.keys_vec(),
+                            "running: we don't have enough participants to generate a failed signature"
+                        );
+                        failed_presigs.push(presignature);
+                        continue;
+                    }
 
-                signature_manager.retry_failed_generation(presignature, &sig_participants);
-                break;
+                    signature_manager.retry_failed_generation(
+                        receipt_id,
+                        &failed_generator,
+                        presignature,
+                        &sig_participants,
+                    );
+                }
             }
 
             let Some((receipt_id, _)) = my_requests.iter().next() else {

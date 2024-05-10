@@ -1,5 +1,6 @@
 pub mod containers;
 pub mod local;
+pub mod utils;
 
 use crate::env::containers::DockerClient;
 use crate::mpc::TARGET_CONTRACT_DIR;
@@ -12,7 +13,7 @@ use mpc_recovery_node::storage;
 use mpc_recovery_node::storage::triple_storage::TripleNodeStorageBox;
 use near_workspaces::network::Sandbox;
 use near_workspaces::types::SecretKey;
-use near_workspaces::{AccountId, Contract, Worker};
+use near_workspaces::{Account, AccountId, Contract, Worker};
 use serde_json::json;
 use std::collections::HashMap;
 
@@ -99,6 +100,15 @@ impl Nodes<'_> {
         account_to_sk
     }
 
+    pub fn near_accounts(&self) -> Vec<Account> {
+        self.near_acc_sk()
+            .iter()
+            .map(|(account_id, account_sk)| {
+                Account::from_secret_key(account_id.clone(), account_sk.clone(), &self.ctx().worker)
+            })
+            .collect()
+    }
+
     pub async fn start_node(
         &mut self,
         new_node_account_id: &AccountId,
@@ -118,14 +128,24 @@ impl Nodes<'_> {
         Ok(())
     }
 
-    pub async fn kill_node(&mut self, index: usize) -> anyhow::Result<()> {
+    pub async fn kill_node(&mut self, account_id: &AccountId) -> anyhow::Result<()> {
         match self {
             Nodes::Local { nodes, .. } => {
-                nodes[index].kill()?;
+                let (index, node) = nodes
+                    .iter_mut()
+                    .enumerate()
+                    .find(|(_, node)| node.account_id == *account_id)
+                    .unwrap();
+                node.kill()?;
                 nodes.remove(index);
             }
             Nodes::Docker { nodes, .. } => {
-                nodes[index].kill();
+                let (index, node) = nodes
+                    .iter_mut()
+                    .enumerate()
+                    .find(|(_, node)| node.account_id == *account_id)
+                    .unwrap();
+                node.kill();
                 nodes.remove(index);
             }
         }

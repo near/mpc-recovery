@@ -2,12 +2,14 @@ pub mod primitives;
 
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::LookupMap;
-use near_sdk::log;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault, Promise, PromiseOrValue, PublicKey};
+use near_sdk::{log, Gas};
 use primitives::ParticipantInfo;
 use primitives::{CandidateInfo, Candidates, Participants, PkVotes, Votes};
 use std::collections::{BTreeMap, HashSet};
+
+const GAS_FOR_SIGN_CALL: Gas = Gas::from_gas(3 * 100_000_000_000_000);
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
 pub struct InitializingContractState {
@@ -194,11 +196,11 @@ impl MpcContract {
         }
     }
 
-    pub fn vote_leave(&mut self, acc_id_to_leave: AccountId) -> bool {
+    pub fn vote_leave(&mut self, kick: AccountId) -> bool {
         log!(
-            "vote_leave: signer={}, acc_id_to_leave={}",
+            "vote_leave: signer={}, kick={}",
             env::signer_account_id(),
-            acc_id_to_leave
+            kick
         );
         match &mut self.protocol_state {
             ProtocolContractState::Running(RunningContractState {
@@ -213,14 +215,17 @@ impl MpcContract {
                 if !participants.contains_key(&signer_account_id) {
                     env::panic_str("calling account is not in the participant set");
                 }
-                if !participants.contains_key(&acc_id_to_leave) {
+                if !participants.contains_key(&kick) {
                     env::panic_str("account to leave is not in the participant set");
                 }
-                let voted = leave_votes.entry(acc_id_to_leave.clone());
+                if participants.len() <= *threshold {
+                    env::panic_str("the number of participants can not go below the threshold");
+                }
+                let voted = leave_votes.entry(kick.clone());
                 voted.insert(signer_account_id);
                 if voted.len() >= *threshold {
                     let mut new_participants = participants.clone();
-                    new_participants.remove(&acc_id_to_leave);
+                    new_participants.remove(&kick);
                     self.protocol_state =
                         ProtocolContractState::Resharing(ResharingContractState {
                             old_epoch: *epoch,
@@ -336,16 +341,24 @@ impl MpcContract {
             "This version of the signer contract doesn't support versions greater than {}",
             latest_key_version,
         );
+        // Make sure sign call will not run out of gas doing recursive calls because the payload will never be removed
+        assert!(
+            env::prepaid_gas() >= GAS_FOR_SIGN_CALL,
+            "Insufficient gas provided. Provided: {} Required: {}",
+            env::prepaid_gas(),
+            GAS_FOR_SIGN_CALL
+        );
         log!(
-            "sign: signer={}, payload={:?}, path={:?}, key_version={}",
+            "sign: signer={}, predecessor={}, payload={:?}, path={:?}, key_version={}",
             env::signer_account_id(),
+            env::predecessor_account_id(),
             payload,
             path,
             key_version
         );
         match self.pending_requests.get(&payload) {
             None => {
-                self.add_request(&payload, &None);
+                self.add_request(&payload, None);
                 log!(&serde_json::to_string(&near_sdk::env::random_seed_array()).unwrap());
                 Self::ext(env::current_account_id()).sign_helper(payload, 0)
             }
@@ -371,21 +384,36 @@ impl MpcContract {
                     PromiseOrValue::Value(signature)
                 }
                 None => {
-                    if depth > 30 {
+                    // Make sure we have enough gas left to do 1 more call and clean up afterwards
+                    // Observationally 30 calls < 300 TGas so 2 calls < 20 TGas
+                    // We keep one call back so we can cleanup then call panic on the next call
+                    if depth > 29 {
                         self.remove_request(&payload);
-                        env::panic_str("Signature was not provided in time. Please, try again.");
+                        let self_id = env::current_account_id();
+                        PromiseOrValue::Promise(Self::ext(self_id).fail_helper(
+                            "Signature was not provided in time. Please, try again.".to_string(),
+                        ))
+                    } else {
+                        log!(&format!(
+                            "sign_helper: signature not ready yet (depth={})",
+                            depth
+                        ));
+                        let account_id = env::current_account_id();
+                        PromiseOrValue::Promise(
+                            Self::ext(account_id).sign_helper(payload, depth + 1),
+                        )
                     }
-                    log!(&format!(
-                        "sign_helper: signature not ready yet (depth={})",
-                        depth
-                    ));
-                    let account_id = env::current_account_id();
-                    PromiseOrValue::Promise(Self::ext(account_id).sign_helper(payload, depth + 1))
                 }
             }
         } else {
-            env::panic_str("unexpected request");
+            env::panic_str("unexpected request")
         }
+    }
+
+    /// This allows us to return a panic, without rolling back the state from this call
+    #[private]
+    pub fn fail_helper(&mut self, message: String) {
+        env::panic_str(&message);
     }
 
     pub fn respond(&mut self, payload: [u8; 32], big_r: String, s: String) {
@@ -399,9 +427,7 @@ impl MpcContract {
                     big_r,
                     s
                 );
-                if self.pending_requests.contains_key(&payload) {
-                    self.pending_requests.insert(&payload, &Some((big_r, s)));
-                }
+                self.add_signature(&payload, (big_r, s));
             } else {
                 env::panic_str("only participants can respond");
             }
@@ -410,6 +436,49 @@ impl MpcContract {
         }
     }
 
+    /// This is the root public key combined from all the public keys of the participants.
+    pub fn public_key(&self) -> PublicKey {
+        match &self.protocol_state {
+            ProtocolContractState::Running(state) => state.public_key.clone(),
+            ProtocolContractState::Resharing(state) => state.public_key.clone(),
+            _ => env::panic_str("public key not available (protocol is not running or resharing)"),
+        }
+    }
+
+    pub fn version(&self) -> String {
+        env!("CARGO_PKG_VERSION").to_string()
+    }
+
+    /// Key versions refer new versions of the root key that we may choose to generate on cohort changes
+    /// Older key versions will always work but newer key versions were never held by older signers
+    /// Newer key versions may also add new security features, like only existing within a secure enclave
+    /// Currently only 0 is a valid key version
+    pub const fn latest_key_version(&self) -> u32 {
+        0
+    }
+
+    fn add_signature(&mut self, payload: &[u8; 32], signature: (String, String)) {
+        if self.pending_requests.contains_key(payload) {
+            self.pending_requests.insert(payload, &Some(signature));
+        }
+    }
+
+    fn add_request(&mut self, payload: &[u8; 32], signature: Option<(String, String)>) {
+        if self.request_counter > 8 {
+            env::panic_str("Too many pending requests. Please, try again later.");
+        }
+        if !self.pending_requests.contains_key(payload) {
+            self.request_counter += 1;
+        }
+        self.pending_requests.insert(payload, &signature);
+    }
+
+    fn remove_request(&mut self, payload: &[u8; 32]) {
+        self.pending_requests.remove(payload);
+        self.request_counter -= 1;
+    }
+
+    // Helper functions
     #[private]
     #[init(ignore_state)]
     pub fn clean(keys: Vec<near_sdk::json_types::Base64VecU8>) -> Self {
@@ -424,35 +493,12 @@ impl MpcContract {
         }
     }
 
-    /// This is the root public key combined from all the public keys of the participants.
-    pub fn public_key(&self) -> PublicKey {
-        match &self.protocol_state {
-            ProtocolContractState::Running(state) => state.public_key.clone(),
-            ProtocolContractState::Resharing(state) => state.public_key.clone(),
-            _ => env::panic_str("public key not available (protocol is not running or resharing)"),
+    #[private]
+    pub fn clean_payloads(&mut self, payloads: Vec<[u8; 32]>, counter: u32) {
+        log!("clean_payloads");
+        for payload in payloads.iter() {
+            self.pending_requests.remove(payload);
         }
-    }
-
-    /// Key versions refer new versions of the root key that we may choose to generate on cohort changes
-    /// Older key versions will always work but newer key versions were never held by older signers
-    /// Newer key versions may also add new security features, like only existing within a secure enclave
-    /// Currently only 0 is a valid key version
-    pub const fn latest_key_version(&self) -> u32 {
-        0
-    }
-
-    fn add_request(&mut self, payload: &[u8; 32], signature: &Option<(String, String)>) {
-        if self.request_counter > 8 {
-            env::panic_str("Too many pending requests. Please, try again later.");
-        }
-        if !self.pending_requests.contains_key(payload) {
-            self.request_counter += 1;
-        }
-        self.pending_requests.insert(payload, signature);
-    }
-
-    fn remove_request(&mut self, payload: &[u8; 32]) {
-        self.pending_requests.remove(payload);
-        self.request_counter -= 1;
+        self.request_counter = counter;
     }
 }
