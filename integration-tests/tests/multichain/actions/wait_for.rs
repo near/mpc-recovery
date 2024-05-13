@@ -13,7 +13,6 @@ use near_jsonrpc_client::methods::tx::RpcTransactionStatusRequest;
 use near_jsonrpc_client::methods::tx::TransactionInfo;
 use near_lake_primitives::CryptoHash;
 use near_primitives::views::FinalExecutionStatus;
-//use near_workspaces::Account;
 
 pub async fn running_mpc<'a>(
     ctx: &MultichainTestContext<'a>,
@@ -227,21 +226,3 @@ pub async fn signature_responded(
         .with_context(|| "failed to wait for signature response")?;
     Ok(signature)
 }
-
-// pub async fn signature_payload_responded(
-//     ctx: &MultichainTestContext<'_>,
-//     account: Account,
-//     payload: [u8; 32],
-//     payload_hashed: [u8; 32],
-// ) -> anyhow::Result<FullSignature<Secp256k1>> {
-//     let is_signature_ready = || async {
-//         let (_, _, _, tx_hash) = crate::multichain::actions::request_sign_non_random(&ctx, account.clone(), payload, payload_hashed).await?;
-//         signature_responded(ctx, tx_hash).await
-//     };
-
-//     let signature = is_signature_ready
-//         .retry(&ExponentialBuilder::default().with_max_times(6))
-//         .await
-//         .with_context(|| "failed to wait for signature response")?;
-//     Ok(signature)
-// }
