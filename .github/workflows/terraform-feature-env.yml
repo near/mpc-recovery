@@ -1,8 +1,7 @@
 name: Terraform Feature Env
 
 on:
-  pull_request:
-    types: [reopened, opened, synchronize, edited]
+  workflow_dispatch:
 
 jobs:
   terraform_apply:
