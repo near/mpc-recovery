@@ -13,7 +13,7 @@ use near_jsonrpc_client::methods::tx::RpcTransactionStatusRequest;
 use near_jsonrpc_client::methods::tx::TransactionInfo;
 use near_lake_primitives::CryptoHash;
 use near_primitives::views::FinalExecutionStatus;
-use near_workspaces::Account;
+//use near_workspaces::Account;
 
 pub async fn running_mpc<'a>(
     ctx: &MultichainTestContext<'a>,
@@ -228,95 +228,20 @@ pub async fn signature_responded(
     Ok(signature)
 }
 
-pub async fn signature_payload_responded(
-    ctx: &MultichainTestContext<'_>,
-    account: Account,
-    payload: [u8; 32],
-    payload_hashed: [u8; 32],
-) -> anyhow::Result<FullSignature<Secp256k1>> {
-    let is_signature_ready = || async {
-        let (_, _, _, tx_hash) = crate::multichain::actions::request_sign_non_random(&ctx, account.clone(), payload, payload_hashed).await?;
-        signature_responded(ctx, tx_hash).await
-    };
+// pub async fn signature_payload_responded(
+//     ctx: &MultichainTestContext<'_>,
+//     account: Account,
+//     payload: [u8; 32],
+//     payload_hashed: [u8; 32],
+// ) -> anyhow::Result<FullSignature<Secp256k1>> {
+//     let is_signature_ready = || async {
+//         let (_, _, _, tx_hash) = crate::multichain::actions::request_sign_non_random(&ctx, account.clone(), payload, payload_hashed).await?;
+//         signature_responded(ctx, tx_hash).await
+//     };
 
-    let signature = is_signature_ready
-        .retry(&ExponentialBuilder::default().with_max_times(6))
-        .await
-        .with_context(|| "failed to wait for signature response")?;
-    Ok(signature)
-}
-
-
-pub async fn has_at_least_mine_triples<'a>(
-    ctx: &MultichainTestContext<'a>,
-    expected_triple_mine_count: usize,
-) -> anyhow::Result<Vec<StateView>> {
-    let is_enough_triples = |id| {
-        move || async move {
-            let state_view: StateView = ctx
-                .http_client
-                .get(format!("{}/state", ctx.nodes.url(id)))
-                .send()
-                .await?
-                .json()
-                .await?;
-
-            match state_view {
-                StateView::Running { triple_mine_count, .. }
-                    if triple_mine_count >= expected_triple_mine_count =>
-                {
-                    Ok(state_view)
-                }
-                StateView::Running { .. } => anyhow::bail!("node does not have enough mine triples yet"),
-                StateView::NotRunning => anyhow::bail!("node is not running"),
-            }
-        }
-    };
-
-    let mut state_views = Vec::new();
-    for id in 0..ctx.nodes.len() {
-        let state_view = is_enough_triples(id)
-            .retry(&ExponentialBuilder::default().with_max_times(8))
-            .await
-            .with_context(|| format!("mpc node '{id}' failed to generate '{expected_triple_mine_count}' triples before deadline"))?;
-        state_views.push(state_view);
-    }
-    Ok(state_views)
-}
-
-pub async fn has_at_least_mine_presignatures<'a>(
-    ctx: &MultichainTestContext<'a>,
-    expected_presignature_mine_count: usize,
-) -> anyhow::Result<Vec<StateView>> {
-    let is_enough_presignatures = |id| {
-        move || async move {
-            let state_view: StateView = ctx
-                .http_client
-                .get(format!("{}/state", ctx.nodes.url(id)))
-                .send()
-                .await?
-                .json()
-                .await?;
-
-            match state_view {
-                StateView::Running {
-                    presignature_mine_count, ..
-                } if presignature_mine_count >= expected_presignature_mine_count => Ok(state_view),
-                StateView::Running { .. } => {
-                    anyhow::bail!("node does not have enough mine presignatures yet")
-                }
-                StateView::NotRunning => anyhow::bail!("node is not running"),
-            }
-        }
-    };
-
-    let mut state_views = Vec::new();
-    for id in 0..ctx.nodes.len() {
-        let state_view = is_enough_presignatures(id)
-            .retry(&ExponentialBuilder::default().with_max_times(8))
-            .await
-            .with_context(|| format!("mpc node '{id}' failed to generate '{expected_presignature_mine_count}' presignatures before deadline"))?;
-        state_views.push(state_view);
-    }
-    Ok(state_views)
-}
+//     let signature = is_signature_ready
+//         .retry(&ExponentialBuilder::default().with_max_times(6))
+//         .await
+//         .with_context(|| "failed to wait for signature response")?;
+//     Ok(signature)
+// }

@@ -190,7 +190,7 @@ where
     let docker_client = DockerClient::default();
     let nodes =
         mpc_recovery_integration_tests::multichain::run(cfg.clone(), &docker_client).await?;
-    
+
     let sk_local_path = nodes.ctx().storage_options.sk_share_local_path.clone();
 
     let connector = JsonRpcClient::new_client();
@@ -209,9 +209,7 @@ where
     result
 }
 
-pub async fn clear_local_sk_shares(
-    sk_local_path: Option<String>,
-) -> anyhow::Result<()> {
+pub async fn clear_local_sk_shares(sk_local_path: Option<String>) -> anyhow::Result<()> {
     if let Some(sk_share_local_path) = sk_local_path {
         let pattern = format!("{sk_share_local_path}*");
         for entry in glob(&pattern).expect("Failed to read glob pattern") {
@@ -222,7 +220,7 @@ pub async fn clear_local_sk_shares(
                             eprintln!("Failed to delete file {:?}: {}", path.display(), e);
                         }
                     }
-                },
+                }
                 Err(e) => eprintln!("{:?}", e),
             }
         }

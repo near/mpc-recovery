@@ -130,7 +130,7 @@ impl Nodes<'_> {
         Ok(())
     }
 
-    pub async fn kill_node(&mut self, account_id: &AccountId) -> anyhow::Result<NodeConfig>  {
+    pub async fn kill_node(&mut self, account_id: &AccountId) -> anyhow::Result<NodeConfig> {
         let killed_node_config = match self {
             Nodes::Local { nodes, .. } => {
                 let (index, node) = nodes

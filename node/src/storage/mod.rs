@@ -37,7 +37,10 @@ impl Options {
             opts.extend(vec!["--gcp-datastore-url".to_string(), gcp_datastore_url]);
         }
         if let Some(sk_share_local_path) = self.sk_share_local_path {
-            opts.extend(vec!["--sk-share-local-path".to_string(), sk_share_local_path]);
+            opts.extend(vec![
+                "--sk-share-local-path".to_string(),
+                sk_share_local_path,
+            ]);
         }
 
         opts

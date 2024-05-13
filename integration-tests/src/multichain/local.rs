@@ -86,7 +86,7 @@ impl Node {
             cipher_sk,
             cfg: cfg.clone(),
             web_port,
-            process
+            process,
         })
     }
 
@@ -144,7 +144,7 @@ impl Node {
             cipher_sk,
             cfg,
             web_port,
-            process
+            process,
         })
     }
 
