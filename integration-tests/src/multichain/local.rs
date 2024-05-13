@@ -137,8 +137,8 @@ impl Node {
 
         Ok(Self {
             address,
-            account_id: account_id,
-            account_sk: account_sk,
+            account_id,
+            account_sk,
             sign_sk,
             cipher_pk,
             cipher_sk,
