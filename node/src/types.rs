@@ -96,17 +96,8 @@ impl ReshareProtocol {
         me: Participant,
         contract_state: &ResharingContractState,
     ) -> Result<Self, InitializationError> {
-        let old_participants = contract_state
-            .old_participants
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>();
-
-        let new_participants = contract_state
-            .new_participants
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>();
+        let old_participants = contract_state.old_participants.keys_vec();
+        let new_participants = contract_state.new_participants.keys_vec();
 
         Ok(Self {
             protocol: Arc::new(RwLock::new(Box::new(cait_sith::reshare::<Secp256k1>(

@@ -362,8 +362,7 @@ impl PresignatureManager {
     pub fn take_mine(&mut self) -> Option<Presignature> {
         tracing::info!(mine = ?self.mine, "my presignatures");
         let my_presignature_id = self.mine.pop_front()?;
-        self.taken.insert(my_presignature_id, Instant::now());
-        Some(self.presignatures.remove(&my_presignature_id).unwrap())
+        self.take(my_presignature_id)
     }
 
     pub fn take(&mut self, id: PresignatureId) -> Option<Presignature> {
