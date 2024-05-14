@@ -257,8 +257,15 @@ impl TripleManager {
                 Err(GenerationError::TripleIsMissing(id1))
             }
         } else {
-            self.delete_triple_from_storage(id0).await?;
-            self.delete_triple_from_storage(id1).await?;
+            // if we cannot find triples from storage, but we still have triples in memory, then we should still be able to take
+            // them, so the following storage errors can just be handled directly and warned to our logs.
+            if let Err(err) = self.delete_triple_from_storage(id0).await {
+                tracing::warn!(triple_id = id0, ?err, "unable to delete triple: potentially missing from datastore; deleting from memory only");
+            }
+            if let Err(err) = self.delete_triple_from_storage(id1).await {
+                tracing::warn!(triple_id = id1, ?err, "unable to delete triple: potentially missing from datastore; deleting from memory only");
+            }
+
             self.taken.insert(id0, Instant::now());
             self.taken.insert(id1, Instant::now());
 
@@ -301,10 +308,29 @@ impl TripleManager {
 
         let take_two_result = self.take_two(id0, id1).await;
         match take_two_result {
-            Err(error) => {
-                tracing::warn!(?error, "take_two failed in take_two_mine.");
+            Err(error)
+                if matches!(
+                    error,
+                    GenerationError::TripleIsMissing(_) | GenerationError::TripleIsGenerating(_)
+                ) =>
+            {
+                tracing::warn!(
+                    triple_id0 = id0,
+                    triple_id1 = id1,
+                    ?error,
+                    "unable to take two triples: one or both of the triples are missing/not-generated",
+                );
                 self.mine.push_front(id1);
                 self.mine.push_front(id0);
+                None
+            }
+            Err(error) => {
+                tracing::warn!(
+                    triple_id0 = id0,
+                    triple_id1 = id1,
+                    ?error,
+                    "unexpected error encountered while taking two triples"
+                );
                 None
             }
             Ok(val) => Some(val),
