@@ -103,6 +103,69 @@ pub async fn single_signature_production(
     Ok(())
 }
 
+pub async fn request_sign_non_random(
+    ctx: &MultichainTestContext<'_>,
+    account: Account,
+    payload: [u8; 32],
+    payload_hashed: [u8; 32],
+) -> anyhow::Result<([u8; 32], [u8; 32], Account, CryptoHash)> {
+    let signer = InMemorySigner {
+        account_id: account.id().clone(),
+        public_key: account.secret_key().public_key().clone().into(),
+        secret_key: account.secret_key().to_string().parse()?,
+    };
+    let (nonce, block_hash, _) = ctx
+        .rpc_client
+        .fetch_nonce(&signer.account_id, &signer.public_key)
+        .await?;
+    let tx_hash = ctx
+        .jsonrpc_client
+        .call(&RpcBroadcastTxAsyncRequest {
+            signed_transaction: Transaction {
+                nonce,
+                block_hash,
+                signer_id: signer.account_id.clone(),
+                public_key: signer.public_key.clone(),
+                receiver_id: ctx.nodes.ctx().mpc_contract.id().clone(),
+                actions: vec![Action::FunctionCall(FunctionCallAction {
+                    method_name: "sign".to_string(),
+                    args: serde_json::to_vec(&serde_json::json!({
+                        "payload": payload_hashed,
+                        "path": "test",
+                        "key_version": 0,
+                    }))?,
+                    gas: 300_000_000_000_000,
+                    deposit: 0,
+                })],
+            }
+            .sign(&signer),
+        })
+        .await?;
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    Ok((payload, payload_hashed, account, tx_hash))
+}
+
+pub async fn single_payload_signature_production(
+    ctx: &MultichainTestContext<'_>,
+    state: &RunningContractState,
+) -> anyhow::Result<()> {
+    let (payload, payload_hash, account, _) = request_sign(ctx).await?;
+    let signature =
+        wait_for::signature_payload_responded(ctx, account.clone(), payload, payload_hash).await?;
+
+    let mut mpc_pk_bytes = vec![0x04];
+    mpc_pk_bytes.extend_from_slice(&state.public_key.as_bytes()[1..]);
+    assert_signature(
+        account.clone().id(),
+        &mpc_pk_bytes,
+        &payload_hash,
+        &signature,
+    )
+    .await;
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn test_proposition() {
     let big_r = "044bf886afee5a6844a25fa6831a01715e990d3d9e96b792a9da91cfbecbf8477cea57097a3db9fc1d4822afade3d1c4e6d66e99568147304ae34bcfa609d90a16";

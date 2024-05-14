@@ -310,7 +310,8 @@ async fn test_signature_offline_node_back_online() -> anyhow::Result<()> {
 
             wait_for::has_at_least_mine_triples(&ctx, 2).await?;
             wait_for::has_at_least_mine_presignatures(&ctx, 1).await?;
-            actions::single_signature_production(&ctx, &state_0).await?;
+            // retry the same payload multiple times because we might pick a presignature that is not present in node 2 initially
+            actions::single_payload_signature_production(&ctx, &state_0).await?;
 
             Ok(())
         })
