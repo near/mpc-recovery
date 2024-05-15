@@ -236,7 +236,7 @@ pub async fn signature_payload_responded(
 ) -> anyhow::Result<FullSignature<Secp256k1>> {
     let is_signature_ready = || async {
         let (_, _, _, tx_hash) = crate::multichain::actions::request_sign_non_random(
-            &ctx,
+            ctx,
             account.clone(),
             payload,
             payload_hashed,
