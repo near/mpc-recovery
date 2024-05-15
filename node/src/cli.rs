@@ -211,8 +211,11 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                         move || indexer::run(options, mpc_id, account_id, sign_queue, gcp).unwrap()
                     });
 
-                    let key_storage =
-                        storage::secret_storage::init(Some(&gcp_service), &storage_options);
+                    let key_storage = storage::secret_storage::init(
+                        Some(&gcp_service),
+                        &storage_options,
+                        &account_id,
+                    );
                     let triple_storage: LockTripleNodeStorageBox = Arc::new(RwLock::new(
                         storage::triple_storage::init(Some(&gcp_service), &account_id),
                     ));

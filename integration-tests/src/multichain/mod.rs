@@ -17,6 +17,8 @@ use near_workspaces::{Account, AccountId, Contract, Worker};
 use serde_json::json;
 use std::collections::HashMap;
 
+use self::local::NodeConfig;
+
 const NETWORK: &str = "mpc_it_network";
 
 #[derive(Clone)]
@@ -128,16 +130,17 @@ impl Nodes<'_> {
         Ok(())
     }
 
-    pub async fn kill_node(&mut self, account_id: &AccountId) -> anyhow::Result<()> {
-        match self {
+    pub async fn kill_node(&mut self, account_id: &AccountId) -> anyhow::Result<NodeConfig> {
+        let killed_node_config = match self {
             Nodes::Local { nodes, .. } => {
                 let (index, node) = nodes
                     .iter_mut()
                     .enumerate()
                     .find(|(_, node)| node.account_id == *account_id)
                     .unwrap();
-                node.kill()?;
+                let node_killed = node.kill()?;
                 nodes.remove(index);
+                node_killed
             }
             Nodes::Docker { nodes, .. } => {
                 let (index, node) = nodes
@@ -145,12 +148,30 @@ impl Nodes<'_> {
                     .enumerate()
                     .find(|(_, node)| node.account_id == *account_id)
                     .unwrap();
-                node.kill();
+                let node_killed = node.kill();
                 nodes.remove(index);
+                node_killed
             }
-        }
+        };
 
         // wait for the node to be removed from the network
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        Ok(killed_node_config)
+    }
+
+    pub async fn restart_node(&mut self, node_config: NodeConfig) -> anyhow::Result<()> {
+        let account_id = node_config.account_id.clone();
+        tracing::info!(%account_id, "restarting node");
+        match self {
+            Nodes::Local { ctx, nodes } => {
+                nodes.push(local::Node::restart(ctx, node_config).await?)
+            }
+            Nodes::Docker { ctx, nodes } => {
+                nodes.push(containers::Node::restart(ctx, node_config).await?)
+            }
+        }
+        // wait for the node to be added to the network
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         Ok(())
@@ -234,11 +255,13 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
         crate::env::containers::Datastore::run(docker_client, docker_network, gcp_project_id)
             .await?;
 
+    let sk_share_local_path = "multichain-integration-secret-manager".to_string();
     let storage_options = mpc_recovery_node::storage::Options {
         env: "local-test".to_string(),
         gcp_project_id: "multichain-integration".to_string(),
         sk_share_secret_id: None,
         gcp_datastore_url: Some(datastore.local_address.clone()),
+        sk_share_local_path: Some(sk_share_local_path),
     };
     Ok(Context {
         docker_client,

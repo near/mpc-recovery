@@ -22,6 +22,8 @@ use near_jsonrpc_client::JsonRpcClient;
 use near_workspaces::{network::Sandbox, Account, AccountId, Worker};
 
 use crate::multichain::actions::wait_for;
+use glob::glob;
+use std::fs;
 
 pub struct TestContext {
     env: String,
@@ -189,18 +191,40 @@ where
     let nodes =
         mpc_recovery_integration_tests::multichain::run(cfg.clone(), &docker_client).await?;
 
+    let sk_local_path = nodes.ctx().storage_options.sk_share_local_path.clone();
+
     let connector = JsonRpcClient::new_client();
     let jsonrpc_client = connector.connect(&nodes.ctx().lake_indexer.rpc_host_address);
     let rpc_client = near_fetch::Client::from_client(jsonrpc_client.clone());
-    f(MultichainTestContext {
+    let result = f(MultichainTestContext {
         nodes,
         rpc_client,
         jsonrpc_client,
         http_client: reqwest::Client::default(),
         cfg,
     })
-    .await?;
+    .await;
+    clear_local_sk_shares(sk_local_path).await?;
 
+    result
+}
+
+pub async fn clear_local_sk_shares(sk_local_path: Option<String>) -> anyhow::Result<()> {
+    if let Some(sk_share_local_path) = sk_local_path {
+        let pattern = format!("{sk_share_local_path}*");
+        for entry in glob(&pattern).expect("Failed to read glob pattern") {
+            match entry {
+                Ok(path) => {
+                    if path.is_file() {
+                        if let Err(e) = fs::remove_file(&path) {
+                            eprintln!("Failed to delete file {:?}: {}", path.display(), e);
+                        }
+                    }
+                }
+                Err(e) => eprintln!("{:?}", e),
+            }
+        }
+    }
     Ok(())
 }
 

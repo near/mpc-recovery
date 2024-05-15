@@ -704,14 +704,13 @@ async fn load_triples<C: ConsensusCtx + Send + Sync>(
     ctx: C,
 ) -> Result<Vec<TripleData>, ConsensusError> {
     let triple_storage = ctx.triple_storage();
-    let read_lock = triple_storage.read().await;
     let mut retries = 3;
     let mut error = None;
     while retries > 0 {
+        let read_lock = triple_storage.read().await;
         match read_lock.load().await {
             Err(DatastoreStorageError::FetchEntitiesError(_)) => {
                 tracing::info!("There are no triples persisted.");
-                drop(read_lock);
                 return Ok(vec![]);
             }
             Err(e) => {
@@ -720,13 +719,9 @@ async fn load_triples<C: ConsensusCtx + Send + Sync>(
                 error = Some(e);
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
-            Ok(loaded_triples) => {
-                drop(read_lock);
-                return Ok(loaded_triples);
-            }
+            Ok(loaded_triples) => return Ok(loaded_triples),
         }
     }
-    drop(read_lock);
     Err(ConsensusError::DatastoreStorageError(error.unwrap()))
 }
 
