@@ -244,13 +244,13 @@ impl SignatureManager {
         ))
     }
 
-    pub fn retry_failed_generation(
+    fn retry_failed_generation(
         &mut self,
         receipt_id: CryptoHash,
         failed_generator: &FailedGenerator,
         presignature: Presignature,
         participants: &Participants,
-    ) -> Option<()> {
+    ) -> Result<(), InitializationError> {
         tracing::info!(receipt_id = %receipt_id, participants = ?participants.keys_vec(), "restarting failed protocol to generate signature");
         let generator = Self::generate_internal(
             participants,
@@ -262,10 +262,9 @@ impl SignatureManager {
             failed_generator.epsilon,
             failed_generator.delta,
             failed_generator.sign_request_timestamp,
-        )
-        .unwrap();
+        )?;
         self.generators.insert(receipt_id, generator);
-        Some(())
+        Ok(())
     }
 
     /// Starts a new presignature generation protocol.
@@ -275,7 +274,6 @@ impl SignatureManager {
         participants: &Participants,
         receipt_id: CryptoHash,
         presignature: Presignature,
-        public_key: PublicKey,
         msg_hash: [u8; 32],
         epsilon: Scalar,
         delta: Scalar,
@@ -291,7 +289,7 @@ impl SignatureManager {
         let generator = Self::generate_internal(
             participants,
             self.me,
-            public_key,
+            self.public_key,
             self.me,
             presignature,
             msg_hash,
@@ -470,18 +468,18 @@ impl SignatureManager {
             // TODO: we need to decide how to prioritize certain requests over others such as with gas or
             // time of when the request made it into the NEAR network. Ticket: https://github.com/near/mpc-recovery/issues/596
             if alternate {
-                let Some((receipt_id, _)) = my_requests.iter().next() else {
+                let Some(receipt_id) = my_requests.keys().next().cloned() else {
                     failed_presigs.push(presignature);
                     break;
                 };
-
-                let receipt_id = *receipt_id;
-                let my_request = my_requests.remove(&receipt_id).unwrap();
+                let Some(my_request) = my_requests.remove(&receipt_id) else {
+                    failed_presigs.push(presignature);
+                    break;
+                };
                 self.generate(
                     &sig_participants,
                     receipt_id,
                     presignature,
-                    self.public_key,
                     my_request.msg_hash,
                     my_request.epsilon,
                     my_request.delta,
@@ -494,7 +492,7 @@ impl SignatureManager {
                     &failed_generator,
                     presignature,
                     &sig_participants,
-                );
+                )?;
                 continue;
             } else {
                 // This else case should never happen based on the precoonditions of the `while let` loop, but we
