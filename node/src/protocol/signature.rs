@@ -244,10 +244,6 @@ impl SignatureManager {
         ))
     }
 
-    pub fn take_failed_generator(&mut self) -> Option<(CryptoHash, FailedGenerator)> {
-        self.failed_generators.pop_front()
-    }
-
     pub fn retry_failed_generation(
         &mut self,
         receipt_id: CryptoHash,
@@ -255,7 +251,7 @@ impl SignatureManager {
         presignature: Presignature,
         participants: &Participants,
     ) -> Option<()> {
-        tracing::info!(receipt_id = %receipt_id, participants = ?participants.keys().collect::<Vec<_>>(), "restarting failed protocol to generate signature");
+        tracing::info!(receipt_id = %receipt_id, participants = ?participants.keys_vec(), "restarting failed protocol to generate signature");
         let generator = Self::generate_internal(
             participants,
             self.me,
@@ -329,7 +325,7 @@ impl SignatureManager {
             Entry::Vacant(entry) => {
                 tracing::info!(%receipt_id, me = ?self.me, presignature_id, "joining protocol to generate a new signature");
                 let Some(presignature) = presignature_manager.take(presignature_id) else {
-                    tracing::warn!(me = ?self.me, presignature_id, "presignature is missing, can't join");
+                    tracing::warn!(me = ?self.me, presignature_id, "presignature is missing, can't join signature generation protocol");
                     return Ok(None);
                 };
                 tracing::info!(me = ?self.me, presignature_id, "found presignature: ready to start signature generation");
@@ -363,16 +359,20 @@ impl SignatureManager {
                     Ok(action) => action,
                     Err(err) => {
                         tracing::warn!(?err, "signature failed to be produced; pushing request back into failed queue");
-                        self.failed_generators.push_back((
-                            *receipt_id,
-                            FailedGenerator {
-                                proposer: generator.proposer,
-                                msg_hash: generator.msg_hash,
-                                epsilon: generator.epsilon,
-                                delta: generator.delta,
-                                sign_request_timestamp: generator.sign_request_timestamp
-                            },
-                        ));
+                        if generator.proposer == self.me {
+                            // only retry the signature generation if it was initially proposed by us. We do not
+                            // want any nodes to be proposing the same signature multiple times.
+                            self.failed_generators.push_back((
+                                *receipt_id,
+                                FailedGenerator {
+                                    proposer: generator.proposer,
+                                    msg_hash: generator.msg_hash,
+                                    epsilon: generator.epsilon,
+                                    delta: generator.delta,
+                                    sign_request_timestamp: generator.sign_request_timestamp
+                                },
+                            ));
+                        }
                         break false;
                     }
                 };
@@ -437,6 +437,79 @@ impl SignatureManager {
             }
         });
         messages
+    }
+
+    pub fn handle_requests(
+        &mut self,
+        threshold: usize,
+        active: &Participants,
+        my_requests: &mut HashMap<CryptoHash, SignRequest>,
+        presignature_manager: &mut PresignatureManager,
+    ) -> Result<(), super::CryptographicError> {
+        let mut alternate = false;
+        let mut failed_presigs = Vec::new();
+        while let Some(presignature) = {
+            if self.failed_generators.is_empty() && my_requests.is_empty() {
+                None
+            } else {
+                presignature_manager.take_mine()
+            }
+        } {
+            let sig_participants = active.intersection(&[&presignature.participants]);
+            if sig_participants.len() < threshold {
+                tracing::debug!(
+                    participants = ?sig_participants.keys_vec(),
+                    "running: we don't have enough participants to generate a failed signature"
+                );
+                failed_presigs.push(presignature);
+                continue;
+            }
+
+            alternate = !alternate;
+            // NOTE: this prioritizes new requests first then alternates to reattempt failed ones.
+            // TODO: we need to decide how to prioritize certain requests over others such as with gas or
+            // time of when the request made it into the NEAR network. Ticket: https://github.com/near/mpc-recovery/issues/596
+            if alternate {
+                let Some((receipt_id, _)) = my_requests.iter().next() else {
+                    failed_presigs.push(presignature);
+                    break;
+                };
+
+                let receipt_id = *receipt_id;
+                let my_request = my_requests.remove(&receipt_id).unwrap();
+                self.generate(
+                    &sig_participants,
+                    receipt_id,
+                    presignature,
+                    self.public_key,
+                    my_request.msg_hash,
+                    my_request.epsilon,
+                    my_request.delta,
+                    my_request.time_added,
+                )?;
+            } else if let Some((receipt_id, failed_generator)) = self.failed_generators.pop_front()
+            {
+                self.retry_failed_generation(
+                    receipt_id,
+                    &failed_generator,
+                    presignature,
+                    &sig_participants,
+                );
+                continue;
+            } else {
+                // This else case should never happen based on the precoonditions of the `while let` loop, but we
+                // will have it here anyways just in case the code for it gets changed.
+                failed_presigs.push(presignature);
+            }
+        }
+
+        // add back the failed presignatures that were incompatible to be made into
+        // signatures due to failures or lack of participants.
+        for presignature in failed_presigs {
+            presignature_manager.insert_mine(presignature);
+        }
+
+        Ok(())
     }
 
     pub async fn publish<T: Signer + ExposeAccountId>(

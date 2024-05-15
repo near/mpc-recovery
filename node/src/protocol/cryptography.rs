@@ -405,77 +405,22 @@ impl CryptographicProtocol for RunningState {
         crate::metrics::SIGN_QUEUE_SIZE
             .with_label_values(&[&my_account_id])
             .set(sign_queue.len() as i64);
-
-        let mut signature_manager = self.signature_manager.write().await;
         sign_queue.organize(self.threshold, active, ctx.me().await, &my_account_id);
         let my_requests = sign_queue.my_requests(ctx.me().await);
         crate::metrics::SIGN_QUEUE_MINE_SIZE
             .with_label_values(&[&my_account_id])
             .set(my_requests.len() as i64);
-        let mut failed_presigs = Vec::new();
-        while presignature_manager.my_len() > 0 {
-            if let Some((receipt_id, failed_generator)) = signature_manager.take_failed_generator()
-            {
-                // only retry the failed signature generator if the proposer of the signature is me
-                if failed_generator.proposer == signature_manager.me() {
-                    let Some(presignature) = presignature_manager.take_mine() else {
-                        break;
-                    };
-                    let sig_participants = active.intersection(&[&presignature.participants]);
-                    if sig_participants.len() < self.threshold {
-                        tracing::debug!(
-                            participants = ?sig_participants.keys_vec(),
-                            "running: we don't have enough participants to generate a failed signature"
-                        );
-                        failed_presigs.push(presignature);
-                        continue;
-                    }
 
-                    signature_manager.retry_failed_generation(
-                        receipt_id,
-                        &failed_generator,
-                        presignature,
-                        &sig_participants,
-                    );
-                }
-            }
-
-            let Some((receipt_id, _)) = my_requests.iter().next() else {
-                break;
-            };
-
-            let Some(presignature) = presignature_manager.take_mine() else {
-                break;
-            };
-
-            let receipt_id = *receipt_id;
-            let sig_participants = active.intersection(&[&presignature.participants]);
-            if sig_participants.len() < self.threshold {
-                tracing::debug!(
-                    participants = ?sig_participants.keys_vec(),
-                    "running: we don't have enough participants to generate a signature"
-                );
-                failed_presigs.push(presignature);
-                continue;
-            }
-
-            let my_request = my_requests.remove(&receipt_id).unwrap();
-            signature_manager.generate(
-                &sig_participants,
-                receipt_id,
-                presignature,
-                self.public_key,
-                my_request.msg_hash,
-                my_request.epsilon,
-                my_request.delta,
-                my_request.time_added,
-            )?;
-        }
+        let mut signature_manager = self.signature_manager.write().await;
+        signature_manager.handle_requests(
+            self.threshold,
+            active,
+            my_requests,
+            &mut presignature_manager,
+        )?;
         drop(sign_queue);
-        for presignature in failed_presigs {
-            presignature_manager.insert_mine(presignature);
-        }
         drop(presignature_manager);
+
         for (p, msg) in signature_manager.poke() {
             let info = self.fetch_participant(&p)?;
             messages.push(info.clone(), MpcMessage::Signature(msg));
