@@ -161,7 +161,7 @@ impl SignatureGenerator {
 
 /// Generator for signature thas has failed. Only retains essential information
 /// for starting up this failed signature once again.
-pub struct FailedGenerator {
+pub struct GenerationRequest {
     pub proposer: Participant,
     pub msg_hash: [u8; 32],
     pub epsilon: Scalar,
@@ -173,7 +173,7 @@ pub struct SignatureManager {
     /// Ongoing signature generation protocols.
     generators: HashMap<CryptoHash, SignatureGenerator>,
     /// Failed signatures awaiting to be retried.
-    failed_generators: VecDeque<(CryptoHash, FailedGenerator)>,
+    failed: VecDeque<(CryptoHash, GenerationRequest)>,
     /// Set of completed signatures
     completed: HashMap<PresignatureId, Instant>,
     /// Generated signatures assigned to the current node that are yet to be published.
@@ -188,7 +188,7 @@ impl SignatureManager {
     pub fn new(me: Participant, public_key: PublicKey, epoch: u64) -> Self {
         Self {
             generators: HashMap::new(),
-            failed_generators: VecDeque::new(),
+            failed: VecDeque::new(),
             completed: HashMap::new(),
             signatures: Vec::new(),
             me,
@@ -198,7 +198,7 @@ impl SignatureManager {
     }
 
     pub fn failed_len(&self) -> usize {
-        self.failed_generators.len()
+        self.failed.len()
     }
 
     pub fn me(&self) -> Participant {
@@ -210,14 +210,17 @@ impl SignatureManager {
         participants: &Participants,
         me: Participant,
         public_key: PublicKey,
-        proposer: Participant,
         presignature: Presignature,
-        msg_hash: [u8; 32],
-        epsilon: Scalar,
-        delta: Scalar,
-        sign_request_timestamp: Instant,
+        req: GenerationRequest,
     ) -> Result<SignatureGenerator, InitializationError> {
-        let participants: Vec<_> = participants.keys().cloned().collect();
+        let participants = participants.keys_vec();
+        let GenerationRequest {
+            proposer,
+            msg_hash,
+            epsilon,
+            delta,
+            sign_request_timestamp,
+        } = req;
         let PresignOutput { big_r, k, sigma } = presignature.output;
         // TODO: Check whether it is okay to use invert_vartime instead
         let output: PresignOutput<Secp256k1> = PresignOutput {
@@ -247,22 +250,13 @@ impl SignatureManager {
     fn retry_failed_generation(
         &mut self,
         receipt_id: CryptoHash,
-        failed_generator: &FailedGenerator,
+        req: GenerationRequest,
         presignature: Presignature,
         participants: &Participants,
     ) -> Result<(), InitializationError> {
         tracing::info!(receipt_id = %receipt_id, participants = ?participants.keys_vec(), "restarting failed protocol to generate signature");
-        let generator = Self::generate_internal(
-            participants,
-            self.me,
-            self.public_key,
-            failed_generator.proposer,
-            presignature,
-            failed_generator.msg_hash,
-            failed_generator.epsilon,
-            failed_generator.delta,
-            failed_generator.sign_request_timestamp,
-        )?;
+        let generator =
+            Self::generate_internal(participants, self.me, self.public_key, presignature, req)?;
         self.generators.insert(receipt_id, generator);
         Ok(())
     }
@@ -290,12 +284,14 @@ impl SignatureManager {
             participants,
             self.me,
             self.public_key,
-            self.me,
             presignature,
-            msg_hash,
-            epsilon,
-            delta,
-            sign_request_timestamp,
+            GenerationRequest {
+                proposer: self.me,
+                msg_hash,
+                epsilon,
+                delta,
+                sign_request_timestamp,
+            },
         )?;
         self.generators.insert(receipt_id, generator);
         Ok(())
@@ -331,12 +327,14 @@ impl SignatureManager {
                     participants,
                     self.me,
                     self.public_key,
-                    proposer,
                     presignature,
-                    msg_hash,
-                    epsilon,
-                    delta,
-                    Instant::now(),
+                    GenerationRequest {
+                        proposer,
+                        msg_hash,
+                        epsilon,
+                        delta,
+                        sign_request_timestamp: Instant::now(),
+                    },
                 )?;
                 let generator = entry.insert(generator);
                 Ok(Some(&mut generator.protocol))
@@ -360,9 +358,9 @@ impl SignatureManager {
                         if generator.proposer == self.me {
                             // only retry the signature generation if it was initially proposed by us. We do not
                             // want any nodes to be proposing the same signature multiple times.
-                            self.failed_generators.push_back((
+                            self.failed.push_back((
                                 *receipt_id,
-                                FailedGenerator {
+                                GenerationRequest {
                                     proposer: generator.proposer,
                                     msg_hash: generator.msg_hash,
                                     epsilon: generator.epsilon,
@@ -444,10 +442,9 @@ impl SignatureManager {
         my_requests: &mut HashMap<CryptoHash, SignRequest>,
         presignature_manager: &mut PresignatureManager,
     ) -> Result<(), super::CryptographicError> {
-        let mut alternate = false;
         let mut failed_presigs = Vec::new();
-        while let Some(presignature) = {
-            if self.failed_generators.is_empty() && my_requests.is_empty() {
+        while let Some(mut presignature) = {
+            if self.failed.is_empty() && my_requests.is_empty() {
                 None
             } else {
                 presignature_manager.take_mine()
@@ -457,48 +454,48 @@ impl SignatureManager {
             if sig_participants.len() < threshold {
                 tracing::debug!(
                     participants = ?sig_participants.keys_vec(),
-                    "running: we don't have enough participants to generate a failed signature"
+                    "we do not have enough participants to generate a failed signature"
                 );
                 failed_presigs.push(presignature);
                 continue;
             }
 
-            alternate = !alternate;
-            // NOTE: this prioritizes new requests first then alternates to reattempt failed ones.
-            // TODO: we need to decide how to prioritize certain requests over others such as with gas or
-            // time of when the request made it into the NEAR network. Ticket: https://github.com/near/mpc-recovery/issues/596
-            if alternate {
-                let Some(receipt_id) = my_requests.keys().next().cloned() else {
-                    failed_presigs.push(presignature);
-                    break;
-                };
-                let Some(my_request) = my_requests.remove(&receipt_id) else {
-                    failed_presigs.push(presignature);
-                    break;
-                };
-                self.generate(
-                    &sig_participants,
-                    receipt_id,
-                    presignature,
-                    my_request.msg_hash,
-                    my_request.epsilon,
-                    my_request.delta,
-                    my_request.time_added,
-                )?;
-            } else if let Some((receipt_id, failed_generator)) = self.failed_generators.pop_front()
-            {
+            // NOTE: this prioritizes old requests first then tries to do new ones if there's enough presignatures.
+            // TODO: we need to decide how to prioritize certain requests over others such as with gas or time of
+            // when the request made it into the NEAR network.
+            // issue: https://github.com/near/mpc-recovery/issues/596
+            if let Some((receipt_id, failed_req)) = self.failed.pop_front() {
                 self.retry_failed_generation(
                     receipt_id,
-                    &failed_generator,
+                    failed_req,
                     presignature,
                     &sig_participants,
                 )?;
-                continue;
-            } else {
-                // This else case should never happen based on the precoonditions of the `while let` loop, but we
-                // will have it here anyways just in case the code for it gets changed.
-                failed_presigs.push(presignature);
+
+                if let Some(another_presignature) = presignature_manager.take_mine() {
+                    presignature = another_presignature;
+                } else {
+                    break;
+                }
             }
+
+            let Some(receipt_id) = my_requests.keys().next().cloned() else {
+                failed_presigs.push(presignature);
+                continue;
+            };
+            let Some(my_request) = my_requests.remove(&receipt_id) else {
+                failed_presigs.push(presignature);
+                continue;
+            };
+            self.generate(
+                &sig_participants,
+                receipt_id,
+                presignature,
+                my_request.msg_hash,
+                my_request.epsilon,
+                my_request.delta,
+                my_request.time_added,
+            )?;
         }
 
         // add back the failed presignatures that were incompatible to be made into
