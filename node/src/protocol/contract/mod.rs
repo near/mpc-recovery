@@ -3,7 +3,7 @@ pub mod primitives;
 use crate::types::PublicKey;
 use crate::util::NearPublicKeyExt;
 use mpc_contract::ProtocolContractState;
-use near_primitives::types::AccountId;
+use near_account_id::AccountId;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, str::FromStr};
 

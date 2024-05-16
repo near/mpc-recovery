@@ -6,13 +6,14 @@ use cait_sith::triples::TripleGenerationOutput;
 use cait_sith::{protocol::Protocol, KeygenOutput};
 use cait_sith::{FullSignature, PresignOutput};
 use k256::{elliptic_curve::CurveArithmetic, Secp256k1};
-use near_lake_primitives::AccountId;
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
 use crate::gcp::error::ConvertError;
 use crate::gcp::value::{FromValue, IntoValue, Value};
 use crate::gcp::{DatastoreResult, GcpService, KeyKind};
 use crate::protocol::contract::ResharingContractState;
+
+use near_account_id::AccountId;
 
 /// Default timeout for triple generation protocols. Times out after 20 minutes of being alive.
 pub const PROTOCOL_TRIPLE_TIMEOUT: Duration = Duration::from_secs(20 * 60);

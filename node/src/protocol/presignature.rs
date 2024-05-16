@@ -4,14 +4,16 @@ use crate::gcp::error::DatastoreStorageError;
 use crate::protocol::contract::primitives::Participants;
 use crate::types::{PresignatureProtocol, PublicKey, SecretKeyShare};
 use crate::util::AffinePointExt;
+
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::{KeygenOutput, PresignArguments, PresignOutput};
 use chrono::Utc;
 use k256::Secp256k1;
-use near_lake_primitives::AccountId;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Instant;
+
+use near_account_id::AccountId;
 
 /// Unique number used to identify a specific ongoing presignature generation protocol.
 /// Without `PresignatureId` it would be unclear where to route incoming cait-sith presignature
@@ -221,10 +223,10 @@ impl PresignatureManager {
         self.generators.insert(id, generator);
         self.introduced.insert(id);
         crate::metrics::NUM_TOTAL_HISTORICAL_PRESIGNATURE_GENERATORS
-            .with_label_values(&[&self.my_account_id])
+            .with_label_values(&[self.my_account_id.as_str()])
             .inc();
         crate::metrics::NUM_TOTAL_HISTORICAL_PRESIGNATURE_GENERATORS_MINE
-            .with_label_values(&[&self.my_account_id])
+            .with_label_values(&[self.my_account_id.as_str()])
             .inc();
         Ok(())
     }
@@ -350,7 +352,7 @@ impl PresignatureManager {
                     )?;
                     let generator = entry.insert(generator);
                     crate::metrics::NUM_TOTAL_HISTORICAL_PRESIGNATURE_GENERATORS
-                        .with_label_values(&[&self.my_account_id])
+                        .with_label_values(&[self.my_account_id.as_str()])
                         .inc();
                     Ok(&mut generator.protocol)
                 }
@@ -447,16 +449,16 @@ impl PresignatureManager {
                             tracing::info!(id, "assigning presignature to myself");
                             self.mine.push_back(*id);
                             crate::metrics::NUM_TOTAL_HISTORICAL_PRESIGNATURE_GENERATORS_MINE_SUCCESS
-                                .with_label_values(&[&self.my_account_id])
+                                .with_label_values(&[self.my_account_id.as_str()])
                                 .inc();
                         }
                         self.introduced.remove(id);
 
                         crate::metrics::PRESIGNATURE_LATENCY
-                            .with_label_values(&[&self.my_account_id])
+                            .with_label_values(&[self.my_account_id.as_str()])
                             .observe(generator.timestamp.elapsed().as_secs_f64());
                         crate::metrics::NUM_TOTAL_HISTORICAL_PRESIGNATURE_GENERATORS_SUCCESS
-                            .with_label_values(&[&self.my_account_id])
+                            .with_label_values(&[self.my_account_id.as_str()])
                             .inc();
                         // Do not retain the protocol
                         return false;

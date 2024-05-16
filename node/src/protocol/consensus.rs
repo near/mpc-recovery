@@ -17,15 +17,18 @@ use crate::storage::triple_storage::LockTripleNodeStorageBox;
 use crate::storage::triple_storage::TripleData;
 use crate::types::{KeygenProtocol, ReshareProtocol, SecretKeyShare};
 use crate::util::AffinePointExt;
-use async_trait::async_trait;
-use cait_sith::protocol::InitializationError;
-use near_crypto::InMemorySigner;
-use near_primitives::transaction::{Action, FunctionCallAction};
-use near_primitives::types::AccountId;
+
 use std::cmp::Ordering;
 use std::sync::Arc;
+
+use async_trait::async_trait;
+use cait_sith::protocol::InitializationError;
+use serde_json::json;
 use tokio::sync::RwLock;
 use url::Url;
+
+use near_account_id::AccountId;
+use near_crypto::InMemorySigner;
 
 pub trait ConsensusCtx {
     fn my_account_id(&self) -> &AccountId;
@@ -54,6 +57,8 @@ pub enum ConsensusError {
     MismatchedParticipants,
     #[error("this node has been unexpectedly kicked from the participant set")]
     HasBeenKicked,
+    #[error("this node errored out during the join process: {0}")]
+    CannotJoin(String),
     #[error("cait-sith initialization error: {0}")]
     CaitSithInitializationError(#[from] InitializationError),
     #[error("secret storage error: {0}")]
@@ -636,24 +641,20 @@ impl ConsensusProtocol for JoiningState {
                         tracing::info!(
                             "joining(running): sending a transaction to join the participant set"
                         );
-                        let args = serde_json::json!({
-                            "url": ctx.my_address(),
-                            "cipher_pk": ctx.cfg().network_cfg.cipher_pk.to_bytes(),
-                            "sign_pk": ctx.cfg().network_cfg.sign_sk.public_key(),
-                        });
                         ctx.rpc_client()
-                            .send_tx(
-                                ctx.signer(),
-                                ctx.mpc_contract_id(),
-                                vec![Action::FunctionCall(FunctionCallAction {
-                                    method_name: "join".to_string(),
-                                    args: args.to_string().into_bytes(),
-                                    gas: 300_000_000_000_000,
-                                    deposit: 0,
-                                })],
-                            )
+                            .call(ctx.signer(), ctx.mpc_contract_id(), "join")
+                            .args_json(json!({
+                                "url": ctx.my_address(),
+                                "cipher_pk": ctx.cfg().network_cfg.cipher_pk.to_bytes(),
+                                "sign_pk": ctx.cfg().network_cfg.sign_sk.public_key(),
+                            }))
+                            .max_gas()
+                            .transact()
                             .await
-                            .unwrap();
+                            .map_err(|err| {
+                                tracing::error!(?err, "failed to join the participant set");
+                                ConsensusError::CannotJoin(format!("{err:?}"))
+                            })?;
                         Ok(NodeState::Joining(self))
                     }
                 }

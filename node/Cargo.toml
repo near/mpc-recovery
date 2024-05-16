@@ -17,7 +17,7 @@ axum = { version = "0.6.19" }
 axum-extra = "0.7"
 cait-sith = { git = "https://github.com/LIT-Protocol/cait-sith.git", features = [
     "k256",
-], rev = "8ad2316"}
+], rev = "8ad2316" }
 clap = { version = "4.2", features = ["derive", "env"] }
 chrono = "0.4.24"
 google-datastore1 = "5"
@@ -41,11 +41,14 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = { version = "2.4.0", features = ["serde"] }
 
-near-crypto = "0.17"
-near-fetch = "0.0.12"
-near-lake-framework = { git = "https://github.com/near/near-lake-framework-rs.git", rev = "dc0f1f9"} # branch = "daniyar/upgrade-sdk"
-near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs.git", rev = "dc0f1f9" } # branch = "daniyar/upgrade-sdk"
-near-primitives = "0.17.0"
+near-account-id = "1.0.0"
+near-crypto = "0.21.2"
+near-fetch = { path = "../../../earth/near-fetch/near-fetch" }
+# near-lake-framework = { git = "https://github.com/near/near-lake-framework-rs.git", rev = "dc0f1f9" }  # branch = "daniyar/upgrade-sdk"
+# near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs.git", rev = "dc0f1f9" } # branch = "daniyar/upgrade-sdk"
+near-lake-framework = { path = "../../near-lake-framework-rs/lake-framework" }
+near-lake-primitives = { path = "../../near-lake-framework-rs/lake-primitives" }
+near-primitives = "0.21.2"
 near-sdk = "5.0.0-alpha.1"
 
 mpc-contract = { path = "../contract" }

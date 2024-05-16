@@ -1,8 +1,9 @@
 use crate::protocol::ProtocolState;
+
+use near_account_id::AccountId;
 use near_crypto::InMemorySigner;
-use near_primitives::transaction::{Action, FunctionCallAction};
-use near_primitives::types::AccountId;
 use near_primitives::views::FinalExecutionStatus;
+
 use serde_json::json;
 
 pub async fn fetch_mpc_contract_state(
@@ -10,7 +11,7 @@ pub async fn fetch_mpc_contract_state(
     mpc_contract_id: &AccountId,
 ) -> anyhow::Result<ProtocolState> {
     let protocol_state: mpc_contract::ProtocolContractState =
-        rpc_client.view(mpc_contract_id, "state", ()).await?;
+        rpc_client.view(mpc_contract_id, "state").await?.json()?;
     protocol_state
         .try_into()
         .map_err(|_| anyhow::anyhow!("protocol state has not been initialized yet"))
@@ -23,23 +24,16 @@ pub async fn vote_for_public_key(
     public_key: &near_crypto::PublicKey,
 ) -> anyhow::Result<bool> {
     tracing::info!(%public_key, "voting for public key");
-    let args = json!({
-        "public_key": public_key
-    });
     let result = rpc_client
-        .send_tx(
-            signer,
-            mpc_contract_id,
-            vec![Action::FunctionCall(FunctionCallAction {
-                method_name: "vote_pk".to_string(),
-                args: serde_json::to_vec(&args)?,
-                gas: 300_000_000_000_000,
-                deposit: 0,
-            })],
-        )
+        .call(signer, mpc_contract_id, "vote_pk")
+        .args_json(json!({
+            "public_key": public_key
+        }))
+        .max_gas()
+        .transact()
         .await?;
 
-    match result.status {
+    match result.status() {
         FinalExecutionStatus::SuccessValue(value) => Ok(serde_json::from_slice(&value)?),
         status => anyhow::bail!("unexpected status: {:?}", status),
     }
@@ -51,23 +45,16 @@ pub async fn vote_reshared(
     mpc_contract_id: &AccountId,
     epoch: u64,
 ) -> anyhow::Result<bool> {
-    let args = json!({
-        "epoch": epoch
-    });
     let result = rpc_client
-        .send_tx(
-            signer,
-            mpc_contract_id,
-            vec![Action::FunctionCall(FunctionCallAction {
-                method_name: "vote_reshared".to_string(),
-                args: serde_json::to_vec(&args)?,
-                gas: 300_000_000_000_000,
-                deposit: 0,
-            })],
-        )
+        .call(signer, mpc_contract_id, "vote_reshared")
+        .args_json(json!({
+            "epoch": epoch
+        }))
+        .max_gas()
+        .transact()
         .await?;
 
-    match result.status {
+    match result.status() {
         FinalExecutionStatus::SuccessValue(value) => Ok(serde_json::from_slice(&value)?),
         status => anyhow::bail!("unexpected status: {:?}", status),
     }

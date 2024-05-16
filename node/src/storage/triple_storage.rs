@@ -1,3 +1,6 @@
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+
 use crate::gcp::{error, Keyable};
 use crate::gcp::{
     error::ConvertError,
@@ -6,14 +9,14 @@ use crate::gcp::{
 };
 use crate::gcp::{DatastoreService, GcpService};
 use crate::protocol::triple::{Triple, TripleId};
+
 use async_trait::async_trait;
 use google_datastore1::api::{
     Filter, Key, PathElement, PropertyFilter, PropertyReference, Value as DatastoreValue,
 };
-use near_lake_primitives::AccountId;
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 use tokio::sync::RwLock;
+
+use near_account_id::AccountId;
 
 pub struct TripleKey<'a> {
     pub account_id: &'a str,
@@ -55,7 +58,7 @@ impl KeyKind for TripleData {
 impl IntoValue for TripleData {
     fn into_value(self) -> Value {
         let triple_key = TripleKey {
-            account_id: &self.account_id,
+            account_id: self.account_id.as_str(),
             triple_id: self.triple.id,
         };
         let mut properties = HashMap::new();
@@ -222,7 +225,7 @@ impl TripleNodeStorage for DataStoreTripleNodeStorage {
         tracing::debug!(id, "deleting triples using datastore");
         self.datastore
             .delete(TripleKey {
-                account_id: &self.account_id,
+                account_id: self.account_id.as_str(),
                 triple_id: id,
             })
             .await?;

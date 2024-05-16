@@ -1,11 +1,12 @@
 mod mpc;
 mod multichain;
 
-use anyhow::anyhow;
-use std::str::FromStr;
+use crate::multichain::actions::wait_for;
 
+use anyhow::anyhow;
 use curv::elliptic::curves::{Ed25519, Point};
 use futures::future::BoxFuture;
+use glob::glob;
 use hyper::StatusCode;
 use mpc_recovery::{
     gcp::GcpService,
@@ -19,11 +20,11 @@ use mpc_recovery_integration_tests::{
 };
 use mpc_recovery_integration_tests::{env::containers::DockerClient, multichain::MultichainConfig};
 use near_jsonrpc_client::JsonRpcClient;
+
 use near_workspaces::{network::Sandbox, Account, AccountId, Worker};
 
-use crate::multichain::actions::wait_for;
-use glob::glob;
 use std::fs;
+use std::str::FromStr;
 
 pub struct TestContext {
     env: String,

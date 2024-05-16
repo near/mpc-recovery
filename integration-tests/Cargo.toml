@@ -14,7 +14,7 @@ aws-types = "0.54.0"
 bollard = "0.13"
 cait-sith = { git = "https://github.com/LIT-Protocol/cait-sith.git", features = [
     "k256",
-], rev = "8ad2316"}
+], rev = "8ad2316" }
 clap = { version = "4.2", features = ["derive", "env"] }
 curv = { package = "curv-kzen", version = "0.9", default-features = false }
 ed25519-dalek = { version = "1.0.1", features = ["serde"] }
@@ -36,12 +36,13 @@ near-workspaces = { git = "https://github.com/near/near-workspaces-rs.git", bran
 toml = "0.8.1"
 sha2 = "0.10.8"
 
-near-crypto = "0.17"
-near-fetch = "0.0.12"
-near-jsonrpc-client = "0.6"
-near-primitives = "0.17.0"
-near-lake-framework = { git = "https://github.com/near/near-lake-framework-rs.git", branch = "daniyar/upgrade-sdk" }
-near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs.git", branch = "daniyar/upgrade-sdk" }
+near-account-id = "1"
+near-crypto = "0.21"
+near-fetch = { path = "../../../earth/near-fetch/near-fetch" }
+near-jsonrpc-client = "0.9"
+near-primitives = "0.21"
+near-lake-framework = { path = "../../near-lake-framework-rs/lake-framework" }
+near-lake-primitives = { path = "../../near-lake-framework-rs/lake-primitives" }
 
 mpc-contract = { path = "../contract" }
 mpc-keys = { path = "../keys" }

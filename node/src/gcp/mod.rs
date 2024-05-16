@@ -4,6 +4,7 @@ pub mod value;
 use self::value::{FromValue, IntoValue};
 use crate::gcp::error::DatastoreStorageError;
 use crate::storage;
+
 use google_datastore1::api::Filter;
 use google_datastore1::api::{
     CommitRequest, Entity, EntityResult, Key, KindExpression, LookupRequest, Mutation, PathElement,
@@ -19,7 +20,8 @@ use google_secretmanager1::oauth2::{
 use google_secretmanager1::SecretManager;
 use hyper::client::HttpConnector;
 use hyper_rustls::HttpsConnector;
-use near_lake_primitives::AccountId;
+
+use near_account_id::AccountId;
 
 pub type SecretResult<T> = std::result::Result<T, error::SecretStorageError>;
 
