@@ -37,7 +37,7 @@ module "gce-container" {
       },
       {
         name  = "MPC_RECOVERY_SIGN_SK"
-        value = data.google_secret_manager_secret_version.sign_sk_secret_id[count.index] ? data.google_secret_manager_secret_version.sign_sk_secret_id[count.index].secret_data : data.google_secret_manager_secret_version.account_sk_secret_id[count.index].secret_data
+        value = data.google_secret_manager_secret_version.sign_sk_secret_id[count.index] != null ? data.google_secret_manager_secret_version.sign_sk_secret_id[count.index].secret_data : data.google_secret_manager_secret_version.account_sk_secret_id[count.index].secret_data
       },
       {
         name  = "AWS_ACCESS_KEY_ID"
