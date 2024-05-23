@@ -1,10 +1,12 @@
 [workspace]
 members = [
-    "mpc-recovery",
+    # "mpc-recovery",
     "contract",
     "node",
     "integration-tests",
-    "load-tests",
+    # "integration-tests/chain-signatures",
+    # "integration-tests/mpc-recovery",
+    # "load-tests",
     "keys",
     "test-oidc-provider",
 ]

@@ -244,7 +244,9 @@ impl TripleNodeStorage for DataStoreTripleNodeStorage {
                     property: Some(PropertyReference {
                         name: Some("account_id".to_string()),
                     }),
-                    value: Some(DatastoreValue::from_value(self.account_id().into_value())?),
+                    value: Some(DatastoreValue::from_value(
+                        self.account_id.as_str().into_value(),
+                    )?),
                 }),
             })
         };

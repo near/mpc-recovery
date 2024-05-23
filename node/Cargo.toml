@@ -10,9 +10,9 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { version = "1", features = ["backtrace"] }
 async-trait = "0.1"
-aws-config = "0.54.0"
-aws-sdk-s3 = "0.24.0"
-aws-types = "0.54.0"
+aws-config = "1.4"
+aws-sdk-s3 = "1.24"
+aws-types = "1.2"
 axum = { version = "0.6.19" }
 axum-extra = "0.7"
 cait-sith = { git = "https://github.com/LIT-Protocol/cait-sith.git", features = [
@@ -49,7 +49,7 @@ near-fetch = { path = "../../../earth/near-fetch/near-fetch" }
 near-lake-framework = { path = "../../near-lake-framework-rs/lake-framework" }
 near-lake-primitives = { path = "../../near-lake-framework-rs/lake-primitives" }
 near-primitives = "0.21.2"
-near-sdk = "5.0.0-alpha.1"
+near-sdk = "=5.0.0-alpha.1"
 
 mpc-contract = { path = "../contract" }
 mpc-keys = { path = "../keys" }

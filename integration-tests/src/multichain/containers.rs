@@ -1,14 +1,22 @@
-use ed25519_dalek::ed25519::signature::digest::{consts::U32, generic_array::GenericArray};
+use super::{local::NodeConfig, MultichainConfig};
+use anyhow::anyhow;
+use bollard::exec::CreateExecOptions;
+use bollard::{container::LogsOptions, network::CreateNetworkOptions, service::Ipam, Docker};
+use futures::{lock::Mutex, StreamExt};
 use mpc_keys::hpke;
-use multi_party_eddsa::protocols::ExpandedKeyPair;
 use near_workspaces::AccountId;
+use once_cell::sync::Lazy;
+use testcontainers::clients::Cli;
+use testcontainers::Image;
 use testcontainers::{
     core::{ExecCommand, WaitFor},
     Container, GenericImage, RunnableImage,
 };
+use tokio::io::AsyncWriteExt;
 use tracing;
 
-use super::{local::NodeConfig, MultichainConfig};
+static NETWORK_MUTEX: Lazy<Mutex<i32>> = Lazy::new(|| Mutex::new(0));
+pub const TARGET_CONTRACT_DIR: &str = "../target";
 
 pub struct Node<'a> {
     pub container: Container<'a, GenericImage>,
@@ -22,14 +30,14 @@ pub struct Node<'a> {
     cfg: MultichainConfig,
 }
 
-pub struct NodeApi {
-    pub address: String,
-    pub node_id: usize,
-    pub sk_share: ExpandedKeyPair,
-    pub cipher_key: GenericArray<u8, U32>,
-    pub gcp_project_id: String,
-    pub gcp_datastore_local_url: String,
-}
+// pub struct NodeApi {
+//     pub address: String,
+//     pub node_id: usize,
+//     pub sk_share: ExpandedKeyPair,
+//     pub cipher_key: GenericArray<u8, U32>,
+//     pub gcp_project_id: String,
+//     pub gcp_datastore_local_url: String,
+// }
 
 impl<'a> Node<'a> {
     // Container port used for the docker network, does not have to be unique
@@ -197,6 +205,340 @@ impl<'a> Node<'a> {
             cipher_sk,
             sign_pk: account_sk.public_key(),
             cfg: cfg.clone(),
+        })
+    }
+}
+
+pub struct LocalStack<'a> {
+    pub container: Container<'a, GenericImage>,
+    pub address: String,
+    pub s3_address: String,
+    pub s3_host_address: String,
+    pub s3_bucket: String,
+    pub s3_region: String,
+}
+
+impl<'a> LocalStack<'a> {
+    const S3_CONTAINER_PORT: u16 = 4566;
+
+    pub async fn run(
+        docker_client: &'a DockerClient,
+        network: &str,
+        s3_bucket: String,
+        s3_region: String,
+    ) -> anyhow::Result<LocalStack<'a>> {
+        tracing::info!("running LocalStack container...");
+        let image = GenericImage::new("localstack/localstack", "3.0.0")
+            .with_wait_for(WaitFor::message_on_stdout("Running on"));
+        let image: RunnableImage<GenericImage> = image.into();
+        let image = image.with_network(network);
+        let container = docker_client.cli.run(image);
+        let address = docker_client
+            .get_network_ip_address(&container, network)
+            .await?;
+
+        // Create the bucket
+        let create_result = docker_client
+            .docker
+            .create_exec(
+                container.id(),
+                CreateExecOptions::<&str> {
+                    attach_stdout: Some(true),
+                    attach_stderr: Some(true),
+                    cmd: Some(vec![
+                        "awslocal",
+                        "s3api",
+                        "create-bucket",
+                        "--bucket",
+                        &s3_bucket,
+                        "--region",
+                        &s3_region,
+                    ]),
+                    ..Default::default()
+                },
+            )
+            .await?;
+        docker_client
+            .docker
+            .start_exec(&create_result.id, None)
+            .await?;
+
+        let s3_address = format!("http://{}:{}", address, Self::S3_CONTAINER_PORT);
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        let s3_host_address = {
+            let s3_host_port = container.get_host_port_ipv4(Self::S3_CONTAINER_PORT);
+            format!("http://127.0.0.1:{s3_host_port}")
+        };
+        #[cfg(target_arch = "x86_64")]
+        let s3_host_address = {
+            let s3_host_port = container.get_host_port_ipv6(Self::S3_CONTAINER_PORT);
+            format!("http://[::1]:{s3_host_port}")
+        };
+
+        tracing::info!(
+            s3_address,
+            s3_host_address,
+            "LocalStack container is running"
+        );
+        Ok(LocalStack {
+            container,
+            address,
+            s3_address,
+            s3_host_address,
+            s3_bucket,
+            s3_region,
+        })
+    }
+}
+
+pub struct LakeIndexer<'a> {
+    pub container: Container<'a, GenericImage>,
+    pub bucket_name: String,
+    pub region: String,
+    pub rpc_address: String,
+    pub rpc_host_address: String,
+}
+
+impl<'a> LakeIndexer<'a> {
+    pub const CONTAINER_RPC_PORT: u16 = 3030;
+
+    pub async fn run(
+        docker_client: &'a DockerClient,
+        network: &str,
+        s3_address: &str,
+        bucket_name: String,
+        region: String,
+    ) -> anyhow::Result<LakeIndexer<'a>> {
+        tracing::info!(
+            network,
+            s3_address,
+            bucket_name,
+            region,
+            "running NEAR Lake Indexer container..."
+        );
+
+        let image = GenericImage::new(
+            // "ghcr.io/near/near-lake-indexer",
+            // "18ef24922fd7b5b8985ea793fdf7a939e57216ba",
+            "near/near-lake-indexer",
+            "1.38",
+        )
+        .with_env_var("AWS_ACCESS_KEY_ID", "FAKE_LOCALSTACK_KEY_ID")
+        .with_env_var("AWS_SECRET_ACCESS_KEY", "FAKE_LOCALSTACK_ACCESS_KEY")
+        .with_wait_for(WaitFor::message_on_stderr("Starting Streamer"))
+        .with_exposed_port(Self::CONTAINER_RPC_PORT);
+        let image: RunnableImage<GenericImage> = (
+            image,
+            vec![
+                "--endpoint".to_string(),
+                s3_address.to_string(),
+                "--bucket".to_string(),
+                bucket_name.clone(),
+                "--region".to_string(),
+                region.clone(),
+                "--stream-while-syncing".to_string(),
+                "sync-from-latest".to_string(),
+            ],
+        )
+            .into();
+        let image = image.with_network(network);
+        let container = docker_client.cli.run(image);
+        let address = docker_client
+            .get_network_ip_address(&container, network)
+            .await?;
+        let rpc_address = format!("http://{}:{}", address, Self::CONTAINER_RPC_PORT);
+        let rpc_host_port = container.get_host_port_ipv4(Self::CONTAINER_RPC_PORT);
+        let rpc_host_address = format!("http://127.0.0.1:{rpc_host_port}");
+
+        tracing::info!(
+            bucket_name,
+            region,
+            rpc_address,
+            rpc_host_address,
+            "NEAR Lake Indexer container is running"
+        );
+        Ok(LakeIndexer {
+            container,
+            bucket_name,
+            region,
+            rpc_address,
+            rpc_host_address,
+        })
+    }
+}
+
+pub struct DockerClient {
+    pub docker: Docker,
+    pub cli: Cli,
+}
+
+impl DockerClient {
+    pub async fn get_network_ip_address<I: Image>(
+        &self,
+        container: &Container<'_, I>,
+        network: &str,
+    ) -> anyhow::Result<String> {
+        let network_settings = self
+            .docker
+            .inspect_container(container.id(), None)
+            .await?
+            .network_settings
+            .ok_or_else(|| anyhow!("missing NetworkSettings on container '{}'", container.id()))?;
+        let ip_address = network_settings
+            .networks
+            .ok_or_else(|| {
+                anyhow!(
+                    "missing NetworkSettings.Networks on container '{}'",
+                    container.id()
+                )
+            })?
+            .get(network)
+            .cloned()
+            .ok_or_else(|| {
+                anyhow!(
+                    "container '{}' is not a part of network '{}'",
+                    container.id(),
+                    network
+                )
+            })?
+            .ip_address
+            .ok_or_else(|| {
+                anyhow!(
+                    "container '{}' belongs to network '{}', but is not assigned an IP address",
+                    container.id(),
+                    network
+                )
+            })?;
+
+        Ok(ip_address)
+    }
+
+    pub async fn create_network(&self, network: &str) -> anyhow::Result<()> {
+        let _lock = &NETWORK_MUTEX.lock().await;
+        let list = self.docker.list_networks::<&str>(None).await?;
+        if list.iter().any(|n| n.name == Some(network.to_string())) {
+            return Ok(());
+        }
+
+        let create_network_options = CreateNetworkOptions {
+            name: network,
+            check_duplicate: true,
+            driver: if cfg!(windows) {
+                "transparent"
+            } else {
+                "bridge"
+            },
+            ipam: Ipam {
+                config: None,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let _response = &self.docker.create_network(create_network_options).await?;
+
+        Ok(())
+    }
+
+    pub async fn continuously_print_logs(&self, id: &str) -> anyhow::Result<()> {
+        let mut output = self.docker.logs::<String>(
+            id,
+            Some(LogsOptions {
+                follow: true,
+                stdout: true,
+                stderr: true,
+                ..Default::default()
+            }),
+        );
+
+        // Asynchronous process that pipes docker attach output into stdout.
+        // Will die automatically once Docker container output is closed.
+        tokio::spawn(async move {
+            let mut stdout = tokio::io::stdout();
+
+            while let Some(Ok(output)) = output.next().await {
+                stdout
+                    .write_all(output.into_bytes().as_ref())
+                    .await
+                    .unwrap();
+                stdout.flush().await.unwrap();
+            }
+        });
+
+        Ok(())
+    }
+}
+
+impl Default for DockerClient {
+    fn default() -> Self {
+        Self {
+            docker: Docker::connect_with_local(
+                "unix:///var/run/docker.sock",
+                // 10 minutes timeout for all requests in case a lot of tests are being ran in parallel.
+                600,
+                bollard::API_DEFAULT_VERSION,
+            )
+            .unwrap(),
+            cli: Default::default(),
+        }
+    }
+}
+
+pub struct Datastore<'a> {
+    pub container: Container<'a, GenericImage>,
+    pub address: String,
+    pub local_address: String,
+}
+
+impl<'a> Datastore<'a> {
+    pub const CONTAINER_PORT: u16 = 3000;
+
+    pub async fn run(
+        docker_client: &'a DockerClient,
+        network: &str,
+        project_id: &str,
+    ) -> anyhow::Result<Datastore<'a>> {
+        tracing::info!("Running datastore container...");
+        let image = GenericImage::new(
+            "gcr.io/google.com/cloudsdktool/google-cloud-cli",
+            "464.0.0-emulators",
+        )
+        .with_wait_for(WaitFor::message_on_stderr("Dev App Server is now running."))
+        .with_exposed_port(Self::CONTAINER_PORT)
+        .with_entrypoint("gcloud")
+        .with_env_var(
+            "DATASTORE_EMULATOR_HOST",
+            format!("0.0.0.0:{}", Self::CONTAINER_PORT),
+        )
+        .with_env_var("DATASTORE_PROJECT_ID", project_id);
+        let image: RunnableImage<GenericImage> = (
+            image,
+            vec![
+                "beta".to_string(),
+                "emulators".to_string(),
+                "datastore".to_string(),
+                "start".to_string(),
+                format!("--project={project_id}"),
+                "--host-port".to_string(),
+                format!("0.0.0.0:{}", Self::CONTAINER_PORT),
+                "--no-store-on-disk".to_string(),
+                "--consistency=1.0".to_string(),
+            ],
+        )
+            .into();
+        let image = image.with_network(network);
+        let container = docker_client.cli.run(image);
+        let ip_address = docker_client
+            .get_network_ip_address(&container, network)
+            .await?;
+        let host_port = container.get_host_port_ipv4(Self::CONTAINER_PORT);
+
+        let full_address = format!("http://{}:{}/", ip_address, Self::CONTAINER_PORT);
+        let local_address = format!("http://127.0.0.1:{}/", host_port);
+        tracing::info!("Datastore container is running at {}", full_address);
+        Ok(Datastore {
+            container,
+            local_address,
+            address: full_address,
         })
     }
 }

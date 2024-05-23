@@ -30,6 +30,7 @@ pub async fn vote_for_public_key(
             "public_key": public_key
         }))
         .max_gas()
+        .retry_exponential(10, 5)
         .transact()
         .await?;
 
@@ -51,6 +52,7 @@ pub async fn vote_reshared(
             "epoch": epoch
         }))
         .max_gas()
+        .retry_exponential(10, 5)
         .transact()
         .await?;
 

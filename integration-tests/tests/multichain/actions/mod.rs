@@ -41,7 +41,7 @@ pub async fn request_sign(
 
     let signer = InMemorySigner {
         account_id: account.id().clone(),
-        public_key: account.secret_key().public_key().clone().into(),
+        public_key: account.secret_key().public_key().to_string().parse()?,
         secret_key: account.secret_key().to_string().parse()?,
     };
     let (nonce, block_hash, _) = ctx
@@ -57,7 +57,7 @@ pub async fn request_sign(
                 signer_id: signer.account_id.clone(),
                 public_key: signer.public_key.clone(),
                 receiver_id: ctx.nodes.ctx().mpc_contract.id().clone(),
-                actions: vec![Action::FunctionCall(FunctionCallAction {
+                actions: vec![Action::FunctionCall(Box::new(FunctionCallAction {
                     method_name: "sign".to_string(),
                     args: serde_json::to_vec(&serde_json::json!({
                         "payload": payload_hashed,
@@ -66,7 +66,7 @@ pub async fn request_sign(
                     }))?,
                     gas: 300_000_000_000_000,
                     deposit: 0,
-                })],
+                }))],
             }
             .sign(&signer),
         })
@@ -111,7 +111,7 @@ pub async fn request_sign_non_random(
 ) -> anyhow::Result<([u8; 32], [u8; 32], Account, CryptoHash)> {
     let signer = InMemorySigner {
         account_id: account.id().clone(),
-        public_key: account.secret_key().public_key().clone().into(),
+        public_key: account.secret_key().public_key().to_string().parse()?,
         secret_key: account.secret_key().to_string().parse()?,
     };
     let (nonce, block_hash, _) = ctx
@@ -127,7 +127,7 @@ pub async fn request_sign_non_random(
                 signer_id: signer.account_id.clone(),
                 public_key: signer.public_key.clone(),
                 receiver_id: ctx.nodes.ctx().mpc_contract.id().clone(),
-                actions: vec![Action::FunctionCall(FunctionCallAction {
+                actions: vec![Action::FunctionCall(Box::new(FunctionCallAction {
                     method_name: "sign".to_string(),
                     args: serde_json::to_vec(&serde_json::json!({
                         "payload": payload_hashed,
@@ -136,7 +136,7 @@ pub async fn request_sign_non_random(
                     }))?,
                     gas: 300_000_000_000_000,
                     deposit: 0,
-                })],
+                }))],
             }
             .sign(&signer),
         })

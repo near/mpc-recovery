@@ -2,8 +2,8 @@ pub mod containers;
 pub mod local;
 pub mod utils;
 
-use crate::env::containers::DockerClient;
-use crate::mpc::TARGET_CONTRACT_DIR;
+use crate::multichain::containers::DockerClient;
+use crate::multichain::containers::TARGET_CONTRACT_DIR;
 use crate::{initialize_lake_indexer, LakeIndexerCtx};
 use mpc_contract::primitives::CandidateInfo;
 use mpc_recovery_node::gcp::GcpService;
@@ -215,23 +215,23 @@ pub struct Context<'a> {
     pub docker_network: String,
     pub release: bool,
 
-    pub localstack: crate::env::containers::LocalStack<'a>,
-    pub lake_indexer: crate::env::containers::LakeIndexer<'a>,
+    pub localstack: crate::multichain::containers::LocalStack<'a>,
+    pub lake_indexer: crate::multichain::containers::LakeIndexer<'a>,
     pub worker: Worker<Sandbox>,
     pub mpc_contract: Contract,
-    pub datastore: crate::env::containers::Datastore<'a>,
+    pub datastore: crate::multichain::containers::Datastore<'a>,
     pub storage_options: storage::Options,
 }
 
 pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> {
-    if !crate::mpc::build_multichain_contract().await?.success() {
-        anyhow::bail!("failed to prebuild multichain contract");
-    }
+    // if !crate::mpc::build_multichain_contract().await?.success() {
+    //     anyhow::bail!("failed to prebuild multichain contract");
+    // }
 
     let release = true;
-    if !crate::mpc::build_multichain(release).await?.success() {
-        anyhow::bail!("failed to prebuild multichain node service");
-    }
+    // if !crate::mpc::build_multichain(release).await?.success() {
+    //     anyhow::bail!("failed to prebuild multichain node service");
+    // }
 
     let docker_network = NETWORK;
     docker_client.create_network(docker_network).await?;
@@ -251,9 +251,12 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
     tracing::info!(contract_id = %mpc_contract.id(), "deployed mpc contract");
 
     let gcp_project_id = "multichain-integration";
-    let datastore =
-        crate::env::containers::Datastore::run(docker_client, docker_network, gcp_project_id)
-            .await?;
+    let datastore = crate::multichain::containers::Datastore::run(
+        docker_client,
+        docker_network,
+        gcp_project_id,
+    )
+    .await?;
 
     let sk_share_local_path = "multichain-integration-secret-manager".to_string();
     let storage_options = mpc_recovery_node::storage::Options {

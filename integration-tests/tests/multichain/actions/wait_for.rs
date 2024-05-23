@@ -22,8 +22,10 @@ pub async fn running_mpc<'a>(
     let is_running = || async {
         let state: ProtocolContractState = ctx
             .rpc_client
-            .view(ctx.nodes.ctx().mpc_contract.id(), "state", ())
-            .await?;
+            .view(ctx.nodes.ctx().mpc_contract.id(), "state")
+            .await
+            .map_err(|err| anyhow::anyhow!("could not view state {err:?}"))?
+            .json()?;
 
         match state {
             ProtocolContractState::Running(running) => match epoch {
@@ -208,14 +210,24 @@ pub async fn signature_responded(
             .jsonrpc_client
             .call(RpcTransactionStatusRequest {
                 transaction_info: TransactionInfo::TransactionId {
-                    hash: tx_hash,
-                    account_id: ctx.nodes.ctx().mpc_contract.id().clone(),
+                    tx_hash,
+                    sender_account_id: ctx.nodes.ctx().mpc_contract.id().clone(),
                 },
+                wait_until: near_primitives::views::TxExecutionStatus::Final,
             })
             .await?;
-        let FinalExecutionStatus::SuccessValue(payload) = outcome_view.status else {
-            anyhow::bail!("tx finished unsuccessfully: {:?}", outcome_view.status);
+        // let FinalExecutionStatus::SuccessValue(payload) = outcome_view.status else {
+        //     anyhow::bail!("tx finished unsuccessfully: {:?}", outcome_view.status);
+        // };
+        let Some(outcome) = outcome_view.final_execution_outcome else {
+            anyhow::bail!("final execution outcome not available");
         };
+        let outcome = outcome.into_outcome();
+
+        let FinalExecutionStatus::SuccessValue(payload) = outcome.status else {
+            anyhow::bail!("tx finished unsuccessfully: {:?}", outcome.status);
+        };
+
         let (big_r, s): (AffinePoint, Scalar) = serde_json::from_slice(&payload)?;
         let signature = cait_sith::FullSignature::<Secp256k1> { big_r, s };
         Ok(signature)

@@ -3,7 +3,7 @@ use std::{
     io::Write,
 };
 
-use crate::containers::RelayerConfig;
+// use crate::containers::RelayerConfig;
 use anyhow::Context;
 use hyper::{Body, Client, Method, Request, StatusCode, Uri};
 use near_workspaces::{types::SecretKey, AccountId};
@@ -101,108 +101,108 @@ pub fn create_key_file_with_filepath(
     Ok(())
 }
 
-pub fn create_relayer_cofig_file(
-    config: RelayerConfig,
-    config_path: String,
-) -> anyhow::Result<String, anyhow::Error> {
-    let mut config_table = Value::Table(toml::value::Table::new());
-    let table = config_table.as_table_mut().unwrap();
+// pub fn create_relayer_cofig_file(
+//     config: RelayerConfig,
+//     config_path: String,
+// ) -> anyhow::Result<String, anyhow::Error> {
+//     let mut config_table = Value::Table(toml::value::Table::new());
+//     let table = config_table.as_table_mut().unwrap();
 
-    table.insert(
-        "ip_address".to_string(),
-        Value::Array(
-            config
-                .ip_address
-                .iter()
-                .map(|ip| Value::Integer(i64::from(*ip)))
-                .collect(),
-        ),
-    );
-    table.insert("port".to_string(), Value::Integer(i64::from(config.port)));
+//     table.insert(
+//         "ip_address".to_string(),
+//         Value::Array(
+//             config
+//                 .ip_address
+//                 .iter()
+//                 .map(|ip| Value::Integer(i64::from(*ip)))
+//                 .collect(),
+//         ),
+//     );
+//     table.insert("port".to_string(), Value::Integer(i64::from(config.port)));
 
-    let relayer_account_id = config.relayer_account_id.to_string();
+//     let relayer_account_id = config.relayer_account_id.to_string();
 
-    table.insert(
-        "relayer_account_id".to_string(),
-        Value::String(relayer_account_id.clone()),
-    );
-    table.insert(
-        "keys_filenames".to_string(),
-        Value::Array(
-            config
-                .keys_filenames
-                .iter()
-                .map(|filename| Value::String(filename.to_string()))
-                .collect(),
-        ),
-    );
+//     table.insert(
+//         "relayer_account_id".to_string(),
+//         Value::String(relayer_account_id.clone()),
+//     );
+//     table.insert(
+//         "keys_filenames".to_string(),
+//         Value::Array(
+//             config
+//                 .keys_filenames
+//                 .iter()
+//                 .map(|filename| Value::String(filename.to_string()))
+//                 .collect(),
+//         ),
+//     );
 
-    table.insert(
-        "shared_storage_account_id".to_string(),
-        Value::String(config.shared_storage_account_id.to_string()),
-    );
-    table.insert(
-        "shared_storage_keys_filename".to_string(),
-        Value::String(config.shared_storage_keys_filename),
-    );
+//     table.insert(
+//         "shared_storage_account_id".to_string(),
+//         Value::String(config.shared_storage_account_id.to_string()),
+//     );
+//     table.insert(
+//         "shared_storage_keys_filename".to_string(),
+//         Value::String(config.shared_storage_keys_filename),
+//     );
 
-    table.insert(
-        "whitelisted_contracts".to_string(),
-        Value::Array(
-            config
-                .whitelisted_contracts
-                .iter()
-                .map(|account_id| Value::String(account_id.to_string()))
-                .collect(),
-        ),
-    );
-    table.insert(
-        "whitelisted_delegate_action_receiver_ids".to_string(),
-        Value::Array(
-            config
-                .whitelisted_delegate_action_receiver_ids
-                .iter()
-                .map(|account_id| Value::String(account_id.to_string()))
-                .collect(),
-        ),
-    );
+//     table.insert(
+//         "whitelisted_contracts".to_string(),
+//         Value::Array(
+//             config
+//                 .whitelisted_contracts
+//                 .iter()
+//                 .map(|account_id| Value::String(account_id.to_string()))
+//                 .collect(),
+//         ),
+//     );
+//     table.insert(
+//         "whitelisted_delegate_action_receiver_ids".to_string(),
+//         Value::Array(
+//             config
+//                 .whitelisted_delegate_action_receiver_ids
+//                 .iter()
+//                 .map(|account_id| Value::String(account_id.to_string()))
+//                 .collect(),
+//         ),
+//     );
 
-    table.insert(
-        "redis_url".to_string(),
-        Value::String(config.redis_url.to_string()),
-    );
-    table.insert(
-        "social_db_contract_id".to_string(),
-        Value::String(config.social_db_contract_id.to_string()),
-    );
+//     table.insert(
+//         "redis_url".to_string(),
+//         Value::String(config.redis_url.to_string()),
+//     );
+//     table.insert(
+//         "social_db_contract_id".to_string(),
+//         Value::String(config.social_db_contract_id.to_string()),
+//     );
 
-    table.insert(
-        "rpc_url".to_string(),
-        Value::String(config.rpc_url.to_string()),
-    );
-    table.insert(
-        "wallet_url".to_string(),
-        Value::String(config.wallet_url.to_string()),
-    ); // not used
-    table.insert(
-        "explorer_transaction_url".to_string(),
-        Value::String(config.explorer_transaction_url.to_string()),
-    ); // not used
-    table.insert("rpc_api_key".to_string(), Value::String(config.rpc_api_key)); // not used
+//     table.insert(
+//         "rpc_url".to_string(),
+//         Value::String(config.rpc_url.to_string()),
+//     );
+//     table.insert(
+//         "wallet_url".to_string(),
+//         Value::String(config.wallet_url.to_string()),
+//     ); // not used
+//     table.insert(
+//         "explorer_transaction_url".to_string(),
+//         Value::String(config.explorer_transaction_url.to_string()),
+//     ); // not used
+//     table.insert("rpc_api_key".to_string(), Value::String(config.rpc_api_key)); // not used
 
-    let mut file =
-        File::create(&config_path).unwrap_or_else(|_| panic!("Failed to write to {}", config_path));
-    let toml_string = toml::to_string(&config_table).expect("Failed to convert to TOML string");
-    file.write_all(toml_string.as_bytes())
-        .unwrap_or_else(|_| panic!("Failed to write to {}", config_path));
+//     let mut file =
+//         File::create(&config_path).unwrap_or_else(|_| panic!("Failed to write to {}", config_path));
+//     let toml_string = toml::to_string(&config_table).expect("Failed to convert to TOML string");
+//     file.write_all(toml_string.as_bytes())
+//         .unwrap_or_else(|_| panic!("Failed to write to {}", config_path));
 
-    let config_absolute_path = fs::canonicalize(&config_path)
-        .unwrap_or_else(|_| panic!("Failed to get absolute path to {}", config_path));
-    Ok(config_absolute_path
-        .to_str()
-        .expect("Failed to convert config file path to string")
-        .to_string())
-}
+//     let config_absolute_path = fs::canonicalize(&config_path)
+//         .unwrap_or_else(|_| panic!("Failed to get absolute path to {}", config_path));
+//     Ok(config_absolute_path
+//         .to_str()
+//         .expect("Failed to convert config file path to string")
+//         .to_string())
+// }
 
 /// Request an unused port from the OS.
 pub async fn pick_unused_port() -> anyhow::Result<u16> {

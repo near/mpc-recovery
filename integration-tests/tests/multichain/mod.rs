@@ -5,7 +5,7 @@ use std::str::FromStr;
 use crate::with_multichain_nodes;
 use actions::wait_for;
 use k256::elliptic_curve::point::AffineCoordinates;
-use mpc_recovery_integration_tests::env::containers::DockerClient;
+use mpc_recovery_integration_tests::multichain::containers::{self, DockerClient};
 use mpc_recovery_integration_tests::multichain::MultichainConfig;
 use mpc_recovery_node::kdf::{self, x_coordinate};
 use mpc_recovery_node::protocol::presignature::PresignatureConfig;
@@ -220,8 +220,7 @@ async fn test_triples_persistence_for_generation() -> anyhow::Result<()> {
     let docker_network = "test-triple-persistence";
     docker_client.create_network(docker_network).await?;
     let datastore =
-        crate::env::containers::Datastore::run(&docker_client, docker_network, gcp_project_id)
-            .await?;
+        containers::Datastore::run(&docker_client, docker_network, gcp_project_id).await?;
     let datastore_url = datastore.local_address.clone();
     // verifies that @triple generation, the datastore triples are in sync with local generated triples
     test_utils::test_triple_generation(Some(datastore_url.clone())).await;
@@ -235,8 +234,7 @@ async fn test_triples_persistence_for_deletion() -> anyhow::Result<()> {
     let docker_network = "test-triple-persistence";
     docker_client.create_network(docker_network).await?;
     let datastore =
-        crate::env::containers::Datastore::run(&docker_client, docker_network, gcp_project_id)
-            .await?;
+        containers::Datastore::run(&docker_client, docker_network, gcp_project_id).await?;
     let datastore_url = datastore.local_address.clone();
     // verifies that @triple deletion, the datastore is working as expected
     test_utils::test_triple_deletion(Some(datastore_url)).await;
