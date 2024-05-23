@@ -32,7 +32,6 @@ serde_json = "1"
 testcontainers = { version = "0.15", features = ["experimental"] }
 tokio = { version = "1.28", features = ["full"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-near-workspaces = { path = "../../workspaces-rs/workspaces" }
 toml = "0.8.1"
 sha2 = "0.10.8"
 
@@ -43,6 +42,7 @@ near-jsonrpc-client = "0.9"
 near-primitives = "0.21"
 near-lake-framework = { path = "../../near-lake-framework-rs/lake-framework" }
 near-lake-primitives = { path = "../../near-lake-framework-rs/lake-primitives" }
+near-workspaces = { path = "../../workspaces-rs/workspaces" }
 
 mpc-contract = { path = "../contract" }
 mpc-keys = { path = "../keys" }

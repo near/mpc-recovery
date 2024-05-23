@@ -13,7 +13,6 @@ use testcontainers::{Container, GenericImage};
 
 // pub mod env;
 // pub mod mpc;
-pub mod multichain;
 pub mod sandbox;
 pub mod util;
 

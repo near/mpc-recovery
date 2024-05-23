@@ -1,12 +1,11 @@
-pub mod actions;
-
 use std::str::FromStr;
 
+use crate::actions::{self, wait_for};
 use crate::with_multichain_nodes;
-use actions::wait_for;
+
+use integration_tests_chain_signatures::containers::{self, DockerClient};
+use integration_tests_chain_signatures::MultichainConfig;
 use k256::elliptic_curve::point::AffineCoordinates;
-use mpc_recovery_integration_tests::multichain::containers::{self, DockerClient};
-use mpc_recovery_integration_tests::multichain::MultichainConfig;
 use mpc_recovery_node::kdf::{self, x_coordinate};
 use mpc_recovery_node::protocol::presignature::PresignatureConfig;
 use mpc_recovery_node::protocol::triple::TripleConfig;

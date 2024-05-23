@@ -1,4 +1,4 @@
-use crate::util;
+use crate::utils;
 use anyhow::Context;
 use async_process::Child;
 use mpc_keys::hpke;
@@ -8,7 +8,7 @@ use super::MultichainConfig;
 
 const PACKAGE_MULTICHAIN: &str = "mpc-recovery-node";
 
-fn target_dir() -> Option<std::path::PathBuf> {
+pub fn target_dir() -> Option<std::path::PathBuf> {
     let mut out_dir = std::path::Path::new(std::env!("OUT_DIR"));
     loop {
         if out_dir.ends_with("target") {
@@ -79,7 +79,7 @@ impl Node {
         account_sk: &near_workspaces::types::SecretKey,
         cfg: &MultichainConfig,
     ) -> anyhow::Result<Self> {
-        let web_port = util::pick_unused_port().await?;
+        let web_port = utils::pick_unused_port().await?;
         let (cipher_sk, cipher_pk) = hpke::generate();
         let sign_sk =
             near_crypto::SecretKey::from_seed(near_crypto::KeyType::ED25519, "integration-test");
@@ -117,7 +117,7 @@ impl Node {
         let process = spawn_multichain(ctx.release, &mpc_node_id, cli)?;
         let address = format!("http://127.0.0.1:{web_port}");
         tracing::info!("node is starting at {}", address);
-        util::ping_until_ok(&address, 60).await?;
+        utils::ping_until_ok(&address, 60).await?;
         tracing::info!("node started [node_account_id={account_id}, {address}]");
 
         Ok(Self {
@@ -175,7 +175,7 @@ impl Node {
         let process = spawn_multichain(ctx.release, &mpc_node_id, cli)?;
         let address = format!("http://127.0.0.1:{web_port}");
         tracing::info!("node is starting at {}", address);
-        util::ping_until_ok(&address, 60).await?;
+        utils::ping_until_ok(&address, 60).await?;
         tracing::info!("node started [node_account_id={account_id}, {address}]");
 
         Ok(Self {

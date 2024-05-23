@@ -1,0 +1,59 @@
+[package]
+name = "integration-tests-chain-signatures"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+
+[dependencies]
+anyhow = { version = "1.0", features = ["backtrace"] }
+async-process = "1"
+bollard = "0.13"
+futures = "0.3"
+generic-array = { version = "0.14.7", default-features = false }
+glob = "0.3.0"
+hex = "0.4.3"
+hyper = { version = "0.14", features = ["full"] }
+once_cell = "1"
+rand = "0.7"
+serde = "1"
+serde_json = "1"
+testcontainers = { version = "0.15", features = ["experimental"] }
+tokio = { version = "1.28", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# crypto dependencies
+cait-sith = { git = "https://github.com/LIT-Protocol/cait-sith.git", features = [
+    "k256",
+], rev = "8ad2316" }
+elliptic-curve = { version = "0.13.5", default-features = false }
+k256 = { version = "0.13.1", features = ["sha256", "ecdsa", "serde"] }
+
+# near dependencies
+near-account-id = "1"
+near-crypto = "0.21"
+near-fetch = { path = "../../../../earth/near-fetch/near-fetch" }
+near-jsonrpc-client = "0.9"
+near-primitives = "0.21"
+near-lake-framework = { path = "../../../near-lake-framework-rs/lake-framework" }
+near-lake-primitives = { path = "../../../near-lake-framework-rs/lake-primitives" }
+near-workspaces = { path = "../../../workspaces-rs/workspaces" }
+
+# local chain-signatures depencencies
+mpc-contract = { path = "../../contract" }
+mpc-keys = { path = "../../keys" }
+mpc-recovery-node = { path = "../../node" }
+
+[dev-dependencies]
+backon = "0.4"
+reqwest = "0.11.16"
+test-log = { version = "0.2.12", features = ["log", "trace"] }
+
+# crypto dependencies
+ecdsa = "0.16.9"
+ethers-core = "2.0.13"
+web3 = "0.19.0"
+secp256k1 = "0.28.2"
+
+[workspace] # used to ignore higher level workspace

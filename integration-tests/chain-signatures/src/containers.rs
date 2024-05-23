@@ -30,15 +30,6 @@ pub struct Node<'a> {
     cfg: MultichainConfig,
 }
 
-// pub struct NodeApi {
-//     pub address: String,
-//     pub node_id: usize,
-//     pub sk_share: ExpandedKeyPair,
-//     pub cipher_key: GenericArray<u8, U32>,
-//     pub gcp_project_id: String,
-//     pub gcp_datastore_local_url: String,
-// }
-
 impl<'a> Node<'a> {
     // Container port used for the docker network, does not have to be unique
     const CONTAINER_PORT: u16 = 3000;
@@ -317,6 +308,7 @@ impl<'a> LakeIndexer<'a> {
             "running NEAR Lake Indexer container..."
         );
 
+        // TODO: replace with proper image
         let image = GenericImage::new(
             // "ghcr.io/near/near-lake-indexer",
             // "18ef24922fd7b5b8985ea793fdf7a939e57216ba",

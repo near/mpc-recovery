@@ -1,4 +1,6 @@
+use crate::actions;
 use crate::MultichainTestContext;
+
 use anyhow::Context;
 use backon::ExponentialBuilder;
 use backon::Retryable;
@@ -247,13 +249,8 @@ pub async fn signature_payload_responded(
     payload_hashed: [u8; 32],
 ) -> anyhow::Result<FullSignature<Secp256k1>> {
     let is_signature_ready = || async {
-        let (_, _, _, tx_hash) = crate::multichain::actions::request_sign_non_random(
-            &ctx,
-            account.clone(),
-            payload,
-            payload_hashed,
-        )
-        .await?;
+        let (_, _, _, tx_hash) =
+            actions::request_sign_non_random(ctx, account.clone(), payload, payload_hashed).await?;
         signature_responded(ctx, tx_hash).await
     };
 

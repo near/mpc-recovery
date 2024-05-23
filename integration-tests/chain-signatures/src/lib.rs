@@ -2,22 +2,27 @@ pub mod containers;
 pub mod local;
 pub mod utils;
 
-use crate::multichain::containers::DockerClient;
-use crate::multichain::containers::TARGET_CONTRACT_DIR;
-use crate::{initialize_lake_indexer, LakeIndexerCtx};
+use std::collections::HashMap;
+
+use self::local::NodeConfig;
+use crate::containers::DockerClient;
+use crate::containers::LocalStack;
+
+use anyhow::Context as _;
+use bollard::exec::{CreateExecOptions, StartExecResults};
+use futures::StreamExt;
 use mpc_contract::primitives::CandidateInfo;
 use mpc_recovery_node::gcp::GcpService;
 use mpc_recovery_node::protocol::presignature::PresignatureConfig;
 use mpc_recovery_node::protocol::triple::TripleConfig;
 use mpc_recovery_node::storage;
 use mpc_recovery_node::storage::triple_storage::TripleNodeStorageBox;
-use near_workspaces::network::Sandbox;
+use near_crypto::KeyFile;
+use near_workspaces::network::{Sandbox, ValidatorKey};
 use near_workspaces::types::SecretKey;
 use near_workspaces::{Account, AccountId, Contract, Worker};
 use serde_json::json;
-use std::collections::HashMap;
-
-use self::local::NodeConfig;
+use testcontainers::{Container, GenericImage};
 
 const NETWORK: &str = "mpc_it_network";
 
@@ -215,11 +220,11 @@ pub struct Context<'a> {
     pub docker_network: String,
     pub release: bool,
 
-    pub localstack: crate::multichain::containers::LocalStack<'a>,
-    pub lake_indexer: crate::multichain::containers::LakeIndexer<'a>,
+    pub localstack: crate::containers::LocalStack<'a>,
+    pub lake_indexer: crate::containers::LakeIndexer<'a>,
     pub worker: Worker<Sandbox>,
     pub mpc_contract: Contract,
-    pub datastore: crate::multichain::containers::Datastore<'a>,
+    pub datastore: crate::containers::Datastore<'a>,
     pub storage_options: storage::Options,
 }
 
@@ -243,20 +248,17 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
     } = initialize_lake_indexer(docker_client, docker_network).await?;
 
     let mpc_contract = worker
-        .dev_deploy(&std::fs::read(format!(
-            "{}/wasm32-unknown-unknown/release/mpc_contract.wasm",
-            TARGET_CONTRACT_DIR
-        ))?)
+        .dev_deploy(&std::fs::read(
+            local::target_dir()
+                .context("could not find target dir")?
+                .join("wasm32-unknown-unknown/release/mpc_contract.wasm"),
+        )?)
         .await?;
     tracing::info!(contract_id = %mpc_contract.id(), "deployed mpc contract");
 
     let gcp_project_id = "multichain-integration";
-    let datastore = crate::multichain::containers::Datastore::run(
-        docker_client,
-        docker_network,
-        gcp_project_id,
-    )
-    .await?;
+    let datastore =
+        crate::containers::Datastore::run(docker_client, docker_network, gcp_project_id).await?;
 
     let sk_share_local_path = "multichain-integration-secret-manager".to_string();
     let storage_options = mpc_recovery_node::storage::Options {
@@ -381,4 +383,94 @@ pub async fn run(cfg: MultichainConfig, docker_client: &DockerClient) -> anyhow:
 
     #[cfg(not(feature = "docker-test"))]
     return host(cfg, docker_client).await;
+}
+
+async fn fetch_from_validator(
+    docker_client: &containers::DockerClient,
+    container: &Container<'_, GenericImage>,
+    path: &str,
+) -> anyhow::Result<Vec<u8>> {
+    tracing::info!(path, "fetching data from validator");
+    let create_result = docker_client
+        .docker
+        .create_exec(
+            container.id(),
+            CreateExecOptions::<&str> {
+                attach_stdout: Some(true),
+                attach_stderr: Some(true),
+                cmd: Some(vec!["cat", path]),
+                ..Default::default()
+            },
+        )
+        .await?;
+
+    let start_result = docker_client
+        .docker
+        .start_exec(&create_result.id, None)
+        .await?;
+
+    match start_result {
+        StartExecResults::Attached { mut output, .. } => {
+            let mut stream_contents = Vec::new();
+            while let Some(chunk) = output.next().await {
+                stream_contents.extend_from_slice(&chunk?.into_bytes());
+            }
+
+            tracing::info!("data fetched");
+            Ok(stream_contents)
+        }
+        StartExecResults::Detached => unreachable!("unexpected detached output"),
+    }
+}
+
+async fn fetch_validator_keys(
+    docker_client: &containers::DockerClient,
+    container: &Container<'_, GenericImage>,
+) -> anyhow::Result<KeyFile> {
+    let _span = tracing::info_span!("fetch_validator_keys");
+    let key_data =
+        fetch_from_validator(docker_client, container, "/root/.near/validator_key.json").await?;
+    Ok(serde_json::from_slice(&key_data)?)
+}
+
+pub struct LakeIndexerCtx<'a> {
+    pub localstack: containers::LocalStack<'a>,
+    pub lake_indexer: containers::LakeIndexer<'a>,
+    pub worker: Worker<Sandbox>,
+}
+
+pub async fn initialize_lake_indexer<'a>(
+    docker_client: &'a containers::DockerClient,
+    network: &str,
+) -> anyhow::Result<LakeIndexerCtx<'a>> {
+    let s3_bucket = "near-lake-custom".to_string();
+    let s3_region = "us-east-1".to_string();
+    let localstack =
+        LocalStack::run(docker_client, network, s3_bucket.clone(), s3_region.clone()).await?;
+
+    let lake_indexer = containers::LakeIndexer::run(
+        docker_client,
+        network,
+        &localstack.s3_address,
+        s3_bucket,
+        s3_region,
+    )
+    .await?;
+
+    let validator_key = fetch_validator_keys(docker_client, &lake_indexer.container).await?;
+
+    tracing::info!("initializing sandbox worker");
+    let worker = near_workspaces::sandbox()
+        .rpc_addr(&lake_indexer.rpc_host_address)
+        .validator_key(ValidatorKey::Known(
+            validator_key.account_id.to_string().parse()?,
+            validator_key.secret_key.to_string().parse()?,
+        ))
+        .await?;
+
+    Ok(LakeIndexerCtx {
+        localstack,
+        lake_indexer,
+        worker,
+    })
 }
