@@ -1,6 +1,7 @@
 /target
 .direnv
 .DS_Store
+.idea
 
 flamegraph*.svg
 tmp
