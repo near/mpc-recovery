@@ -6,20 +6,20 @@ use k256::elliptic_curve::sec1::ToEncodedPoint;
 use k256::elliptic_curve::CurveArithmetic;
 use k256::sha2::{Digest, Sha256};
 use k256::{AffinePoint, Scalar, Secp256k1};
-use near_primitives::types::AccountId;
+use near_sdk::AccountId;
 
 // Constant prefix that ensures epsilon derivation values are used specifically for
 // near-mpc-recovery with key derivation protocol vX.Y.Z.
 const EPSILON_DERIVATION_PREFIX: &str = "near-mpc-recovery v0.1.0 epsilon derivation:";
 
-pub fn derive_epsilon(signer_id: &AccountId, path: &str) -> Scalar {
+pub fn derive_epsilon(predecessor_id: &AccountId, path: &str) -> Scalar {
     // TODO: Use a key derivation library instead of doing this manually.
     // https://crates.io/crates/hkdf might be a good option?
     //
     // ',' is ACCOUNT_DATA_SEPARATOR from nearcore that indicate the end
     // of the accound id in the trie key. We reuse the same constant to
     // indicate the end of the account id in derivation path.
-    let derivation_path = format!("{EPSILON_DERIVATION_PREFIX}{},{}", signer_id, path);
+    let derivation_path = format!("{EPSILON_DERIVATION_PREFIX}{},{}", predecessor_id, path);
     let mut hasher = Sha256::new();
     hasher.update(derivation_path);
     Scalar::from_bytes(&hasher.finalize())
