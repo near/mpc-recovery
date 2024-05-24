@@ -1,5 +1,5 @@
-use crate::types::PublicKey;
 use chrono::{DateTime, LocalResult, TimeZone, Utc};
+use crypto_shared::PublicKey;
 use k256::elliptic_curve::scalar::FromUintUnchecked;
 use k256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
 use k256::{AffinePoint, EncodedPoint, Scalar, U256};

@@ -3,6 +3,7 @@ pub mod wait_for;
 use crate::MultichainTestContext;
 
 use cait_sith::FullSignature;
+use crypto_shared::{derive_epsilon, derive_key, into_eth_sig};
 use elliptic_curve::sec1::ToEncodedPoint;
 use k256::ecdsa::VerifyingKey;
 use k256::elliptic_curve::ops::{Invert, Reduce};
@@ -13,7 +14,6 @@ use k256::elliptic_curve::ProjectivePoint;
 use k256::{AffinePoint, EncodedPoint, Scalar, Secp256k1};
 use mpc_contract::primitives::SignRequest;
 use mpc_contract::RunningContractState;
-use mpc_recovery_node::kdf;
 use mpc_recovery_node::util::ScalarExt;
 use near_crypto::InMemorySigner;
 use near_jsonrpc_client::methods::broadcast_tx_async::RpcBroadcastTxAsyncRequest;
@@ -88,8 +88,8 @@ pub async fn assert_signature(
 ) {
     let mpc_point = EncodedPoint::from_bytes(mpc_pk_bytes).unwrap();
     let mpc_pk = AffinePoint::from_encoded_point(&mpc_point).unwrap();
-    let epsilon = kdf::derive_epsilon(account_id, "test");
-    let user_pk = kdf::derive_key(mpc_pk, epsilon);
+    let epsilon = derive_epsilon(account_id, "test");
+    let user_pk = derive_key(mpc_pk, epsilon);
 
     assert!(signature.verify(&user_pk, &Scalar::from_bytes(payload),));
 }
@@ -206,8 +206,8 @@ async fn test_proposition() {
     let mpc_pk = EncodedPoint::from_bytes(mpc_pk).unwrap();
     let mpc_pk = AffinePoint::from_encoded_point(&mpc_pk).unwrap();
     let account_id = "acc_mc.test.near".parse().unwrap();
-    let derivation_epsilon: k256::Scalar = kdf::derive_epsilon(&account_id, "test");
-    let user_pk: AffinePoint = kdf::derive_key(mpc_pk, derivation_epsilon);
+    let derivation_epsilon: k256::Scalar = derive_epsilon(&account_id, "test");
+    let user_pk: AffinePoint = derive_key(mpc_pk, derivation_epsilon);
     let user_pk_y_parity = match user_pk.y_is_odd().unwrap_u8() {
         0 => secp256k1::Parity::Even,
         1 => secp256k1::Parity::Odd,
@@ -231,7 +231,7 @@ async fn test_proposition() {
     let r = x_coordinate::<k256::Secp256k1>(&big_r);
 
     let signature = cait_sith::FullSignature::<Secp256k1> { big_r, s };
-    let multichain_sig = kdf::into_eth_sig(&user_pk, &signature, payload_hash_scalar).unwrap();
+    let multichain_sig = into_eth_sig(&user_pk, &signature.big_r, &signature.s, payload_hash_scalar).unwrap();
 
     println!("{multichain_sig:#?}");
     println!("R: {big_r:#?}");
@@ -242,7 +242,7 @@ async fn test_proposition() {
     // Check signature using cait-sith tooling
     let is_signature_valid_for_user_pk = signature.verify(&user_pk, &payload_hash_scalar);
     let is_signature_valid_for_mpc_pk = signature.verify(&mpc_pk, &payload_hash_scalar);
-    let another_user_pk = kdf::derive_key(mpc_pk, derivation_epsilon + k256::Scalar::ONE);
+    let another_user_pk = derive_key(mpc_pk, derivation_epsilon + k256::Scalar::ONE);
     let is_signature_valid_for_another_user_pk =
         signature.verify(&another_user_pk, &payload_hash_scalar);
     assert!(is_signature_valid_for_user_pk);

@@ -4,11 +4,13 @@ use super::presignature::{Presignature, PresignatureId, PresignatureManager};
 use crate::indexer::ContractSignRequest;
 use crate::kdf;
 use crate::types::{PublicKey, SignatureProtocol};
+use crate::types::{PublicKey, SignatureProtocol};
 use crate::util::{AffinePointExt, ScalarExt};
 
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::{FullSignature, PresignOutput};
 use chrono::Utc;
+use crypto_shared::{derive_key, PublicKey};
 use k256::{Scalar, Secp256k1};
 use rand::rngs::StdRng;
 use rand::seq::{IteratorRandom, SliceRandom};
@@ -237,7 +239,7 @@ impl SignatureManager {
         let protocol = Box::new(cait_sith::sign(
             &participants,
             me,
-            kdf::derive_key(public_key, epsilon),
+            derive_key(public_key, epsilon),
             output,
             Scalar::from_bytes(&request.payload),
         )?);

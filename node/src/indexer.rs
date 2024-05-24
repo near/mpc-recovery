@@ -3,6 +3,7 @@ use crate::kdf;
 use crate::protocol::{SignQueue, SignRequest};
 use crate::types::LatestBlockHeight;
 
+use crypto_shared::derive_epsilon;
 use near_account_id::AccountId;
 use near_lake_framework::{LakeBuilder, LakeContext};
 use near_lake_primitives::actions::ActionMetaDataExt;
@@ -120,8 +121,7 @@ async fn handle_block(
                             );
                             continue;
                         };
-                        let epsilon =
-                            kdf::derive_epsilon(&action.predecessor_id(), &aruments.request.path);
+                        let epsilon = derive_epsilon(&action.predecessor_id(), &sign_payload.path);
                         let delta = kdf::derive_delta(receipt_id, entropy);
                         tracing::info!(
                             receipt_id = %receipt_id,

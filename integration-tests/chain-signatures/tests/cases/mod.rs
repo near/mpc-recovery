@@ -3,10 +3,14 @@ use std::str::FromStr;
 use crate::actions::{self, wait_for};
 use crate::with_multichain_nodes;
 
+use crypto_shared::{self, derive_epsilon, derive_key, into_eth_sig, x_coordinate};
 use integration_tests_chain_signatures::containers::{self, DockerClient};
 use integration_tests_chain_signatures::MultichainConfig;
 use k256::elliptic_curve::point::AffineCoordinates;
-use mpc_recovery_node::kdf::{self, x_coordinate};
+use mpc_recovery_integration_tests::env::containers::DockerClient;
+use mpc_recovery_integration_tests::env::containers::DockerClient;
+use mpc_recovery_integration_tests::multichain::MultichainConfig;
+use mpc_recovery_integration_tests::multichain::MultichainConfig;
 use mpc_recovery_node::protocol::presignature::PresignatureConfig;
 use mpc_recovery_node::protocol::triple::TripleConfig;
 use mpc_recovery_node::test_utils;
@@ -171,14 +175,18 @@ async fn test_key_derivation() -> anyhow::Result<()> {
                 let sig = wait_for::signature_responded(&ctx, tx_hash).await?;
 
                 let hd_path = "test";
-                let derivation_epsilon = kdf::derive_epsilon(account.id(), hd_path);
-                let user_pk = kdf::derive_key(mpc_pk, derivation_epsilon);
-                let multichain_sig =
-                    kdf::into_eth_sig(&user_pk, &sig, k256::Scalar::from_bytes(&payload_hashed))
-                        .unwrap();
+                let derivation_epsilon = derive_epsilon(account.id(), hd_path);
+                let user_pk = derive_key(mpc_pk, derivation_epsilon);
+                let multichain_sig = into_eth_sig(
+                    &user_pk,
+                    &sig.big_r,
+                    &sig.s,
+                    k256::Scalar::from_bytes(&payload_hashed),
+                )
+                .unwrap();
 
                 // start recovering the address and compare them:
-                let user_pk_x = kdf::x_coordinate::<k256::Secp256k1>(&user_pk);
+                let user_pk_x = x_coordinate(&user_pk);
                 let user_pk_y_parity = match user_pk.y_is_odd().unwrap_u8() {
                     1 => secp256k1::Parity::Odd,
                     0 => secp256k1::Parity::Even,
@@ -189,7 +197,7 @@ async fn test_key_derivation() -> anyhow::Result<()> {
                 let user_secp_pk =
                     secp256k1::PublicKey::from_x_only_public_key(user_pk_x, user_pk_y_parity);
                 let user_addr = actions::public_key_to_address(&user_secp_pk);
-                let r = x_coordinate::<k256::Secp256k1>(&multichain_sig.big_r);
+                let r = x_coordinate(&multichain_sig.big_r);
                 let s = multichain_sig.s;
                 let signature_for_recovery: [u8; 64] = {
                     let mut signature = [0u8; 64];

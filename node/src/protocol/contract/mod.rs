@@ -1,7 +1,7 @@
 pub mod primitives;
 
-use crate::types::PublicKey;
 use crate::util::NearPublicKeyExt;
+use crypto_shared::PublicKey;
 use mpc_contract::ProtocolContractState;
 use near_account_id::AccountId;
 use serde::{Deserialize, Serialize};

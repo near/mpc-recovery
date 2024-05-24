@@ -2,12 +2,13 @@ use super::message::PresignatureMessage;
 use super::triple::{Triple, TripleConfig, TripleId, TripleManager};
 use crate::gcp::error::DatastoreStorageError;
 use crate::protocol::contract::primitives::Participants;
-use crate::types::{PresignatureProtocol, PublicKey, SecretKeyShare};
+use crate::types::{PresignatureProtocol, SecretKeyShare};
 use crate::util::AffinePointExt;
 
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::{KeygenOutput, PresignArguments, PresignOutput};
 use chrono::Utc;
+use crypto_shared::PublicKey;
 use k256::Secp256k1;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet, VecDeque};

@@ -5,6 +5,7 @@ use cait_sith::protocol::{InitializationError, Participant};
 use cait_sith::triples::TripleGenerationOutput;
 use cait_sith::{protocol::Protocol, KeygenOutput};
 use cait_sith::{FullSignature, PresignOutput};
+use crypto_shared::PublicKey;
 use k256::{elliptic_curve::CurveArithmetic, Secp256k1};
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
@@ -31,7 +32,6 @@ pub const FAILED_TRIPLES_TIMEOUT: Duration = Duration::from_secs(120 * 60);
 pub const TAKEN_TIMEOUT: Duration = Duration::from_secs(120 * 60);
 
 pub type SecretKeyShare = <Secp256k1 as CurveArithmetic>::Scalar;
-pub type PublicKey = <Secp256k1 as CurveArithmetic>::AffinePoint;
 pub type TripleProtocol =
     Box<dyn Protocol<Output = TripleGenerationOutput<Secp256k1>> + Send + Sync>;
 pub type PresignatureProtocol = Box<dyn Protocol<Output = PresignOutput<Secp256k1>> + Send + Sync>;
