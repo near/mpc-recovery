@@ -57,6 +57,14 @@ node_configs = [
     sk_share_secret_id   = "multichain-sk-share-dev-6"
   },
   {
+    account              = "multichain-node-dev-7.testnet"
+    cipher_pk            = "5f49047f95ab9705f325d573ea6fcd2bbe681ab1f90b6b0d736669c34b483a07"
+    account_sk_secret_id = "multichain-account-sk-dev-7"
+    cipher_sk_secret_id  = "multichain-cipher-sk-dev-7"
+    sign_sk_secret_id    = "multichain-sign-sk-dev-7"
+    sk_share_secret_id   = "multichain-sk-share-dev-7"
+  },
+  {
     account              = "multichain-node-dev-8.testnet"
     cipher_pk            = "39da3edf2d09298ff5449d475c8e3c25e6f624cbfee961c4fa97ca568b6abd61"
     account_sk_secret_id = "multichain-account-sk-dev-8"
