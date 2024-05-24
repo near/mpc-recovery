@@ -1,4 +1,5 @@
 pub mod containers;
+pub mod execute;
 pub mod local;
 pub mod utils;
 
@@ -229,14 +230,14 @@ pub struct Context<'a> {
 }
 
 pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> {
-    // if !crate::mpc::build_multichain_contract().await?.success() {
-    //     anyhow::bail!("failed to prebuild multichain contract");
-    // }
+    if !execute::build_multichain_contract().await?.success() {
+        anyhow::bail!("failed to prebuild multichain contract");
+    }
 
     let release = true;
-    // if !crate::mpc::build_multichain(release).await?.success() {
-    //     anyhow::bail!("failed to prebuild multichain node service");
-    // }
+    if !execute::build_multichain(release).await?.success() {
+        anyhow::bail!("failed to prebuild multichain node service");
+    }
 
     let docker_network = NETWORK;
     docker_client.create_network(docker_network).await?;
@@ -249,7 +250,7 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
 
     let mpc_contract = worker
         .dev_deploy(&std::fs::read(
-            local::target_dir()
+            execute::target_dir()
                 .context("could not find target dir")?
                 .join("wasm32-unknown-unknown/release/mpc_contract.wasm"),
         )?)

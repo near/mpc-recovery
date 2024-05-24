@@ -1,16 +1,12 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use async_process::{Command, ExitStatus, Stdio};
 use tokio::runtime::Runtime;
 
 use mpc_recovery::Cli;
 
 const PACKAGE: &str = "mpc-recovery";
-const PACKAGE_MULTICHAIN: &str = "mpc-recovery-node";
-const PACKAGE_CONTRACT: &str = "mpc-contract";
-const TARGET_CONTRACT: &str = "wasm32-unknown-unknown";
-pub const TARGET_CONTRACT_DIR: &str = "../target/seperate_wasm";
 
 /// NodeProcess holds onto the respective handles such that on drop, it will clean
 /// the running process, task, or thread.
@@ -44,7 +40,7 @@ async fn build_package(
     release: bool,
     package: &str,
     target: Option<&str>,
-    target_dir: Option<&str>,
+    target_dir: Option<impl AsRef<Path>>,
 ) -> anyhow::Result<ExitStatus> {
     let mut cmd = Command::new("cargo");
     cmd.arg("build")
@@ -63,27 +59,21 @@ async fn build_package(
     }
 
     if let Some(target_dir) = target_dir {
-        cmd.arg("--target-dir").arg(target_dir);
+        cmd.arg("--target-dir").arg(target_dir.as_ref().as_os_str());
     }
 
     Ok(cmd.spawn()?.status().await?)
 }
 
 pub async fn build(release: bool) -> anyhow::Result<ExitStatus> {
-    build_package(release, PACKAGE, None, None).await
-}
-
-pub async fn build_multichain(release: bool) -> anyhow::Result<ExitStatus> {
-    build_package(release, PACKAGE_MULTICHAIN, None, None).await
-}
-
-pub async fn build_multichain_contract() -> anyhow::Result<ExitStatus> {
-    // We use a different target directory to stop the different rustflags between targets from clobbering the build cache
     build_package(
-        true,
-        PACKAGE_CONTRACT,
-        Some(TARGET_CONTRACT),
-        Some(TARGET_CONTRACT_DIR),
+        release,
+        PACKAGE,
+        None,
+        Some(
+            target_dir()
+                .ok_or_else(|| anyhow!("could not find /target while building mpc-recovery"))?,
+        ),
     )
     .await
 }
