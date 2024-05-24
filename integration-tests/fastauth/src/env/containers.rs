@@ -46,7 +46,6 @@ use crate::env::{Context, LeaderNodeApi, SignerNodeApi};
 use crate::util::{
     self, create_key_file, create_key_file_with_filepath, create_relayer_cofig_file,
 };
-use bollard::exec::CreateExecOptions;
 
 static NETWORK_MUTEX: Lazy<Mutex<i32>> = Lazy::new(|| Mutex::new(0));
 
@@ -499,7 +498,6 @@ impl<'a> Datastore<'a> {
     }
 }
 
-
 pub struct SignerNode<'a> {
     pub container: Container<'a, GenericImage>,
     pub address: String,
@@ -644,7 +642,7 @@ impl<'a> LeaderNode<'a> {
             sign_nodes,
             near_rpc: ctx.relayer_ctx.sandbox.address.clone(),
             near_root_account: ctx.relayer_ctx.worker.root_account()?.id().to_string(),
-            account_creator_id: account_creator.id().clone(),
+            account_creator_id: account_creator.id().as_str().parse().unwrap(),
             account_creator_sk: ctx
                 .relayer_ctx
                 .creator_account_keys
@@ -776,7 +774,7 @@ impl LeaderNodeApi {
         };
 
         let new_account_request = NewAccountRequest {
-            near_account_id: account_id.clone(),
+            near_account_id: account_id.as_str().parse().unwrap(),
             create_account_options,
             oidc_token: oidc_token.clone(),
             user_credentials_frp_signature: frp_signature,
@@ -796,11 +794,14 @@ impl LeaderNodeApi {
         frp_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
-        let (_, block_height, nonce) = self.client.access_key(account_id, recovery_pk).await?;
+        let (_, block_height, nonce) = self
+            .client
+            .access_key(&account_id.as_str().parse().unwrap(), recovery_pk)
+            .await?;
 
         let add_key_delegate_action = DelegateAction {
-            sender_id: account_id.clone(),
-            receiver_id: account_id.clone(),
+            sender_id: account_id.as_str().parse().unwrap(),
+            receiver_id: account_id.as_str().parse().unwrap(),
             actions: vec![Action::AddKey(AddKeyAction {
                 public_key: public_key.clone(),
                 access_key: AccessKey {
@@ -850,11 +851,14 @@ impl LeaderNodeApi {
         frp_pk: &PublicKey,
     ) -> anyhow::Result<(StatusCode, SignResponse)> {
         // Prepare SignRequest with add key delegate action
-        let (_, block_height, nonce) = self.client.access_key(account_id, recovery_pk).await?;
+        let (_, block_height, nonce) = self
+            .client
+            .access_key(&account_id.as_str().parse().unwrap(), recovery_pk)
+            .await?;
 
         let delete_key_delegate_action = DelegateAction {
-            sender_id: account_id.clone(),
-            receiver_id: account_id.clone(),
+            sender_id: account_id.as_str().parse().unwrap(),
+            receiver_id: account_id.as_str().parse().unwrap(),
             actions: vec![Action::DeleteKey(DeleteKeyAction {
                 public_key: public_key.clone(),
             })

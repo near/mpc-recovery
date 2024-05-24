@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
-use async_process::{Child, Command, ExitStatus, Stdio};
+use async_process::{Command, ExitStatus, Stdio};
 use tokio::runtime::Runtime;
 
 use mpc_recovery::Cli;
@@ -116,23 +116,4 @@ pub async fn spawn(release: bool, node: &str, cli: Cli) -> anyhow::Result<NodePr
         .with_context(|| format!("failed to execute {node} node"))?;
 
     Ok(NodeProcess::Subprocess(child))
-}
-
-pub fn spawn_multichain(
-    release: bool,
-    node: &str,
-    cli: mpc_recovery_node::cli::Cli,
-) -> anyhow::Result<Child> {
-    let executable = executable(release, PACKAGE_MULTICHAIN)
-        .with_context(|| format!("could not find target dir while starting {node} node"))?;
-
-    Command::new(&executable)
-        .args(cli.into_str_args())
-        .env("RUST_LOG", "mpc_recovery_node=INFO")
-        .envs(std::env::vars())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .kill_on_drop(true)
-        .spawn()
-        .with_context(|| format!("failed to run {node} node: {}", executable.display()))
 }

@@ -1,4 +1,4 @@
-use crate::mpc::{add_pk_and_check_validity, fetch_recovery_pk, new_random_account};
+use crate::cases::{add_pk_and_check_validity, fetch_recovery_pk, new_random_account};
 use crate::{account, key, with_nodes, MpcCheck, TestContext};
 use futures::stream::FuturesUnordered;
 use hyper::StatusCode;
@@ -61,7 +61,7 @@ async fn test_random_recovery_keys() -> anyhow::Result<()> {
         let user_limited_access_key = LimitedAccessKey {
             public_key: key::random_pk(),
             allowance: "100".to_string(),
-            receiver_id: account::random(&ctx.worker)?,
+            receiver_id: account::random(&ctx.worker)?.as_str().parse().unwrap(),
             method_names: "method_names".to_string(),
         };
 

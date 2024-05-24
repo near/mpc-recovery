@@ -1,8 +1,9 @@
-use crate::mpc::{fetch_recovery_pk, register_account};
+use crate::cases::{fetch_recovery_pk, register_account};
 use crate::{account, check, key, with_nodes, MpcCheck};
 use anyhow::Context;
 use ed25519_dalek::{PublicKey as PublicKeyEd25519, Signature, Verifier};
 use hyper::StatusCode;
+use integration_tests_fastauth::util;
 use mpc_recovery::sign_node::oidc::OidcToken;
 use mpc_recovery::utils::user_credentials_request_digest;
 use mpc_recovery::{
@@ -17,8 +18,8 @@ use near_primitives::{
         Action, AddKeyAction, CreateAccountAction, DeleteAccountAction, DeleteKeyAction,
         DeployContractAction, FunctionCallAction, StakeAction, TransferAction,
     },
+    types::AccountId,
 };
-use near_workspaces::AccountId;
 use std::{str::FromStr, time::Duration};
 use test_log::test;
 
@@ -395,7 +396,7 @@ async fn test_invalid_token() -> anyhow::Result<()> {
                 create_account_options: _,
                 user_recovery_public_key: _,
                 near_account_id: acc_id,
-            } if acc_id == account_id
+            } if acc_id.as_str() == account_id.as_str()
         ));
 
         tokio::time::sleep(Duration::from_millis(2000)).await;
@@ -538,7 +539,7 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
             malformed_cases.into_iter().enumerate()
         {
             let (code, msg): (StatusCode, serde_json::Value) =
-                mpc_recovery_integration_tests::util::post(
+                util::post(
                     format!("{}/new_account", ctx.leader_node.address),
                     invalid_req,
                 )
@@ -573,7 +574,7 @@ async fn test_malformed_raw_create_account() -> anyhow::Result<()> {
                 create_account_options: _,
                 user_recovery_public_key: _,
                 near_account_id,
-            } if near_account_id == account_id
+            } if near_account_id.as_str() == account_id.as_str()
         ));
 
         tokio::time::sleep(Duration::from_millis(2000)).await;

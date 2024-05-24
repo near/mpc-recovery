@@ -35,7 +35,7 @@ pub async fn register_account(
             create_account_options: _,
             user_recovery_public_key: _,
             near_account_id,
-        } if &near_account_id == user_id
+        } if near_account_id.as_str() == user_id.as_str()
     ));
 
     tokio::time::sleep(Duration::from_millis(2000)).await;

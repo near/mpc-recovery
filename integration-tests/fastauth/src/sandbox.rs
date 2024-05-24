@@ -25,7 +25,7 @@ pub async fn initialize_linkdrop(worker: &Worker<Sandbox>) -> anyhow::Result<()>
     tracing::info!("Initializing linkdrop contract...");
     let near_root_account = worker.root_account()?;
     near_root_account
-        .deploy(include_bytes!("../linkdrop.wasm"))
+        .deploy(include_bytes!("../res/linkdrop.wasm"))
         .await?
         .into_result()?;
     near_root_account

@@ -93,7 +93,7 @@ impl LeaderNode {
             sign_nodes,
             near_rpc: ctx.relayer_ctx.sandbox.local_address.clone(),
             near_root_account: ctx.relayer_ctx.worker.root_account()?.id().to_string(),
-            account_creator_id: account_creator.id().clone(),
+            account_creator_id: account_creator.id().as_str().parse()?,
             account_creator_sk: ctx
                 .relayer_ctx
                 .creator_account_keys

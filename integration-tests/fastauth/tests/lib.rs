@@ -1,76 +1,61 @@
-// mod mpc;
+mod cases;
 
-use crate::multichain::actions::wait_for;
-
-use anyhow::anyhow;
-// use curv::elliptic::curves::{Ed25519, Point};
-use futures::future::BoxFuture;
-use glob::glob;
+use curv::elliptic::curves::{Ed25519, Point};
 use hyper::StatusCode;
-// use mpc_recovery::{
-//     gcp::GcpService,
-//     msg::{
-//         ClaimOidcResponse, MpcPkResponse, NewAccountResponse, SignResponse, UserCredentialsResponse,
-//     },
-// };
-use mpc_recovery_integration_tests::{
-    multichain::containers::DockerClient, multichain::MultichainConfig,
+use integration_tests_fastauth::env;
+use integration_tests_fastauth::env::containers::DockerClient;
+use mpc_recovery::{
+    gcp::GcpService,
+    msg::{
+        ClaimOidcResponse, MpcPkResponse, NewAccountResponse, SignResponse, UserCredentialsResponse,
+    },
 };
-use mpc_recovery_integration_tests::{
-    // env,
-    multichain::utils::{vote_join, vote_leave},
-};
-use near_jsonrpc_client::JsonRpcClient;
+use near_workspaces::{network::Sandbox, Worker};
 
-use near_workspaces::{network::Sandbox, Account, AccountId, Worker};
+pub struct TestContext {
+    env: String,
+    leader_node: env::LeaderNodeApi,
+    pk_set: Vec<Point<Ed25519>>,
+    worker: Worker<Sandbox>,
+    signer_nodes: Vec<env::SignerNodeApi>,
+    gcp_project_id: String,
+    gcp_datastore_url: String,
+}
 
-use std::fs;
-use std::str::FromStr;
+impl TestContext {
+    pub async fn gcp_service(&self) -> anyhow::Result<GcpService> {
+        GcpService::new(
+            self.env.clone(),
+            self.gcp_project_id.clone(),
+            Some(self.gcp_datastore_url.clone()),
+        )
+        .await
+    }
+}
 
-// pub struct TestContext {
-//     env: String,
-//     leader_node: env::LeaderNodeApi,
-//     pk_set: Vec<Point<Ed25519>>,
-//     worker: Worker<Sandbox>,
-//     signer_nodes: Vec<env::SignerNodeApi>,
-//     gcp_project_id: String,
-//     gcp_datastore_url: String,
-// }
+async fn with_nodes<Task, Fut, Val>(nodes: usize, f: Task) -> anyhow::Result<()>
+where
+    Task: FnOnce(TestContext) -> Fut,
+    Fut: core::future::Future<Output = anyhow::Result<Val>>,
+{
+    let docker_client = DockerClient::default();
+    let nodes = env::run(nodes, &docker_client).await?;
 
-// impl TestContext {
-//     pub async fn gcp_service(&self) -> anyhow::Result<GcpService> {
-//         GcpService::new(
-//             self.env.clone(),
-//             self.gcp_project_id.clone(),
-//             Some(self.gcp_datastore_url.clone()),
-//         )
-//         .await
-//     }
-// }
+    f(TestContext {
+        env: nodes.ctx().env.clone(),
+        pk_set: nodes.pk_set(),
+        leader_node: nodes.leader_api(),
+        signer_nodes: nodes.signer_apis(),
+        worker: nodes.ctx().relayer_ctx.worker.clone(),
+        gcp_project_id: nodes.ctx().gcp_project_id.clone(),
+        gcp_datastore_url: nodes.datastore_addr(),
+    })
+    .await?;
 
-// async fn with_nodes<Task, Fut, Val>(nodes: usize, f: Task) -> anyhow::Result<()>
-// where
-//     Task: FnOnce(TestContext) -> Fut,
-//     Fut: core::future::Future<Output = anyhow::Result<Val>>,
-// {
-//     let docker_client = DockerClient::default();
-//     let nodes = env::run(nodes, &docker_client).await?;
+    nodes.ctx().relayer_ctx.relayer.clean_tmp_files()?;
 
-//     f(TestContext {
-//         env: nodes.ctx().env.clone(),
-//         pk_set: nodes.pk_set(),
-//         leader_node: nodes.leader_api(),
-//         signer_nodes: nodes.signer_apis(),
-//         worker: nodes.ctx().relayer_ctx.worker.clone(),
-//         gcp_project_id: nodes.ctx().gcp_project_id.clone(),
-//         gcp_datastore_url: nodes.datastore_addr(),
-//     })
-//     .await?;
-
-//     nodes.ctx().relayer_ctx.relayer.clean_tmp_files()?;
-
-//     Ok(())
-// }
+    Ok(())
+}
 
 mod account {
     use near_workspaces::{network::Sandbox, AccountId, Worker};
@@ -129,49 +114,49 @@ mod key {
     }
 }
 
-// mod check {
-//     use crate::TestContext;
-//     use near_crypto::PublicKey;
-//     use near_workspaces::AccountId;
+mod check {
+    use crate::TestContext;
+    use near_crypto::PublicKey;
+    use near_workspaces::AccountId;
 
-//     pub async fn access_key_exists(
-//         ctx: &TestContext,
-//         account_id: &AccountId,
-//         public_key: &PublicKey,
-//     ) -> anyhow::Result<()> {
-//         let access_keys = ctx.worker.view_access_keys(account_id).await?;
+    pub async fn access_key_exists(
+        ctx: &TestContext,
+        account_id: &AccountId,
+        public_key: &PublicKey,
+    ) -> anyhow::Result<()> {
+        let access_keys = ctx.worker.view_access_keys(account_id).await?;
 
-//         if access_keys
-//             .iter()
-//             .any(|ak| ak.public_key.key_data() == public_key.key_data())
-//         {
-//             Ok(())
-//         } else {
-//             Err(anyhow::anyhow!(
-//                 "could not find access key {public_key} on account {account_id}"
-//             ))
-//         }
-//     }
+        if access_keys
+            .iter()
+            .any(|ak| ak.public_key.key_data() == public_key.key_data())
+        {
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!(
+                "could not find access key {public_key} on account {account_id}"
+            ))
+        }
+    }
 
-//     pub async fn access_key_does_not_exists(
-//         ctx: &TestContext,
-//         account_id: &AccountId,
-//         public_key: &str,
-//     ) -> anyhow::Result<()> {
-//         let access_keys = ctx.worker.view_access_keys(account_id).await?;
+    pub async fn access_key_does_not_exists(
+        ctx: &TestContext,
+        account_id: &AccountId,
+        public_key: &str,
+    ) -> anyhow::Result<()> {
+        let access_keys = ctx.worker.view_access_keys(account_id).await?;
 
-//         if access_keys
-//             .iter()
-//             .any(|ak| ak.public_key.to_string() == public_key)
-//         {
-//             Err(anyhow::anyhow!(
-//                 "Access key {public_key} still added to the account {account_id}"
-//             ))
-//         } else {
-//             Ok(())
-//         }
-//     }
-// }
+        if access_keys
+            .iter()
+            .any(|ak| ak.public_key.to_string() == public_key)
+        {
+            Err(anyhow::anyhow!(
+                "Access key {public_key} still added to the account {account_id}"
+            ))
+        } else {
+            Ok(())
+        }
+    }
+}
 
 // Kept the dead code around because it will be useful in testing and it's implemented everywhere
 trait MpcCheck {
@@ -316,8 +301,8 @@ macro_rules! impl_mpc_check {
     };
 }
 
-// impl_mpc_check!(SignResponse);
-// impl_mpc_check!(NewAccountResponse);
-// impl_mpc_check!(MpcPkResponse);
-// impl_mpc_check!(ClaimOidcResponse);
-// impl_mpc_check!(UserCredentialsResponse);
+impl_mpc_check!(SignResponse);
+impl_mpc_check!(NewAccountResponse);
+impl_mpc_check!(MpcPkResponse);
+impl_mpc_check!(ClaimOidcResponse);
+impl_mpc_check!(UserCredentialsResponse);
