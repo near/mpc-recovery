@@ -318,3 +318,10 @@ async fn test_signature_offline_node_back_online() -> anyhow::Result<()> {
     })
     .await
 }
+
+#[test]
+fn test() {
+    let sk = near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519);
+    let pk = sk.public_key();
+    println!("{sk}, {pk}");
+}
