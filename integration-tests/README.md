@@ -18,13 +18,14 @@ docker pull ghcr.io/near/sandbox:latest-aarch64
 In case of authorization issues make sure you have logged into docker using your [access token](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic).
 
 Build OIDC Provider test image
+
 ```bash
 docker build -t near/test-oidc-provider ./test-oidc-provider
 ```
 
 Set dummy AWS credentials and the correct region
 
-``` bash
+```bash
 aws configure set region us-east-1
 aws --profile default configure set aws_access_key_id "123"
 aws --profile default configure set aws_secret_access_key "456"
@@ -33,7 +34,8 @@ aws --profile default configure set aws_secret_access_key "456"
 Then run the integration tests:
 
 ```BASH
-cargo test -p mpc-recovery-integration-tests
+cd integration-tests/fastauth   # or integration-tests/chain-signatures
+cargo test
 ```
 
 ### Alternative: Docker Builds/Tests
@@ -41,7 +43,7 @@ cargo test -p mpc-recovery-integration-tests
 If instead, we need to run docker build/tests:
 
 ```BASH
-docker build ./mpc-recovery -t near/mpc-recovery
+docker build ./ -t near/mpc-recovery
 ```
 
 **Note**. You will need to re-build the Docker image each time you make a code change and want to run the integration tests.
@@ -49,7 +51,8 @@ docker build ./mpc-recovery -t near/mpc-recovery
 Finally, run the integration tests with the built docker image:
 
 ```BASH
-cargo test -p mpc-recovery-integration-tests --features docker-test
+cd integration-tests/fastauth   # or integration-tests/chain-signatures
+cargo test --features docker-test
 ```
 
 ## Profiling: Flamegraphs
@@ -75,7 +78,8 @@ This will generate a `flamegraph.svg`. Open this on a browser and inspect each o
 You can pass environment variable `TESTCONTAINERS=keep` to keep all of the docker containers. For example:
 
 ```bash
-$ TESTCONTAINERS=keep cargo test -p mpc-recovery-integration-tests
+$ cd integration-tests/fastauth
+$ TESTCONTAINERS=keep cargo test
 ```
 
 ### There are no logs anymore, how do I debug?
@@ -83,7 +87,8 @@ $ TESTCONTAINERS=keep cargo test -p mpc-recovery-integration-tests
 The easiest way is to run one isolated test of your choosing while keeping the containers (see above):
 
 ```bash
-$ TESTCONTAINERS=keep cargo test -p mpc-recovery-integration-tests test_basic_action
+$ cd integration-tests/fastauth
+$ TESTCONTAINERS=keep cargo test test_basic_action
 ```
 
 Now, you can do `docker ps` and it should list all of containers related to your test (the most recent ones are always at the top, so lookout for those). For example:
@@ -108,7 +113,8 @@ We have a CLI tool that can instantiate a short-lived development environment th
 
 ```bash
 $ export RUST_LOG=info
-$ cargo run -p mpc-recovery-integration-tests -- setup-env 3
+$ cd integration-tests/fastauth
+$ cargo run -- setup-env 3
 ```
 
 ### I'm getting "Error: error trying to connect: No such file or directory (os error 2)"

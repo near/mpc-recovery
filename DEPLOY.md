@@ -68,7 +68,7 @@ Save it to GCP Secret Manager under the name of your choosing (e.g. `mpc-recover
 Build the mpc-recovery docker image from this folder and make sure to tag it for convenience:
 
 ```bash
-$ docker build ./mpc-recovery -t near/mpc-recovery
+$ docker build ./ -t near/mpc-recovery
 ```
 
 ## Configure Terraform Variables
