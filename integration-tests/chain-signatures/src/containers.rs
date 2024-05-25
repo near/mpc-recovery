@@ -16,7 +16,6 @@ use tokio::io::AsyncWriteExt;
 use tracing;
 
 static NETWORK_MUTEX: Lazy<Mutex<i32>> = Lazy::new(|| Mutex::new(0));
-pub const TARGET_CONTRACT_DIR: &str = "../target";
 
 pub struct Node<'a> {
     pub container: Container<'a, GenericImage>,

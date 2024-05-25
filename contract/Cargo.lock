@@ -3123,7 +3123,7 @@ checksum = "7843ec2de400bcbc6a6328c958dc38e5359da6e93e72e37bc5246bf1ae776389"
 
 [[package]]
 name = "mpc-contract"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh 1.5.0",
@@ -3949,6 +3949,7 @@ dependencies = [
 [[package]]
 name = "near-sandbox-utils"
 version = "0.7.1"
+source = "git+https://github.com/near/near-sandbox.git?rev=4ca9c1fac434b75ee40c890cda5edd47ce86ead2#4ca9c1fac434b75ee40c890cda5edd47ce86ead2"
 dependencies = [
  "anyhow",
  "binary-install",
@@ -4276,6 +4277,7 @@ dependencies = [
 [[package]]
 name = "near-workspaces"
 version = "0.10.0"
+source = "git+https://github.com/near/near-workspaces-rs.git?branch=feat/upgrade-near-deps#ccc4372639144bff3720e23e958bc7dbaaebaa48"
 dependencies = [
  "async-trait",
  "base64 0.21.7",

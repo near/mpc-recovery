@@ -4,7 +4,6 @@ use async_process::Child;
 use mpc_keys::hpke;
 use near_workspaces::AccountId;
 
-#[allow(dead_code)]
 pub struct Node {
     pub address: String,
     pub account_id: AccountId,

@@ -27,18 +27,25 @@ jobs:
       - name: Compile Contract
         run: cd contract && cargo build --target wasm32-unknown-unknown --release
       - name: Compile
-        run: cargo check
+        run: |
+          ( cd keys ; cargo check )
+          ( cd node ; cargo check )
+          ( cd contract ; cargo check )
+          ( cd mpc-recovery ; cargo check )
+          ( cd load-tests ; cargo check )
+          ( cd test-oidc-provider ; cargo check )
+          ( cd integration-tests/chain-signatures ; cargo check )
+          ( cd integration-tests/fastauth ; cargo check )
       - name: Test format
         run: |
           ( cd keys ; cargo fmt -- --check )
           ( cd node ; cargo fmt -- --check )
           ( cd contract ; cargo fmt -- --check )
           ( cd mpc-recovery ; cargo fmt -- --check )
-          ( cd load-tests/ ; cargo fmt -- --check )
-          ( cd test-oidc-provider/ ; cargo fmt -- --check )
+          ( cd load-tests ; cargo fmt -- --check )
+          ( cd test-oidc-provider ; cargo fmt -- --check )
           ( cd integration-tests/chain-signatures ; cargo fmt -- --check )
           ( cd integration-tests/fastauth ; cargo fmt -- --check )
-
       - name: Unit tests
         run: ( cd mpc-recovery && cargo test )
       - name: Test clippy
@@ -47,8 +54,8 @@ jobs:
           ( cd node ; cargo clippy --tests -- -Dclippy::all )
           ( cd contract ; cargo clippy --tests -- -Dclippy::all )
           ( cd mpc-recovery ; cargo clippy --tests -- -Dclippy::all )
-          ( cd load-tests/ ; cargo clippy --tests -- -Dclippy::all )
-          ( cd test-oidc-provider/ ; cargo clippy --tests -- -Dclippy::all )
+          ( cd load-tests ; cargo clippy --tests -- -Dclippy::all )
+          ( cd test-oidc-provider ; cargo clippy --tests -- -Dclippy::all )
           ( cd integration-tests/chain-signatures ; cargo clippy --tests -- -Dclippy::all )
           ( cd integration-tests/fastauth ; cargo clippy --tests -- -Dclippy::all )
 

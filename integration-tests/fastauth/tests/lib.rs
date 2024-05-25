@@ -103,7 +103,6 @@ mod key {
         near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519).public_key()
     }
 
-    #[allow(dead_code)]
     pub fn malformed_pk() -> String {
         let random: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)
@@ -165,7 +164,6 @@ trait MpcCheck {
     fn assert_ok(self) -> anyhow::Result<Self::Response>;
     fn assert_bad_request_contains(self, expected: &str) -> anyhow::Result<Self::Response>;
     fn assert_unauthorized_contains(self, expected: &str) -> anyhow::Result<Self::Response>;
-    #[allow(dead_code)]
     fn assert_internal_error_contains(self, expected: &str) -> anyhow::Result<Self::Response>;
     fn assert_dependency_error_contains(self, expected: &str) -> anyhow::Result<Self::Response>;
 
