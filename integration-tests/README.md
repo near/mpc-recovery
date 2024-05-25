@@ -41,7 +41,7 @@ cargo test -p mpc-recovery-integration-tests
 If instead, we need to run docker build/tests:
 
 ```BASH
-docker build . -t near/mpc-recovery
+docker build ./mpc-recovery -t near/mpc-recovery
 ```
 
 **Note**. You will need to re-build the Docker image each time you make a code change and want to run the integration tests.
@@ -118,4 +118,3 @@ It's a known issue on MacOS. Try executiong the following command:
 ```bash
 sudo ln -s $HOME/.docker/run/docker.sock /var/run/docker.sock
 ```
-

@@ -33,12 +33,12 @@ k256 = { version = "0.13.1", features = ["sha256", "ecdsa", "serde"] }
 # near dependencies
 near-account-id = "1"
 near-crypto = "0.21"
-near-fetch = { path = "../../../../earth/near-fetch/near-fetch" }
+near-fetch = { git = "https://github.com/ChaoticTempest/fetch.git" }
 near-jsonrpc-client = "0.9"
 near-primitives = "0.21"
-near-lake-framework = { path = "../../../near-lake-framework-rs/lake-framework" }
-near-lake-primitives = { path = "../../../near-lake-framework-rs/lake-primitives" }
-near-workspaces = { path = "../../../workspaces-rs/workspaces" }
+near-lake-framework = { git = "https://github.com/near/near-lake-framework-rs", branch = "dmd/bump-dependencies" }
+near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs", branch = "dmd/bump-dependencies" }
+near-workspaces = { git = "https://github.com/near/near-workspaces-rs.git", branch = "feat/upgrade-near-deps" }
 
 # local chain-signatures depencencies
 mpc-contract = { path = "../../contract" }

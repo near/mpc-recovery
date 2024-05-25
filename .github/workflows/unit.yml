@@ -29,11 +29,29 @@ jobs:
       - name: Compile
         run: cargo check
       - name: Test format
-        run: cargo fmt -- --check
+        run: |
+          ( cd keys ; cargo fmt -- --check )
+          ( cd node ; cargo fmt -- --check )
+          ( cd contract ; cargo fmt -- --check )
+          ( cd mpc-recovery ; cargo fmt -- --check )
+          ( cd load-tests/ ; cargo fmt -- --check )
+          ( cd test-oidc-provider/ ; cargo fmt -- --check )
+          ( cd integration-tests/chain-signatures ; cargo fmt -- --check )
+          ( cd integration-tests/fastauth ; cargo fmt -- --check )
+
       - name: Unit tests
-        run: cargo test -p mpc-recovery
+        run: ( cd mpc-recovery && cargo test )
       - name: Test clippy
-        run: cargo clippy --tests -- -Dclippy::all
+        run: |
+          ( cd keys ; cargo clippy --tests -- -Dclippy::all )
+          ( cd node ; cargo clippy --tests -- -Dclippy::all )
+          ( cd contract ; cargo clippy --tests -- -Dclippy::all )
+          ( cd mpc-recovery ; cargo clippy --tests -- -Dclippy::all )
+          ( cd load-tests/ ; cargo clippy --tests -- -Dclippy::all )
+          ( cd test-oidc-provider/ ; cargo clippy --tests -- -Dclippy::all )
+          ( cd integration-tests/chain-signatures ; cargo clippy --tests -- -Dclippy::all )
+          ( cd integration-tests/fastauth ; cargo clippy --tests -- -Dclippy::all )
+
   audit:
     name: Audit
     runs-on: ubuntu-latest

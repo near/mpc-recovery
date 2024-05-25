@@ -22,4 +22,4 @@ near-jsonrpc-client = "0.6.0"
 near-fetch = "0.2.0"
 web3 = "0.19.0"
 borsh = "0.10.3"
-near-workspaces = { path = "../../workspaces-rs/workspaces" }
+near-workspaces = { git = "https://github.com/near/near-workspaces-rs", branch = "feat/upgrade-near-deps" }

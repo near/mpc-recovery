@@ -43,11 +43,9 @@ url = { version = "2.4.0", features = ["serde"] }
 
 near-account-id = "1.0.0"
 near-crypto = "0.21.2"
-near-fetch = { path = "../../../earth/near-fetch/near-fetch" }
-# near-lake-framework = { git = "https://github.com/near/near-lake-framework-rs.git", rev = "dc0f1f9" }  # branch = "daniyar/upgrade-sdk"
-# near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs.git", rev = "dc0f1f9" } # branch = "daniyar/upgrade-sdk"
-near-lake-framework = { path = "../../near-lake-framework-rs/lake-framework" }
-near-lake-primitives = { path = "../../near-lake-framework-rs/lake-primitives" }
+near-fetch = { git = "https://github.com/ChaoticTempest/fetch.git" }
+near-lake-framework = { git = "https://github.com/near/near-lake-framework-rs", branch = "dmd/bump-dependencies" }
+near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs", branch = "dmd/bump-dependencies" }
 near-primitives = "0.21.2"
 near-sdk = "=5.0.0-alpha.1"
 
