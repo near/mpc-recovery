@@ -216,7 +216,7 @@ impl CryptographicProtocol for WaitingForConsensusState {
 impl CryptographicProtocol for ResharingState {
     async fn progress<C: CryptographicCtx + Send + Sync>(
         mut self,
-        ctx: C,
+        mut ctx: C,
     ) -> Result<NodeState, CryptographicError> {
         // TODO: we are not using active potential participants here, but we should in the future.
         // Currently resharing protocol does not timeout and restart with new set of participants.
@@ -321,6 +321,14 @@ impl CryptographicProtocol for ResharingState {
                             "resharing(return): failed to send encrypted message; {failures:?}",
                         );
                     }
+
+                    ctx.secret_storage()
+                        .store(&PersistentNodeData {
+                            epoch: self.old_epoch + 1,
+                            private_share,
+                            public_key: self.public_key,
+                        })
+                        .await?;
 
                     return Ok(NodeState::WaitingForConsensus(WaitingForConsensusState {
                         epoch: self.old_epoch + 1,
