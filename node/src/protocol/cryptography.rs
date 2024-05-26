@@ -300,7 +300,14 @@ impl CryptographicProtocol for ResharingState {
                 }
                 Action::Return(private_share) => {
                     tracing::debug!("resharing: successfully completed key reshare");
-
+                    ctx.secret_storage()
+                        .store(&PersistentNodeData {
+                            epoch: self.old_epoch + 1,
+                            private_share,
+                            public_key: self.public_key,
+                        })
+                        .await?;
+                    tracing::debug!("resharing: finished uploading secret");
                     // Send any leftover messages.
                     let failures = self
                         .messages
@@ -321,14 +328,6 @@ impl CryptographicProtocol for ResharingState {
                             "resharing(return): failed to send encrypted message; {failures:?}",
                         );
                     }
-
-                    ctx.secret_storage()
-                        .store(&PersistentNodeData {
-                            epoch: self.old_epoch + 1,
-                            private_share,
-                            public_key: self.public_key,
-                        })
-                        .await?;
 
                     return Ok(NodeState::WaitingForConsensus(WaitingForConsensusState {
                         epoch: self.old_epoch + 1,
