@@ -1,5 +1,5 @@
 use k256::{
-    elliptic_curve::{scalar::FromUintUnchecked, CurveArithmetic, PrimeField},
+    elliptic_curve::{scalar::FromUintUnchecked, CurveArithmetic},
     Scalar, Secp256k1, U256,
 };
 use near_sdk::borsh::{BorshDeserialize, BorshSerialize};
@@ -40,6 +40,7 @@ impl BorshDeserialize for SerializableScalar {
 
 #[test]
 fn serializeable_scalar_roundtrip() {
+    use k256::elliptic_curve::PrimeField;
     let test_vec = vec![
         Scalar::ZERO,
         Scalar::ONE,
