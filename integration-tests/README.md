@@ -7,15 +7,18 @@ Running integration tests requires you to have relayer and sandbox docker images
 ```BASH
 docker pull ghcr.io/near/os-relayer
 docker pull ghcr.io/near/sandbox
+docker pull ghcr.io/near/near-lake-indexer:18ef24922fd7b5b8985ea793fdf7a939e57216ba
 ```
 
 For M1 you may want to pull the following image instead:
 
 ```BASH
+docker pull ghcr.io/near/os-relayer
 docker pull ghcr.io/near/sandbox:latest-aarch64
+docker pull ghcr.io/near/near-lake-indexer:18ef24922fd7b5b8985ea793fdf7a939e57216ba
 ```
 
-In case of authorization issues make sure you have logged into docker using your [access token](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic).
+In case of authorization issues make sure you have logged into docker using your [access token](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic). Your github account should have access to https://github.com/near/pagoda-relayer-rs/pkgs/container/os-relayer, otherwise ask to be added.
 
 Build OIDC Provider test image
 ```bash
@@ -28,6 +31,11 @@ Set dummy AWS credentials and the correct region
 aws configure set region us-east-1
 aws --profile default configure set aws_access_key_id "123"
 aws --profile default configure set aws_secret_access_key "456"
+```
+
+Build the contract:
+```bash
+cargo build -p mpc-contract --target wasm32-unknown-unknown --release --target-dir target/seperate_wasm
 ```
 
 Then run the integration tests:
@@ -119,3 +127,16 @@ It's a known issue on MacOS. Try executiong the following command:
 sudo ln -s $HOME/.docker/run/docker.sock /var/run/docker.sock
 ```
 
+### Some tests are failed when running together. How to run them?
+
+You can run tests in single thread mode: 
+```bash
+cargo test -p mpc-recovery-integration-tests multichain --jobs 1 -- --test-threads 1
+```
+
+Or run the failed specific tests with command below, replace `mpc::...` with the failed test
+```bash
+cargo test -p mpc-recovery-integration-tests --test lib mpc::positive::test_stress_network
+```
+
+We're working to make tests run faster and more robust.
