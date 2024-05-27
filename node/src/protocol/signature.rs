@@ -2,10 +2,10 @@ use super::contract::primitives::Participants;
 use super::message::SignatureMessage;
 use super::presignature::{Presignature, PresignatureId, PresignatureManager};
 use crate::indexer::ContractSignRequest;
-use crate::kdf;
-use crate::types::{PublicKey, SignatureProtocol};
+use crate::types::SignatureProtocol;
 use crate::types::{PublicKey, SignatureProtocol};
 use crate::util::{AffinePointExt, ScalarExt};
+use crypto_shared::{AffinePointExt, ScalarExt};
 
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::{FullSignature, PresignOutput};

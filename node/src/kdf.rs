@@ -1,8 +1,8 @@
-use crate::util::ScalarExt;
+use crypto_shared::ScalarExt;
 use hkdf::Hkdf;
 use k256::Scalar;
 use near_primitives::hash::CryptoHash;
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 
 // In case there are multiple requests in the same block (hence same entropy), we need to ensure
 // that we generate different random scalars as delta tweaks.

@@ -2093,7 +2093,10 @@ dependencies = [
  "hkdf",
  "k256",
  "near-account-id 1.0.0",
+ "near-crypto 0.21.2",
+ "near-sdk",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

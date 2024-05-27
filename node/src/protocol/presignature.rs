@@ -3,7 +3,7 @@ use super::triple::{Triple, TripleConfig, TripleId, TripleManager};
 use crate::gcp::error::DatastoreStorageError;
 use crate::protocol::contract::primitives::Participants;
 use crate::types::{PresignatureProtocol, SecretKeyShare};
-use crate::util::AffinePointExt;
+use crypto_shared::AffinePointExt;
 
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::{KeygenOutput, PresignArguments, PresignOutput};

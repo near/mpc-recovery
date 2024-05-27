@@ -14,7 +14,7 @@ use k256::elliptic_curve::ProjectivePoint;
 use k256::{AffinePoint, EncodedPoint, Scalar, Secp256k1};
 use mpc_contract::primitives::SignRequest;
 use mpc_contract::RunningContractState;
-use mpc_recovery_node::util::ScalarExt;
+use crypto_shared::ScalarExt;
 use near_crypto::InMemorySigner;
 use near_jsonrpc_client::methods::broadcast_tx_async::RpcBroadcastTxAsyncRequest;
 use near_lake_primitives::CryptoHash;

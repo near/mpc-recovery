@@ -5,7 +5,7 @@ use super::presignature::GenerationError;
 use crate::gcp::error;
 use crate::storage::triple_storage::{LockTripleNodeStorageBox, TripleData};
 use crate::types::TripleProtocol;
-use crate::util::AffinePointExt;
+use crypto_shared::AffinePointExt;
 
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::triples::{TripleGenerationOutput, TriplePub, TripleShare};

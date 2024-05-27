@@ -1,6 +1,10 @@
 pub mod primitives;
 
-use crypto_shared::{derive_epsilon, SerializableScalar};
+use crypto_shared::{
+    derive_epsilon, derive_key, into_eth_sig, types::NearPublicKeyExt, ScalarExt as _,
+    SerializableAffinePoint, SerializableScalar,
+};
+use k256::{AffinePoint, Scalar};
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::LookupMap;
 use near_sdk::serde::{Deserialize, Serialize};
@@ -77,6 +81,23 @@ pub struct SignatureRequest {
     payload_hash: [u8; 32],
 }
 
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug, Clone)]
+pub struct SignatureResponse {
+    big_r: SerializableAffinePoint,
+    s: SerializableScalar,
+}
+
+impl SignatureResponse {
+    pub fn new(big_r: AffinePoint, s: Scalar) -> Self {
+        SignatureResponse {
+            big_r: SerializableAffinePoint {
+                affine_point: big_r,
+            },
+            s: SerializableScalar { scalar: s },
+        }
+    }
+}
+
 impl SignatureRequest {
     pub fn new(payload_hash: [u8; 32], predecessor_id: &AccountId, path: &str) -> Self {
         let scalar = derive_epsilon(predecessor_id, path);
@@ -91,12 +112,12 @@ impl SignatureRequest {
 #[derive(BorshDeserialize, BorshSerialize, Debug)]
 pub struct MpcContract {
     protocol_state: ProtocolContractState,
-    pending_requests: LookupMap<SignRequest, Option<SignResult>>,
+    pending_requests: LookupMap<SignatureRequest, Option<SignatureResponse>>,
     request_counter: u32,
 }
 
 impl MpcContract {
-    fn add_request(&mut self, request: &SignRequest, sign_result: &Option<SignResult>) {
+    fn add_request(&mut self, payload: &SignatureRequest, signature: &Option<SignatureResponse>) {
         if self.request_counter > 8 {
             env::panic_str("Too many pending requests. Please, try again later.");
         }
@@ -111,7 +132,7 @@ impl MpcContract {
         self.request_counter -= 1;
     }
 
-    fn add_signature(&mut self, payload: &SignatureRequest, signature: (String, String)) {
+    fn add_signature(&mut self, payload: &SignatureRequest, signature: SignatureResponse) {
         if self.pending_requests.contains_key(payload) {
             self.pending_requests.insert(payload, &Some(signature));
         }
@@ -165,6 +186,7 @@ impl VersionedMpcContract {
             path,
             key_version
         );
+
         let request = SignatureRequest::new(payload, &predecessor, &path);
         match self.sign_result(request.clone()) {
             None => {
@@ -177,7 +199,7 @@ impl VersionedMpcContract {
     }
 
     /// This is the root public key combined from all the public keys of the participants.
-    pub fn public_key(self) -> PublicKey {
+    pub fn public_key(&self) -> PublicKey {
         match self.state() {
             ProtocolContractState::Running(state) => state.public_key.clone(),
             ProtocolContractState::Resharing(state) => state.public_key.clone(),
@@ -202,18 +224,38 @@ impl VersionedMpcContract {
 // MPC Node API
 #[near_bindgen]
 impl VersionedMpcContract {
-    pub fn respond(&mut self, request_id: SignatureRequest, big_r: String, s: String) {
+    pub fn respond(
+        &mut self,
+        request_id: SignatureRequest,
+        big_r: SerializableAffinePoint,
+        s: SerializableScalar,
+    ) {
         let protocol_state = self.mutable_state();
         if let ProtocolContractState::Running(state) = protocol_state {
             let signer = env::signer_account_id();
             if state.participants.contains_key(&signer) {
                 log!(
-                    "respond: signer={}, request={:?} result:{:?}",
+                    "respond: signer={}, request_id={:?} big_r={:?} s={:?}",
                     signer,
                     request,
                     result
                 );
-                self.add_sign_result(&request_id, (big_r, s));
+
+                // generate the expected public key
+                let expected_public_key = derive_key(
+                    self.public_key().into_affine_point(),
+                    request_id.epsilon.scalar,
+                );
+                // Check the signature is correct
+                let _ = into_eth_sig(
+                    &expected_public_key,
+                    &big_r.affine_point,
+                    &s.scalar,
+                    k256::Scalar::from_bytes(&request_id.payload_hash[..]),
+                )
+                .expect("Signature could not be verified");
+
+                self.add_sign_result(&request_id, SignatureResponse { big_r, s });
             } else {
                 env::panic_str("only participants can respond");
             }
@@ -542,9 +584,9 @@ impl VersionedMpcContract {
         env::panic_str(&message);
     }
 
-    pub fn state(self) -> ProtocolContractState {
+    pub fn state(&self) -> &ProtocolContractState {
         match self {
-            Self::V0(mpc_contract) => mpc_contract.protocol_state,
+            Self::V0(mpc_contract) => &mpc_contract.protocol_state,
         }
     }
 
@@ -620,7 +662,7 @@ impl VersionedMpcContract {
         }
     }
 
-    fn sign_result(&self, request: SignatureRequest) -> Option<Option<(String, String)>> {
+    fn sign_result(&self, request: SignatureRequest) -> Option<Option<SignatureResponse>> {
         match self {
             Self::V0(mpc_contract) => mpc_contract.pending_requests.get(&request),
         }
