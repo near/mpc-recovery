@@ -137,7 +137,7 @@ async fn handle_block(
                             time_added: Instant::now(),
                         });
                         crate::metrics::NUM_SIGN_REQUESTS
-                            .with_label_values(&[&ctx.gcp_service.account_id.as_str()])
+                            .with_label_values(&[ctx.gcp_service.account_id.as_str()])
                             .inc();
                         drop(queue);
                     }

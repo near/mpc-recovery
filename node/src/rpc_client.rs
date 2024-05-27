@@ -35,7 +35,7 @@ pub async fn vote_for_public_key(
         .await?;
 
     match result.status() {
-        FinalExecutionStatus::SuccessValue(value) => Ok(serde_json::from_slice(&value)?),
+        FinalExecutionStatus::SuccessValue(value) => Ok(serde_json::from_slice(value)?),
         status => anyhow::bail!("unexpected status: {:?}", status),
     }
 }
@@ -57,7 +57,7 @@ pub async fn vote_reshared(
         .await?;
 
     match result.status() {
-        FinalExecutionStatus::SuccessValue(value) => Ok(serde_json::from_slice(&value)?),
+        FinalExecutionStatus::SuccessValue(value) => Ok(serde_json::from_slice(value)?),
         status => anyhow::bail!("unexpected status: {:?}", status),
     }
 }
