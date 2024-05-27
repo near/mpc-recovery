@@ -7,10 +7,6 @@ use crypto_shared::{self, derive_epsilon, derive_key, into_eth_sig, x_coordinate
 use integration_tests_chain_signatures::containers::{self, DockerClient};
 use integration_tests_chain_signatures::MultichainConfig;
 use k256::elliptic_curve::point::AffineCoordinates;
-use mpc_recovery_integration_tests::env::containers::DockerClient;
-use mpc_recovery_integration_tests::env::containers::DockerClient;
-use mpc_recovery_integration_tests::multichain::MultichainConfig;
-use mpc_recovery_integration_tests::multichain::MultichainConfig;
 use mpc_recovery_node::protocol::presignature::PresignatureConfig;
 use mpc_recovery_node::protocol::triple::TripleConfig;
 use mpc_recovery_node::test_utils;

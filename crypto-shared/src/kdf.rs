@@ -1,12 +1,12 @@
 use crate::types::{PublicKey, ScalarExt};
 use anyhow::Context;
-use k256::ecdsa::{RecoveryId, VerifyingKey};
-use k256::elliptic_curve::point::AffineCoordinates;
-use k256::elliptic_curve::sec1::ToEncodedPoint;
-use k256::elliptic_curve::CurveArithmetic;
-use k256::sha2::{Digest, Sha256};
-use k256::{AffinePoint, Scalar, Secp256k1};
-use near_sdk::AccountId;
+use k256::{
+    ecdsa::{RecoveryId, VerifyingKey},
+    elliptic_curve::{point::AffineCoordinates, sec1::ToEncodedPoint, CurveArithmetic},
+    sha2::{Digest, Sha256},
+    AffinePoint, Scalar, Secp256k1,
+};
+use near_account_id::AccountId;
 
 // Constant prefix that ensures epsilon derivation values are used specifically for
 // near-mpc-recovery with key derivation protocol vX.Y.Z.

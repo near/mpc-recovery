@@ -1,8 +1,8 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 use k256::{
     elliptic_curve::{scalar::FromUintUnchecked, CurveArithmetic},
     Scalar, Secp256k1, U256,
 };
-use near_sdk::borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
 pub type PublicKey = <Secp256k1 as CurveArithmetic>::AffinePoint;

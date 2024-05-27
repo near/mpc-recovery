@@ -1,11 +1,6 @@
 use crate::util::ScalarExt;
 use hkdf::Hkdf;
-use k256::ecdsa::{RecoveryId, VerifyingKey};
-use k256::elliptic_curve::point::AffineCoordinates;
-use k256::elliptic_curve::sec1::ToEncodedPoint;
-use k256::elliptic_curve::CurveArithmetic;
-use k256::{AffinePoint, Scalar, Secp256k1};
-use near_account_id::AccountId;
+use k256::Scalar;
 use near_primitives::hash::CryptoHash;
 use sha2::{Digest, Sha256};
 

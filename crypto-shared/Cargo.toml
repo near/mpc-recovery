@@ -7,10 +7,9 @@ k256 = { version = "0.13.1", features = ["sha256", "ecdsa", "serde", "arithmetic
 hkdf = "0.12.4"
 anyhow = "1"
 # THis can probably be replaced with primitives
-near-sdk = "5.0.0-alpha.1"
 serde = "1"
-
 borsh = "1.3.0"
+near-account-id = "1"
 
 [dev-dependencies]
 serde_json = "1"
