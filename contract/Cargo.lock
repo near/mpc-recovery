@@ -1443,10 +1443,9 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "borsh 1.5.0",
- "hkdf",
+ "getrandom 0.2.15",
  "k256",
  "near-account-id 1.0.0",
- "near-crypto 0.21.2",
  "near-sdk",
  "serde",
  "serde_json",

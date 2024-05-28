@@ -3,8 +3,7 @@ use std::str::FromStr;
 use crate::actions::{self, wait_for};
 use crate::with_multichain_nodes;
 
-use crypto_shared::{self, derive_epsilon, derive_key, into_eth_sig, x_coordinate};
-use crypto_shared::{NearPublicKeyExt, ScalarExt};
+use crypto_shared::{self, derive_epsilon, derive_key, into_eth_sig, x_coordinate, ScalarExt};
 use integration_tests_chain_signatures::containers::{self, DockerClient};
 use integration_tests_chain_signatures::MultichainConfig;
 use k256::elliptic_curve::point::AffineCoordinates;
@@ -12,6 +11,7 @@ use mpc_recovery_node::protocol::presignature::PresignatureConfig;
 use mpc_recovery_node::protocol::triple::TripleConfig;
 use mpc_recovery_node::test_utils;
 use mpc_recovery_node::types::LatestBlockHeight;
+use mpc_recovery_node::util::NearPublicKeyExt;
 use test_log::test;
 
 #[test(tokio::test)]

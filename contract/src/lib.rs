@@ -1,8 +1,9 @@
 pub mod primitives;
 
+use crypto_shared::near_public_key_to_affine_point;
 use crypto_shared::{
-    derive_epsilon, derive_key, into_eth_sig, types::NearPublicKeyExt, ScalarExt as _,
-    SerializableAffinePoint, SerializableScalar,
+    derive_epsilon, derive_key, into_eth_sig, ScalarExt as _, SerializableAffinePoint,
+    SerializableScalar,
 };
 use k256::{AffinePoint, Scalar};
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
@@ -77,14 +78,14 @@ impl Default for VersionedMpcContract {
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug, Clone)]
 pub struct SignatureRequest {
-    epsilon: SerializableScalar,
-    payload_hash: [u8; 32],
+    pub epsilon: SerializableScalar,
+    pub payload_hash: [u8; 32],
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug, Clone)]
 pub struct SignatureResponse {
-    big_r: SerializableAffinePoint,
-    s: SerializableScalar,
+    pub big_r: SerializableAffinePoint,
+    pub s: SerializableScalar,
 }
 
 impl SignatureResponse {
@@ -224,38 +225,34 @@ impl VersionedMpcContract {
 // MPC Node API
 #[near_bindgen]
 impl VersionedMpcContract {
-    pub fn respond(
-        &mut self,
-        request_id: SignatureRequest,
-        big_r: SerializableAffinePoint,
-        s: SerializableScalar,
-    ) {
+    pub fn respond(&mut self, request: SignatureRequest, big_r: AffinePoint, s: Scalar) {
         let protocol_state = self.mutable_state();
         if let ProtocolContractState::Running(state) = protocol_state {
             let signer = env::signer_account_id();
             if state.participants.contains_key(&signer) {
                 log!(
-                    "respond: signer={}, request_id={:?} big_r={:?} s={:?}",
+                    "respond: signer={}, request={:?} big_r={:?} s={:?}",
                     signer,
                     request,
-                    result
+                    big_r,
+                    s
                 );
 
                 // generate the expected public key
                 let expected_public_key = derive_key(
-                    self.public_key().into_affine_point(),
-                    request_id.epsilon.scalar,
+                    near_public_key_to_affine_point(self.public_key()),
+                    request.epsilon.scalar,
                 );
                 // Check the signature is correct
                 let _ = into_eth_sig(
                     &expected_public_key,
-                    &big_r.affine_point,
-                    &s.scalar,
-                    k256::Scalar::from_bytes(&request_id.payload_hash[..]),
+                    &big_r,
+                    &s,
+                    k256::Scalar::from_bytes(&request.payload_hash[..]),
                 )
                 .expect("Signature could not be verified");
 
-                self.add_sign_result(&request_id, SignatureResponse { big_r, s });
+                self.add_sign_result(&request, SignatureResponse::new(big_r, s));
             } else {
                 env::panic_str("only participants can respond");
             }
@@ -548,7 +545,8 @@ impl VersionedMpcContract {
                         depth
                     );
                     self.remove_sign_request(&request);
-                    PromiseOrValue::Value(signature)
+                    self.remove_request(&request);
+                    PromiseOrValue::Value((signature.big_r.affine_point, signature.s.scalar))
                 }
                 None => {
                     // Make sure we have enough gas left to do 1 more call and clean up afterwards

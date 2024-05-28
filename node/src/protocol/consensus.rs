@@ -16,7 +16,7 @@ use crate::storage::secret_storage::SecretNodeStorageBox;
 use crate::storage::triple_storage::LockTripleNodeStorageBox;
 use crate::storage::triple_storage::TripleData;
 use crate::types::{KeygenProtocol, ReshareProtocol, SecretKeyShare};
-use crypto_shared::AffinePointExt;
+use crate::util::AffinePointExt;
 
 use std::cmp::Ordering;
 use std::sync::Arc;

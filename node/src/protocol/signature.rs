@@ -4,14 +4,15 @@ use super::presignature::{Presignature, PresignatureId, PresignatureManager};
 use crate::indexer::ContractSignRequest;
 use crate::types::SignatureProtocol;
 use crate::types::{PublicKey, SignatureProtocol};
-use crate::util::{AffinePointExt, ScalarExt};
-use crypto_shared::{AffinePointExt, ScalarExt};
+use crate::util::AffinePointExt;
+use crypto_shared::{ScalarExt, SerializableScalar};
 
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::{FullSignature, PresignOutput};
 use chrono::Utc;
 use crypto_shared::{derive_key, PublicKey};
 use k256::{Scalar, Secp256k1};
+use mpc_contract::SignatureRequest;
 use rand::rngs::StdRng;
 use rand::seq::{IteratorRandom, SliceRandom};
 use rand::SeedableRng;
@@ -180,10 +181,10 @@ pub struct SignatureManager {
     /// Set of completed signatures
     completed: HashMap<PresignatureId, Instant>,
     /// Generated signatures assigned to the current node that are yet to be published.
-    /// Vec<(receipt_id, sign_request, timestamp, output)>
+    /// Vec<(receipt_id, msg_hash, timestamp, output)>
     signatures: Vec<(
         CryptoHash,
-        ContractSignRequest,
+        SignatureRequest,
         Instant,
         FullSignature<Secp256k1>,
     )>,
@@ -430,9 +431,13 @@ impl SignatureManager {
                             "completed signature generation"
                         );
                         self.completed.insert(generator.presignature_id, Instant::now());
+                        let request = SignatureRequest {
+                            epsilon: SerializableScalar {scalar: generator.epsilon},
+                            payload_hash: generator.msg_hash,
+                        };
                         if generator.proposer == self.me {
                             self.signatures
-                                .push((*receipt_id, generator.request.clone(), generator.sign_request_timestamp, output));
+                                .push((*receipt_id, request, generator.sign_request_timestamp, output));
                         }
                         // Do not retain the protocol
                         return false;
@@ -523,14 +528,19 @@ impl SignatureManager {
         my_account_id: &AccountId,
     ) -> Result<(), near_fetch::Error> {
         for (receipt_id, request, time_added, signature) in self.signatures.drain(..) {
+            // TODO: Figure out how to properly serialize the signature
+            // let r_s = signature.big_r.x().concat(signature.s.to_bytes());
+            // let tag =
+            //     ConditionallySelectable::conditional_select(&2u8, &3u8, signature.big_r.y_is_odd());
+            // let signature = r_s.append(tag);
+            // let signature = Secp256K1Signature::try_from(signature.as_slice()).unwrap();
+            // let signature = Signature::SECP256K1(signature);
             let response = rpc_client
                 .call(signer, mpc_contract_id, "respond")
                 .args_json(serde_json::json!({
                     "request": request,
-                    "result": {
-                        "big_r": signature.big_r,
-                        "s": signature.s,
-                    },
+                    "big_r": signature.big_r,
+                    "s": signature.s
                 }))
                 .max_gas()
                 .transact()

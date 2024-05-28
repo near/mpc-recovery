@@ -1,6 +1,6 @@
 pub mod primitives;
 
-use crypto_shared::NearPublicKeyExt;
+use crate::util::NearPublicKeyExt;
 use crypto_shared::PublicKey;
 use mpc_contract::ProtocolContractState;
 use near_account_id::AccountId;
