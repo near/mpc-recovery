@@ -33,11 +33,6 @@ aws --profile default configure set aws_access_key_id "123"
 aws --profile default configure set aws_secret_access_key "456"
 ```
 
-Build the contract:
-```bash
-cargo build -p mpc-contract --target wasm32-unknown-unknown --release --target-dir target/seperate_wasm
-```
-
 Then run the integration tests:
 
 ```BASH
