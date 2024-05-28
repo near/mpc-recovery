@@ -187,5 +187,6 @@ direnv allow
 
 Run unit tests with:
 ```BASH
-cargo test -p mpc-recovery
+cd mpc-recovery/
+cargo test
 ```

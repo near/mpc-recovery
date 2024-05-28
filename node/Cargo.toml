@@ -10,14 +10,14 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { version = "1", features = ["backtrace"] }
 async-trait = "0.1"
-aws-config = "0.54.0"
-aws-sdk-s3 = "0.24.0"
-aws-types = "0.54.0"
+aws-config = "1.4"
+aws-sdk-s3 = "1.24"
+aws-types = "1.2"
 axum = { version = "0.6.19" }
 axum-extra = "0.7"
 cait-sith = { git = "https://github.com/LIT-Protocol/cait-sith.git", features = [
     "k256",
-], rev = "8ad2316"}
+], rev = "8ad2316" }
 clap = { version = "4.2", features = ["derive", "env"] }
 chrono = "0.4.24"
 google-datastore1 = "5"
@@ -41,12 +41,13 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = { version = "2.4.0", features = ["serde"] }
 
-near-crypto = "0.17"
-near-fetch = "0.0.12"
-near-lake-framework = { git = "https://github.com/near/near-lake-framework-rs.git", rev = "dc0f1f9"} # branch = "daniyar/upgrade-sdk"
-near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs.git", rev = "dc0f1f9" } # branch = "daniyar/upgrade-sdk"
-near-primitives = "0.17.0"
-near-sdk = "5.0.0-alpha.1"
+near-account-id = "1.0.0"
+near-crypto = "0.21.2"
+near-fetch = { git = "https://github.com/ChaoticTempest/fetch.git" }
+near-lake-framework = { git = "https://github.com/near/near-lake-framework-rs", branch = "dmd/bump-dependencies" }
+near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs", branch = "dmd/bump-dependencies" }
+near-primitives = "0.21.2"
+near-sdk = "=5.0.0-alpha.1"
 
 mpc-contract = { path = "../contract" }
 mpc-keys = { path = "../keys" }

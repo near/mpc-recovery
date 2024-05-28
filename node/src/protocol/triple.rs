@@ -6,17 +6,19 @@ use crate::gcp::error;
 use crate::storage::triple_storage::{LockTripleNodeStorageBox, TripleData};
 use crate::types::TripleProtocol;
 use crate::util::AffinePointExt;
+
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::triples::{TripleGenerationOutput, TriplePub, TripleShare};
 use chrono::Utc;
 use highway::{HighwayHash, HighwayHasher};
 use k256::elliptic_curve::group::GroupEncoding;
 use k256::Secp256k1;
-use near_lake_primitives::AccountId;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
+
+use near_account_id::AccountId;
 
 /// Unique number used to identify a specific ongoing triple generation protocol.
 /// Without `TripleId` it would be unclear where to route incoming cait-sith triple generation
@@ -200,7 +202,7 @@ impl TripleManager {
         self.queued.push_back(id);
         self.introduced.insert(id);
         crate::metrics::NUM_TOTAL_HISTORICAL_TRIPLE_GENERATORS
-            .with_label_values(&[&self.my_account_id])
+            .with_label_values(&[self.my_account_id.as_str()])
             .inc();
         Ok(())
     }
@@ -376,7 +378,7 @@ impl TripleManager {
                     let generator = e.insert(TripleGenerator::new(id, participants, protocol));
                     self.queued.push_back(id);
                     crate::metrics::NUM_TOTAL_HISTORICAL_TRIPLE_GENERATORS
-                        .with_label_values(&[&self.my_account_id])
+                        .with_label_values(&[self.my_account_id.as_str()])
                         .inc();
                     Ok(Some(&mut generator.protocol))
                 }
@@ -467,12 +469,12 @@ impl TripleManager {
 
                         if let Some(start_time) = generator.timestamp {
                             crate::metrics::TRIPLE_LATENCY
-                                .with_label_values(&[&self.my_account_id])
+                                .with_label_values(&[self.my_account_id.as_str()])
                                 .observe(start_time.elapsed().as_secs_f64());
                         }
 
                         crate::metrics::NUM_TOTAL_HISTORICAL_TRIPLE_GENERATORS_SUCCESS
-                            .with_label_values(&[&self.my_account_id])
+                            .with_label_values(&[self.my_account_id.as_str()])
                             .inc();
 
                         let triple = Triple {
@@ -503,7 +505,7 @@ impl TripleManager {
                         if triple_is_mine {
                             self.mine.push_back(*id);
                             crate::metrics::NUM_TOTAL_HISTORICAL_TRIPLE_GENERATIONS_MINE_SUCCESS
-                                .with_label_values(&[&self.my_account_id])
+                                .with_label_values(&[self.my_account_id.as_str()])
                                 .inc();
                         }
 

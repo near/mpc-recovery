@@ -31,8 +31,8 @@ use crate::storage::secret_storage::SecretNodeStorageBox;
 use crate::storage::triple_storage::LockTripleNodeStorageBox;
 
 use cait_sith::protocol::Participant;
+use near_account_id::AccountId;
 use near_crypto::InMemorySigner;
-use near_primitives::types::AccountId;
 use reqwest::IntoUrl;
 use std::time::Instant;
 use std::{sync::Arc, time::Duration};
@@ -195,10 +195,10 @@ impl MpcSignProtocol {
         let my_account_id = self.ctx.account_id.to_string();
         let _span = tracing::info_span!("running", my_account_id);
         crate::metrics::NODE_RUNNING
-            .with_label_values(&[&my_account_id])
+            .with_label_values(&[my_account_id.as_str()])
             .set(1);
         crate::metrics::NODE_VERSION
-            .with_label_values(&[&my_account_id])
+            .with_label_values(&[my_account_id.as_str()])
             .set(node_version());
         let mut queue = MpcMessageQueue::default();
         let mut last_state_update = Instant::now();
@@ -271,7 +271,7 @@ impl MpcSignProtocol {
                 }
             };
             crate::metrics::PROTOCOL_LATENCY_ITER_CRYPTO
-                .with_label_values(&[&my_account_id])
+                .with_label_values(&[my_account_id.as_str()])
                 .observe(crypto_time.elapsed().as_secs_f64());
 
             let consensus_time = Instant::now();
@@ -286,7 +286,7 @@ impl MpcSignProtocol {
                 };
             }
             crate::metrics::PROTOCOL_LATENCY_ITER_CONSENSUS
-                .with_label_values(&[&my_account_id])
+                .with_label_values(&[my_account_id.as_str()])
                 .observe(consensus_time.elapsed().as_secs_f64());
 
             let message_time = Instant::now();
@@ -296,7 +296,7 @@ impl MpcSignProtocol {
                 continue;
             }
             crate::metrics::PROTOCOL_LATENCY_ITER_MESSAGE
-                .with_label_values(&[&my_account_id])
+                .with_label_values(&[my_account_id.as_str()])
                 .observe(message_time.elapsed().as_secs_f64());
 
             let sleep_ms = match state {
@@ -315,7 +315,7 @@ impl MpcSignProtocol {
             drop(guard);
 
             crate::metrics::PROTOCOL_LATENCY_ITER_TOTAL
-                .with_label_values(&[&my_account_id])
+                .with_label_values(&[my_account_id.as_str()])
                 .observe(protocol_time.elapsed().as_secs_f64());
             tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
         }

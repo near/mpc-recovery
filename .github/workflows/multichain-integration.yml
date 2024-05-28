@@ -6,7 +6,8 @@ on:
       - develop
   pull_request:
     paths:
-      - integration-tests/**
+      - integration-tests/chain-signatures/**
+      - keys/**
       - node/**
       - contract/**
 
@@ -43,7 +44,7 @@ jobs:
       - name: Pull Relayer & Sandbox Docker Images
         run: |
           docker pull ghcr.io/near/os-relayer:12ba6e35690df3979fce0b36a41d0ca0db9c0ab4
-          docker pull ghcr.io/near/near-lake-indexer:e6519c922435f3d18b5f2ddac5d1ec171ef4dd6b
+          docker pull ghcr.io/near/near-lake-indexer:node-1.38
           docker pull localstack/localstack:latest
 
       - name: Install stable toolchain
@@ -67,15 +68,17 @@ jobs:
           aws --profile default configure set aws_access_key_id "123"
           aws --profile default configure set aws_secret_access_key "456"
 
-      - name: Compile Contract
-        run: cargo build -p mpc-contract --target wasm32-unknown-unknown --release --target-dir target/seperate_wasm
+      - name: Compile Chain-Signature Contract
+        working-directory: ./contract
+        run: cargo build --target wasm32-unknown-unknown --release
 
-      - name: Build MPC Recovery Binary Locally
-        run: |
-          cargo build -p mpc-recovery-node --release
+      - name: Build Chain-Signature Node Binary Locally
+        working-directory: ./node
+        run: cargo build --release
 
       - name: Test
-        run: cargo test -p mpc-recovery-integration-tests multichain --jobs 1 -- --test-threads 1
+        working-directory: ./integration-tests/chain-signatures
+        run: cargo test --jobs 1 -- --test-threads 1
         env:
           RUST_LOG: INFO
           RUST_BACKTRACE: 1

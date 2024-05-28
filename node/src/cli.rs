@@ -7,8 +7,8 @@ use crate::storage::triple_storage::LockTripleNodeStorageBox;
 use crate::{indexer, storage, web};
 use clap::Parser;
 use local_ip_address::local_ip;
+use near_account_id::AccountId;
 use near_crypto::{InMemorySigner, SecretKey};
-use near_primitives::types::AccountId;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use tracing_subscriber::EnvFilter;
@@ -221,10 +221,15 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                     ));
 
                     let sign_sk = sign_sk.unwrap_or_else(|| account_sk.clone());
-                    let my_address = my_address.unwrap_or_else(|| {
-                        let my_ip = local_ip().unwrap();
-                        Url::parse(&format!("http://{my_ip}:{web_port}")).unwrap()
-                    });
+                    let my_address = my_address
+                        .map(|mut addr| {
+                            addr.set_port(Some(web_port)).unwrap();
+                            addr
+                        })
+                        .unwrap_or_else(|| {
+                            let my_ip = local_ip().unwrap();
+                            Url::parse(&format!("http://{my_ip}:{web_port}")).unwrap()
+                        });
                     tracing::info!(%my_address, "address detected");
                     let rpc_client = near_fetch::Client::new(&near_rpc);
                     tracing::debug!(rpc_addr = rpc_client.rpc_addr(), "rpc client initialized");

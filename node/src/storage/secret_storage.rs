@@ -6,7 +6,8 @@ use crate::gcp::{GcpService, SecretResult};
 use crate::storage::Options;
 use crate::{gcp::SecretManagerService, protocol::state::PersistentNodeData};
 use async_trait::async_trait;
-use near_lake_primitives::AccountId;
+
+use near_account_id::AccountId;
 
 #[async_trait]
 pub trait SecretNodeStorage {

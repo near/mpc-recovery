@@ -8,8 +8,8 @@ use k256::elliptic_curve::point::AffineCoordinates;
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use k256::elliptic_curve::CurveArithmetic;
 use k256::{AffinePoint, Scalar, Secp256k1};
+use near_account_id::AccountId;
 use near_primitives::hash::CryptoHash;
-use near_primitives::types::AccountId;
 use sha2::{Digest, Sha256};
 
 // Constant prefix that ensures epsilon derivation values are used specifically for

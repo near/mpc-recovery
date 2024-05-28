@@ -4,21 +4,21 @@ use super::presignature::{Presignature, PresignatureId, PresignatureManager};
 use crate::kdf;
 use crate::types::{PublicKey, SignatureProtocol};
 use crate::util::{AffinePointExt, ScalarExt};
+
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::{FullSignature, PresignOutput};
 use chrono::Utc;
 use k256::{Scalar, Secp256k1};
-use near_crypto::Signer;
-use near_fetch::signer::ExposeAccountId;
-use near_primitives::hash::CryptoHash;
-use near_primitives::transaction::FunctionCallAction;
-use near_primitives::types::AccountId;
 use rand::rngs::StdRng;
 use rand::seq::{IteratorRandom, SliceRandom};
 use rand::SeedableRng;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
+
+use near_account_id::AccountId;
+use near_fetch::signer::SignerExt;
+use near_primitives::hash::CryptoHash;
 
 /// Duration for which completed signatures are retained.
 pub const COMPLETION_EXISTENCE_TIMEOUT: Duration = Duration::from_secs(120 * 60);
@@ -83,7 +83,7 @@ impl SignQueue {
                 let proposer_requests = self.requests.entry(proposer).or_default();
                 proposer_requests.insert(request.receipt_id, request);
                 crate::metrics::NUM_SIGN_REQUESTS_MINE
-                    .with_label_values(&[my_account_id])
+                    .with_label_values(&[my_account_id.as_str()])
                     .inc();
             } else {
                 tracing::info!(
@@ -507,7 +507,7 @@ impl SignatureManager {
         Ok(())
     }
 
-    pub async fn publish<T: Signer + ExposeAccountId>(
+    pub async fn publish<T: SignerExt>(
         &mut self,
         rpc_client: &near_fetch::Client,
         signer: &T,
@@ -523,36 +523,27 @@ impl SignatureManager {
             // let signature = Secp256K1Signature::try_from(signature.as_slice()).unwrap();
             // let signature = Signature::SECP256K1(signature);
             let response = rpc_client
-                .send_tx(
-                    signer,
-                    mpc_contract_id,
-                    vec![near_primitives::transaction::Action::FunctionCall(
-                        FunctionCallAction {
-                            method_name: "respond".to_string(),
-                            args: serde_json::to_vec(&serde_json::json!({
-                                "payload": payload,
-                                "big_r": signature.big_r,
-                                "s": signature.s
-                            }))
-                            .unwrap(),
-                            gas: 300_000_000_000_000,
-                            deposit: 0,
-                        },
-                    )],
-                )
+                .call(signer, mpc_contract_id, "respond")
+                .args_json(serde_json::json!({
+                    "payload": payload,
+                    "big_r": signature.big_r,
+                    "s": signature.s
+                }))
+                .max_gas()
+                .transact()
                 .await?;
             crate::metrics::NUM_SIGN_SUCCESS
-                .with_label_values(&[my_account_id])
+                .with_label_values(&[my_account_id.as_str()])
                 .inc();
             crate::metrics::SIGN_LATENCY
-                .with_label_values(&[my_account_id])
+                .with_label_values(&[my_account_id.as_str()])
                 .observe(time_added.elapsed().as_secs_f64());
             if time_added.elapsed().as_secs() <= 30 {
                 crate::metrics::NUM_SIGN_SUCCESS_30S
-                    .with_label_values(&[my_account_id])
+                    .with_label_values(&[my_account_id.as_str()])
                     .inc();
             }
-            tracing::info!(%receipt_id, big_r = signature.big_r.to_base58(), s = ?signature.s, status = ?response.status, "published signature response");
+            tracing::info!(%receipt_id, big_r = signature.big_r.to_base58(), s = ?signature.s, status = ?response.status(), "published signature response");
         }
         Ok(())
     }

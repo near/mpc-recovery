@@ -8,7 +8,7 @@ use crate::http_client::MessageQueue;
 use crate::storage::triple_storage::TripleData;
 use crate::types::{KeygenProtocol, PublicKey, ReshareProtocol, SecretKeyShare};
 use cait_sith::protocol::Participant;
-use near_primitives::types::AccountId;
+use near_account_id::AccountId;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;

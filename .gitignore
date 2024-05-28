@@ -1,7 +1,11 @@
 /target
 .direnv
 .DS_Store
+.idea
 
 flamegraph*.svg
 tmp
 *.log
+
+# Artifacts that may be left over
+**/*-secret-manager-*

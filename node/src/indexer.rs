@@ -2,9 +2,12 @@ use crate::gcp::GcpService;
 use crate::kdf;
 use crate::protocol::{SignQueue, SignRequest};
 use crate::types::LatestBlockHeight;
+
+use near_account_id::AccountId;
 use near_lake_framework::{LakeBuilder, LakeContext};
 use near_lake_primitives::actions::ActionMetaDataExt;
-use near_lake_primitives::{receipts::ExecutionStatus, AccountId};
+use near_lake_primitives::receipts::ExecutionStatus;
+
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
@@ -134,7 +137,7 @@ async fn handle_block(
                             time_added: Instant::now(),
                         });
                         crate::metrics::NUM_SIGN_REQUESTS
-                            .with_label_values(&[&ctx.gcp_service.account_id])
+                            .with_label_values(&[ctx.gcp_service.account_id.as_str()])
                             .inc();
                         drop(queue);
                     }
@@ -151,7 +154,7 @@ async fn handle_block(
         .await?;
 
     crate::metrics::LATEST_BLOCK_HEIGHT
-        .with_label_values(&[&ctx.gcp_service.account_id])
+        .with_label_values(&[ctx.gcp_service.account_id.as_str()])
         .set(block.block_height() as i64);
 
     if block.block_height() % 1000 == 0 {

@@ -31,10 +31,10 @@ jobs:
       - uses: Swatinem/rust-cache@v1
 
       - name: Compile Contract
-        run: cargo build -p mpc-contract --target wasm32-unknown-unknown --release --target-dir target/seperate_wasm
+        run: cd ./contract && cargo build --target wasm32-unknown-unknown --release
 
       - name: Test Contract
-        run: cd contract && cargo test --target x86_64-unknown-linux-gnu --release
+        run: cd ./contract && cargo test --target x86_64-unknown-linux-gnu --release
         env:
           RUST_LOG: INFO
           RUST_BACKTRACE: 1
