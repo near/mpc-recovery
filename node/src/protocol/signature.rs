@@ -529,6 +529,7 @@ impl SignatureManager {
     ) -> Result<(), near_fetch::Error> {
         for (receipt_id, request, time_added, signature) in self.signatures.drain(..) {
             let expected_public_key = derive_key(self.public_key, request.epsilon.scalar);
+            // We do this here, rather than on the client side, so we can use the ecrecover system function on NEAR to validate our signature
             let signature = into_eth_sig(
                 &expected_public_key,
                 &signature.big_r,

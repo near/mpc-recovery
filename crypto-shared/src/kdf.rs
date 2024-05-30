@@ -23,7 +23,7 @@ pub fn derive_epsilon(predecessor_id: &AccountId, path: &str) -> Scalar {
     let mut hasher = Sha256::new();
     hasher.update(derivation_path);
     let mut bytes = hasher.finalize();
-    // TODO explain or remove
+    // Due to a previous bug in our Scalar conversion code, this hash was reversed, we reverse it here to preserve compatibility, but will likely change this later.
     bytes.reverse();
     Scalar::from_bytes(&bytes)
 }

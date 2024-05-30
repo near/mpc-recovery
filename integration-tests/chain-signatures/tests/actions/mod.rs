@@ -102,11 +102,6 @@ pub async fn single_signature_rogue_responder(
 ) -> anyhow::Result<()> {
     let (_, payload_hash, account, tx_hash) = request_sign(ctx).await?;
 
-    // let mpc_point = EncodedPoint::from_bytes(mpc_pk_bytes).unwrap();
-    // let mpc_pk = AffinePoint::from_encoded_point(&mpc_point).unwrap();
-    // let epsilon = derive_epsilon(account_id, "test");
-    // let user_pk = derive_key(mpc_pk, epsilon);
-
     // We have to use seperate transactions because one could fail.
     // This leads to a potential race condition where this transaction could get sent after the signature completes, but I think that's unlikely
     let rogue_hash = rogue_respond(ctx, payload_hash, &account.id(), "test").await?;
@@ -276,17 +271,6 @@ pub async fn single_payload_signature_production(
 async fn test_proposition() {
     use k256::sha2::{Sha256, Digest};
 
-
-    // let (account_id, big_r, s, mpc_key, mut payload_hash, payload) = (
-    //     "dev-20240528191713-45043193246525.test.near",
-    //     "02EC7FA686BB430A4B700BDA07F2E07D6333D9E33AEEF270334EB2D00D0A6FEC6C",
-    //     "20F90C540EE00133C911EA2A9ADE2ABBCC7AD820687F75E011DFEEC94DB10CD6",
-    //     "036DC71326637EE5708088C200CCCD4B2C79E51657AD33095B4A5AEE0134C8163C",
-    //     [29, 118, 40, 238, 47, 45, 130, 117, 199, 125, 139, 152, 109, 84, 243, 167, 217, 20, 124, 135, 250, 82, 12, 18, 244, 143, 181, 114, 173, 180, 36, 179],
-    //     [83, 218, 143, 193, 158, 149, 39, 214, 64, 43, 142, 85, 129, 113, 68, 244, 170, 112, 167, 208, 42, 175, 176, 234, 140, 215, 230, 156, 246, 209, 15, 26]
-    //     );
-
-    // Create payload
     let mut payload = [0u8; 32];
     for (i, item) in payload.iter_mut().enumerate() {
         *item = i as u8;
