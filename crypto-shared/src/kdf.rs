@@ -1,12 +1,14 @@
 use crate::types::{PublicKey, ScalarExt};
 use anyhow::Context;
 use k256::{
-    ecdsa::{RecoveryId, VerifyingKey},
+    ecdsa::{RecoveryId, Signature, VerifyingKey},
     elliptic_curve::{point::AffineCoordinates, sec1::ToEncodedPoint, CurveArithmetic},
+    pkcs8::DecodePublicKey,
     sha2::{Digest, Sha256},
     AffinePoint, Scalar, Secp256k1,
 };
 use near_account_id::AccountId;
+use near_sdk::env;
 
 // Constant prefix that ensures epsilon derivation values are used specifically for
 // near-mpc-recovery with key derivation protocol vX.Y.Z.
@@ -95,3 +97,48 @@ pub fn x_coordinate(
 // pub fn x_coordinate<C: cait_sith::CSCurve>(point: &C::AffinePoint) -> C::Scalar {
 //     <C::Scalar as k256::elliptic_curve::ops::Reduce<<C as k256::elliptic_curve::Curve>::Uint>>::reduce_bytes(&point.x())
 // }
+
+pub fn check_ec_signature(
+    expected_pk: &k256::AffinePoint,
+    big_r: &k256::AffinePoint,
+    s: &k256::Scalar,
+    msg_hash: Scalar,
+    recovery_id: u8,
+) -> anyhow::Result<()> {
+    let public_key = expected_pk.to_encoded_point(false);
+    let signature = k256::ecdsa::Signature::from_scalars(x_coordinate(big_r), s)
+        .context("cannot create signature from cait_sith signature")?;
+    let found_pk = recover(
+        &msg_hash.to_bytes(),
+        &signature,
+        RecoveryId::try_from(recovery_id).context("invalid recovery ID")?,
+    )?
+    .to_encoded_point(false);
+    if public_key == found_pk {
+        return Ok(());
+    }
+
+    anyhow::bail!("cannot use either recovery id (0 or 1) to recover pubic key")
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn recover(
+    prehash: &[u8],
+    signature: &Signature,
+    recovery_id: RecoveryId,
+) -> anyhow::Result<VerifyingKey> {
+    VerifyingKey::recover_from_prehash(prehash, signature, recovery_id)
+        .context("unable to recover public key")
+}
+
+#[cfg(target_arch = "wasm32")]
+fn recover(
+    prehash: &[u8],
+    signature: &Signature,
+    recovery_id: RecoveryId,
+) -> anyhow::Result<VerifyingKey> {
+    let recovered_key =
+        env::ecrecover(prehash, &signature.to_bytes(), recovery_id.to_byte(), false)
+            .context("Unable to recover public key")?;
+    VerifyingKey::try_from(&recovered_key[..]).context("Failed to parse returned key")
+}

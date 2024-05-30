@@ -1,5 +1,6 @@
 pub mod primitives;
 
+use crypto_shared::kdf::check_ec_signature;
 use crypto_shared::near_public_key_to_affine_point;
 use crypto_shared::{
     derive_epsilon, derive_key, into_eth_sig, ScalarExt as _, SerializableAffinePoint,
@@ -246,12 +247,14 @@ impl VersionedMpcContract {
                 near_public_key_to_affine_point(self.public_key()),
                 request.epsilon.scalar,
             );
+
             // Check the signature is correct
-            if let Err(_) = into_eth_sig(
+            if let Err(_) = check_ec_signature(
                 &expected_public_key,
                 &response.big_r.affine_point,
                 &response.s.scalar,
                 k256::Scalar::from_bytes(&request.payload_hash[..]),
+                response.recovery_id,
             ) {
                 env::panic_str("Signature could not be verified");
             }
