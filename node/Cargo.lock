@@ -1652,7 +1652,7 @@ dependencies = [
  "borsh 1.5.0",
  "getrandom 0.2.15",
  "k256",
- "near-account-id 1.0.0",
+ "near-account-id",
  "near-sdk",
  "serde",
  "serde_json",

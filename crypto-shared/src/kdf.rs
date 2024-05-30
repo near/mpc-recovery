@@ -1,4 +1,4 @@
-use crate::types::{PublicKey, ScalarExt, SignatureResponse};
+use crate::types::{PublicKey, ScalarExt};
 use anyhow::Context;
 use k256::{
     ecdsa::{RecoveryId, Signature, VerifyingKey},
@@ -30,41 +30,6 @@ pub fn derive_epsilon(predecessor_id: &AccountId, path: &str) -> Scalar {
 
 pub fn derive_key(public_key: PublicKey, epsilon: Scalar) -> PublicKey {
     (<Secp256k1 as CurveArithmetic>::ProjectivePoint::GENERATOR * epsilon + public_key).to_affine()
-}
-
-// try to get the correct recovery id for this signature by brute force.
-pub fn into_eth_sig(
-    public_key: &k256::AffinePoint,
-    big_r: &k256::AffinePoint,
-    s: &k256::Scalar,
-    msg_hash: Scalar,
-) -> anyhow::Result<SignatureResponse> {
-    let public_key = public_key.to_encoded_point(false);
-    let signature = k256::ecdsa::Signature::from_scalars(x_coordinate(big_r), s)
-        .context("cannot create signature from cait_sith signature")?;
-    let pk0 = VerifyingKey::recover_from_prehash(
-        &msg_hash.to_bytes(),
-        &signature,
-        RecoveryId::try_from(0).context("cannot create recovery_id=0")?,
-    )
-    .context("unable to use 0 as recovery_id to recover public key")?
-    .to_encoded_point(false);
-    if public_key == pk0 {
-        return Ok(SignatureResponse::new(*big_r, *s, 0));
-    }
-
-    let pk1 = VerifyingKey::recover_from_prehash(
-        &msg_hash.to_bytes(),
-        &signature,
-        RecoveryId::try_from(1).context("cannot create recovery_id=1")?,
-    )
-    .context("unable to use 1 as recovery_id to recover public key")?
-    .to_encoded_point(false);
-    if public_key == pk1 {
-        return Ok(SignatureResponse::new(*big_r, *s, 1));
-    }
-
-    anyhow::bail!("cannot use either recovery id (0 or 1) to recover pubic key")
 }
 
 /// Get the x coordinate of a point, as a scalar
