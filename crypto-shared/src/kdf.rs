@@ -22,7 +22,10 @@ pub fn derive_epsilon(predecessor_id: &AccountId, path: &str) -> Scalar {
     let derivation_path = format!("{EPSILON_DERIVATION_PREFIX}{},{}", predecessor_id, path);
     let mut hasher = Sha256::new();
     hasher.update(derivation_path);
-    Scalar::from_bytes(&hasher.finalize())
+    let mut bytes = hasher.finalize();
+    // TODO explain or remove
+    bytes.reverse();
+    Scalar::from_bytes(&bytes)
 }
 
 pub fn derive_key(public_key: PublicKey, epsilon: Scalar) -> PublicKey {

@@ -8,7 +8,6 @@ use elliptic_curve::sec1::ToEncodedPoint;
 use k256::ecdsa::VerifyingKey;
 use k256::elliptic_curve::ops::{Invert, Reduce};
 use k256::elliptic_curve::point::AffineCoordinates;
-use k256::elliptic_curve::scalar::FromUintUnchecked;
 use k256::elliptic_curve::sec1::FromEncodedPoint;
 use k256::elliptic_curve::ProjectivePoint;
 use k256::{AffinePoint, EncodedPoint, Scalar, Secp256k1};
@@ -178,34 +177,45 @@ pub async fn single_payload_signature_production(
 
 #[tokio::test]
 async fn test_proposition() {
-    let big_r = "044bf886afee5a6844a25fa6831a01715e990d3d9e96b792a9da91cfbecbf8477cea57097a3db9fc1d4822afade3d1c4e6d66e99568147304ae34bcfa609d90a16";
-    let s = "1f871c67139f617409067ac8a7150481e3a5e2d8a9207ffdaad82098654e95cb";
-    let mpc_key = "02F2B55346FD5E4BFF1F06522561BDCD024CEA25D98A091197ACC04E22B3004DB2";
+    use k256::sha2::{Sha256, Digest};
+
+
+    // let (account_id, big_r, s, mpc_key, mut payload_hash, payload) = (
+    //     "dev-20240528191713-45043193246525.test.near",
+    //     "02EC7FA686BB430A4B700BDA07F2E07D6333D9E33AEEF270334EB2D00D0A6FEC6C",
+    //     "20F90C540EE00133C911EA2A9ADE2ABBCC7AD820687F75E011DFEEC94DB10CD6",
+    //     "036DC71326637EE5708088C200CCCD4B2C79E51657AD33095B4A5AEE0134C8163C",
+    //     [29, 118, 40, 238, 47, 45, 130, 117, 199, 125, 139, 152, 109, 84, 243, 167, 217, 20, 124, 135, 250, 82, 12, 18, 244, 143, 181, 114, 173, 180, 36, 179],
+    //     [83, 218, 143, 193, 158, 149, 39, 214, 64, 43, 142, 85, 129, 113, 68, 244, 170, 112, 167, 208, 42, 175, 176, 234, 140, 215, 230, 156, 246, 209, 15, 26]
+    //     );
 
     // Create payload
     let mut payload = [0u8; 32];
     for (i, item) in payload.iter_mut().enumerate() {
         *item = i as u8;
     }
+    //
+    let big_r = "044bf886afee5a6844a25fa6831a01715e990d3d9e96b792a9da91cfbecbf8477cea57097a3db9fc1d4822afade3d1c4e6d66e99568147304ae34bcfa609d90a16";
+    let s = "1f871c67139f617409067ac8a7150481e3a5e2d8a9207ffdaad82098654e95cb";
+    let mpc_key = "02F2B55346FD5E4BFF1F06522561BDCD024CEA25D98A091197ACC04E22B3004DB2";
+    let account_id = "acc_mc.test.near";
 
-    // TODO: get hashed values on the flight
-    let payload_hash: [u8; 32] = [
-        99, 13, 205, 41, 102, 196, 51, 102, 145, 18, 84, 72, 187, 178, 91, 79, 244, 18, 164, 156,
-        115, 45, 178, 200, 171, 193, 184, 88, 27, 215, 16, 221,
-    ];
-    let payload_hash_scalar = k256::Scalar::from_bytes(&payload_hash); // TODO: why do we need both reversed and not reversed versions?
-    let mut payload_hash_reversed: [u8; 32] = payload_hash;
-    payload_hash_reversed.reverse();
+    let mut hasher = Sha256::new();
+    hasher.update(payload);
+    let mut payload_hash: [u8; 32] = hasher.finalize().try_into().unwrap();
+
+    payload_hash.reverse();
+    let payload_hash_scalar = Scalar::from_bytes(&payload_hash);
 
     println!("payload_hash: {payload_hash:?}");
     println!("payload_hash_scallar: {payload_hash_scalar:#?}");
-    println!("payload_hash_reversed: {payload_hash_reversed:?}");
 
     // Derive and convert user pk
     let mpc_pk = hex::decode(mpc_key).unwrap();
     let mpc_pk = EncodedPoint::from_bytes(mpc_pk).unwrap();
     let mpc_pk = AffinePoint::from_encoded_point(&mpc_pk).unwrap();
-    let account_id = "acc_mc.test.near".parse().unwrap();
+
+    let account_id = account_id.parse().unwrap();
     let derivation_epsilon: k256::Scalar = derive_epsilon(&account_id, "test");
     let user_pk: AffinePoint = derive_key(mpc_pk, derivation_epsilon);
     let user_pk_y_parity = match user_pk.y_is_odd().unwrap_u8() {
@@ -227,17 +237,19 @@ async fn test_proposition() {
     assert!(big_r_y_parity == 0 || big_r_y_parity == 1);
 
     let s = hex::decode(s).unwrap();
-    let s = k256::Scalar::from_uint_unchecked(k256::U256::from_be_slice(s.as_slice()));
+    let s = k256::Scalar::from_bytes(s.as_slice());
     let r = x_coordinate::<k256::Secp256k1>(&big_r);
 
     let signature = cait_sith::FullSignature::<Secp256k1> { big_r, s };
-    let multichain_sig = into_eth_sig(&user_pk, &signature.big_r, &signature.s, payload_hash_scalar).unwrap();
 
-    println!("{multichain_sig:#?}");
     println!("R: {big_r:#?}");
     println!("r: {r:#?}");
     println!("y parity: {}", big_r_y_parity);
     println!("s: {s:#?}");
+    println!("epsilon: {derivation_epsilon:#?}");
+
+    let multichain_sig = into_eth_sig(&user_pk, &signature.big_r, &signature.s, payload_hash_scalar).unwrap();
+    println!("{multichain_sig:#?}");
 
     // Check signature using cait-sith tooling
     let is_signature_valid_for_user_pk = signature.verify(&user_pk, &payload_hash_scalar);
@@ -256,7 +268,7 @@ async fn test_proposition() {
 
     let ecdsa_local_verify_result = verify(
         &k256::ecdsa::VerifyingKey::from(&user_pk_k256),
-        &payload_hash_reversed,
+        &payload_hash,
         &k256_sig,
     );
     assert!(ecdsa_local_verify_result.is_ok());
@@ -290,7 +302,7 @@ async fn test_proposition() {
         ethers_core::utils::public_key_to_address(&verifying_user_pk);
 
     assert!(signature
-        .verify(payload_hash_reversed, user_address_ethers)
+        .verify(payload_hash, user_address_ethers)
         .is_ok());
 
     // Check if recovered address is the same as the user address
@@ -302,21 +314,21 @@ async fn test_proposition() {
     };
 
     let recovered_from_signature_address_web3 = web3::signing::recover(
-        &payload_hash_reversed,
+        &payload_hash,
         &signature_for_recovery,
         multichain_sig.recovery_id as i32,
     )
     .unwrap();
     assert_eq!(user_address_from_pk, recovered_from_signature_address_web3);
 
-    let recovered_from_signature_address_ethers = signature.recover(payload_hash_reversed).unwrap();
+    let recovered_from_signature_address_ethers = signature.recover(payload_hash).unwrap();
     assert_eq!(
         user_address_from_pk,
         recovered_from_signature_address_ethers
     );
 
     let recovered_from_signature_address_local_function =
-        recover(signature, payload_hash_reversed).unwrap();
+        recover(signature, payload_hash).unwrap();
     assert_eq!(
         user_address_from_pk,
         recovered_from_signature_address_local_function
