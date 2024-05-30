@@ -86,15 +86,17 @@ pub struct SignatureRequest {
 pub struct SignatureResponse {
     pub big_r: SerializableAffinePoint,
     pub s: SerializableScalar,
+    pub recovery_id: u8,
 }
 
 impl SignatureResponse {
-    pub fn new(big_r: AffinePoint, s: Scalar) -> Self {
+    pub fn new(big_r: AffinePoint, s: Scalar, recovery_id: u8) -> Self {
         SignatureResponse {
             big_r: SerializableAffinePoint {
                 affine_point: big_r,
             },
             s: SerializableScalar { scalar: s },
+            recovery_id,
         }
     }
 }
@@ -225,7 +227,7 @@ impl VersionedMpcContract {
 // MPC Node API
 #[near_bindgen]
 impl VersionedMpcContract {
-    pub fn respond(&mut self, request: SignatureRequest, big_r: AffinePoint, s: Scalar) {
+    pub fn respond(&mut self, request: SignatureRequest, response: SignatureResponse) {
         let protocol_state = self.mutable_state();
         if let ProtocolContractState::Running(_) = protocol_state {
             let signer = env::signer_account_id();
@@ -233,10 +235,10 @@ impl VersionedMpcContract {
             // It's not strictly necessary, since we verify the payload is correct
             log!(
                 "respond: signer={}, request={:?} big_r={:?} s={:?}",
-                signer,
-                request,
-                big_r,
-                s
+                &signer,
+                &request,
+                &response.big_r,
+                &response.s
             );
 
             // generate the expected public key
@@ -247,14 +249,14 @@ impl VersionedMpcContract {
             // Check the signature is correct
             if let Err(_) = into_eth_sig(
                 &expected_public_key,
-                &big_r,
-                &s,
+                &response.big_r.affine_point,
+                &response.s.scalar,
                 k256::Scalar::from_bytes(&request.payload_hash[..]),
             ) {
                 env::panic_str("Signature could not be verified");
             }
 
-            self.add_signature(&request, SignatureResponse::new(big_r, s));
+            self.add_signature(&request, response);
         } else {
             env::panic_str("protocol is not in a running state");
         }

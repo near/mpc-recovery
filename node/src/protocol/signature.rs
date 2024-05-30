@@ -5,14 +5,14 @@ use crate::indexer::ContractSignRequest;
 use crate::types::SignatureProtocol;
 use crate::types::{PublicKey, SignatureProtocol};
 use crate::util::AffinePointExt;
-use crypto_shared::{ScalarExt, SerializableScalar};
+use crypto_shared::{into_eth_sig, ScalarExt, SerializableScalar};
 
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::{FullSignature, PresignOutput};
 use chrono::Utc;
 use crypto_shared::{derive_key, PublicKey};
 use k256::{Scalar, Secp256k1};
-use mpc_contract::SignatureRequest;
+use mpc_contract::{SignatureRequest, SignatureResponse};
 use rand::rngs::StdRng;
 use rand::seq::{IteratorRandom, SliceRandom};
 use rand::SeedableRng;
@@ -528,19 +528,22 @@ impl SignatureManager {
         my_account_id: &AccountId,
     ) -> Result<(), near_fetch::Error> {
         for (receipt_id, request, time_added, signature) in self.signatures.drain(..) {
-            // TODO: Figure out how to properly serialize the signature
-            // let r_s = signature.big_r.x().concat(signature.s.to_bytes());
-            // let tag =
-            //     ConditionallySelectable::conditional_select(&2u8, &3u8, signature.big_r.y_is_odd());
-            // let signature = r_s.append(tag);
-            // let signature = Secp256K1Signature::try_from(signature.as_slice()).unwrap();
-            // let signature = Signature::SECP256K1(signature);
+            let expected_public_key = derive_key(self.public_key, request.epsilon.scalar);
+            let signature = into_eth_sig(
+                &expected_public_key,
+                &signature.big_r,
+                &signature.s,
+                Scalar::from_bytes(&request.payload_hash),
+            )
+            // TODO good error
+            .unwrap();
+            let signature_response =
+                SignatureResponse::new(signature.big_r, signature.s, signature.recovery_id);
             let response = rpc_client
                 .call(signer, mpc_contract_id, "respond")
                 .args_json(serde_json::json!({
                     "request": request,
-                    "big_r": signature.big_r,
-                    "s": signature.s
+                    "response": signature_response,
                 }))
                 .max_gas()
                 .transact()

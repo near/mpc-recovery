@@ -3,6 +3,7 @@ pub mod wait_for;
 use crate::MultichainTestContext;
 
 use cait_sith::FullSignature;
+use mpc_contract::SignatureResponse;
 use crypto_shared::SerializableScalar;
 use crypto_shared::{derive_epsilon, derive_key, into_eth_sig};
 use elliptic_curve::sec1::ToEncodedPoint;
@@ -16,6 +17,7 @@ use mpc_contract::primitives::SignRequest;
 use mpc_contract::RunningContractState;
 use crypto_shared::ScalarExt;
 use near_crypto::InMemorySigner;
+use crypto_shared::SerializableAffinePoint;
 use near_jsonrpc_client::methods::broadcast_tx_async::RpcBroadcastTxAsyncRequest;
 use near_lake_primitives::CryptoHash;
 use near_primitives::transaction::{Action, FunctionCallAction, Transaction};
@@ -167,10 +169,18 @@ pub async fn rogue_respond(
         epsilon: SerializableScalar {scalar: epsilon},
     };
 
+    let big_r = serde_json::from_value("02EC7FA686BB430A4B700BDA07F2E07D6333D9E33AEEF270334EB2D00D0A6FEC6C".into())?; // Fake BigR
+    let s = serde_json::from_value("20F90C540EE00133C911EA2A9ADE2ABBCC7AD820687F75E011DFEEC94DB10CD6".into())?; // Fake S
+
+    let response = SignatureResponse {
+        big_r: SerializableAffinePoint {affine_point: big_r},
+        s: SerializableScalar {scalar: s},
+        recovery_id: 0,
+    };
+
     let json = &serde_json::json!({
         "request": request,
-        "big_r": "02EC7FA686BB430A4B700BDA07F2E07D6333D9E33AEEF270334EB2D00D0A6FEC6C", // Fake BigR
-        "s": "20F90C540EE00133C911EA2A9ADE2ABBCC7AD820687F75E011DFEEC94DB10CD6" // Fake S
+        "response": response,
     });
     let hash = ctx
         .jsonrpc_client
