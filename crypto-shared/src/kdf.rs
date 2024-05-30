@@ -115,6 +115,7 @@ fn recover(
     signature: &Signature,
     recovery_id: RecoveryId,
 ) -> anyhow::Result<VerifyingKey> {
+    use near_sdk::env;
     let recovered_key =
         env::ecrecover(prehash, &signature.to_bytes(), recovery_id.to_byte(), false)
             .context("Unable to recover public key")?;
