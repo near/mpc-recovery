@@ -105,7 +105,7 @@ pub async fn single_signature_rogue_responder(
 
     // We have to use seperate transactions because one could fail.
     // This leads to a potential race condition where this transaction could get sent after the signature completes, but I think that's unlikely
-    let rogue_hash = rogue_respond(ctx, payload_hash, &account.id(), "test").await?;
+    let rogue_hash = rogue_respond(ctx, payload_hash, account.id(), "test").await?;
 
     let err = wait_for::rogue_message_responded(ctx, rogue_hash).await?;
 
@@ -289,7 +289,7 @@ async fn test_proposition() {
 
     let mut hasher = Sha256::new();
     hasher.update(payload);
-    let mut payload_hash: [u8; 32] = hasher.finalize().try_into().unwrap();
+    let mut payload_hash: [u8; 32] = hasher.finalize().into();
 
     payload_hash.reverse();
     let payload_hash_scalar = Scalar::from_bytes(&payload_hash);
