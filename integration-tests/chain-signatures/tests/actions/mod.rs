@@ -3,6 +3,8 @@ pub mod wait_for;
 use crate::MultichainTestContext;
 
 use cait_sith::FullSignature;
+use crypto_shared::ScalarExt;
+use crypto_shared::SerializableAffinePoint;
 use crypto_shared::{derive_epsilon, derive_key, SerializableScalar, SignatureResponse};
 use elliptic_curve::sec1::ToEncodedPoint;
 use k256::ecdsa::VerifyingKey;
@@ -13,17 +15,15 @@ use k256::elliptic_curve::ProjectivePoint;
 use k256::{AffinePoint, EncodedPoint, Scalar, Secp256k1};
 use mpc_contract::primitives::SignRequest;
 use mpc_contract::RunningContractState;
-use crypto_shared::ScalarExt;
+use mpc_contract::SignatureRequest;
+use mpc_recovery_node::kdf::into_eth_sig;
 use near_crypto::InMemorySigner;
-use crypto_shared::SerializableAffinePoint;
 use near_jsonrpc_client::methods::broadcast_tx_async::RpcBroadcastTxAsyncRequest;
 use near_lake_primitives::CryptoHash;
 use near_primitives::transaction::{Action, FunctionCallAction, Transaction};
 use near_workspaces::Account;
-use mpc_recovery_node::kdf::into_eth_sig;
 use rand::Rng;
 use secp256k1::XOnlyPublicKey;
-use mpc_contract::SignatureRequest;
 
 use std::time::Duration;
 
@@ -111,8 +111,7 @@ pub async fn single_signature_rogue_responder(
 
     assert_eq!(
         err,
-        "Smart contract panicked: Signature could not be verified"
-            .to_string()
+        "Smart contract panicked: Signature could not be verified".to_string()
     );
 
     let signature = wait_for::signature_responded(ctx, tx_hash).await?;
@@ -160,15 +159,21 @@ pub async fn rogue_respond(
 
     let request = SignatureRequest {
         payload_hash,
-        epsilon: SerializableScalar {scalar: epsilon},
+        epsilon: SerializableScalar { scalar: epsilon },
     };
 
-    let big_r = serde_json::from_value("02EC7FA686BB430A4B700BDA07F2E07D6333D9E33AEEF270334EB2D00D0A6FEC6C".into())?; // Fake BigR
-    let s = serde_json::from_value("20F90C540EE00133C911EA2A9ADE2ABBCC7AD820687F75E011DFEEC94DB10CD6".into())?; // Fake S
+    let big_r = serde_json::from_value(
+        "02EC7FA686BB430A4B700BDA07F2E07D6333D9E33AEEF270334EB2D00D0A6FEC6C".into(),
+    )?; // Fake BigR
+    let s = serde_json::from_value(
+        "20F90C540EE00133C911EA2A9ADE2ABBCC7AD820687F75E011DFEEC94DB10CD6".into(),
+    )?; // Fake S
 
     let response = SignatureResponse {
-        big_r: SerializableAffinePoint {affine_point: big_r},
-        s: SerializableScalar {scalar: s},
+        big_r: SerializableAffinePoint {
+            affine_point: big_r,
+        },
+        s: SerializableScalar { scalar: s },
         recovery_id: 0,
     };
 
@@ -270,7 +275,7 @@ pub async fn single_payload_signature_production(
 
 #[tokio::test]
 async fn test_proposition() {
-    use k256::sha2::{Sha256, Digest};
+    use k256::sha2::{Digest, Sha256};
 
     let mut payload = [0u8; 32];
     for (i, item) in payload.iter_mut().enumerate() {
@@ -330,7 +335,13 @@ async fn test_proposition() {
     println!("s: {s:#?}");
     println!("epsilon: {derivation_epsilon:#?}");
 
-    let multichain_sig = into_eth_sig(&user_pk, &signature.big_r, &signature.s, payload_hash_scalar).unwrap();
+    let multichain_sig = into_eth_sig(
+        &user_pk,
+        &signature.big_r,
+        &signature.s,
+        payload_hash_scalar,
+    )
+    .unwrap();
     println!("{multichain_sig:#?}");
 
     // Check signature using cait-sith tooling
@@ -383,9 +394,7 @@ async fn test_proposition() {
     let user_address_ethers: ethers_core::types::H160 =
         ethers_core::utils::public_key_to_address(&verifying_user_pk);
 
-    assert!(signature
-        .verify(payload_hash, user_address_ethers)
-        .is_ok());
+    assert!(signature.verify(payload_hash, user_address_ethers).is_ok());
 
     // Check if recovered address is the same as the user address
     let signature_for_recovery: [u8; 64] = {
@@ -409,8 +418,7 @@ async fn test_proposition() {
         recovered_from_signature_address_ethers
     );
 
-    let recovered_from_signature_address_local_function =
-        recover(signature, payload_hash).unwrap();
+    let recovered_from_signature_address_local_function = recover(signature, payload_hash).unwrap();
     assert_eq!(
         user_address_from_pk,
         recovered_from_signature_address_local_function
