@@ -3,6 +3,7 @@ pub mod wait_for;
 use crate::MultichainTestContext;
 
 use cait_sith::FullSignature;
+use crypto_shared::SerializableScalar;
 use crypto_shared::{derive_epsilon, derive_key, into_eth_sig};
 use elliptic_curve::sec1::ToEncodedPoint;
 use k256::ecdsa::VerifyingKey;
@@ -21,6 +22,7 @@ use near_primitives::transaction::{Action, FunctionCallAction, Transaction};
 use near_workspaces::Account;
 use rand::Rng;
 use secp256k1::XOnlyPublicKey;
+use mpc_contract::SignatureRequest;
 
 use std::time::Duration;
 
@@ -93,6 +95,39 @@ pub async fn assert_signature(
     assert!(signature.verify(&user_pk, &Scalar::from_bytes(payload),));
 }
 
+// A normal signature, but we try to insert a bad response which fails and the signature is generated
+pub async fn single_signature_rogue_responder(
+    ctx: &MultichainTestContext<'_>,
+    state: &RunningContractState,
+) -> anyhow::Result<()> {
+    let (_, payload_hash, account, tx_hash) = request_sign(ctx).await?;
+
+    // let mpc_point = EncodedPoint::from_bytes(mpc_pk_bytes).unwrap();
+    // let mpc_pk = AffinePoint::from_encoded_point(&mpc_point).unwrap();
+    // let epsilon = derive_epsilon(account_id, "test");
+    // let user_pk = derive_key(mpc_pk, epsilon);
+
+    // We have to use seperate transactions because one could fail.
+    // This leads to a potential race condition where this transaction could get sent after the signature completes, but I think that's unlikely
+    let rogue_hash = rogue_respond(ctx, payload_hash, &account.id(), "test").await?;
+
+    let err = wait_for::rogue_message_responded(ctx, rogue_hash).await?;
+
+    assert_eq!(
+        err,
+        "Smart contract panicked: Signature could not be verified"
+            .to_string()
+    );
+
+    let signature = wait_for::signature_responded(ctx, tx_hash).await?;
+
+    let mut mpc_pk_bytes = vec![0x04];
+    mpc_pk_bytes.extend_from_slice(&state.public_key.as_bytes()[1..]);
+    assert_signature(account.id(), &mpc_pk_bytes, &payload_hash, &signature).await;
+
+    Ok(())
+}
+
 pub async fn single_signature_production(
     ctx: &MultichainTestContext<'_>,
     state: &RunningContractState,
@@ -105,6 +140,60 @@ pub async fn single_signature_production(
     assert_signature(account.id(), &mpc_pk_bytes, &payload_hash, &signature).await;
 
     Ok(())
+}
+
+pub async fn rogue_respond(
+    ctx: &MultichainTestContext<'_>,
+    payload_hash: [u8; 32],
+    predecessor: &near_workspaces::AccountId,
+    path: &str,
+) -> anyhow::Result<CryptoHash> {
+    let worker = &ctx.nodes.ctx().worker;
+    let account = worker.dev_create_account().await?;
+
+    let signer = InMemorySigner {
+        account_id: account.id().clone(),
+        public_key: account.secret_key().public_key().clone().into(),
+        secret_key: account.secret_key().to_string().parse()?,
+    };
+    let (nonce, block_hash, _) = ctx
+        .rpc_client
+        .fetch_nonce(&signer.account_id, &signer.public_key)
+        .await?;
+    let epsilon = derive_epsilon(predecessor, path);
+
+    let request = SignatureRequest {
+        payload_hash,
+        epsilon: SerializableScalar {scalar: epsilon},
+    };
+
+    let json = &serde_json::json!({
+        "request": request,
+        "big_r": "02EC7FA686BB430A4B700BDA07F2E07D6333D9E33AEEF270334EB2D00D0A6FEC6C", // Fake BigR
+        "s": "20F90C540EE00133C911EA2A9ADE2ABBCC7AD820687F75E011DFEEC94DB10CD6" // Fake S
+    });
+    let hash = ctx
+        .jsonrpc_client
+        .call(&RpcBroadcastTxAsyncRequest {
+            signed_transaction: Transaction {
+                nonce,
+                block_hash,
+                signer_id: signer.account_id.clone(),
+                public_key: signer.public_key.clone(),
+                receiver_id: ctx.nodes.ctx().mpc_contract.id().clone(),
+                actions: vec![Action::FunctionCall(Box::new(FunctionCallAction {
+                    method_name: "respond".to_string(),
+                    args: serde_json::to_vec(json)?,
+                    gas: 300_000_000_000_000,
+                    deposit: 0,
+                }))],
+            }
+            .sign(&signer),
+        })
+        .await?;
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    Ok(hash)
 }
 
 pub async fn request_sign_non_random(

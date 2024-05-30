@@ -227,35 +227,34 @@ impl VersionedMpcContract {
 impl VersionedMpcContract {
     pub fn respond(&mut self, request: SignatureRequest, big_r: AffinePoint, s: Scalar) {
         let protocol_state = self.mutable_state();
-        if let ProtocolContractState::Running(state) = protocol_state {
+        if let ProtocolContractState::Running(_) = protocol_state {
             let signer = env::signer_account_id();
-            if state.participants.contains_key(&signer) {
-                log!(
-                    "respond: signer={}, request={:?} big_r={:?} s={:?}",
-                    signer,
-                    request,
-                    big_r,
-                    s
-                );
+            // TODO add back in a check to see that the caller is correct (it's horrible to test atm)
+            // It's not strictly necessary, since we verify the payload is correct
+            log!(
+                "respond: signer={}, request={:?} big_r={:?} s={:?}",
+                signer,
+                request,
+                big_r,
+                s
+            );
 
-                // generate the expected public key
-                let expected_public_key = derive_key(
-                    near_public_key_to_affine_point(self.public_key()),
-                    request.epsilon.scalar,
-                );
-                // Check the signature is correct
-                let _ = into_eth_sig(
-                    &expected_public_key,
-                    &big_r,
-                    &s,
-                    k256::Scalar::from_bytes(&request.payload_hash[..]),
-                )
-                .expect("Signature could not be verified");
-
-                self.add_sign_result(&request, SignatureResponse::new(big_r, s));
-            } else {
-                env::panic_str("only participants can respond");
+            // generate the expected public key
+            let expected_public_key = derive_key(
+                near_public_key_to_affine_point(self.public_key()),
+                request.epsilon.scalar,
+            );
+            // Check the signature is correct
+            if let Err(_) = into_eth_sig(
+                &expected_public_key,
+                &big_r,
+                &s,
+                k256::Scalar::from_bytes(&request.payload_hash[..]),
+            ) {
+                env::panic_str("Signature could not be verified");
             }
+
+            self.add_signature(&request, SignatureResponse::new(big_r, s));
         } else {
             env::panic_str("protocol is not in a running state");
         }

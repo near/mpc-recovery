@@ -14,6 +14,7 @@ use mpc_recovery_node::web::StateView;
 use near_jsonrpc_client::methods::tx::RpcTransactionStatusRequest;
 use near_jsonrpc_client::methods::tx::TransactionInfo;
 use near_lake_primitives::CryptoHash;
+use near_primitives::errors::ActionErrorKind;
 use near_primitives::views::FinalExecutionStatus;
 use near_workspaces::Account;
 use serde::Deserialize;
@@ -273,4 +274,53 @@ pub async fn signature_payload_responded(
         .await
         .with_context(|| "failed to wait for signature response")?;
     Ok(signature)
+}
+
+// Check that the rogue message failed
+pub async fn rogue_message_responded(
+    ctx: &MultichainTestContext<'_>,
+    tx_hash: CryptoHash,
+) -> anyhow::Result<String> {
+    let is_tx_ready = || async {
+        let outcome_view = ctx
+            .jsonrpc_client
+            .call(RpcTransactionStatusRequest {
+                transaction_info: TransactionInfo::TransactionId {
+                    tx_hash,
+                    sender_account_id: ctx.nodes.ctx().mpc_contract.id().clone(),
+                },
+                wait_until: near_primitives::views::TxExecutionStatus::Final,
+            })
+            .await?;
+
+        let Some(outcome) = outcome_view.final_execution_outcome else {
+            anyhow::bail!("final execution outcome not available");
+        };
+        let outcome = outcome.into_outcome();
+
+        let FinalExecutionStatus::Failure(ref failure) = outcome.status else {
+            anyhow::bail!("tx finished successfully: {:?}", outcome.status);
+        };
+
+        use near_primitives::errors::TxExecutionError;
+        let TxExecutionError::ActionError(action_err) = failure else {
+            anyhow::bail!("invalid transaction: {:?}", outcome.status);
+        };
+
+        let ActionErrorKind::FunctionCallError(ref err) = action_err.kind else {
+            anyhow::bail!("Not a function call error {:?}", outcome.status);
+        };
+        use near_primitives::errors::FunctionCallError;
+        let FunctionCallError::ExecutionError(err_msg) = err else {
+            anyhow::bail!("Wrong error type: {:?}", err);
+        };
+        Ok(err_msg.clone())
+    };
+
+    let signature = is_tx_ready
+        .retry(&ExponentialBuilder::default().with_max_times(6))
+        .await
+        .with_context(|| "failed to wait for rogue message response")?;
+
+    Ok(signature.clone())
 }
