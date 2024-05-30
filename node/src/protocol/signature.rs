@@ -535,8 +535,7 @@ impl SignatureManager {
                 &signature.s,
                 Scalar::from_bytes(&request.payload_hash),
             )
-            // TODO good error
-            .unwrap();
+            .map_err(|_| near_fetch::Error::InvalidArgs("Failed to generate a recovery ID"))?;
             let signature_response =
                 SignatureResponse::new(signature.big_r, signature.s, signature.recovery_id);
             let response = rpc_client

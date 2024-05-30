@@ -93,11 +93,6 @@ pub fn x_coordinate(
     >>::reduce_bytes(&point.x())
 }
 
-// Get the x coordinate of a point, as a scalar
-// pub fn x_coordinate<C: cait_sith::CSCurve>(point: &C::AffinePoint) -> C::Scalar {
-//     <C::Scalar as k256::elliptic_curve::ops::Reduce<<C as k256::elliptic_curve::Curve>::Uint>>::reduce_bytes(&point.x())
-// }
-
 pub fn check_ec_signature(
     expected_pk: &k256::AffinePoint,
     big_r: &k256::AffinePoint,
@@ -128,7 +123,7 @@ fn recover(
     recovery_id: RecoveryId,
 ) -> anyhow::Result<VerifyingKey> {
     VerifyingKey::recover_from_prehash(prehash, signature, recovery_id)
-        .context("unable to recover public key")
+        .context("Unable to recover public key")
 }
 
 #[cfg(target_arch = "wasm32")]
