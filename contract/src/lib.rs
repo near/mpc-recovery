@@ -228,13 +228,15 @@ impl VersionedMpcContract {
             );
 
             // Check the signature is correct
-            if let Err(_) = check_ec_signature(
+            if check_ec_signature(
                 &expected_public_key,
                 &response.big_r.affine_point,
                 &response.s.scalar,
                 k256::Scalar::from_bytes(&request.payload_hash[..]),
                 response.recovery_id,
-            ) {
+            )
+            .is_err()
+            {
                 env::panic_str("Signature could not be verified");
             }
 
