@@ -188,12 +188,12 @@ async fn test_key_derivation() -> anyhow::Result<()> {
                 let user_secp_pk =
                     secp256k1::PublicKey::from_x_only_public_key(user_pk_x, user_pk_y_parity);
                 let user_addr = actions::public_key_to_address(&user_secp_pk);
-                let r = x_coordinate(&multichain_sig.big_r);
+                let r = x_coordinate(&multichain_sig.big_r.affine_point);
                 let s = multichain_sig.s;
                 let signature_for_recovery: [u8; 64] = {
                     let mut signature = [0u8; 64];
                     signature[..32].copy_from_slice(&r.to_bytes());
-                    signature[32..].copy_from_slice(&s.to_bytes());
+                    signature[32..].copy_from_slice(&s.scalar.to_bytes());
                     signature
                 };
                 let recovered_addr = web3::signing::recover(

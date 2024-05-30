@@ -4,7 +4,9 @@ pub mod types;
 use k256::elliptic_curve::sec1::FromEncodedPoint;
 use k256::EncodedPoint;
 pub use kdf::{derive_epsilon, derive_key, into_eth_sig, x_coordinate};
-pub use types::{PublicKey, ScalarExt, SerializableAffinePoint, SerializableScalar};
+pub use types::{
+    PublicKey, ScalarExt, SerializableAffinePoint, SerializableScalar, SignatureResponse,
+};
 
 // Our wasm runtime doesn't support good syncronous entropy.
 // We could use something VRF + pseudorandom here, but someone would likely shoot themselves in the foot with it.

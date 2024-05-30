@@ -88,3 +88,22 @@ fn serializeable_scalar_roundtrip() {
         }
     }
 }
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug, Clone)]
+pub struct SignatureResponse {
+    pub big_r: SerializableAffinePoint,
+    pub s: SerializableScalar,
+    pub recovery_id: u8,
+}
+
+impl SignatureResponse {
+    pub fn new(big_r: AffinePoint, s: Scalar, recovery_id: u8) -> Self {
+        SignatureResponse {
+            big_r: SerializableAffinePoint {
+                affine_point: big_r,
+            },
+            s: SerializableScalar { scalar: s },
+            recovery_id,
+        }
+    }
+}

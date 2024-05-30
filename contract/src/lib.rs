@@ -1,10 +1,8 @@
 pub mod primitives;
 
-use crypto_shared::kdf::check_ec_signature;
-use crypto_shared::near_public_key_to_affine_point;
 use crypto_shared::{
-    derive_epsilon, derive_key, into_eth_sig, ScalarExt as _, SerializableAffinePoint,
-    SerializableScalar,
+    derive_epsilon, derive_key, kdf::check_ec_signature, near_public_key_to_affine_point,
+    types::SignatureResponse, ScalarExt as _, SerializableScalar,
 };
 use k256::{AffinePoint, Scalar};
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
@@ -81,25 +79,6 @@ impl Default for VersionedMpcContract {
 pub struct SignatureRequest {
     pub epsilon: SerializableScalar,
     pub payload_hash: [u8; 32],
-}
-
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug, Clone)]
-pub struct SignatureResponse {
-    pub big_r: SerializableAffinePoint,
-    pub s: SerializableScalar,
-    pub recovery_id: u8,
-}
-
-impl SignatureResponse {
-    pub fn new(big_r: AffinePoint, s: Scalar, recovery_id: u8) -> Self {
-        SignatureResponse {
-            big_r: SerializableAffinePoint {
-                affine_point: big_r,
-            },
-            s: SerializableScalar { scalar: s },
-            recovery_id,
-        }
-    }
 }
 
 impl SignatureRequest {

@@ -12,7 +12,7 @@ use cait_sith::{FullSignature, PresignOutput};
 use chrono::Utc;
 use crypto_shared::{derive_key, PublicKey};
 use k256::{Scalar, Secp256k1};
-use mpc_contract::{SignatureRequest, SignatureResponse};
+use mpc_contract::SignatureRequest;
 use rand::rngs::StdRng;
 use rand::seq::{IteratorRandom, SliceRandom};
 use rand::SeedableRng;
@@ -536,13 +536,11 @@ impl SignatureManager {
                 Scalar::from_bytes(&request.payload_hash),
             )
             .map_err(|_| near_fetch::Error::InvalidArgs("Failed to generate a recovery ID"))?;
-            let signature_response =
-                SignatureResponse::new(signature.big_r, signature.s, signature.recovery_id);
             let response = rpc_client
                 .call(signer, mpc_contract_id, "respond")
                 .args_json(serde_json::json!({
                     "request": request,
-                    "response": signature_response,
+                    "response": signature,
                 }))
                 .max_gas()
                 .transact()
@@ -558,7 +556,7 @@ impl SignatureManager {
                     .with_label_values(&[my_account_id.as_str()])
                     .inc();
             }
-            tracing::info!(%receipt_id, big_r = signature.big_r.to_base58(), s = ?signature.s, status = ?response.status(), "published signature response");
+            tracing::info!(%receipt_id, big_r = signature.big_r.affine_point.to_base58(), s = ?signature.s, status = ?response.status(), "published signature response");
         }
         Ok(())
     }
