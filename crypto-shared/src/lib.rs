@@ -3,7 +3,7 @@ pub mod types;
 
 use k256::elliptic_curve::sec1::FromEncodedPoint;
 use k256::EncodedPoint;
-pub use kdf::{derive_epsilon, derive_key, into_eth_sig, x_coordinate};
+pub use kdf::{derive_epsilon, derive_key, x_coordinate};
 pub use types::{
     PublicKey, ScalarExt, SerializableAffinePoint, SerializableScalar, SignatureResponse,
 };

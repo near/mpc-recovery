@@ -2,15 +2,16 @@ use super::contract::primitives::Participants;
 use super::message::SignatureMessage;
 use super::presignature::{Presignature, PresignatureId, PresignatureManager};
 use crate::indexer::ContractSignRequest;
+use crate::kdf::into_eth_sig;
 use crate::types::SignatureProtocol;
 use crate::types::{PublicKey, SignatureProtocol};
 use crate::util::AffinePointExt;
-use crypto_shared::{into_eth_sig, ScalarExt, SerializableScalar};
 
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
 use cait_sith::{FullSignature, PresignOutput};
 use chrono::Utc;
 use crypto_shared::{derive_key, PublicKey};
+use crypto_shared::{ScalarExt, SerializableScalar};
 use k256::{Scalar, Secp256k1};
 use mpc_contract::SignatureRequest;
 use rand::rngs::StdRng;

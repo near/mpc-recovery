@@ -3,7 +3,7 @@ pub mod wait_for;
 use crate::MultichainTestContext;
 
 use cait_sith::FullSignature;
-use crypto_shared::{derive_epsilon, derive_key, into_eth_sig, SerializableScalar, SignatureResponse};
+use crypto_shared::{derive_epsilon, derive_key, SerializableScalar, SignatureResponse};
 use elliptic_curve::sec1::ToEncodedPoint;
 use k256::ecdsa::VerifyingKey;
 use k256::elliptic_curve::ops::{Invert, Reduce};
@@ -20,6 +20,7 @@ use near_jsonrpc_client::methods::broadcast_tx_async::RpcBroadcastTxAsyncRequest
 use near_lake_primitives::CryptoHash;
 use near_primitives::transaction::{Action, FunctionCallAction, Transaction};
 use near_workspaces::Account;
+use mpc_recovery_node::kdf::into_eth_sig;
 use rand::Rng;
 use secp256k1::XOnlyPublicKey;
 use mpc_contract::SignatureRequest;
