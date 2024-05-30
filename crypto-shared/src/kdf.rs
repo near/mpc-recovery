@@ -64,7 +64,7 @@ pub fn check_ec_signature(
     anyhow::bail!("cannot use either recovery id (0 or 1) to recover pubic key")
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+// #[cfg(not(target_arch = "wasm32"))]
 fn recover(
     prehash: &[u8],
     signature: &Signature,
@@ -74,15 +74,16 @@ fn recover(
         .context("Unable to recover public key")
 }
 
-#[cfg(target_arch = "wasm32")]
-fn recover(
-    prehash: &[u8],
-    signature: &Signature,
-    recovery_id: RecoveryId,
-) -> anyhow::Result<VerifyingKey> {
-    use near_sdk::env;
-    let recovered_key =
-        env::ecrecover(prehash, &signature.to_bytes(), recovery_id.to_byte(), false)
-            .context("Unable to recover public key")?;
-    VerifyingKey::try_from(&recovered_key[..]).context("Failed to parse returned key")
-}
+// TODO Migrate to native function
+// #[cfg(target_arch = "wasm32")]
+// fn recover(
+//     prehash: &[u8],
+//     signature: &Signature,
+//     recovery_id: RecoveryId,
+// ) -> anyhow::Result<VerifyingKey> {
+//     use near_sdk::env;
+//     let recovered_key =
+//         env::ecrecover(prehash, &signature.to_bytes(), recovery_id.to_byte(), false)
+//             .context("Unable to recover public key")?;
+//     VerifyingKey::try_from(&recovered_key[..]).context("Failed to parse returned key")
+// }
