@@ -176,7 +176,7 @@ impl VersionedMpcContract {
         let request = SignatureRequest::new(payload, &predecessor, &path);
         match self.sign_result(&request) {
             None => {
-                self.add_sign_request(&request, &None);
+                self.add_sign_request(&request);
                 log!(&serde_json::to_string(&near_sdk::env::random_seed_array()).unwrap());
                 Self::ext(env::current_account_id()).sign_helper(request, 0)
             }
@@ -613,14 +613,10 @@ impl VersionedMpcContract {
         }
     }
 
-    fn add_sign_request(
-        &mut self,
-        request: &SignatureRequest,
-        response: &Option<SignatureResponse>,
-    ) {
+    fn add_sign_request(&mut self, request: &SignatureRequest) {
         match self {
             Self::V0(mpc_contract) => {
-                mpc_contract.add_request(request, response);
+                mpc_contract.add_request(request, &None);
             }
         }
     }
