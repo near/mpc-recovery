@@ -273,24 +273,29 @@ pub async fn single_payload_signature_production(
     Ok(())
 }
 
+// This code was and still is a bit of a mess.
+// Previously converting a Scalar to bytes reversed the bytes and converted to a Scalar.
+// The big_r and s values were generated using chain signatures from an older commit, therefore the signature is generated against a reversed hash.
+// This shows that the old signatures will verify against a reversed payload
 #[tokio::test]
-async fn test_proposition() {
+async fn test_old_signatures_verify() {
     use k256::sha2::{Digest, Sha256};
     let big_r = "044bf886afee5a6844a25fa6831a01715e990d3d9e96b792a9da91cfbecbf8477cea57097a3db9fc1d4822afade3d1c4e6d66e99568147304ae34bcfa609d90a16";
     let s = "1f871c67139f617409067ac8a7150481e3a5e2d8a9207ffdaad82098654e95cb";
     let mpc_key = "02F2B55346FD5E4BFF1F06522561BDCD024CEA25D98A091197ACC04E22B3004DB2";
+    let account_id = "acc_mc.test.near";
 
     let mut payload = [0u8; 32];
     for (i, item) in payload.iter_mut().enumerate() {
         *item = i as u8;
     }
-    let account_id = "acc_mc.test.near";
 
     let mut hasher = Sha256::new();
     hasher.update(payload);
-    let mut payload_hash: [u8; 32] = hasher.finalize().into();
 
+    let mut payload_hash: [u8; 32] = hasher.finalize().into();
     payload_hash.reverse();
+
     let payload_hash_scalar = Scalar::from_bytes(&payload_hash);
 
     println!("payload_hash: {payload_hash:?}");
