@@ -5,8 +5,7 @@ use anyhow::Context;
 use backon::ExponentialBuilder;
 use backon::Retryable;
 use cait_sith::FullSignature;
-use k256::AffinePoint;
-use k256::Scalar;
+use crypto_shared::SignatureResponse;
 use k256::Secp256k1;
 use mpc_contract::ProtocolContractState;
 use mpc_contract::RunningContractState;
@@ -17,8 +16,6 @@ use near_lake_primitives::CryptoHash;
 use near_primitives::errors::ActionErrorKind;
 use near_primitives::views::FinalExecutionStatus;
 use near_workspaces::Account;
-use serde::Deserialize;
-use serde::Serialize;
 
 pub async fn running_mpc<'a>(
     ctx: &MultichainTestContext<'a>,
@@ -206,13 +203,6 @@ pub async fn has_at_least_mine_presignatures<'a>(
     Ok(state_views)
 }
 
-// TODO: use structure from contract when the internal types are the same
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SignResult {
-    pub big_r: AffinePoint,
-    pub s: Scalar,
-}
-
 pub async fn signature_responded(
     ctx: &MultichainTestContext<'_>,
     tx_hash: CryptoHash,
@@ -241,10 +231,10 @@ pub async fn signature_responded(
             anyhow::bail!("tx finished unsuccessfully: {:?}", outcome.status);
         };
 
-        let result: SignResult = serde_json::from_slice(&payload)?;
+        let result: SignatureResponse = serde_json::from_slice(&payload)?;
         let signature = cait_sith::FullSignature::<Secp256k1> {
-            big_r: result.big_r,
-            s: result.s,
+            big_r: result.big_r.affine_point,
+            s: result.s.scalar,
         };
 
         Ok(signature)

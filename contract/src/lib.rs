@@ -178,7 +178,7 @@ impl VersionedMpcContract {
             None => {
                 self.add_sign_request(&request, &None);
                 log!(&serde_json::to_string(&near_sdk::env::random_seed_array()).unwrap());
-                Self::ext(env::current_account_id()).sign_helper(request.clone(), 0)
+                Self::ext(env::current_account_id()).sign_helper(request, 0)
             }
             Some(_) => env::panic_str("Signature for this payload already requested"),
         }
