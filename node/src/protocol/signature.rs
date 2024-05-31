@@ -4,7 +4,6 @@ use super::presignature::{Presignature, PresignatureId, PresignatureManager};
 use crate::indexer::ContractSignRequest;
 use crate::kdf::into_eth_sig;
 use crate::types::SignatureProtocol;
-use crate::types::{PublicKey, SignatureProtocol};
 use crate::util::AffinePointExt;
 
 use cait_sith::protocol::{Action, InitializationError, Participant, ProtocolError};
@@ -434,7 +433,7 @@ impl SignatureManager {
                         self.completed.insert(generator.presignature_id, Instant::now());
                         let request = SignatureRequest {
                             epsilon: SerializableScalar {scalar: generator.epsilon},
-                            payload_hash: generator.msg_hash,
+                            payload_hash: generator.request.payload,
                         };
                         if generator.proposer == self.me {
                             self.signatures
