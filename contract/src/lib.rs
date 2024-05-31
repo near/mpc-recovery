@@ -210,7 +210,7 @@ impl VersionedMpcContract {
         let protocol_state = self.mutable_state();
         if let ProtocolContractState::Running(_) = protocol_state {
             let signer = env::signer_account_id();
-            // TODO add back in a check to see that the caller is correct (it's horrible to test atm)
+            // TODO add back in a check to see that the caller is a participant (it's horrible to test atm)
             // It's not strictly necessary, since we verify the payload is correct
             log!(
                 "respond: signer={}, request={:?} big_r={:?} s={:?}",
