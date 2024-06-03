@@ -51,7 +51,7 @@ near-sdk = { git = "https://github.com/near/near-sdk-rs.git", rev = "5a9acaedc95
 
 mpc-contract = { path = "../contract" }
 mpc-keys = { path = "../keys" }
-crypto-shared = { path = "../../crypto-shared" }
+crypto-shared = { path = "../crypto-shared" }
 
 itertools = "0.12.0"
 prometheus = { version = "0.13.3" }

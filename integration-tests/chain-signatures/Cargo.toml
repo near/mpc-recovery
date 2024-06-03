@@ -22,7 +22,6 @@ testcontainers = { version = "0.15", features = ["experimental"] }
 tokio = { version = "1.28", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-crypto-shared = { path = "../../crypto-shared" }
 
 # crypto dependencies
 cait-sith = { git = "https://github.com/LIT-Protocol/cait-sith.git", features = [
@@ -42,6 +41,7 @@ near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs",
 near-workspaces = { git = "https://github.com/near/near-workspaces-rs.git", branch = "feat/upgrade-near-deps" }
 
 # local chain-signatures depencencies
+crypto-shared = { path = "../../chain-signatures/crypto-shared" }
 mpc-contract = { path = "../../chain-signatures/contract" }
 mpc-keys = { path = "../../chain-signatures/keys" }
 mpc-recovery-node = { path = "../../chain-signatures/node" }

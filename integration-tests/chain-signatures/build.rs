@@ -82,9 +82,7 @@ async fn build_multichain_contract(release: bool) -> anyhow::Result<ExitStatus> 
 
 fn main() -> anyhow::Result<()> {
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=../../contract/");
-    println!("cargo:rerun-if-changed=../../keys/");
-    println!("cargo:rerun-if-changed=../../node/");
+    println!("cargo:rerun-if-changed=../../chain-signatures/");
 
     let release = true;
     let rt = tokio::runtime::Runtime::new().unwrap();
