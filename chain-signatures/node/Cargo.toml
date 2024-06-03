@@ -47,7 +47,7 @@ near-fetch = { git = "https://github.com/ChaoticTempest/fetch.git" }
 near-lake-framework = { git = "https://github.com/near/near-lake-framework-rs", branch = "dmd/bump-dependencies" }
 near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs", branch = "dmd/bump-dependencies" }
 near-primitives = "0.21.2"
-near-sdk = { version = "=5.1.0", features = ["legacy", "unit-testing"] }
+near-sdk = { git = "https://github.com/near/near-sdk-rs.git", rev = "5a9acaedc95c5721d2088f263bc99e3de574decf", features = ["legacy", "unit-testing"] }
 
 mpc-contract = { path = "../contract" }
 mpc-keys = { path = "../keys" }

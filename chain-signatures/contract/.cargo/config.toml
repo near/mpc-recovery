@@ -1,5 +1,4 @@
 [profile.release]
-inherits = "release"
 codegen-units = 1
 # Tell `rustc` to optimize for small code size.
 opt-level = "z"

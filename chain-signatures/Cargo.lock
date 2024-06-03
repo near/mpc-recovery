@@ -1157,11 +1157,7 @@ version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "703f41c54fc768e63e091340b424302bb1c29ef4aa0c7f10fe849dfb114d29ea"
 dependencies = [
-<<<<<<< HEAD:chain-signatures/Cargo.lock
  "async-channel 2.3.1",
-=======
- "async-channel",
->>>>>>> cd5d74d (near-sdk version: move to the commit with yield_resume merged):contract/Cargo.lock
  "async-task",
  "futures-io",
  "futures-lite 2.3.0",
@@ -1488,7 +1484,6 @@ name = "cfg_aliases"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
-<<<<<<< HEAD:chain-signatures/Cargo.lock
 
 [[package]]
 name = "chacha20"
@@ -1513,8 +1508,6 @@ dependencies = [
  "poly1305",
  "zeroize",
 ]
-=======
->>>>>>> cd5d74d (near-sdk version: move to the commit with yield_resume merged):contract/Cargo.lock
 
 [[package]]
 name = "chrono"
@@ -2437,7 +2430,6 @@ name = "easy-ext"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc5d6d6a8504f8caedd7de14576464383900cd3840b7033a7a3dce5ac00121ca"
-<<<<<<< HEAD:chain-signatures/Cargo.lock
 
 [[package]]
 name = "ecdsa"
@@ -2450,8 +2442,6 @@ dependencies = [
  "rfc6979 0.3.1",
  "signature 1.6.4",
 ]
-=======
->>>>>>> cd5d74d (near-sdk version: move to the commit with yield_resume merged):contract/Cargo.lock
 
 [[package]]
 name = "ecdsa"
@@ -2726,30 +2716,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD:chain-signatures/Cargo.lock
-name = "event-listener"
-version = "5.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6032be9bd27023a771701cc49f9f053c751055f71efb2e0ae5c15809093675ba"
-dependencies = [
- "concurrent-queue",
- "parking",
- "pin-project-lite",
-]
-
-[[package]]
-name = "event-listener-strategy"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "958e4d70b6d5e81971bebec42271ec641e7ff4e170a6fa605f2b8a8b65cb97d3"
-dependencies = [
- "event-listener 4.0.3",
- "pin-project-lite",
-]
-
-[[package]]
-=======
->>>>>>> cd5d74d (near-sdk version: move to the commit with yield_resume merged):contract/Cargo.lock
 name = "event-listener-strategy"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6160,15 +6126,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-<<<<<<< HEAD:chain-signatures/Cargo.lock
 version = "1.0.84"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec96c6a92621310b51366f1e28d05ef11489516e93be030060e5fc12024a49d6"
-=======
-version = "1.0.85"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22244ce15aa966053a896d1accb3a6e68469b97c7f33f284b99f0d576879fc23"
->>>>>>> cd5d74d (near-sdk version: move to the commit with yield_resume merged):contract/Cargo.lock
 dependencies = [
  "unicode-ident",
 ]
@@ -6726,21 +6686,14 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.22.4"
+version = "0.21.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf4ef73721ac7bcd79b2b315da7779d8fc09718c6b3d2d1b2d94850eb8c18432"
+checksum = "3f56a14d1f48b391359b22f731fd4bd7e43c97f3c50eee276f3aa09c94784d3e"
 dependencies = [
  "log",
  "ring",
-<<<<<<< HEAD:chain-signatures/Cargo.lock
  "rustls-webpki 0.101.7",
  "sct",
-=======
- "rustls-pki-types",
- "rustls-webpki",
- "subtle",
- "zeroize",
->>>>>>> cd5d74d (near-sdk version: move to the commit with yield_resume merged):contract/Cargo.lock
 ]
 
 [[package]]
@@ -6792,7 +6745,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD:chain-signatures/Cargo.lock
 name = "rustls-pemfile"
 version = "2.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6811,21 +6763,10 @@ checksum = "976295e77ce332211c0d24d92c0e83e50f5c5f046d11082cea19f3df13a3562d"
 [[package]]
 name = "rustls-webpki"
 version = "0.101.7"
-=======
-name = "rustls-pki-types"
-version = "1.7.0"
->>>>>>> cd5d74d (near-sdk version: move to the commit with yield_resume merged):contract/Cargo.lock
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "976295e77ce332211c0d24d92c0e83e50f5c5f046d11082cea19f3df13a3562d"
-
-[[package]]
-name = "rustls-webpki"
-version = "0.102.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff448f7e92e913c4b7d4c6d8e4540a1724b319b4152b8aef6d4cf8339712b33e"
+checksum = "8b6275d1ee7a1cd780b64aca7726599a1dbc893b1e64144529e55c3c2f745765"
 dependencies = [
  "ring",
- "rustls-pki-types",
  "untrusted",
 ]
 
@@ -6924,6 +6865,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.66",
+]
+
+[[package]]
+name = "sct"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da046153aa2352493d6cb7da4b6e5c0c057d8a1d0a9aa8560baffdd945acd414"
+dependencies = [
+ "ring",
+ "untrusted",
 ]
 
 [[package]]
@@ -8263,19 +8214,11 @@ dependencies = [
  "flate2",
  "log",
  "once_cell",
-<<<<<<< HEAD:chain-signatures/Cargo.lock
  "rustls 0.22.4",
  "rustls-pki-types",
  "rustls-webpki 0.102.4",
  "url 2.5.0",
  "webpki-roots 0.26.1",
-=======
- "rustls",
- "rustls-pki-types",
- "rustls-webpki",
- "url",
- "webpki-roots",
->>>>>>> cd5d74d (near-sdk version: move to the commit with yield_resume merged):contract/Cargo.lock
 ]
 
 [[package]]
@@ -8929,12 +8872,9 @@ dependencies = [
 
 [[package]]
 name = "webpki-roots"
-version = "0.26.1"
+version = "0.25.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3de34ae270483955a94f4b21bdaaeb83d508bb84a01435f393818edb0012009"
-dependencies = [
- "rustls-pki-types",
-]
+checksum = "5f20c57d8d7db6d3b86154206ae5d8fba62dd39573114de97c2cb0578251f8e1"
 
 [[package]]
 name = "webpki-roots"
