@@ -6,7 +6,7 @@ on:
       - develop
   pull_request:
     paths:
-      - contract/**
+      - chain-signatures/contract/**
 
 env:
   RUSTFLAGS: -D warnings
