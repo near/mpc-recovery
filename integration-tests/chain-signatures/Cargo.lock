@@ -2086,14 +2086,14 @@ dependencies = [
 
 [[package]]
 name = "crypto-shared"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh 1.5.0",
  "getrandom 0.2.15",
  "k256",
  "near-account-id",
- "near-sdk",
+ "near-sdk 5.1.0 (git+https://github.com/near/near-sdk-rs.git?rev=5a9acaedc95c5721d2088f263bc99e3de574decf)",
  "serde",
  "serde_json",
 ]
@@ -4565,7 +4565,7 @@ dependencies = [
  "borsh 1.5.0",
  "crypto-shared",
  "k256",
- "near-sdk",
+ "near-sdk 5.1.0 (git+https://github.com/near/near-sdk-rs.git?rev=5a9acaedc95c5721d2088f263bc99e3de574decf)",
  "schemars",
  "serde",
  "serde_json",
@@ -4614,7 +4614,7 @@ dependencies = [
  "near-lake-framework",
  "near-lake-primitives",
  "near-primitives 0.21.2",
- "near-sdk",
+ "near-sdk 5.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "once_cell",
  "prometheus",
  "rand 0.8.5",
@@ -5381,8 +5381,32 @@ dependencies = [
  "near-parameters 0.20.1",
  "near-primitives 0.20.1",
  "near-primitives-core 0.20.1",
- "near-sdk-macros",
- "near-sys",
+ "near-sdk-macros 5.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "near-sys 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "near-token",
+ "near-vm-runner 0.20.1",
+ "once_cell",
+ "serde",
+ "serde_json",
+ "wee_alloc",
+]
+
+[[package]]
+name = "near-sdk"
+version = "5.1.0"
+source = "git+https://github.com/near/near-sdk-rs.git?rev=5a9acaedc95c5721d2088f263bc99e3de574decf#5a9acaedc95c5721d2088f263bc99e3de574decf"
+dependencies = [
+ "base64 0.21.7",
+ "borsh 1.5.0",
+ "bs58 0.5.1",
+ "near-account-id",
+ "near-crypto 0.20.1",
+ "near-gas",
+ "near-parameters 0.20.1",
+ "near-primitives 0.20.1",
+ "near-primitives-core 0.20.1",
+ "near-sdk-macros 5.1.0 (git+https://github.com/near/near-sdk-rs.git?rev=5a9acaedc95c5721d2088f263bc99e3de574decf)",
+ "near-sys 0.2.1 (git+https://github.com/near/near-sdk-rs.git?rev=5a9acaedc95c5721d2088f263bc99e3de574decf)",
  "near-token",
  "near-vm-runner 0.20.1",
  "once_cell",
@@ -5396,6 +5420,22 @@ name = "near-sdk-macros"
 version = "5.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee2fe3fc30068c5f20e89b0985d6104c5cc1c6742dbc6efbf352be4189b9bbf7"
+dependencies = [
+ "Inflector",
+ "darling 0.20.9",
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_json",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
+ "syn 2.0.65",
+]
+
+[[package]]
+name = "near-sdk-macros"
+version = "5.1.0"
+source = "git+https://github.com/near/near-sdk-rs.git?rev=5a9acaedc95c5721d2088f263bc99e3de574decf#5a9acaedc95c5721d2088f263bc99e3de574decf"
 dependencies = [
  "Inflector",
  "darling 0.20.9",
@@ -5442,6 +5482,11 @@ name = "near-sys"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "397688591acf8d3ebf2c2485ba32d4b24fc10aad5334e3ad8ec0b7179bfdf06b"
+
+[[package]]
+name = "near-sys"
+version = "0.2.1"
+source = "git+https://github.com/near/near-sdk-rs.git?rev=5a9acaedc95c5721d2088f263bc99e3de574decf#5a9acaedc95c5721d2088f263bc99e3de574decf"
 
 [[package]]
 name = "near-token"
