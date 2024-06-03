@@ -241,11 +241,14 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
     } = initialize_lake_indexer(docker_client, docker_network).await?;
 
     let mpc_contract = worker
-        .dev_deploy(&std::fs::read(
-            execute::target_dir()
-                .context("could not find target dir")?
-                .join("wasm32-unknown-unknown/release/mpc_contract.wasm"),
-        )?)
+        .dev_deploy(
+            &std::fs::read(
+                execute::target_dir()
+                    .context("could not find target dir")?
+                    .join("wasm/wasm32-unknown-unknown/release/mpc_contract.wasm"),
+            )
+            .map_err(|e| anyhow::anyhow!("Can't find MPC Contract {e}"))?,
+        )
         .await?;
     tracing::info!(contract_id = %mpc_contract.id(), "deployed mpc contract");
 

@@ -54,6 +54,7 @@
               })
               cargo-watch
               cargo-audit
+              cargo-make
               sccache
 
               # TODO Add podman + docker image dependencies

@@ -1,0 +1,26 @@
+[env]
+CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
+CARGO_MAKE_WORKSPACE_EMULATION = true
+# a list of crate members. since we do not have a Cargo.toml, we will need to specify this in here.
+CARGO_MAKE_CRATE_WORKSPACE_MEMBERS = [
+    # This is where the targets end up
+    "integration-tests/chain-signatures",
+    "chain-signatures/contract",
+    "chain-signatures/node",
+    "chain-signatures"
+    # "chain-signatures",
+]
+
+[tasks.build-contract]
+command = "cargo"
+args = ["build", "--target", "wasm32-unknown-unknown", "--release", "--package", "mpc-contract", "--target-dir", "target/wasm"]
+
+[tasks.build-node]
+command = "cargo"
+args = ["build", "--release", "--package", "mpc-recovery-node", "--target-dir", "target/native"]
+
+[tasks.test]
+command = "cargo"
+args = ["test", "--release", "--package", "integration-tests-chain-signatures", "--", "--test-threads", "1"]
+dependencies = ["build-node", "build-contract"]
+env = { "OUT_DIR" = "target" }
