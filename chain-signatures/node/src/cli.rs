@@ -182,10 +182,15 @@ fn spinup_indexer(
             let sign_queue = sign_queue.clone();
             let gcp = gcp.clone();
 
-            if let Err(err) = indexer::run(options, mpc_contract_id, account_id, sign_queue, gcp) {
-                tracing::error!(%err, "indexer failed");
-                std::thread::sleep(std::time::Duration::from_secs(2u64.pow(i)));
-            }
+            // TODO/NOTE: currently indexer does not have any interrupt handlers and will never yield back
+            // as successful. We can add interrupt handlers in the future but this is not important right
+            // now since we managing nodes through integration tests that can kill it or through docker.
+            let Err(err) = indexer::run(options, mpc_contract_id, account_id, sign_queue, gcp)
+            else {
+                break;
+            };
+            tracing::error!(%err, "indexer failed");
+            std::thread::sleep(std::time::Duration::from_secs(2u64.pow(i)));
         }
     })
 }
