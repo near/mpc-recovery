@@ -161,6 +161,35 @@ impl Cli {
     }
 }
 
+fn spinup_indexer(
+    options: &indexer::Options,
+    mpc_contract_id: &AccountId,
+    account_id: &AccountId,
+    sign_queue: &Arc<RwLock<SignQueue>>,
+    gcp: &GcpService,
+) -> std::thread::JoinHandle<()> {
+    let options = options.clone();
+    let mpc_contract_id = mpc_contract_id.clone();
+    let account_id = account_id.clone();
+    let sign_queue = sign_queue.clone();
+    let gcp = gcp.clone();
+    std::thread::spawn(move || {
+        // If indexer fails for whatever reason, let's spin it back up with exponential delay:
+        for i in 0..10 {
+            let options = options.clone();
+            let mpc_contract_id = mpc_contract_id.clone();
+            let account_id = account_id.clone();
+            let sign_queue = sign_queue.clone();
+            let gcp = gcp.clone();
+
+            if let Err(err) = indexer::run(options, mpc_contract_id, account_id, sign_queue, gcp) {
+                tracing::error!(%err, "indexer failed");
+                std::thread::sleep(std::time::Duration::from_secs(2u64.pow(i)));
+            }
+        }
+    })
+}
+
 pub fn run(cmd: Cli) -> anyhow::Result<()> {
     // Install global collector configured based on RUST_LOG env var.
     let mut subscriber = tracing_subscriber::fmt()
@@ -201,15 +230,13 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                 .block_on(async {
                     let (sender, receiver) = mpsc::channel(16384);
                     let gcp_service = GcpService::init(&account_id, &storage_options).await?;
-
-                    let join_handle = std::thread::spawn({
-                        let options = indexer_options.clone();
-                        let mpc_id = mpc_contract_id.clone();
-                        let account_id = account_id.clone();
-                        let sign_queue = sign_queue.clone();
-                        let gcp = gcp_service.clone();
-                        move || indexer::run(options, mpc_id, account_id, sign_queue, gcp).unwrap()
-                    });
+                    let indexer_handle = spinup_indexer(
+                        &indexer_options,
+                        &mpc_contract_id,
+                        &account_id,
+                        &sign_queue,
+                        &gcp_service,
+                    );
 
                     let key_storage = storage::secret_storage::init(
                         Some(&gcp_service),
@@ -276,7 +303,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
                     web_handle.await??;
                     tracing::debug!("spinning down");
 
-                    join_handle.join().unwrap();
+                    indexer_handle.join().unwrap();
                     anyhow::Ok(())
                 })?;
         }
