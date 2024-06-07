@@ -298,8 +298,14 @@ impl MessageHandler for RunningState {
                         leftover_messages.push(message)
                     }
                     Err(presignature::GenerationError::TripleIsMissing(_)) => {
-                        // Store the message until triple is ready
-                        leftover_messages.push(message)
+                        // If a triple is missing, that means our system cannot process this presignature. We will have to bin
+                        // this message and have the other node timeout on that generation.
+                        tracing::warn!(
+                            presignature_id = id,
+                            triple0 = message.triple0,
+                            triple1 = message.triple1,
+                            "unable to process presignature: one or more triples are missing",
+                        );
                     }
                     Err(presignature::GenerationError::CaitSithInitializationError(error)) => {
                         // ignore the message since the generation had bad parameters. Also have the other node who
