@@ -87,8 +87,6 @@ pub enum GenerationError {
     TripleIsMissing(TripleId),
     #[error("cait-sith initialization error: {0}")]
     CaitSithInitializationError(#[from] InitializationError),
-    #[error("datastore storage error: {0}")]
-    DatastoreStorageError(#[from] DatastoreStorageError),
     #[error("triple {0} is generating")]
     TripleIsGenerating(TripleId),
 }
