@@ -174,8 +174,13 @@ fn spinup_indexer(
     let sign_queue = sign_queue.clone();
     let gcp = gcp.clone();
     std::thread::spawn(move || {
-        // If indexer fails for whatever reason, let's spin it back up with exponential delay:
-        for i in 0..10 {
+        // If indexer fails for whatever reason, let's spin it back up:
+        let mut i = 0;
+        loop {
+            if i > 0 {
+                tracing::info!("restarting indexer after failure: restart count={i}");
+            }
+
             let options = options.clone();
             let mpc_contract_id = mpc_contract_id.clone();
             let account_id = account_id.clone();
@@ -190,7 +195,16 @@ fn spinup_indexer(
                 break;
             };
             tracing::error!(%err, "indexer failed");
-            std::thread::sleep(std::time::Duration::from_secs(2u64.pow(i)));
+
+            let delay = if i <= 7 {
+                2u64.pow(i)
+            } else {
+                // Max out at 2 minutes
+                120
+            };
+
+            std::thread::sleep(std::time::Duration::from_secs(delay));
+            i += 1;
         }
     })
 }
