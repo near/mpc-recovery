@@ -358,6 +358,9 @@ impl ConsensusProtocol for WaitingForConsensusState {
                         .find_participant(ctx.my_account_id())
                         .unwrap();
 
+                    // Clear triples from storage before starting the new epoch.
+                    ctx.triple_storage().write().await.clear().await?;
+
                     let triple_manager = TripleManager::new(
                         me,
                         self.threshold,
@@ -725,8 +728,7 @@ async fn load_triples<C: ConsensusCtx + Send + Sync>(
     let mut retries = 3;
     let mut error = None;
     while retries > 0 {
-        let read_lock = triple_storage.read().await;
-        match read_lock.load().await {
+        match triple_storage.read().await.load().await {
             Err(DatastoreStorageError::FetchEntitiesError(_)) => {
                 tracing::info!("There are no triples persisted.");
                 return Ok(vec![]);

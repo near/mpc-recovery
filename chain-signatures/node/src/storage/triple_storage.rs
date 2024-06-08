@@ -55,6 +55,19 @@ impl KeyKind for TripleData {
     }
 }
 
+impl Keyable for TripleData {
+    fn key(&self) -> Key {
+        Key {
+            path: Some(vec![PathElement {
+                kind: None,
+                name: Some(format!("{}/{}", self.account_id, self.triple.id)),
+                id: None,
+            }]),
+            partition_id: None,
+        }
+    }
+}
+
 impl IntoValue for TripleData {
     fn into_value(self) -> Value {
         let triple_key = TripleKey {
@@ -147,6 +160,7 @@ type TripleResult<T> = std::result::Result<T, error::DatastoreStorageError>;
 pub trait TripleNodeStorage {
     async fn insert(&mut self, triple: Triple, mine: bool) -> TripleResult<()>;
     async fn delete(&mut self, id: TripleId) -> TripleResult<()>;
+    async fn clear(&mut self) -> TripleResult<Vec<TripleData>>;
     async fn load(&self) -> TripleResult<Vec<TripleData>>;
     fn account_id(&self) -> &AccountId;
 }
@@ -172,6 +186,13 @@ impl TripleNodeStorage for MemoryTripleNodeStorage {
         self.triples.remove(&id);
         self.mine.remove(&id);
         Ok(())
+    }
+
+    async fn clear(&mut self) -> TripleResult<Vec<TripleData>> {
+        let res = self.load().await?;
+        self.triples.clear();
+        self.mine.clear();
+        Ok(res)
     }
 
     async fn load(&self) -> TripleResult<Vec<TripleData>> {
@@ -230,6 +251,12 @@ impl TripleNodeStorage for DataStoreTripleNodeStorage {
             })
             .await?;
         Ok(())
+    }
+
+    async fn clear(&mut self) -> TripleResult<Vec<TripleData>> {
+        let triples = self.load().await?;
+        self.datastore.delete_many(&triples).await?;
+        Ok(triples)
     }
 
     async fn load(&self) -> TripleResult<Vec<TripleData>> {
