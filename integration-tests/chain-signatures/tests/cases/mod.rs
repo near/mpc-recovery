@@ -14,6 +14,7 @@ use mpc_recovery_node::test_utils;
 use mpc_recovery_node::types::LatestBlockHeight;
 use mpc_recovery_node::util::NearPublicKeyExt;
 use test_log::test;
+use near_o11y::testonly::init_test_logger;
 
 #[test(tokio::test)]
 async fn test_multichain_reshare() -> anyhow::Result<()> {
@@ -54,6 +55,7 @@ async fn test_triples_and_presignatures() -> anyhow::Result<()> {
 
 #[test(tokio::test)]
 async fn test_signature_basic() -> anyhow::Result<()> {
+    init_test_logger();
     with_multichain_nodes(MultichainConfig::default(), |ctx| {
         Box::pin(async move {
             let state_0 = wait_for::running_mpc(&ctx, Some(0)).await?;

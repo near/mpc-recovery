@@ -229,7 +229,9 @@ pub async fn signature_responded(
             anyhow::bail!("tx finished unsuccessfully: {:?}", outcome.status);
         };
 
+        println!("success tx");
         let result: SignatureResponse = serde_json::from_slice(&payload)?;
+        println!("success from_slice");
         let signature = cait_sith::FullSignature::<Secp256k1> {
             big_r: result.big_r.affine_point,
             s: result.s.scalar,

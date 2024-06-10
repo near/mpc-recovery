@@ -10,7 +10,7 @@ pub async fn fetch_mpc_contract_state(
     mpc_contract_id: &AccountId,
 ) -> anyhow::Result<ProtocolState> {
     let protocol_state: mpc_contract::ProtocolContractState =
-        rpc_client.view(mpc_contract_id, "state").await?.borsh()?;
+        rpc_client.view(mpc_contract_id, "state").await?.json()?;
     protocol_state
         .try_into()
         .map_err(|_| anyhow::anyhow!("protocol state has not been initialized yet"))

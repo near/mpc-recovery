@@ -9,7 +9,7 @@ use near_sdk::collections::LookupMap;
 use near_sdk::serde::{Deserialize, Serialize};
 
 use near_sdk::{
-    env, log, near_bindgen, AccountId, BorshStorageKey, CryptoHash, Gas, GasWeight, PromiseError,
+    env, log, near_bindgen, AccountId, BorshStorageKey, CryptoHash, Gas, GasWeight, PromiseError,Promise,
     PromiseOrValue, PublicKey,
 };
 
@@ -85,7 +85,7 @@ pub enum VersionedMpcContract {
     V1(MpcContractV1),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum ContractVersion {
     V0,
     V1,
@@ -285,7 +285,7 @@ impl VersionedMpcContract {
                     );
                     //what is this for?
                     log!(&serde_json::to_string(&near_sdk::env::random_seed_array()).unwrap());
-                    Self::ext(env::current_account_id()).sign_helper(request, 0);
+                    Self::ext(env::current_account_id()).sign_helper(request, 0)
                 }
                 Self::V1(mpc_contract) => {
                     let index = mpc_contract.next_available_yield_resume_request_index;
@@ -327,6 +327,7 @@ impl VersionedMpcContract {
                     // The return value for this function call will be the value
                     // returned by the `sign_on_finish` callback.
                     env::promise_return(yield_promise);
+                    env::panic_str("not work");
                 }
             }
         } else {

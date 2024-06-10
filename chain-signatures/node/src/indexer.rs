@@ -132,6 +132,7 @@ async fn handle_block(
                             entropy = hex::encode(entropy),
                             "indexed new `sign` function call"
                         );
+                        println!("indexed new 'sign' function");
                         let mut queue = ctx.queue.write().await;
                         queue.add(SignRequest {
                             receipt_id,

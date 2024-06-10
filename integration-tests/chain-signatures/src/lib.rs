@@ -311,7 +311,8 @@ pub async fn docker(cfg: MultichainConfig, docker_client: &DockerClient) -> anyh
         .call("init")
         .args_json(json!({
             "threshold": cfg.threshold,
-            "candidates": candidates
+            "candidates": candidates,
+            "contract_version": "V0"
         }))
         .transact()
         .await?
@@ -361,7 +362,8 @@ pub async fn host(cfg: MultichainConfig, docker_client: &DockerClient) -> anyhow
         .call("init")
         .args_json(json!({
             "threshold": cfg.threshold,
-            "candidates": candidates
+            "candidates": candidates,
+            "contract_version": "V0"
         }))
         .transact()
         .await?
