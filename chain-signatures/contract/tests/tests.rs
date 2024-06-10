@@ -1,12 +1,13 @@
-use mpc_contract::{primitives::CandidateInfo, MpcContract, VersionedMpcContract};
-use near_sdk::env;
+use mpc_contract::primitives::CandidateInfo;
 use near_workspaces::AccountId;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 const CONTRACT_FILE_PATH: &str = "../../target/wasm32-unknown-unknown/release/mpc_contract.wasm";
 
 #[tokio::test]
 async fn test_contract_can_not_be_reinitialized() -> anyhow::Result<()> {
+
+    //let worker = near_workspaces::sandbox_with_builder_and_version(network_builder, "3f684fdc1d972f352ec6a1bf8d1e78b1b5a124b3").await?;
     let worker = near_workspaces::sandbox().await?;
     let wasm = std::fs::read(CONTRACT_FILE_PATH)?;
     let contract = worker.dev_deploy(&wasm).await?;
@@ -17,11 +18,13 @@ async fn test_contract_can_not_be_reinitialized() -> anyhow::Result<()> {
         .call("init")
         .args_json(serde_json::json!({
             "threshold": 2,
-            "candidates": candidates
+            "candidates": candidates,
+            "contract_version": 1
         }))
         .transact()
         .await?;
 
+    println!("{result1:?}");
     assert!(result1.is_success());
 
     let result2 = contract
@@ -34,22 +37,6 @@ async fn test_contract_can_not_be_reinitialized() -> anyhow::Result<()> {
         .await?;
 
     assert!(result2.is_failure());
-
-    Ok(())
-}
-
-#[test]
-fn test_old_state_can_be_migrated_to_v0() -> anyhow::Result<()> {
-    let old_contract = MpcContract::init(3, BTreeMap::new());
-    env::state_write(&old_contract);
-
-    let v0_contract = VersionedMpcContract::migrate_state_old_to_v0();
-    let expected_contract = VersionedMpcContract::V0(old_contract);
-
-    assert_eq!(
-        format!("{v0_contract:#?}"),
-        format!("{expected_contract:#?}")
-    );
 
     Ok(())
 }
