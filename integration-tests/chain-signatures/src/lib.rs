@@ -239,7 +239,6 @@ pub async fn setup(docker_client: &DockerClient) -> anyhow::Result<Context<'_>> 
         lake_indexer,
         worker,
     } = initialize_lake_indexer(docker_client, docker_network).await?;
-
     let mpc_contract = worker
         .dev_deploy(
             &std::fs::read(

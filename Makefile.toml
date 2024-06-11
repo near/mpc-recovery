@@ -3,13 +3,16 @@ CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
 CARGO_MAKE_WORKSPACE_EMULATION = true
 # a list of crate members. since we do not have a Cargo.toml, we will need to specify this in here.
 CARGO_MAKE_CRATE_WORKSPACE_MEMBERS = [
-    # This is where the targets end up
+    # This is the current working directory
     "chain-signatures",
-    "chain-signatures/contract",
-    "chain-signatures/node",
+    "mpc-recovery",
+    "load-tests",
+    "test-oidc-provider",
     "integration-tests/chain-signatures",
+    "integration-tests/fastauth",
 ]
-OUT_DIR = "target"
+CARGO_MAKE_WORKING_DIRECTORY = "./chain-signatures"
+OUT_DIR = "${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/target"
 
 [tasks.build-contract]
 command = "cargo"
@@ -21,14 +24,81 @@ args = ["build", "--release", "--package", "mpc-recovery-node", "--target-dir", 
 
 [tasks.integration-test]
 command = "cargo"
-args = ["test", "--package", "integration-tests-chain-signatures", "--", "--test-threads", "1"]
-cwd = "../integration-tests/chain-signatures"
+args = [
+     "test",
+     "--package", "integration-tests-chain-signatures",
+     "--target-dir", "target/testing",
+     "--manifest-path", "../integration-tests/chain-signatures/Cargo.toml",
+     "--",
+     "--test-threads", "1"
+     ]
 dependencies = ["build-node", "build-contract"]
 
 [tasks.unit-test]
 command = "cargo"
+# Is it quicker for this to be done on release?
 args = ["test"]
 dependencies = ["build-contract"]
 
 [tasks.test]
 dependencies = ["unit-test", "integration-test"]
+
+[tasks.check-chain-signatures-integration]
+command = "cargo"
+args = [
+     "check",
+     "--package", "integration-tests-chain-signatures",
+     "--manifest-path", "../integration-tests/chain-signatures/Cargo.toml",
+     ]
+
+[tasks.check-fastauth-integration]
+command = "cargo"
+args = [
+     "check",
+     "--package", "integration-tests-fastauth",
+     "--manifest-path", "../integration-tests/fastauth/Cargo.toml",
+     ]
+
+[tasks.check-load-test]
+command = "cargo"
+args = [
+     "check",
+     "--package", "load-tests",
+     "--manifest-path", "../load-tests/Cargo.toml",
+     ]
+
+
+[tasks.check-test-oidc-provider]
+command = "cargo"
+args = [
+     "check",
+     "--package", "test-oidc-provider",
+     "--manifest-path", "../test-oidc-provider/Cargo.toml",
+     ]
+
+[tasks.check-mpc-recovery]
+command = "cargo"
+args = [
+     "check",
+     "--package", "mpc-recovery",
+     "--manifest-path", "../mpc-recovery/Cargo.toml",
+     ]
+
+# [tasks.check-fastauth]
+# dependencies = ["check-mpc-recovery", "check-load-tests", "check-test-oidc-provider", "check-integration-tests-fastauth"]
+
+[tasks.check]
+command = "cargo"
+args = ["check"]
+dependencies = [
+    "check-chain-signatures-integration",
+    "check-fastauth-integration",
+    "check-load-test",
+    "check-test-oidc-provider",
+    "check-mpc-recovery",
+]
+
+#           ( cd chain-signatures ; cargo check )
+#           ( cd mpc-recovery ; cargo check )
+#           ( cd integration-tests/chain-signatures ; cargo check )
+#           ( cd integration-tests/fastauth ; cargo check )

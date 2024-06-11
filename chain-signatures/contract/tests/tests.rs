@@ -3,15 +3,14 @@ use near_sdk::env;
 use near_workspaces::AccountId;
 use std::collections::{BTreeMap, HashMap};
 
-const CONTRACT_FILE_PATH: &str =
-    "../../integration-tests/chain-signatures/target/wasm/wasm32-unknown-unknown/release/mpc_contract.wasm";
+const CONTRACT_FILE_PATH: &str = "../target/wasm/wasm32-unknown-unknown/release/mpc_contract.wasm";
 
 #[tokio::test]
 async fn test_contract_can_not_be_reinitialized() -> anyhow::Result<()> {
     let worker = near_workspaces::sandbox().await?;
     let cwd = std::env::current_dir()?;
     let wasm = std::fs::read(CONTRACT_FILE_PATH).expect(&format!(
-        "Contract not found in working direcory {}",
+        "Contract not found in working directory {}",
         cwd.display()
     ));
     let contract = worker.dev_deploy(&wasm).await?;

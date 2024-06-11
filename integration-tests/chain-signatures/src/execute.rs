@@ -1,10 +1,13 @@
+use std::env;
+
 use anyhow::Context;
 use async_process::Child;
 
 const PACKAGE_MULTICHAIN: &str = "mpc-recovery-node";
 
 pub fn target_dir() -> Option<std::path::PathBuf> {
-    let mut out_dir = std::path::Path::new(std::env!("OUT_DIR"));
+    let out_dir = env::var("OUT_DIR").ok()?;
+    let mut out_dir = std::path::Path::new(&out_dir);
     loop {
         if out_dir.ends_with("target") {
             break Some(out_dir.to_path_buf());

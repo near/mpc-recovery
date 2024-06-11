@@ -22,8 +22,8 @@
           # More agressively cache build artefacts
           # Uses more disk but speeds up compile times significantly
           env = {
-            # SCCACHE_GHA_ENABLED = true;
-            # RUSTC_WRAPPER = "sccache";
+            PROJECT_ROOT = builtins.getEnv "PWD";
+            OUT_DIR = "{PROJECT_ROOT}/chain-signatures/target";
           };
 
           # Everything in this list is added to your path
@@ -55,7 +55,6 @@
               cargo-watch
               cargo-audit
               cargo-make
-              sccache
 
               # TODO Add podman + docker image dependencies
               # TODO Add AWS-CLI and dummy credentials
