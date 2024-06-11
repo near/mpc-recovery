@@ -5,11 +5,11 @@ CARGO_MAKE_WORKSPACE_EMULATION = true
 CARGO_MAKE_CRATE_WORKSPACE_MEMBERS = [
     # This is the current working directory
     "chain-signatures",
-    "mpc-recovery",
-    "load-tests",
-    "test-oidc-provider",
-    "integration-tests/chain-signatures",
-    "integration-tests/fastauth",
+    # "mpc-recovery",
+    # "load-tests",
+    # "test-oidc-provider",
+    # "integration-tests/chain-signatures",
+    # "integration-tests/fastauth",
 ]
 CARGO_MAKE_WORKING_DIRECTORY = "./chain-signatures"
 OUT_DIR = "${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/target"
@@ -46,50 +46,67 @@ dependencies = ["unit-test", "integration-test"]
 [tasks.check-chain-signatures-integration]
 command = "cargo"
 args = [
-     "check",
+     "${CARGO_COMMAND}",
      "--package", "integration-tests-chain-signatures",
      "--manifest-path", "../integration-tests/chain-signatures/Cargo.toml",
+     "@@split(CARGO_ARGUMENTS, )",
+     "--",
+     "@@split(BINARY_ARGUMENTS, )",
      ]
 
 [tasks.check-fastauth-integration]
 command = "cargo"
 args = [
-     "check",
+     "${CARGO_COMMAND}",
      "--package", "integration-tests-fastauth",
      "--manifest-path", "../integration-tests/fastauth/Cargo.toml",
+     "@@split(CARGO_ARGUMENTS, )",
+     "--",
+     "@@split(BINARY_ARGUMENTS, )",
      ]
 
 [tasks.check-load-test]
 command = "cargo"
 args = [
-     "check",
+     "${CARGO_COMMAND}",
      "--package", "load-tests",
      "--manifest-path", "../load-tests/Cargo.toml",
+     "@@split(CARGO_ARGUMENTS, )",
+     "--",
+     "@@split(BINARY_ARGUMENTS, )",
      ]
 
 
 [tasks.check-test-oidc-provider]
 command = "cargo"
 args = [
-     "check",
+     "${CARGO_COMMAND}",
      "--package", "test-oidc-provider",
      "--manifest-path", "../test-oidc-provider/Cargo.toml",
+     "@@split(CARGO_ARGUMENTS, )",
+     "--",
+     "@@split(BINARY_ARGUMENTS, )",
      ]
 
 [tasks.check-mpc-recovery]
 command = "cargo"
 args = [
-     "check",
+     "${CARGO_COMMAND}",
      "--package", "mpc-recovery",
      "--manifest-path", "../mpc-recovery/Cargo.toml",
+     "@@split(CARGO_ARGUMENTS, )",
+     "--",
+     "@@split(BINARY_ARGUMENTS, )",
      ]
+
+[tasks.check-chain-signatures]
+command = "cargo"
+args = ["check"]
 
 # [tasks.check-fastauth]
 # dependencies = ["check-mpc-recovery", "check-load-tests", "check-test-oidc-provider", "check-integration-tests-fastauth"]
 
-[tasks.check]
-command = "cargo"
-args = ["check"]
+[tasks.all-packages]
 dependencies = [
     "check-chain-signatures-integration",
     "check-fastauth-integration",
@@ -97,6 +114,27 @@ dependencies = [
     "check-test-oidc-provider",
     "check-mpc-recovery",
 ]
+
+[tasks.checker-rule]
+env = { "CARGO_COMMAND" = "check" }
+run_task = "all-packages"
+
+[tasks.fmt-rule]
+env = { "CARGO_COMMAND" = "fmt", "BINARY_ARGUMENTS" = "--check" }
+run_task = "all-packages"
+
+[tasks.clippy-rule]
+env = { "CARGO_COMMAND" = "clippy", "CARGO_ARGUMENTS" = "--tests", "BINARY_ARGUMENTS" = "-Dclippy::all" }
+run_task = "all-packages"
+
+[tasks.is-correct]
+dependencies = [
+    "clippy-rule",
+    "fmt-rule",
+    "checker-rule",
+]
+
+
 
 #           ( cd chain-signatures ; cargo check )
 #           ( cd mpc-recovery ; cargo check )

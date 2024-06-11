@@ -27,31 +27,13 @@ jobs:
       - name: Compile Contract
         run: cd chain-signatures && cargo build -p mpc-contract --target wasm32-unknown-unknown --release
       - name: Compile
-        run: |
-          ( cd chain-signatures ; cargo check )
-          ( cd mpc-recovery ; cargo check )
-          ( cd load-tests ; cargo check )
-          ( cd test-oidc-provider ; cargo check )
-          ( cd integration-tests/chain-signatures ; cargo check )
-          ( cd integration-tests/fastauth ; cargo check )
+        run: cargo make check
       - name: Test format
-        run: |
-          ( cd chain-signatures ; cargo fmt -- --check )
-          ( cd mpc-recovery ; cargo fmt -- --check )
-          ( cd load-tests ; cargo fmt -- --check )
-          ( cd test-oidc-provider ; cargo fmt -- --check )
-          ( cd integration-tests/chain-signatures ; cargo fmt -- --check )
-          ( cd integration-tests/fastauth ; cargo fmt -- --check )
+        run: cargo make fmt
       - name: Unit tests
         run: ( cd mpc-recovery && cargo test )
       - name: Test clippy
-        run: |
-          ( cd chain-signatures ; cargo clippy --tests -- -Dclippy::all )
-          ( cd mpc-recovery ; cargo clippy --tests -- -Dclippy::all )
-          ( cd load-tests ; cargo clippy --tests -- -Dclippy::all )
-          ( cd test-oidc-provider ; cargo clippy --tests -- -Dclippy::all )
-          ( cd integration-tests/chain-signatures ; cargo clippy --tests -- -Dclippy::all )
-          ( cd integration-tests/fastauth ; cargo clippy --tests -- -Dclippy::all )
+        run: cargo make clippy
 
   audit:
     name: Audit
@@ -67,12 +49,10 @@ jobs:
       - name: Install Audit
         run: cargo install cargo-audit
       - name: Run Audit (FastAuth)
-        working-directory: integration-tests/fastauth
         run: |
           cargo audit --ignore RUSTSEC-2020-0071 --ignore RUSTSEC-2023-0052 --ignore RUSTSEC-2022-0093 --ignore RUSTSEC-2023-0071 --ignore RUSTSEC-2024-0019
       - name: Run Audit (Chain Signatures)
         # even if previous audit step fails, run this audit step to ensure all crates are audited
         if: always()
-        working-directory: integration-tests/chain-signatures
         run: |
           cargo audit --ignore RUSTSEC-2020-0071 --ignore RUSTSEC-2023-0052 --ignore RUSTSEC-2022-0093 --ignore RUSTSEC-2023-0071 --ignore RUSTSEC-2024-0019
