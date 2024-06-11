@@ -9,7 +9,7 @@ use near_sdk::collections::LookupMap;
 use near_sdk::serde::{Deserialize, Serialize};
 
 use near_sdk::{
-    env, log, near_bindgen, AccountId, BorshStorageKey, CryptoHash, Gas, GasWeight, PromiseError,Promise,
+    env, log, near_bindgen, AccountId, BorshStorageKey, CryptoHash, Gas, GasWeight, NearToken, PromiseError,Promise,
     PromiseOrValue, PublicKey,
 };
 
@@ -853,6 +853,7 @@ impl VersionedMpcContract {
         const CHEAP_REQUESTS: u32 = 3;
         let pending_requests = match self {
             Self::V0(mpc_contract) => mpc_contract.request_counter,
+            Self::V1(mpc_contract) => mpc_contract.request_counter,
         };
         match pending_requests {
             0..=CHEAP_REQUESTS => 1,
