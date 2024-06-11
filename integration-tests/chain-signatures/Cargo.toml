@@ -60,7 +60,7 @@ secp256k1 = "0.28.2"
 [build-dependencies]
 anyhow = "1"
 async-process = "1"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1.37.0", features = ["full"] }
 
 [workspace] # used to ignore higher level workspace
 

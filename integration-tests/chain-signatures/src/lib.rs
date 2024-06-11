@@ -454,14 +454,14 @@ pub async fn initialize_lake_indexer<'a>(
     let validator_key = fetch_validator_keys(docker_client, &lake_indexer.container).await?;
 
     tracing::info!("initializing sandbox worker");
-    let network_builder = near_workspaces::sandbox()
+    let worker = near_workspaces::sandbox()
         .rpc_addr(&lake_indexer.rpc_host_address)
         .validator_key(ValidatorKey::Known(
             validator_key.account_id.to_string().parse()?,
             validator_key.secret_key.to_string().parse()?,
-        ));
+        )).await?;
 
-    let worker = near_workspaces::sandbox_with_builder_and_version(network_builder, "1.40.0").await?;
+    // let worker = near_workspaces::sandbox_with_builder_and_version(network_builder, "1.40.0").await?;
 
     Ok(LakeIndexerCtx {
         localstack,
