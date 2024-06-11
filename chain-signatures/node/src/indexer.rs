@@ -163,7 +163,7 @@ async fn handle_block(
         .with_label_values(&[ctx.gcp_service.account_id.as_str()])
         .set(block.block_height() as i64);
 
-    if block.block_height() % 1000 == 0 {
+    if block.block_height() > 0 {
         tracing::info!(block_height = block.block_height(), "indexed block");
     }
     Ok(())
