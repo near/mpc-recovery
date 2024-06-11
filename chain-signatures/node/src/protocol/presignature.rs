@@ -320,7 +320,7 @@ impl PresignatureManager {
         } else {
             match self.generators.entry(id) {
                 Entry::Vacant(entry) => {
-                    tracing::info!(id, "joining protocol to generate a new presignature");
+                    tracing::debug!(id, "joining protocol to generate a new presignature");
                     let (triple0, triple1) = match triple_manager.take_two(triple0, triple1).await {
                         Ok(result) => result,
                         Err(error) => match error {
@@ -440,7 +440,7 @@ impl PresignatureManager {
                         },
                     )),
                     Action::Return(output) => {
-                        tracing::info!(
+                        tracing::debug!(
                             id,
                             me = ?self.me,
                             big_r = ?output.big_r.to_base58(),
@@ -455,7 +455,7 @@ impl PresignatureManager {
                             },
                         );
                         if generator.mine {
-                            tracing::info!(id, "assigning presignature to myself");
+                            tracing::debug!(id, "assigning presignature to myself");
                             self.mine.push_back(*id);
                             crate::metrics::NUM_TOTAL_HISTORICAL_PRESIGNATURE_GENERATORS_MINE_SUCCESS
                                 .with_label_values(&[self.my_account_id.as_str()])

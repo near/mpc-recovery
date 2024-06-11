@@ -123,7 +123,7 @@ async fn handle_block(
                         let epsilon =
                             derive_epsilon(&action.predecessor_id(), &arguments.request.path);
                         let delta = kdf::derive_delta(receipt_id, entropy);
-                        tracing::info!(
+                        tracing::warn!(
                             receipt_id = %receipt_id,
                             caller_id = receipt.predecessor_id().to_string(),
                             our_account = ctx.node_account_id.to_string(),

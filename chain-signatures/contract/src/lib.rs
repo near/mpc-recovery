@@ -241,7 +241,7 @@ impl VersionedMpcContract {
     /// we ask for a small deposit for each signature request.
     /// The fee changes based on how busy the network is.
     #[payable]
-    pub fn sign(&mut self, request: SignRequest) -> Promise {
+    pub fn sign(&mut self, request: SignRequest){
         let SignRequest {
             payload,
             path,
@@ -285,7 +285,7 @@ impl VersionedMpcContract {
                     );
                     //what is this for?
                     log!(&serde_json::to_string(&near_sdk::env::random_seed_array()).unwrap());
-                    Self::ext(env::current_account_id()).sign_helper(request, 0)
+                    Self::ext(env::current_account_id()).sign_helper(request, 0);
                 }
                 Self::V1(mpc_contract) => {
                     let index = mpc_contract.next_available_yield_resume_request_index;
@@ -314,6 +314,7 @@ impl VersionedMpcContract {
                         key_version,
                         data_id
                     );
+                    log!(&serde_json::to_string(&near_sdk::env::random_seed_array()).unwrap());
 
                     mpc_contract.add_request(&request, &Some(data_id));
                     mpc_contract.add_yield_resume_request(
@@ -327,7 +328,6 @@ impl VersionedMpcContract {
                     // The return value for this function call will be the value
                     // returned by the `sign_on_finish` callback.
                     env::promise_return(yield_promise);
-                    env::panic_str("not work");
                 }
             }
         } else {

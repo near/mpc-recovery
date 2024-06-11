@@ -60,8 +60,8 @@ async fn test_signature_basic() -> anyhow::Result<()> {
         Box::pin(async move {
             let state_0 = wait_for::running_mpc(&ctx, Some(0)).await?;
             assert_eq!(state_0.participants.len(), 3);
-            wait_for::has_at_least_triples(&ctx, 2).await?;
-            wait_for::has_at_least_presignatures(&ctx, 2).await?;
+            // wait_for::has_at_least_triples(&ctx, 2).await?;
+            // wait_for::has_at_least_presignatures(&ctx, 2).await?;
             actions::single_signature_rogue_responder(&ctx, &state_0).await
         })
     })

@@ -312,7 +312,7 @@ pub async fn docker(cfg: MultichainConfig, docker_client: &DockerClient) -> anyh
         .args_json(json!({
             "threshold": cfg.threshold,
             "candidates": candidates,
-            "contract_version": "V0"
+            "contract_version": "V1"
         }))
         .transact()
         .await?
@@ -363,7 +363,7 @@ pub async fn host(cfg: MultichainConfig, docker_client: &DockerClient) -> anyhow
         .args_json(json!({
             "threshold": cfg.threshold,
             "candidates": candidates,
-            "contract_version": "V0"
+            "contract_version": "V1"
         }))
         .transact()
         .await?

@@ -78,6 +78,7 @@ pub async fn request_sign(
             .sign(&signer),
         })
         .await?;
+    println!("sign tx hash: {tx_hash}");
     tokio::time::sleep(Duration::from_secs(1)).await;
     Ok((payload, payload_hashed, account, tx_hash))
 }
