@@ -280,11 +280,9 @@ impl DatastoreService {
             )
         })?;
 
-        batch.entity_results.ok_or_else(|| {
-            DatastoreStorageError::FetchEntitiesError(
-                "Could not retrieve entity results while fetching entities".to_string(),
-            )
-        })
+        // NOTE: if entity_results is None, we return an empty Vec since the fetch query
+        // could not find any entities in the DB.
+        Ok(batch.entity_results.unwrap_or_default())
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
