@@ -4451,6 +4451,7 @@ dependencies = [
  "borsh",
  "crypto-shared",
  "k256",
+ "near-gas",
  "near-sdk",
  "schemars",
  "serde",
