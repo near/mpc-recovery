@@ -12,9 +12,10 @@ RUN sed -i 's#mpc-keys = { path = "../keys" }##' Cargo.toml
 RUN sed -i 's#mpc-contract = { path = "../contract" }##' Cargo.toml
 RUN sed -i 's#crypto-shared = { path = "../crypto-shared" }##' Cargo.toml
 RUN cargo build --release
-COPY chain-signatures/Cargo.toml Cargo.toml
-RUN sed -i 's#"contract",##' Cargo.toml
+COPY chain-signatures/. .
 RUN sed -i 's#"keys",##' Cargo.toml
+RUN sed -i 's#"contract",##' Cargo.toml
+RUN sed -i 's#target-dir = "../target"#target-dir = "target"#' .cargo/config.toml
 RUN cargo build --release --package mpc-recovery-node
 
 FROM debian:stable-slim as runtime
