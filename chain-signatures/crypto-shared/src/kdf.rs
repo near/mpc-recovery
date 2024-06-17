@@ -77,6 +77,7 @@ pub fn recover(
     signature: &Signature,
     recovery_id: RecoveryId,
 ) -> anyhow::Result<VerifyingKey> {
+    use k256::EncodedPoint;
     use near_sdk::env;
     // While this function also works on native code, it's a bit weird and unsafe.
     // I'm more comfortable using an existing library instead.
