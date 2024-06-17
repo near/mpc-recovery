@@ -557,7 +557,7 @@ impl SignatureManager {
             let status = response.status();
 
             // Check we returned successfully
-            let FinalExecutionStatus::SuccessValue(_) = status else {
+            let FinalExecutionStatus::SuccessValue(payload) = status else {
                 let err = format!("Publish transaction failed, {:?}", response);
                 tracing::error!(err);
                 return Err(near_fetch::Error::RpcReturnedInvalidData(err));
