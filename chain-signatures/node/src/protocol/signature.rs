@@ -13,6 +13,7 @@ use crypto_shared::{derive_key, PublicKey};
 use crypto_shared::{ScalarExt, SerializableScalar};
 use k256::{Scalar, Secp256k1};
 use mpc_contract::SignatureRequest;
+use near_primitives::views::FinalExecutionStatus;
 use rand::rngs::StdRng;
 use rand::seq::{IteratorRandom, SliceRandom};
 use rand::SeedableRng;
@@ -552,6 +553,22 @@ impl SignatureManager {
                 .retry_exponential(10, 5)
                 .transact()
                 .await?;
+
+            let status = response.status();
+
+            // Check we returned successfully
+            let FinalExecutionStatus::SuccessValue(_) = status else {
+                let err = format!("Publish transaction failed, {:?}", response);
+                tracing::error!(err);
+                return Err(near_fetch::Error::RpcReturnedInvalidData(err));
+            };
+
+            // Check that the return type is correct, weirdly doesn't match up
+            // let _: () = serde_json::from_slice(&payload).map_err(|e| {
+            //     tracing::error!("Response deserialization failed, {e} {payload:?}");
+            //     near_fetch::Error::Serialization(e)
+            // })?;
+
             crate::metrics::NUM_SIGN_SUCCESS
                 .with_label_values(&[my_account_id.as_str()])
                 .inc();

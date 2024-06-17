@@ -117,6 +117,8 @@ impl MpcContract {
     fn add_sign_result(&mut self, payload: &SignatureRequest, signature: SignatureResponse) {
         if self.pending_requests.contains_key(payload) {
             self.pending_requests.insert(payload, &Some(signature));
+        } else {
+            env::panic_str(&format!("Key not found: {:?}", payload))
         }
     }
 

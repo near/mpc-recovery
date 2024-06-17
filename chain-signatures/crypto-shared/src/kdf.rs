@@ -4,7 +4,7 @@ use k256::{
     ecdsa::{RecoveryId, Signature, VerifyingKey},
     elliptic_curve::{point::AffineCoordinates, sec1::ToEncodedPoint, CurveArithmetic},
     sha2::{Digest, Sha256},
-    Scalar, Secp256k1,
+    EncodedPoint, Scalar, Secp256k1,
 };
 use near_account_id::AccountId;
 
@@ -22,10 +22,7 @@ pub fn derive_epsilon(predecessor_id: &AccountId, path: &str) -> Scalar {
     let derivation_path = format!("{EPSILON_DERIVATION_PREFIX}{},{}", predecessor_id, path);
     let mut hasher = Sha256::new();
     hasher.update(derivation_path);
-    let mut bytes = hasher.finalize();
-    // Due to a previous bug in our Scalar conversion code, this hash was reversed, we reverse it here to preserve compatibility, but will likely change this later.
-    bytes.reverse();
-    Scalar::from_bytes(&bytes)
+    Scalar::from_bytes(&hasher.finalize())
 }
 
 pub fn derive_key(public_key: PublicKey, epsilon: Scalar) -> PublicKey {
@@ -64,8 +61,8 @@ pub fn check_ec_signature(
     anyhow::bail!("cannot use either recovery id (0 or 1) to recover pubic key")
 }
 
-// #[cfg(not(target_arch = "wasm32"))]
-fn recover(
+#[cfg(not(target_arch = "wasm32"))]
+pub fn recover(
     prehash: &[u8],
     signature: &Signature,
     recovery_id: RecoveryId,
@@ -74,16 +71,20 @@ fn recover(
         .context("Unable to recover public key")
 }
 
-// TODO Migrate to native function
-// #[cfg(target_arch = "wasm32")]
-// fn recover(
-//     prehash: &[u8],
-//     signature: &Signature,
-//     recovery_id: RecoveryId,
-// ) -> anyhow::Result<VerifyingKey> {
-//     use near_sdk::env;
-//     let recovered_key =
-//         env::ecrecover(prehash, &signature.to_bytes(), recovery_id.to_byte(), false)
-//             .context("Unable to recover public key")?;
-//     VerifyingKey::try_from(&recovered_key[..]).context("Failed to parse returned key")
-// }
+#[cfg(target_arch = "wasm32")]
+pub fn recover(
+    prehash: &[u8],
+    signature: &Signature,
+    recovery_id: RecoveryId,
+) -> anyhow::Result<VerifyingKey> {
+    use near_sdk::env;
+    // While this function also works on native code, it's a bit weird and unsafe.
+    // I'm more comfortable using an existing library instead.
+    let recovered_key_bytes =
+        env::ecrecover(prehash, &signature.to_bytes(), recovery_id.to_byte(), true)
+            .context("Unable to recover public key")?;
+    VerifyingKey::from_encoded_point(&EncodedPoint::from_untagged_bytes(
+        &recovered_key_bytes.into(),
+    ))
+    .context("Failed to parse returned key")
+}
