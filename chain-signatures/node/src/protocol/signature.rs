@@ -563,11 +563,11 @@ impl SignatureManager {
                 return Err(near_fetch::Error::RpcReturnedInvalidData(err));
             };
 
-            // Check that the return type is correct, weirdly doesn't match up
-            // let _: () = serde_json::from_slice(&payload).map_err(|e| {
-            //     tracing::error!("Response deserialization failed, {e} {payload:?}");
-            //     near_fetch::Error::Serialization(e)
-            // })?;
+            // Check that the return type is correct
+            let _: () = serde_json::from_slice(&payload).map_err(|e| {
+                tracing::error!("Response deserialization failed, {e} {payload:?}");
+                near_fetch::Error::Serialization(e)
+            })?;
 
             crate::metrics::NUM_SIGN_SUCCESS
                 .with_label_values(&[my_account_id.as_str()])
