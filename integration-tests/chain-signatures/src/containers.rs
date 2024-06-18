@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use super::{local::NodeConfig, MultichainConfig};
 use anyhow::anyhow;
 use bollard::exec::CreateExecOptions;
@@ -44,9 +46,6 @@ impl<'a> Node<'a> {
         let sign_sk =
             near_crypto::SecretKey::from_seed(near_crypto::KeyType::ED25519, "integration-test");
         let sign_pk = sign_sk.public_key();
-        let storage_options = ctx.storage_options.clone();
-        let near_rpc = ctx.lake_indexer.rpc_host_address.clone();
-        let mpc_contract_id = ctx.mpc_contract.id().clone();
         let indexer_options = mpc_recovery_node::indexer::Options {
             s3_bucket: ctx.localstack.s3_bucket.clone(),
             s3_region: ctx.localstack.s3_region.clone(),
@@ -54,8 +53,8 @@ impl<'a> Node<'a> {
             start_block_height: 0,
         };
         let args = mpc_recovery_node::cli::Cli::Start {
-            near_rpc: near_rpc.clone(),
-            mpc_contract_id: mpc_contract_id.clone(),
+            near_rpc: ctx.lake_indexer.rpc_host_address.clone(),
+            mpc_contract_id: ctx.mpc_contract.id().clone(),
             account_id: account_id.clone(),
             account_sk: account_sk.to_string().parse()?,
             web_port: Self::CONTAINER_PORT,
@@ -64,7 +63,7 @@ impl<'a> Node<'a> {
             sign_sk: Some(sign_sk),
             indexer_options: indexer_options.clone(),
             my_address: None,
-            storage_options: storage_options.clone(),
+            storage_options: ctx.storage_options.clone(),
             min_triples: cfg.triple_cfg.min_triples,
             max_triples: cfg.triple_cfg.max_triples,
             max_concurrent_introduction: cfg.triple_cfg.max_concurrent_introduction,
@@ -214,12 +213,12 @@ impl<'a> LocalStack<'a> {
     pub async fn run(
         docker_client: &'a DockerClient,
         network: &str,
-        s3_bucket: String,
-        s3_region: String,
+        s3_bucket: &str,
+        s3_region: &str,
     ) -> anyhow::Result<LocalStack<'a>> {
         tracing::info!("running LocalStack container...");
-        let image = GenericImage::new("localstack/localstack", "3.0.0")
-            .with_wait_for(WaitFor::message_on_stdout("Running on"));
+        let image = GenericImage::new("localstack/localstack", "3.5.0")
+            .with_wait_for(WaitFor::message_on_stdout("Ready."));
         let image: RunnableImage<GenericImage> = image.into();
         let image = image.with_network(network);
         let container = docker_client.cli.run(image);
@@ -240,18 +239,19 @@ impl<'a> LocalStack<'a> {
                         "s3api",
                         "create-bucket",
                         "--bucket",
-                        &s3_bucket,
+                        s3_bucket,
                         "--region",
-                        &s3_region,
+                        s3_region,
                     ]),
                     ..Default::default()
                 },
             )
             .await?;
-        docker_client
+        let result = docker_client
             .docker
             .start_exec(&create_result.id, None)
             .await?;
+        tracing::info!(?result, s3_bucket, s3_region, "localstack created bucket");
 
         let s3_address = format!("http://{}:{}", address, Self::S3_CONTAINER_PORT);
         #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
@@ -275,8 +275,8 @@ impl<'a> LocalStack<'a> {
             address,
             s3_address,
             s3_host_address,
-            s3_bucket,
-            s3_region,
+            s3_bucket: s3_bucket.to_string(),
+            s3_region: s3_region.to_string(),
         })
     }
 }
@@ -296,8 +296,8 @@ impl<'a> LakeIndexer<'a> {
         docker_client: &'a DockerClient,
         network: &str,
         s3_address: &str,
-        bucket_name: String,
-        region: String,
+        bucket_name: &str,
+        region: &str,
     ) -> anyhow::Result<LakeIndexer<'a>> {
         tracing::info!(
             network,
@@ -307,20 +307,23 @@ impl<'a> LakeIndexer<'a> {
             "running NEAR Lake Indexer container..."
         );
 
-        let image = GenericImage::new("ghcr.io/near/near-lake-indexer", "node-1.38")
-            .with_env_var("AWS_ACCESS_KEY_ID", "FAKE_LOCALSTACK_KEY_ID")
-            .with_env_var("AWS_SECRET_ACCESS_KEY", "FAKE_LOCALSTACK_ACCESS_KEY")
-            .with_wait_for(WaitFor::message_on_stderr("Starting Streamer"))
-            .with_exposed_port(Self::CONTAINER_RPC_PORT);
+        let image = GenericImage::new(
+            "ghcr.io/near/near-lake-indexer",
+            "node-1.40-rc.1-localstack",
+        )
+        .with_env_var("AWS_ACCESS_KEY_ID", "FAKE_LOCALSTACK_KEY_ID")
+        .with_env_var("AWS_SECRET_ACCESS_KEY", "FAKE_LOCALSTACK_ACCESS_KEY")
+        .with_wait_for(WaitFor::message_on_stderr("Starting Streamer"))
+        .with_exposed_port(Self::CONTAINER_RPC_PORT);
         let image: RunnableImage<GenericImage> = (
             image,
             vec![
                 "--endpoint".to_string(),
                 s3_address.to_string(),
                 "--bucket".to_string(),
-                bucket_name.clone(),
+                bucket_name.to_string(),
                 "--region".to_string(),
-                region.clone(),
+                region.to_string(),
                 "--stream-while-syncing".to_string(),
                 "sync-from-latest".to_string(),
             ],
@@ -344,8 +347,8 @@ impl<'a> LakeIndexer<'a> {
         );
         Ok(LakeIndexer {
             container,
-            bucket_name,
-            region,
+            bucket_name: bucket_name.to_string(),
+            region: region.to_string(),
             rpc_address,
             rpc_host_address,
         })
@@ -446,6 +449,27 @@ impl DockerClient {
                     .await
                     .unwrap();
                 stdout.flush().await.unwrap();
+            }
+        });
+
+        Ok(())
+    }
+
+    pub async fn output_logs(&self, id: &str, path: impl AsRef<Path>) -> anyhow::Result<()> {
+        let mut output = self.docker.logs::<String>(
+            id,
+            Some(LogsOptions {
+                follow: true,
+                stdout: true,
+                stderr: true,
+                ..Default::default()
+            }),
+        );
+
+        let mut out = std::fs::File::create(path)?;
+        tokio::spawn(async move {
+            while let Some(Ok(output)) = output.next().await {
+                std::io::Write::write_all(&mut out, output.into_bytes().as_ref()).unwrap();
             }
         });
 

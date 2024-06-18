@@ -213,7 +213,8 @@ pub fn run(
                 .build();
             lake_builder = lake_builder.s3_config(s3_config);
         }
-        anyhow::Ok((anyhow::Context::context(lake_builder.build(), "could not build lake indexer")?, latest))
+        let lake = anyhow::Context::context(lake_builder.build(), "could not build lake indexer")?;
+        anyhow::Ok((lake, latest))
     })?;
     let context = Context {
         mpc_contract_id,
