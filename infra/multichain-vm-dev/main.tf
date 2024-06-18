@@ -67,6 +67,7 @@ resource "google_compute_address" "internal_ips" {
   count        = length(var.node_configs)
   name         = "multichain-dev-${count.index}"
   address_type = "INTERNAL"
+  address      = var.node_configs["${count.index}"].ip_address
   region       = var.region
   subnetwork   = "projects/pagoda-shared-infrastructure/regions/us-central1/subnetworks/dev-us-central1"
 }
