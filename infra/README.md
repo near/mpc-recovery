@@ -13,7 +13,7 @@
       - [multichain-dev.yml](../.github/workflows/multichain-dev.yml)
       - [deploy-multichain-dev-contract.yml](../.github/workflows/deploy-multichain-dev-contract.yml)
     2. These workflows deploy a new imaged based off of the github SHA tag to the 8 GCP vms and restart the VM
-    3. Then, the smart contract for the dev environment is reinitialized
+    3. Then, the smart contract for the dev environment is redeployed
 
 ### "Break Glass" Deployment of Development environment
 #### This should only be used if the environment is completely broken
