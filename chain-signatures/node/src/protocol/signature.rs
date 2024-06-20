@@ -531,8 +531,7 @@ impl SignatureManager {
         signer: &T,
         mpc_contract_id: &AccountId,
         my_account_id: &AccountId,
-    ) -> Result<(), Vec<near_fetch::Error>> {
-        let mut errors = Vec::new();
+    ) {
         for (receipt_id, request, time_added, signature) in self.signatures.drain(..) {
             let expected_public_key = derive_key(self.public_key, request.epsilon.scalar);
             // We do this here, rather than on the client side, so we can use the ecrecover system function on NEAR to validate our signature
@@ -542,9 +541,7 @@ impl SignatureManager {
                 &signature.s,
                 Scalar::from_bytes(&request.payload_hash),
             ) else {
-                errors.push(near_fetch::Error::InvalidArgs(
-                    "Failed to generate a recovery ID",
-                ));
+                tracing::error!(%receipt_id, "Failed to generate a recovery ID");
                 break;
             };
             let response = match rpc_client
@@ -560,7 +557,17 @@ impl SignatureManager {
             {
                 Ok(response) => response,
                 Err(err) => {
-                    errors.push(err);
+                    tracing::error!(%receipt_id, error = ?err, "Failed to publish transaction");
+                    break;
+                }
+            };
+
+            match response.json() {
+                Ok(()) => {
+                    tracing::info!(%receipt_id, bi_r = signature.big_r.affine_point.to_base58(), s = ?signature.s, "published signature sucessfully")
+                }
+                Err(err) => {
+                    tracing::error!(%receipt_id, bi_r = signature.big_r.affine_point.to_base58(), s = ?signature.s, error = ?err, "smart contract threw error");
                     break;
                 }
             };
@@ -576,20 +583,6 @@ impl SignatureManager {
                     .with_label_values(&[my_account_id.as_str()])
                     .inc();
             }
-
-            tracing::info!(%receipt_id, bi_r = signature.big_r.affine_point.to_base58(), s = ?signature.s, status = ?response.status(), "published signature response");
-
-            // Check we returned successfully
-            // We currently just log these errors because near fetch has made a good effort of sending them
-            // It might be worth catagorizing recoverable and unrecoverable errors and doing a retry later
-            if let Err(err) = response.json::<()>() {
-                errors.push(err);
-            };
-        }
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(errors)
         }
     }
 
