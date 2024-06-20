@@ -11,7 +11,7 @@ path = "src/main.rs"
 anyhow = { version = "1", features = ["backtrace"] }
 async-trait = "0.1"
 aws-config = "1.4"
-aws-sdk-s3 = "1.24"
+aws-sdk-s3 = "1.29"
 aws-types = "1.2"
 axum = { version = "0.6.19" }
 axum-extra = "0.7"
@@ -42,12 +42,15 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = { version = "2.4.0", features = ["serde"] }
 
 near-account-id = "1.0.0"
-near-crypto = "0.21.2"
-near-fetch = "0.3.1"
-near-lake-framework = { git = "https://github.com/near/near-lake-framework-rs", rev = "e0b28590ffe6b6441987d302843d45bef55ef50e" }
-near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs", rev = "e0b28590ffe6b6441987d302843d45bef55ef50e" }
-near-primitives = "0.21.2"
-near-sdk = { git = "https://github.com/near/near-sdk-rs.git", rev = "5a9acaedc95c5721d2088f263bc99e3de574decf", features = ["legacy", "unit-testing"] }
+near-crypto = { git = "https://github.com/near/nearcore", rev = "08941a3c070eca2e6163a4ad1eaed1f0d3ee233c" }
+near-fetch = { git = "https://github.com/ChaoticTempest/near-fetch", branch = "chore/bump-node-1.40" }
+near-lake-framework = { git = "https://github.com/near/near-lake-framework-rs/", branch = "node/1.40-rc.1" }
+near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs/", branch = "node/1.40-rc.1" }
+near-primitives = { git = "https://github.com/near/nearcore", rev = "08941a3c070eca2e6163a4ad1eaed1f0d3ee233c" }
+near-sdk = { git = "https://github.com/near/near-sdk-rs.git", rev = "5a9acaedc95c5721d2088f263bc99e3de574decf", features = [
+    "legacy",
+    "unit-testing",
+] }
 
 mpc-contract = { path = "../contract" }
 mpc-keys = { path = "../keys" }

@@ -16,6 +16,6 @@ k256 = { version = "0.13.1", features = ["sha256", "ecdsa", "serde", "arithmetic
 crypto-shared = { path = "../crypto-shared" }
 
 [dev-dependencies]
-near-workspaces = { git = "https://github.com/near/near-workspaces-rs.git", branch = "feat/upgrade-near-deps" }
+near-workspaces = { git = "https://github.com/near/near-workspaces-rs", branch = "node/1.40-rc.1" }
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0.44"
