@@ -3,15 +3,16 @@ use std::str::FromStr;
 use crate::actions::{self, wait_for};
 use crate::with_multichain_nodes;
 
+use crypto_shared::{self, derive_epsilon, derive_key, x_coordinate, ScalarExt};
 use integration_tests_chain_signatures::containers::{self, DockerClient};
 use integration_tests_chain_signatures::MultichainConfig;
 use k256::elliptic_curve::point::AffineCoordinates;
-use mpc_recovery_node::kdf::{self, x_coordinate};
+use mpc_recovery_node::kdf::into_eth_sig;
 use mpc_recovery_node::protocol::presignature::PresignatureConfig;
 use mpc_recovery_node::protocol::triple::TripleConfig;
 use mpc_recovery_node::test_utils;
 use mpc_recovery_node::types::LatestBlockHeight;
-use mpc_recovery_node::util::{NearPublicKeyExt, ScalarExt};
+use mpc_recovery_node::util::NearPublicKeyExt;
 use test_log::test;
 
 #[test(tokio::test)]
@@ -59,7 +60,7 @@ async fn test_signature_basic() -> anyhow::Result<()> {
             assert_eq!(state_0.participants.len(), 3);
             wait_for::has_at_least_triples(&ctx, 2).await?;
             wait_for::has_at_least_presignatures(&ctx, 2).await?;
-            actions::single_signature_production(&ctx, &state_0).await
+            actions::single_signature_rogue_responder(&ctx, &state_0).await
         })
     })
     .await
@@ -163,22 +164,21 @@ async fn test_key_derivation() -> anyhow::Result<()> {
             for _ in 0..3 {
                 let mpc_pk: k256::AffinePoint = state_0.public_key.clone().into_affine_point();
                 let (_, payload_hashed, account, tx_hash) = actions::request_sign(&ctx).await?;
-                let payload_hashed_rev = {
-                    let mut rev = payload_hashed;
-                    rev.reverse();
-                    rev
-                };
                 let sig = wait_for::signature_responded(&ctx, tx_hash).await?;
 
                 let hd_path = "test";
-                let derivation_epsilon = kdf::derive_epsilon(account.id(), hd_path);
-                let user_pk = kdf::derive_key(mpc_pk, derivation_epsilon);
-                let multichain_sig =
-                    kdf::into_eth_sig(&user_pk, &sig, k256::Scalar::from_bytes(&payload_hashed))
-                        .unwrap();
+                let derivation_epsilon = derive_epsilon(account.id(), hd_path);
+                let user_pk = derive_key(mpc_pk, derivation_epsilon);
+                let multichain_sig = into_eth_sig(
+                    &user_pk,
+                    &sig.big_r,
+                    &sig.s,
+                    k256::Scalar::from_bytes(&payload_hashed),
+                )
+                .unwrap();
 
                 // start recovering the address and compare them:
-                let user_pk_x = kdf::x_coordinate::<k256::Secp256k1>(&user_pk);
+                let user_pk_x = x_coordinate(&user_pk);
                 let user_pk_y_parity = match user_pk.y_is_odd().unwrap_u8() {
                     1 => secp256k1::Parity::Odd,
                     0 => secp256k1::Parity::Even,
@@ -189,16 +189,16 @@ async fn test_key_derivation() -> anyhow::Result<()> {
                 let user_secp_pk =
                     secp256k1::PublicKey::from_x_only_public_key(user_pk_x, user_pk_y_parity);
                 let user_addr = actions::public_key_to_address(&user_secp_pk);
-                let r = x_coordinate::<k256::Secp256k1>(&multichain_sig.big_r);
+                let r = x_coordinate(&multichain_sig.big_r.affine_point);
                 let s = multichain_sig.s;
                 let signature_for_recovery: [u8; 64] = {
                     let mut signature = [0u8; 64];
                     signature[..32].copy_from_slice(&r.to_bytes());
-                    signature[32..].copy_from_slice(&s.to_bytes());
+                    signature[32..].copy_from_slice(&s.scalar.to_bytes());
                     signature
                 };
                 let recovered_addr = web3::signing::recover(
-                    &payload_hashed_rev,
+                    &payload_hashed,
                     &signature_for_recovery,
                     multichain_sig.recovery_id as i32,
                 )

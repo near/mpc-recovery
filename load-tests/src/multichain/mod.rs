@@ -10,8 +10,16 @@ use near_primitives::{
 };
 use rand::Rng;
 use reqwest::header::CONTENT_TYPE;
+use serde::{Deserialize, Serialize};
 
 use crate::fastauth::primitives::UserSession;
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SignRequest {
+    pub payload: [u8; 32],
+    pub path: String,
+    pub key_version: u32,
+}
 
 pub async fn multichain_sign(user: &mut GooseUser) -> TransactionResult {
     tracing::info!("multichain_sign");
@@ -42,6 +50,12 @@ pub async fn multichain_sign(user: &mut GooseUser) -> TransactionResult {
     let payload_hashed: [u8; 32] = rand::thread_rng().gen();
     tracing::info!("requesting signature for: {:?}", payload_hashed);
 
+    let request = SignRequest {
+        payload: payload_hashed,
+        path: "test".to_string(),
+        key_version: 0,
+    };
+
     let transaction = Transaction {
         signer_id: session.near_account_id.clone(),
         public_key: session.fa_sk.public_key(),
@@ -51,13 +65,11 @@ pub async fn multichain_sign(user: &mut GooseUser) -> TransactionResult {
         actions: vec![Action::FunctionCall(FunctionCallAction {
             method_name: "sign".to_string(),
             args: serde_json::to_vec(&serde_json::json!({
-                "payload": payload_hashed,
-                "path": "test",
-                "key_version": 0,
+                "request": request,
             }))
             .unwrap(),
             gas: 300_000_000_000_000,
-            deposit: 0,
+            deposit: 1,
         })],
     };
 

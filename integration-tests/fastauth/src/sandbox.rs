@@ -20,7 +20,7 @@ pub async fn initialize_social_db(worker: &Worker<Sandbox>) -> anyhow::Result<Co
     Ok(social_db)
 }
 
-// Linkdrop contains top-level account creation logic
+// Linkdrop contract contains top-level account creation logic.
 pub async fn initialize_linkdrop(worker: &Worker<Sandbox>) -> anyhow::Result<()> {
     tracing::info!("Initializing linkdrop contract...");
     let near_root_account = worker.root_account()?;

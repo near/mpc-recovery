@@ -1,9 +1,11 @@
-name: Deploy Multichain Dev.
+name: Build Image & Deploy Multichain Dev
 on:
   pull_request:
     types: [closed]
     branches:
       - develop
+    paths:
+      - chain-signatures/**
 
 env:
   IMAGE: "us-east1-docker.pkg.dev/pagoda-discovery-platform-dev/multichain-public/multichain-dev"
@@ -39,15 +41,15 @@ jobs:
         uses: 'google-github-actions/auth@v2'
         with:
           credentials_json: '${{ secrets.GCP_CREDENTIALS_DEV }}'
-  
+
       - name: 'Set up Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
-  
+
       - name: 'Set project'
         run: 'gcloud config set project pagoda-discovery-platform-dev'
 
       - name: 'Update Nodes'
-        run: | 
+        run: |
           gcloud compute instances update-container multichain-dev-0 --zone us-central1-a --container-image=${{ env.IMAGE }}:${{ env.TAG }} & \
           gcloud compute instances update-container multichain-dev-1 --zone us-central1-a --container-image=${{ env.IMAGE }}:${{ env.TAG }} & \
           gcloud compute instances update-container multichain-dev-2 --zone us-central1-a --container-image=${{ env.IMAGE }}:${{ env.TAG }} & \
@@ -56,4 +58,3 @@ jobs:
           gcloud compute instances update-container multichain-dev-5 --zone us-central1-a --container-image=${{ env.IMAGE }}:${{ env.TAG }} & \
           gcloud compute instances update-container multichain-dev-6 --zone us-central1-a --container-image=${{ env.IMAGE }}:${{ env.TAG }} & \
           gcloud compute instances update-container multichain-dev-7 --zone us-central1-a --container-image=${{ env.IMAGE }}:${{ env.TAG }}
-

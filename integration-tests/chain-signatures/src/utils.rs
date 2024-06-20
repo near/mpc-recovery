@@ -80,7 +80,7 @@ where
 pub async fn pick_unused_port() -> anyhow::Result<u16> {
     // Port 0 means the OS gives us an unused port
     // Important to use localhost as using 0.0.0.0 leads to users getting brief firewall popups to
-    // allow inbound connections on MacOS.
+    // allow inbound connections on macOS
     let addr = std::net::SocketAddrV4::new(std::net::Ipv4Addr::LOCALHOST, 0);
     let listener = tokio::net::TcpListener::bind(addr).await?;
     let port = listener.local_addr()?.port();

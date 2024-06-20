@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "contract",
+    "keys",
+    "node",
+]
+resolver = "2"

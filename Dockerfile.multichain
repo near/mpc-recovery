@@ -6,16 +6,18 @@ RUN apt-get update \
     apt-get install --no-install-recommends --assume-yes \
     protobuf-compiler libprotobuf-dev
 RUN echo "fn main() {}" > dummy.rs
-COPY node/Cargo.toml Cargo.toml
+COPY chain-signatures/node/Cargo.toml Cargo.toml
 RUN sed -i 's#src/main.rs#dummy.rs#' Cargo.toml
 RUN sed -i 's#mpc-keys = { path = "../keys" }##' Cargo.toml
 RUN sed -i 's#mpc-contract = { path = "../contract" }##' Cargo.toml
+RUN sed -i 's#crypto-shared = { path = "../crypto-shared" }##' Cargo.toml
 RUN cargo build --release
 COPY . .
 RUN sed -i 's#"mpc-recovery",##' Cargo.toml
 RUN sed -i 's#"integration-tests",##' Cargo.toml
 RUN sed -i 's#"load-tests",##' Cargo.toml
 RUN sed -i 's#"keys",##' Cargo.toml
+RUN sed -i 's#"crypto-shared",##' Cargo.toml
 RUN cargo build --release --package mpc-recovery-node
 
 FROM debian:stable-slim as runtime

@@ -1,0 +1,21 @@
+[package]
+name = "mpc-contract"
+version = "0.2.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+borsh = "1.5.0"
+near-sdk = { git = "https://github.com/near/near-sdk-rs.git", rev = "5a9acaedc95c5721d2088f263bc99e3de574decf", features = ["legacy", "unit-testing"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "0.8"
+k256 = { version = "0.13.1", features = ["sha256", "ecdsa", "serde", "arithmetic", "expose-field"] }
+crypto-shared = { path = "../crypto-shared" }
+
+[dev-dependencies]
+near-workspaces = { git = "https://github.com/near/near-workspaces-rs.git", branch = "feat/upgrade-near-deps" }
+tokio = { version = "1", features = ["full"] }
+anyhow = "1.0.44"

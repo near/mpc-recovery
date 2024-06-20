@@ -1,4 +1,4 @@
-/target
+**/target
 .direnv
 .DS_Store
 .idea

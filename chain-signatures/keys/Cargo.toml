@@ -1,0 +1,16 @@
+[package]
+name = "mpc-keys"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+borsh = "1.5.0"
+hpke = { version = "0.11", features = ["serde_impls", "std"] }
+serde = { version = "1", features = ["derive"] }
+rand = { version = "0.8" }
+
+[dev-dependencies]
+hex = "*"

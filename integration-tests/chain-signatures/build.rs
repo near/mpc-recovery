@@ -1,5 +1,5 @@
 use std::path::Path;
-use std::{env, io};
+use std::{env, fs, io};
 
 use anyhow::Context;
 use async_process::{Command, ExitStatus, Stdio};
@@ -71,7 +71,6 @@ async fn build_multichain(release: bool) -> anyhow::Result<ExitStatus> {
 
 async fn build_multichain_contract(release: bool) -> anyhow::Result<ExitStatus> {
     let target_dir = target_dir().context("could not find /target while building contract")?;
-    // We use a different target directory to stop the different rustflags between targets from clobbering the build cache
     build_package(
         release,
         PACKAGE_CONTRACT,
@@ -81,11 +80,22 @@ async fn build_multichain_contract(release: bool) -> anyhow::Result<ExitStatus> 
     .await
 }
 
+fn rerun_directory<T: AsRef<Path> + ?Sized>(dir: &T) {
+    println!("cargo:rerun-if-changed={}", dir.as_ref().to_str().unwrap());
+
+    for entry in fs::read_dir(dir).unwrap() {
+        let entry = entry.expect("cannot access file in src directory");
+        let path = entry.path();
+        if path.is_dir() {
+            // only look at directories for timestamps
+            rerun_directory(&path);
+        }
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=../../contract/");
-    println!("cargo:rerun-if-changed=../../keys/");
-    println!("cargo:rerun-if-changed=../../node/");
+    rerun_directory("../../chain-signatures/");
 
     let release = true;
     let rt = tokio::runtime::Runtime::new().unwrap();

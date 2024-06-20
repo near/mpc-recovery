@@ -28,7 +28,7 @@ jobs:
       - name: debug
         run: cat ~/.near-credentials/testnet/v5.multichain-mpc-dev.testnet.json
 
-      - name: Cargo Build
+      - name: Build & Deploy Dev Contract
         run: |
-          source $HOME/.cargo/env && cd ./contract ; rustup target add wasm32-unknown-unknown && cargo build --target wasm32-unknown-unknown --release && \
+          source $HOME/.cargo/env && cd chain-signatures ; rustup target add wasm32-unknown-unknown && cargo build -p mpc-contract --target wasm32-unknown-unknown --release && \
           cd .. && (yes || true) | near deploy v5.multichain-mpc-dev.testnet target/wasm32-unknown-unknown/release/mpc_contract.wasm

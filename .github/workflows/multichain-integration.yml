@@ -7,9 +7,7 @@ on:
   pull_request:
     paths:
       - integration-tests/chain-signatures/**
-      - keys/**
-      - node/**
-      - contract/**
+      - chain-signatures/**
 
 env:
   RUSTFLAGS: -D warnings
@@ -19,7 +17,7 @@ jobs:
     strategy:
       matrix:
         # FIXME: macos-latest-xl is disabled since colima is erroring out right now
-        os: [ubuntu-22.04-4core]
+        os: [warp-ubuntu-latest-x64-4x]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -54,7 +52,16 @@ jobs:
           toolchain: stable
           target: wasm32-unknown-unknown
 
-      - uses: Swatinem/rust-cache@v1
+      - uses: WarpBuilds/cache@v1
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: "${{ runner.os }}-cargo-${{ hashFiles('chain-signatures/Cargo.lock') }}"
+          restore-keys: ${{ runner.os }}-cargo-
 
       - name: Install Protoc
         uses: arduino/setup-protoc@v1.1.2
@@ -68,17 +75,23 @@ jobs:
           aws --profile default configure set aws_access_key_id "123"
           aws --profile default configure set aws_secret_access_key "456"
 
-      - name: Compile Chain-Signature Contract
-        working-directory: ./contract
-        run: cargo build --target wasm32-unknown-unknown --release
+      - name: Build Chain-Signatures Contract
+        working-directory: ./chain-signatures
+        run: cargo build -p mpc-contract --target wasm32-unknown-unknown --release
 
-      - name: Build Chain-Signature Node Binary Locally
-        working-directory: ./node
-        run: cargo build --release
+      - name: Build Chain-Signatures Node
+        working-directory: ./chain-signatures
+        run: cargo build -p mpc-recovery-node --release
+
+      # Build the tests before actually running them to see how long the tests take to run by itself
+      # instead of including the build time in the test time report on Github.
+      - name: Build Chain-Signatures Integration Tests
+        working-directory: ./integration-tests/chain-signatures
+        run: cargo build --tests
 
       - name: Test
         working-directory: ./integration-tests/chain-signatures
         run: cargo test --jobs 1 -- --test-threads 1
         env:
-          RUST_LOG: INFO
+          RUST_LOG: info,workspaces=warn
           RUST_BACKTRACE: 1
