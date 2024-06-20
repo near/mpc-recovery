@@ -446,7 +446,7 @@ impl CryptographicProtocol for RunningState {
             )
             .await
         {
-            tracing::warn!(?err, "running: failed to publish signatures");
+            tracing::error!(?err, "running: failed to publish signatures");
         }
         drop(signature_manager);
         let failures = messages

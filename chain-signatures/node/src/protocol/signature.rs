@@ -13,7 +13,6 @@ use crypto_shared::{derive_key, PublicKey};
 use crypto_shared::{ScalarExt, SerializableScalar};
 use k256::{Scalar, Secp256k1};
 use mpc_contract::SignatureRequest;
-use near_primitives::views::FinalExecutionStatus;
 use rand::rngs::StdRng;
 use rand::seq::{IteratorRandom, SliceRandom};
 use rand::SeedableRng;
@@ -532,18 +531,23 @@ impl SignatureManager {
         signer: &T,
         mpc_contract_id: &AccountId,
         my_account_id: &AccountId,
-    ) -> Result<(), near_fetch::Error> {
+    ) -> Result<(), Vec<near_fetch::Error>> {
+        let mut errors = Vec::new();
         for (receipt_id, request, time_added, signature) in self.signatures.drain(..) {
             let expected_public_key = derive_key(self.public_key, request.epsilon.scalar);
             // We do this here, rather than on the client side, so we can use the ecrecover system function on NEAR to validate our signature
-            let signature = into_eth_sig(
+            let Ok(signature) = into_eth_sig(
                 &expected_public_key,
                 &signature.big_r,
                 &signature.s,
                 Scalar::from_bytes(&request.payload_hash),
-            )
-            .map_err(|_| near_fetch::Error::InvalidArgs("Failed to generate a recovery ID"))?;
-            let response = rpc_client
+            ) else {
+                errors.push(near_fetch::Error::InvalidArgs(
+                    "Failed to generate a recovery ID",
+                ));
+                break;
+            };
+            let response = match rpc_client
                 .call(signer, mpc_contract_id, "respond")
                 .args_json(serde_json::json!({
                     "request": request,
@@ -552,22 +556,14 @@ impl SignatureManager {
                 .max_gas()
                 .retry_exponential(10, 5)
                 .transact()
-                .await?;
-
-            let status = response.status();
-
-            // Check we returned successfully
-            let FinalExecutionStatus::SuccessValue(payload) = status else {
-                let err = format!("Publish transaction failed, {:?}", response);
-                tracing::error!(err);
-                return Err(near_fetch::Error::RpcReturnedInvalidData(err));
+                .await
+            {
+                Ok(response) => response,
+                Err(err) => {
+                    errors.push(err);
+                    break;
+                }
             };
-
-            // Check that the return type is correct
-            let _: () = serde_json::from_slice(&payload).map_err(|e| {
-                tracing::error!("Response deserialization failed, {e} {payload:?}");
-                near_fetch::Error::Serialization(e)
-            })?;
 
             crate::metrics::NUM_SIGN_SUCCESS
                 .with_label_values(&[my_account_id.as_str()])
@@ -580,9 +576,21 @@ impl SignatureManager {
                     .with_label_values(&[my_account_id.as_str()])
                     .inc();
             }
-            tracing::info!(%receipt_id, big_r = signature.big_r.affine_point.to_base58(), s = ?signature.s, status = ?response.status(), "published signature response");
+
+            tracing::info!(%receipt_id, bi_r = signature.big_r.affine_point.to_base58(), s = ?signature.s, status = ?response.status(), "published signature response");
+
+            // Check we returned successfully
+            // We currently just log these errors because near fetch has made a good effort of sending them
+            // It might be worth catagorizing recoverable and unrecoverable errors and doing a retry later
+            if let Err(err) = response.json::<()>() {
+                errors.push(err);
+            };
         }
-        Ok(())
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
     }
 
     /// Check whether or not the signature has been completed with this presignature_id.
