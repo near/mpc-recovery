@@ -30,7 +30,7 @@ hyper-rustls = { version = "=0.24", features = ["http2"] }
 k256 = { version = "0.13.1", features = ["sha256", "ecdsa", "serde"] }
 local-ip-address = "0.5.4"
 rand = "0.8"
-reqwest = { version = "0.11.16", features = ["json"] }
+reqwest = { version = "0.11.16", features = ["blocking", "json"] }
 sha2 = "0.10.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -44,8 +44,8 @@ url = { version = "2.4.0", features = ["serde"] }
 near-account-id = "1.0.0"
 near-crypto = "0.21.2"
 near-fetch = "0.3.1"
-near-lake-framework = { git = "https://github.com/near/near-lake-framework-rs", branch = "dmd/bump-dependencies" }
-near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs", branch = "dmd/bump-dependencies" }
+near-lake-framework = { git = "https://github.com/near/near-lake-framework-rs", rev = "e0b28590ffe6b6441987d302843d45bef55ef50e" }
+near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs", rev = "e0b28590ffe6b6441987d302843d45bef55ef50e" }
 near-primitives = "0.21.2"
 near-sdk = { git = "https://github.com/near/near-sdk-rs.git", rev = "5a9acaedc95c5721d2088f263bc99e3de574decf", features = ["legacy", "unit-testing"] }
 
