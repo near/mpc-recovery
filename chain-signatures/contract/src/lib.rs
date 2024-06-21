@@ -339,8 +339,8 @@ impl VersionedMpcContract {
     pub fn sign_on_finish(
         &mut self,
         yield_resume_request_index: u64,
-        #[callback_result] signature: Result<String, PromiseError>,
-    ) -> String {
+        #[callback_result] signature: Result<SignatureResponse, PromiseError>,
+    ) -> SignatureResponse {
         match self {
             Self::V0(_) => env::panic_str("Contract V0 should not ever call sign on finish"),
             Self::V1(mpc_contract) => {
