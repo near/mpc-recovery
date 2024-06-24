@@ -7,3 +7,11 @@ output "available_zones" {
 output "self_links" {
   value = google_compute_instance_from_template.compute_instance[*].self_link
 }
+
+output "hostname" {
+  value = local.hostname
+}
+
+output "ip_address" {
+  value = local.static_ips
+}

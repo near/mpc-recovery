@@ -12,6 +12,12 @@ terraform {
   }
 }
 
+locals {
+  instance_ip_map = {
+    for idx, instance in module.instances : instance["hostname"] => google_compute_global_address.external_ips[idx].address
+  }
+}
+
 # These data blocks grab the values from your GCP secret manager, please adjust secret names as desired
 data "google_secret_manager_secret_version" "account_sk_secret_id" {
   count   = length(var.node_configs)
