@@ -8,8 +8,6 @@ const CONTRACT_FILE_PATH: &str = "../../target/wasm32-unknown-unknown/release/mp
 
 #[tokio::test]
 async fn test_contract_can_not_be_reinitialized() -> anyhow::Result<()> {
-
-    std::env::set_var("NEAR_SANDBOX_BIN_PATH", "/Users/xiangyiz/.near/near-sandbox-1.40.0/near-sandbox");
     let worker = near_workspaces::sandbox().await?;
     let wasm = std::fs::read(CONTRACT_FILE_PATH)?;
     let contract = worker.dev_deploy(&wasm).await?;
@@ -20,8 +18,7 @@ async fn test_contract_can_not_be_reinitialized() -> anyhow::Result<()> {
         .call("init")
         .args_json(serde_json::json!({
             "threshold": 2,
-            "candidates": candidates,
-            "contract_version": "V1"
+            "candidates": candidates
         }))
         .transact()
         .await?;
@@ -32,8 +29,7 @@ async fn test_contract_can_not_be_reinitialized() -> anyhow::Result<()> {
         .call("init")
         .args_json(serde_json::json!({
             "threshold": 2,
-            "candidates": candidates,
-            "contract_version": "V1"
+            "candidates": candidates
         }))
         .transact()
         .await?;
@@ -45,8 +41,6 @@ async fn test_contract_can_not_be_reinitialized() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_contract_sign_respond_work_for_v1() -> anyhow::Result<()> {
-
-    std::env::set_var("NEAR_SANDBOX_BIN_PATH", "/Users/xiangyiz/.near/near-sandbox-1.40.0/near-sandbox");
     let worker = near_workspaces::sandbox().await?;
     let wasm = std::fs::read(CONTRACT_FILE_PATH)?;
     let contract = worker.dev_deploy(&wasm).await?;
@@ -58,7 +52,6 @@ async fn test_contract_sign_respond_work_for_v1() -> anyhow::Result<()> {
         .args_json(serde_json::json!({
             "threshold": 2,
             "participants": candidates,
-            "contract_version": "V1",
             "epoch": 0,
             "public_key": "secp256k1:54hU5wcCmVUPFWLDALXMh1fFToZsVXrx9BbTbHzSfQq1Kd1rJZi52iPa4QQxo6s5TgjWqgpY8HamYuUDzG6fAaUq"
 

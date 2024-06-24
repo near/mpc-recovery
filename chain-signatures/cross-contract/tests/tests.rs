@@ -8,15 +8,13 @@ const MPC_CONTRACT_FILE_PATH: &str = "../../target/wasm32-unknown-unknown/releas
 const CROSS_CONTRACT_FILE_PATH: &str = "/Users/xiangyiz/workspace/near/mpc-recovery/chain-signatures/cross-contract/target/wasm32-unknown-unknown/release/cross_contract.wasm";
 
 #[tokio::test]
-async fn test_contract_sign_respond_work_for_v1() -> anyhow::Result<()> {
-
-    std::env::set_var("NEAR_SANDBOX_BIN_PATH", "/Users/xiangyiz/.near/near-sandbox-1.40.0/near-sandbox");
+async fn test_cross_contract_sign_respond_work() -> anyhow::Result<()> {
     let worker = near_workspaces::sandbox().await?;
 
     // Deploy mpc contract
     let mpc_contract_wasm = std::fs::read(MPC_CONTRACT_FILE_PATH)?;
     let mpc_contract = worker.dev_deploy(&mpc_contract_wasm).await?;
-    // Deploy contract for testing
+    // Deploy cross contract for testing
     let contract_wasm = std::fs::read(CROSS_CONTRACT_FILE_PATH)?;
     let contract = worker.dev_deploy(&contract_wasm).await?;
 
@@ -27,7 +25,6 @@ async fn test_contract_sign_respond_work_for_v1() -> anyhow::Result<()> {
         .args_json(serde_json::json!({
             "threshold": 2,
             "participants": candidates,
-            "contract_version": "V1",
             "epoch": 0,
             "public_key": "secp256k1:54hU5wcCmVUPFWLDALXMh1fFToZsVXrx9BbTbHzSfQq1Kd1rJZi52iPa4QQxo6s5TgjWqgpY8HamYuUDzG6fAaUq"
 
@@ -63,7 +60,7 @@ async fn test_contract_sign_respond_work_for_v1() -> anyhow::Result<()> {
         .transact_async()
         .await?;
 
-    std::thread::sleep(std::time::Duration::from_secs(10));
+    std::thread::sleep(std::time::Duration::from_secs(2));
     let respond_result = mpc_contract
         .call("respond")
         .args_json(serde_json::json!({

@@ -9,8 +9,7 @@ use near_sdk::collections::LookupMap;
 use near_sdk::serde::{Deserialize, Serialize};
 
 use near_sdk::{
-    env, log, near_bindgen, AccountId, BorshStorageKey, CryptoHash, Gas, GasWeight, NearToken, PromiseError,Promise,
-    PromiseOrValue, PublicKey,
+    env, log, near_bindgen, AccountId, BorshStorageKey, CryptoHash, Gas, GasWeight, NearToken, PromiseError, PublicKey,
 };
 
 use primitives::{
@@ -81,14 +80,7 @@ pub struct YieldResumeRequest {
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, Debug)]
 pub enum VersionedMpcContract {
-    V0(MpcContract),
-    V1(MpcContractV1),
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub enum ContractVersion {
-    V0,
-    V1,
+    V0(MpcContract)
 }
 
 impl Default for VersionedMpcContract {
@@ -118,13 +110,6 @@ impl SignatureRequest {
 #[derive(BorshDeserialize, BorshSerialize, Debug)]
 pub struct MpcContract {
     protocol_state: ProtocolContractState,
-    pending_requests: LookupMap<SignatureRequest, Option<SignatureResponse>>,
-    request_counter: u32,
-}
-
-#[derive(BorshDeserialize, BorshSerialize, Debug)]
-pub struct MpcContractV1 {
-    protocol_state: ProtocolContractState,
     pending_requests: LookupMap<SignatureRequest, Option<CryptoHash>>,
     request_counter: u32,
     yield_resume_requests: LookupMap<u64, YieldResumeRequest>,
@@ -132,49 +117,6 @@ pub struct MpcContractV1 {
 }
 
 impl MpcContract {
-    fn add_request(&mut self, request: &SignatureRequest, result: &Option<SignatureResponse>) {
-        if self.request_counter > 8 {
-            env::panic_str("Too many pending requests. Please, try again later.");
-        }
-        if !self.pending_requests.contains_key(request) {
-            self.request_counter += 1;
-        }
-        self.pending_requests.insert(request, result);
-    }
-
-    fn remove_request(&mut self, payload: &SignatureRequest) {
-        self.pending_requests.remove(payload);
-        self.request_counter -= 1;
-    }
-
-    fn add_sign_result(&mut self, payload: &SignatureRequest, signature: SignatureResponse) {
-        if self.pending_requests.contains_key(payload) {
-            self.pending_requests.insert(payload, &Some(signature));
-        }
-    }
-
-    fn clean_payloads(&mut self, requests: Vec<SignatureRequest>, counter: u32) {
-        log!("clean_payloads");
-        for payload in requests.iter() {
-            self.pending_requests.remove(payload);
-        }
-        self.request_counter = counter;
-    }
-
-    pub fn init(threshold: usize, candidates: BTreeMap<AccountId, CandidateInfo>) -> Self {
-        MpcContract {
-            protocol_state: ProtocolContractState::Initializing(InitializingContractState {
-                candidates: Candidates { candidates },
-                threshold,
-                pk_votes: PkVotes::new(),
-            }),
-            pending_requests: LookupMap::new(StorageKey::PendingRequests),
-            request_counter: 0,
-        }
-    }
-}
-
-impl MpcContractV1 {
     fn add_request(
         &mut self,
         request: &SignatureRequest,
@@ -218,7 +160,7 @@ impl MpcContractV1 {
     }
 
     pub fn init(threshold: usize, candidates: BTreeMap<AccountId, CandidateInfo>) -> Self {
-        MpcContractV1 {
+        MpcContract {
             protocol_state: ProtocolContractState::Initializing(InitializingContractState {
                 candidates: Candidates { candidates },
                 threshold,
@@ -276,18 +218,6 @@ impl VersionedMpcContract {
             self.mark_request_pending(&request);
             match self {
                 Self::V0(mpc_contract) => {
-                    log!(
-                        "sign: predecessor={}, payload={:?}, path={:?}, key_version={}",
-                        predecessor,
-                        payload,
-                        path,
-                        key_version
-                    );
-                    //what is this for?
-                    log!(&serde_json::to_string(&near_sdk::env::random_seed_array()).unwrap());
-                    Self::ext(env::current_account_id()).sign_helper(request, 0);
-                }
-                Self::V1(mpc_contract) => {
                     let index = mpc_contract.next_available_yield_resume_request_index;
                     mpc_contract.next_available_yield_resume_request_index += 1;
 
@@ -341,8 +271,7 @@ impl VersionedMpcContract {
         #[callback_result] signature: Result<String, PromiseError>,
     ) -> String {
         match self {
-            Self::V0(_) => env::panic_str("Contract V0 should not ever call sign on finish"),
-            Self::V1(mpc_contract) => {
+            Self::V0(mpc_contract) => {
                 // Clean up the local state
                 mpc_contract.remove_request_by_yield_resume_index(yield_resume_request_index);
 
@@ -352,65 +281,6 @@ impl VersionedMpcContract {
                 }
             }
         }
-    }
-
-    #[private]
-    pub fn sign_helper(
-        &mut self,
-        request: SignatureRequest,
-        depth: usize,
-    ) -> PromiseOrValue<SignatureResponse> {
-        match self {
-            Self::V0(mpc_contract) => {
-                if let Some(signature_opt) = mpc_contract.pending_requests.get(&request) {
-                    match signature_opt {
-                        Some(signature) => {
-                            log!(
-                                "sign_helper: signature ready: {:?}, depth: {:?}",
-                                signature,
-                                depth
-                            );
-                            mpc_contract.remove_request(&request);
-                            PromiseOrValue::Value(signature)
-                        }
-                        None => {
-                            // Make sure we have enough gas left to do 1 more call and clean up afterwards
-                            // Observationally 30 calls < 300 TGas so 2 calls < 20 TGas
-                            // We keep one call back so we can cleanup then call panic on the next call
-                            // Start cleaning up if there's less than 25 teragas left regardless of how deep you are.
-                            if depth > 30 || env::prepaid_gas() < Gas::from_tgas(25) {
-                                mpc_contract.remove_request(&request);
-                                let self_id = env::current_account_id();
-                                PromiseOrValue::Promise(
-                                    Self::ext(self_id).fail_helper(
-                                        "Signature was not provided in time. Please, try again."
-                                            .to_string(),
-                                    ),
-                                )
-                            } else {
-                                log!(&format!(
-                                    "sign_helper: signature not ready yet (depth={})",
-                                    depth
-                                ));
-                                let account_id = env::current_account_id();
-                                PromiseOrValue::Promise(
-                                    Self::ext(account_id).sign_helper(request, depth + 1),
-                                )
-                            }
-                        }
-                    }
-                } else {
-                    env::panic_str("unexpected request")
-                }
-            }
-            Self::V1(_) => env::panic_str("V1 contract should not call sign_helper function."),
-        }
-    }
-
-    /// This allows us to return a panic, without rolling back the state from this call
-    #[private]
-    pub fn fail_helper(&mut self, message: String) {
-        env::panic_str(&message);
     }
 
     pub fn respond(&mut self, request: SignatureRequest, response: String) {
@@ -454,10 +324,6 @@ impl VersionedMpcContract {
 
             match self {
                 Self::V0(mpc_contract) => {
-                    // mpc_contract.add_sign_result(&request, response);
-                    env::panic_str("not work");
-                }
-                Self::V1(mpc_contract) => {
                     if let Some(Some(data_id)) = mpc_contract.pending_requests.get(&request) {
                         env::promise_yield_resume(
                             &data_id,
@@ -727,21 +593,16 @@ impl VersionedMpcContract {
     #[init]
     pub fn init(
         threshold: usize,
-        candidates: BTreeMap<AccountId, CandidateInfo>,
-        contract_version: ContractVersion,
+        candidates: BTreeMap<AccountId, CandidateInfo>
     ) -> Self {
         log!(
-            "init: signer={}, treshhold={}, candidates={}, contract_version={:?}",
+            "init: signer={}, treshhold={}, candidates={}",
             env::signer_account_id(),
             threshold,
-            serde_json::to_string(&candidates).unwrap(),
-            contract_version
+            serde_json::to_string(&candidates).unwrap()
         );
 
-        match contract_version {
-            ContractVersion::V0 => Self::V0(MpcContract::init(threshold, candidates)),
-            ContractVersion::V1 => Self::V1(MpcContractV1::init(threshold, candidates)),
-        }
+        Self::V0(MpcContract::init(threshold, candidates))
     }
 
     // This function can be used to transfer the MPC network to a new contract.
@@ -750,55 +611,37 @@ impl VersionedMpcContract {
         epoch: u64,
         participants: BTreeMap<AccountId, ParticipantInfo>,
         threshold: usize,
-        public_key: PublicKey,
-        contract_version: ContractVersion,
+        public_key: PublicKey
     ) -> Self {
         log!(
-            "init_running: signer={}, epoch={}, participants={}, threshold={}, public_key={:?}, contract_version={:?}",
+            "init_running: signer={}, epoch={}, participants={}, threshold={}, public_key={:?}",
             env::signer_account_id(),
             epoch,
             serde_json::to_string(&participants).unwrap(),
             threshold,
-            public_key,
-            contract_version
+            public_key
         );
 
-        match contract_version {
-            ContractVersion::V0 => Self::V0(MpcContract {
-                protocol_state: ProtocolContractState::Running(RunningContractState {
-                    epoch,
-                    participants: Participants { participants },
-                    threshold,
-                    public_key,
-                    candidates: Candidates::new(),
-                    join_votes: Votes::new(),
-                    leave_votes: Votes::new(),
-                }),
-                pending_requests: LookupMap::new(StorageKey::PendingRequests),
-                request_counter: 0,
+        Self::V0(MpcContract {
+            protocol_state: ProtocolContractState::Running(RunningContractState {
+                epoch,
+                participants: Participants { participants },
+                threshold,
+                public_key,
+                candidates: Candidates::new(),
+                join_votes: Votes::new(),
+                leave_votes: Votes::new(),
             }),
-            ContractVersion::V1 => Self::V1(MpcContractV1 {
-                protocol_state: ProtocolContractState::Running(RunningContractState {
-                    epoch,
-                    participants: Participants { participants },
-                    threshold,
-                    public_key,
-                    candidates: Candidates::new(),
-                    join_votes: Votes::new(),
-                    leave_votes: Votes::new(),
-                }),
-                pending_requests: LookupMap::new(StorageKey::PendingRequests),
-                request_counter: 0,
-                yield_resume_requests: LookupMap::new(StorageKey::YieldResumeRequests),
-                next_available_yield_resume_request_index: 0u64,
-            }),
-        }
+            pending_requests: LookupMap::new(StorageKey::PendingRequests),
+            request_counter: 0,
+            yield_resume_requests: LookupMap::new(StorageKey::YieldResumeRequests),
+            next_available_yield_resume_request_index: 0u64,
+        })
     }
 
     pub fn state(&self) -> &ProtocolContractState {
         match self {
-            Self::V0(mpc_contract) => &mpc_contract.protocol_state,
-            Self::V1(mpc_contract) => &mpc_contract.protocol_state,
+            Self::V0(mpc_contract) => &mpc_contract.protocol_state
         }
     }
 
@@ -809,7 +652,7 @@ impl VersionedMpcContract {
         for key in keys.iter() {
             env::storage_remove(&key.0);
         }
-        Self::V1(MpcContractV1 {
+        Self::V0(MpcContract {
             protocol_state: ProtocolContractState::NotInitialized,
             pending_requests: LookupMap::new(StorageKey::PendingRequests),
             request_counter: 0,
@@ -824,9 +667,6 @@ impl VersionedMpcContract {
             Self::V0(mpc_contract) => {
                 mpc_contract.clean_payloads(requests, counter);
             }
-            Self::V1(mpc_contract) => {
-                mpc_contract.clean_payloads(requests, counter);
-            }
         }
     }
 
@@ -835,31 +675,25 @@ impl VersionedMpcContract {
             Self::V0(mpc_contract) => {
                 mpc_contract.add_request(request, &None);
             }
-            Self::V1(mpc_contract) => {
-                mpc_contract.add_request(request, &None);
-            }
         }
     }
 
     fn mutable_state(&mut self) -> &mut ProtocolContractState {
         match self {
-            Self::V0(ref mut mpc_contract) => &mut mpc_contract.protocol_state,
-            Self::V1(ref mut mpc_contract) => &mut mpc_contract.protocol_state,
+            Self::V0(ref mut mpc_contract) => &mut mpc_contract.protocol_state
         }
     }
 
     fn request_already_exists(&self, request: &SignatureRequest) -> bool {
         match self {
-            Self::V0(mpc_contract) => mpc_contract.pending_requests.contains_key(request),
-            Self::V1(mpc_contract) => mpc_contract.pending_requests.contains_key(request),
+            Self::V0(mpc_contract) => mpc_contract.pending_requests.contains_key(request)
         }
     }
 
     fn signature_deposit(&self) -> u128 {
         const CHEAP_REQUESTS: u32 = 3;
         let pending_requests = match self {
-            Self::V0(mpc_contract) => mpc_contract.request_counter,
-            Self::V1(mpc_contract) => mpc_contract.request_counter,
+            Self::V0(mpc_contract) => mpc_contract.request_counter
         };
         match pending_requests {
             0..=CHEAP_REQUESTS => 1,
