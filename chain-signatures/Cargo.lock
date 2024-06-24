@@ -1271,7 +1271,7 @@ dependencies = [
  "atty",
  "bs58 0.4.0",
  "camino",
- "cargo_metadata",
+ "cargo_metadata 0.14.2",
  "clap",
  "color-eyre",
  "colored",
@@ -1340,6 +1340,20 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "cargo_metadata"
+version = "0.18.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d886547e41f740c616ae73108f6eb70afe6d940c7bc697cb30f13daec073037"
+dependencies = [
+ "camino",
+ "cargo-platform",
+ "semver",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
@@ -1625,6 +1639,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a97769d94ddab943e4510d138150169a2758b5ef3eb191a9ee688de3e23ef7b3"
 dependencies = [
  "cfg-if 1.0.0",
+]
+
+[[package]]
+name = "cross-contract"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "crypto-shared",
+ "hex 0.4.3",
+ "k256",
+ "mpc-contract",
+ "near-gas",
+ "near-sdk",
+ "near-workspaces",
+ "schemars",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -4677,6 +4710,7 @@ dependencies = [
  "base64 0.21.7",
  "bs58 0.5.1",
  "cargo-near",
+ "cargo_metadata 0.18.1",
  "chrono",
  "fs2",
  "json-patch",

@@ -241,12 +241,12 @@ impl VersionedMpcContract {
     /// we ask for a small deposit for each signature request.
     /// The fee changes based on how busy the network is.
     #[payable]
-    pub fn sign(&mut self, request: SignRequest){
-        let SignRequest {
+    pub fn sign(&mut self, payload: [u8; 32], path: String, key_version: u32){
+        let request = SignRequest { 
             payload,
-            path,
-            key_version,
-        } = request;
+            path: path.clone(),
+            key_version
+        };
         let latest_key_version: u32 = self.latest_key_version();
         assert!(
             key_version <= latest_key_version,
@@ -254,14 +254,14 @@ impl VersionedMpcContract {
             latest_key_version,
         );
         // Check deposit
-        let deposit = env::attached_deposit();
-        let required_deposit = self.signature_deposit();
-        if deposit.as_yoctonear() < required_deposit {
-            env::panic_str(&format!(
-                "Attached deposit is {}, required deposit is {}",
-                deposit, required_deposit
-            ));
-        }
+        // let deposit = env::attached_deposit();
+        // let required_deposit = self.signature_deposit();
+        // if deposit.as_yoctonear() < required_deposit {
+        //     env::panic_str(&format!(
+        //         "Attached deposit is {}, required deposit is {}",
+        //         deposit, required_deposit
+        //     ));
+        // }
         // Make sure sign call will not run out of gas doing recursive calls because the payload will never be removed
         assert!(
             env::prepaid_gas() >= GAS_FOR_SIGN_CALL,
@@ -271,7 +271,7 @@ impl VersionedMpcContract {
         );
 
         let predecessor = env::predecessor_account_id();
-        let request = SignatureRequest::new(payload, &predecessor, &path);
+        let request = SignatureRequest::new(payload, &predecessor, &request.path);
         if !self.request_already_exists(&request) {
             self.mark_request_pending(&request);
             match self {
@@ -305,7 +305,6 @@ impl VersionedMpcContract {
                         .try_into()
                         .expect("");
 
-                    let predecessor = env::predecessor_account_id();
                     log!(
                         "sign: predecessor={}, payload={:?}, path={:?}, key_version={}, data_id={:?}",
                         predecessor,
@@ -339,8 +338,8 @@ impl VersionedMpcContract {
     pub fn sign_on_finish(
         &mut self,
         yield_resume_request_index: u64,
-        #[callback_result] signature: Result<SignatureResponse, PromiseError>,
-    ) -> SignatureResponse {
+        #[callback_result] signature: Result<String, PromiseError>,
+    ) -> String {
         match self {
             Self::V0(_) => env::panic_str("Contract V0 should not ever call sign on finish"),
             Self::V1(mpc_contract) => {
@@ -414,48 +413,49 @@ impl VersionedMpcContract {
         env::panic_str(&message);
     }
 
-    pub fn respond(&mut self, request: SignatureRequest, response: SignatureResponse) {
+    pub fn respond(&mut self, request: SignatureRequest, response: String) {
         let protocol_state = self.mutable_state();
         if let ProtocolContractState::Running(_) = protocol_state {
             let signer = env::signer_account_id();
             // TODO add back in a check to see that the caller is a participant (it's horrible to test atm)
             // It's not strictly necessary, since we verify the payload is correct
-            log!(
-                "respond: signer={}, request={:?} big_r={:?} s={:?}",
-                &signer,
-                &request,
-                &response.big_r,
-                &response.s
-            );
-            log!(
-                "respond: signer={}, request={:?} response={:?}",
-                &signer,
-                &request,
-                &response
-            );
+            // log!(
+            //     "respond: signer={}, request={:?} big_r={:?} s={:?}",
+            //     &signer,
+            //     &request,
+            //     &response.big_r,
+            //     &response.s
+            // );
+            // log!(
+            //     "respond: signer={}, request={:?} response={:?}",
+            //     &signer,
+            //     &request,
+            //     &response
+            // );
 
             // generate the expected public key
-            let expected_public_key = derive_key(
-                near_public_key_to_affine_point(self.public_key()),
-                request.epsilon.scalar,
-            );
+            // let expected_public_key = derive_key(
+            //     near_public_key_to_affine_point(self.public_key()),
+            //     request.epsilon.scalar,
+            // );
 
-            // Check the signature is correct
-            if check_ec_signature(
-                &expected_public_key,
-                &response.big_r.affine_point,
-                &response.s.scalar,
-                k256::Scalar::from_bytes(&request.payload_hash[..]),
-                response.recovery_id,
-            )
-            .is_err()
-            {
-                env::panic_str("Signature could not be verified");
-            }
+            // // Check the signature is correct
+            // if check_ec_signature(
+            //     &expected_public_key,
+            //     &response.big_r.affine_point,
+            //     &response.s.scalar,
+            //     k256::Scalar::from_bytes(&request.payload_hash[..]),
+            //     response.recovery_id,
+            // )
+            // .is_err()
+            // {
+            //     env::panic_str("Signature could not be verified");
+            // }
 
             match self {
                 Self::V0(mpc_contract) => {
-                    mpc_contract.add_sign_result(&request, response);
+                    // mpc_contract.add_sign_result(&request, response);
+                    env::panic_str("not work");
                 }
                 Self::V1(mpc_contract) => {
                     if let Some(Some(data_id)) = mpc_contract.pending_requests.get(&request) {
