@@ -70,7 +70,7 @@ variable "node_configs" {
     cipher_sk_secret_id  = string
     sign_sk_secret_id    = string
     sk_share_secret_id   = string
-    # ip_address           = string
+    ip_address           = string
   }))
 }
 

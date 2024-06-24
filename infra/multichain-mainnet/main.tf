@@ -67,7 +67,7 @@ resource "google_compute_global_address" "external_ips" {
   count        = length(var.node_configs)
   name         = "multichain-mainnet-${count.index}"
   address_type = "EXTERNAL"
-  # address      = var.node_configs["${count.index}"].ip_address
+  address      = var.node_configs["${count.index}"].ip_address
 }
 
 module "mig_template" {
@@ -80,7 +80,7 @@ module "mig_template" {
     email  = "mpc-recovery@pagoda-discovery-platform-prod.iam.gserviceaccount.com",
     scopes = ["cloud-platform"]
   }
-  name_prefix          = "multichain-mainnet-${count.index}"
+  name_prefix          = "multichain-mainnet-dev-${count.index}"
   source_image_family  = "cos-stable"
   source_image_project = "cos-cloud"
   machine_type         = "n2-standard-2"
@@ -105,7 +105,7 @@ module "instances" {
   source     = "../modules/instance-from-tpl"
   region     = var.region
   project_id = var.project_id
-  hostname   = "multichain-mainnet-${count.index}"
+  hostname   = "multichain-mainnet-dev-${count.index}"
   network    = "projects/pagoda-shared-infrastructure/global/networks/prod"
   subnetwork = "projects/pagoda-shared-infrastructure/regions/us-central1/subnetworks/prod-us-central1"
 
@@ -114,7 +114,7 @@ module "instances" {
 }
 
 resource "google_compute_health_check" "multichain_healthcheck" {
-  name = "multichain-mainnet-healthcheck"
+  name = "multichain-mainnet-dev-healthcheck"
 
   http_health_check {
     port         = 3000
@@ -125,7 +125,7 @@ resource "google_compute_health_check" "multichain_healthcheck" {
 
 resource "google_compute_global_forwarding_rule" "default" {
   count                 = length(var.node_configs)
-  name                  = "multichain-mainnet-rule-${count.index}"
+  name                  = "multichain-mainnet-dev-rule-${count.index}"
   target                = google_compute_target_http_proxy.default[count.index].id
   port_range            = "80"
   load_balancing_scheme = "EXTERNAL"
@@ -134,19 +134,19 @@ resource "google_compute_global_forwarding_rule" "default" {
 
 resource "google_compute_target_http_proxy" "default" {
   count       = length(var.node_configs)
-  name        = "multichain-mainnet-target-proxy-${count.index}"
+  name        = "multichain-mainnet-dev-target-proxy-${count.index}"
   description = "a description"
   url_map     = google_compute_url_map.default[count.index].id
 }
 
 resource "google_compute_url_map" "default" {
   count           = length(var.node_configs)
-  name            = "multichain-mainnet-url-map-${count.index}"
+  name            = "multichain-mainnet-dev-url-map-${count.index}"
   default_service = google_compute_backend_service.multichain_backend.id
 }
 
 resource "google_compute_backend_service" "multichain_backend" {
-  name                  = "multichain-service-mainnet"
+  name                  = "multichain-service-mainnet-dev"
   load_balancing_scheme = "EXTERNAL"
 
   backend {
@@ -157,7 +157,7 @@ resource "google_compute_backend_service" "multichain_backend" {
 }
 
 resource "google_compute_instance_group" "multichain_group" {
-  name      = "multichain-instance-group-mainnet"
+  name      = "multichain-instance-group-mainnet-dev"
   instances = module.instances[*].self_links[0]
 
   zone = "us-central1-a"

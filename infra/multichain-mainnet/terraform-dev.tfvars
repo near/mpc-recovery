@@ -7,7 +7,7 @@ node_configs = [
     cipher_sk_secret_id  = "multichain-cipher-sk-mainnet-0"
     sign_sk_secret_id    = "multichain-sign-sk-mainnet-0"
     sk_share_secret_id   = "multichain-sk-share-mainnet-0"
-    # ip_address           = "10.100.0.56"
+    ip_address           = "34.49.10.185"
   },
   {
     account              = "multichain-node-dev-1.near"
@@ -16,7 +16,7 @@ node_configs = [
     cipher_sk_secret_id  = "multichain-cipher-sk-mainnet-1"
     sign_sk_secret_id    = "multichain-sign-sk-mainnet-1"
     sk_share_secret_id   = "multichain-sk-share-mainnet-1"
-    # ip_address           = "10.100.0.81"
+    ip_address           = "34.49.80.96"
   },
   {
     account              = "multichain-node-dev-2.near"
@@ -25,7 +25,7 @@ node_configs = [
     cipher_sk_secret_id  = "multichain-cipher-sk-mainnet-2"
     sign_sk_secret_id    = "multichain-sign-sk-mainnet-2"
     sk_share_secret_id   = "multichain-sk-share-mainnet-2"
-    # ip_address           = "10.100.0.57"
+    ip_address           = "34.117.135.210"
   },
   {
     account              = "multichain-node-dev-3.near"
@@ -34,7 +34,7 @@ node_configs = [
     cipher_sk_secret_id  = "multichain-cipher-sk-mainnet-3"
     sign_sk_secret_id    = "multichain-sign-sk-mainnet-3"
     sk_share_secret_id   = "multichain-sk-share-mainnet-3"
-    # ip_address           = "10.100.0.129"
+    ip_address           = "34.95.93.7"
   },
   {
     account              = "multichain-node-dev-4.near"
@@ -43,7 +43,7 @@ node_configs = [
     cipher_sk_secret_id  = "multichain-cipher-sk-mainnet-4"
     sign_sk_secret_id    = "multichain-sign-sk-mainnet-4"
     sk_share_secret_id   = "multichain-sk-share-mainnet-4"
-    # ip_address           = "10.100.0.124"
+    ip_address           = "34.111.141.46"
   },
   {
     account              = "multichain-node-dev-5.near"
@@ -52,7 +52,7 @@ node_configs = [
     cipher_sk_secret_id  = "multichain-cipher-sk-mainnet-5"
     sign_sk_secret_id    = "multichain-sign-sk-mainnet-5"
     sk_share_secret_id   = "multichain-sk-share-mainnet-5"
-    # ip_address           = "10.100.0.101"
+    ip_address           = "34.102.184.158"
   },
   {
     account              = "multichain-node-dev-6.near"
@@ -61,7 +61,7 @@ node_configs = [
     cipher_sk_secret_id  = "multichain-cipher-sk-mainnet-6"
     sign_sk_secret_id    = "multichain-sign-sk-mainnet-6"
     sk_share_secret_id   = "multichain-sk-share-mainnet-6"
-    # ip_address           = "10.100.0.122"
+    ip_address           = "34.117.128.65"
   },
   {
     account              = "multichain-node-dev-7.near"
@@ -70,6 +70,6 @@ node_configs = [
     cipher_sk_secret_id  = "multichain-cipher-sk-mainnet-7"
     sign_sk_secret_id    = "multichain-sign-sk-mainnet-7"
     sk_share_secret_id   = "multichain-sk-share-mainnet-7"
-    # ip_address           = "10.100.0.123"
+    ip_address           = "34.160.231.173"
   },
 ]
