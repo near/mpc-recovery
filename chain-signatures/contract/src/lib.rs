@@ -26,6 +26,9 @@ const DATA_ID_REGISTER: u64 = 0;
 // Prepaid gas for a `sign_on_finish` call
 const SIGN_ON_FINISH_CALL_GAS: Gas = Gas::from_tgas(5);
 
+// Prepaid gas for a `log_signature` call
+const CHAINED_CALL_GAS: Gas = Gas::from_tgas(5);
+
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug)]
 pub struct InitializingContractState {
     pub candidates: Candidates,
@@ -123,9 +126,9 @@ impl MpcContract {
         request: &SignatureRequest,
         yield_resume_data_id: &Option<CryptoHash>,
     ) {
-        if self.request_counter > 8 {
-            env::panic_str("Too many pending requests. Please, try again later.");
-        }
+        // if self.request_counter > 1000 {
+        //     env::panic_str("Too many pending requests. Please, try again later.");
+        // }
         if !self.pending_requests.contains_key(request) {
             self.request_counter += 1;
         }
@@ -196,15 +199,15 @@ impl VersionedMpcContract {
             "This version of the signer contract doesn't support versions greater than {}",
             latest_key_version,
         );
-        // Check deposit
-        let deposit = env::attached_deposit();
-        let required_deposit = self.signature_deposit();
-        if deposit.as_yoctonear() < required_deposit {
-            env::panic_str(&format!(
-                "Attached deposit is {}, required deposit is {}",
-                deposit, required_deposit
-            ));
-        }
+        // // Check deposit
+        // let deposit = env::attached_deposit();
+        // let required_deposit = self.signature_deposit();
+        // if deposit.as_yoctonear() < required_deposit {
+        //     env::panic_str(&format!(
+        //         "Attached deposit is {}, required deposit is {}",
+        //         deposit, required_deposit
+        //     ));
+        // }
         // Make sure sign call will not run out of gas doing recursive calls because the payload will never be removed
         assert!(
             env::prepaid_gas() >= GAS_FOR_SIGN_CALL,
@@ -255,6 +258,15 @@ impl VersionedMpcContract {
                             signature_request: request,
                         },
                     );
+
+                    env::promise_then(
+                        yield_promise,
+                        env::current_account_id(),
+                        "log_signature",
+                        &[],
+                        NearToken::from_near(0),
+                        CHAINED_CALL_GAS,
+                    );
                     // The return value for this function call will be the value
                     // returned by the `sign_on_finish` callback.
                     env::promise_return(yield_promise);
@@ -282,6 +294,10 @@ impl VersionedMpcContract {
                 }
             }
         }
+    }
+
+    pub fn log_signature(#[callback_unwrap] signature_result: SignatureResponse) {
+        log!("fn log_signature invoked");
     }
 
     pub fn respond(&mut self, request: SignatureRequest, response: SignatureResponse) {
