@@ -14,8 +14,9 @@ serde_json = "1"
 schemars = "0.8"
 k256 = { version = "0.13.1", features = ["sha256", "ecdsa", "serde", "arithmetic", "expose-field"] }
 crypto-shared = { path = "../crypto-shared" }
+near-gas = { version = "0.2.5", features = ["serde", "borsh", "schemars"] }
 
 [dev-dependencies]
-near-workspaces = { git = "https://github.com/near/near-workspaces-rs.git", branch = "feat/upgrade-near-deps" }
+near-workspaces = { git = "https://github.com/near/near-workspaces-rs", branch = "node/1.40-rc.1" }
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0.44"

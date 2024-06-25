@@ -32,13 +32,13 @@ k256 = { version = "0.13.1", features = ["sha256", "ecdsa", "serde"] }
 
 # near dependencies
 near-account-id = "1"
-near-crypto = "0.21"
-near-fetch = "0.3.1"
-near-jsonrpc-client = "0.9"
-near-primitives = "0.21"
-near-lake-framework = { git = "https://github.com/near/near-lake-framework-rs", branch = "dmd/bump-dependencies" }
-near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs", branch = "dmd/bump-dependencies" }
-near-workspaces = { git = "https://github.com/near/near-workspaces-rs.git", branch = "feat/upgrade-near-deps" }
+near-crypto = { git = "https://github.com/near/nearcore", rev = "08941a3c070eca2e6163a4ad1eaed1f0d3ee233c" }
+near-fetch = { git = "https://github.com/ChaoticTempest/near-fetch", branch = "chore/bump-node-1.40" }
+near-jsonrpc-client = { git = "https://github.com/near/near-jsonrpc-client-rs", branch = "node/1.40-rc.1" }
+near-primitives = { git = "https://github.com/near/nearcore", rev = "08941a3c070eca2e6163a4ad1eaed1f0d3ee233c" }
+near-lake-framework = { git = "https://github.com/near/near-lake-framework-rs/", branch = "node/1.40-rc.1" }
+near-lake-primitives = { git = "https://github.com/near/near-lake-framework-rs/", branch = "node/1.40-rc.1" }
+near-workspaces = { git = "https://github.com/near/near-workspaces-rs", branch = "node/1.40-rc.1" }
 
 # local chain-signatures depencencies
 crypto-shared = { path = "../../chain-signatures/crypto-shared" }
@@ -60,7 +60,7 @@ secp256k1 = "0.28.2"
 [build-dependencies]
 anyhow = "1"
 async-process = "1"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1.37.0", features = ["full"] }
 
 [workspace] # used to ignore higher level workspace
 

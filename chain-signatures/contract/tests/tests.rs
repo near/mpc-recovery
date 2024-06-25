@@ -1,7 +1,6 @@
-use mpc_contract::{primitives::CandidateInfo, MpcContract, VersionedMpcContract};
-use near_sdk::env;
+use mpc_contract::primitives::CandidateInfo;
 use near_workspaces::AccountId;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 const CONTRACT_FILE_PATH: &str = "../../target/wasm32-unknown-unknown/release/mpc_contract.wasm";
 
@@ -34,22 +33,6 @@ async fn test_contract_can_not_be_reinitialized() -> anyhow::Result<()> {
         .await?;
 
     assert!(result2.is_failure());
-
-    Ok(())
-}
-
-#[test]
-fn test_old_state_can_be_migrated_to_v0() -> anyhow::Result<()> {
-    let old_contract = MpcContract::init(3, BTreeMap::new());
-    env::state_write(&old_contract);
-
-    let v0_contract = VersionedMpcContract::migrate_state_old_to_v0();
-    let expected_contract = VersionedMpcContract::V0(old_contract);
-
-    assert_eq!(
-        format!("{v0_contract:#?}"),
-        format!("{expected_contract:#?}")
-    );
 
     Ok(())
 }

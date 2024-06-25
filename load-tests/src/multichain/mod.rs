@@ -29,7 +29,7 @@ pub async fn multichain_sign(user: &mut GooseUser) -> TransactionResult {
         .expect("Session Data must be set");
 
     let multichain_contract_id =
-        AccountId::try_from("v2.multichain-mpc.testnet".to_string()).unwrap();
+        AccountId::try_from("v5.multichain-mpc-dev.testnet".to_string()).unwrap();
     let testnet_rpc_url = "https://rpc.testnet.near.org".to_string();
 
     let signer = InMemorySigner {

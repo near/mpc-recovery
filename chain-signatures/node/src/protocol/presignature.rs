@@ -320,7 +320,7 @@ impl PresignatureManager {
         } else {
             match self.generators.entry(id) {
                 Entry::Vacant(entry) => {
-                    tracing::info!(id, "joining protocol to generate a new presignature");
+                    tracing::debug!(id, "joining protocol to generate a new presignature");
                     let (triple0, triple1) = match triple_manager.take_two(triple0, triple1).await {
                         Ok(result) => result,
                         Err(error) => match error {

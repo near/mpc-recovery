@@ -311,7 +311,8 @@ pub async fn docker(cfg: MultichainConfig, docker_client: &DockerClient) -> anyh
         .call("init")
         .args_json(json!({
             "threshold": cfg.threshold,
-            "candidates": candidates
+            "candidates": candidates,
+            "contract_version": "V1"
         }))
         .transact()
         .await?
@@ -361,7 +362,8 @@ pub async fn host(cfg: MultichainConfig, docker_client: &DockerClient) -> anyhow
         .call("init")
         .args_json(json!({
             "threshold": cfg.threshold,
-            "candidates": candidates
+            "candidates": candidates,
+            "contract_version": "V1"
         }))
         .transact()
         .await?
@@ -436,10 +438,9 @@ pub async fn initialize_lake_indexer<'a>(
     docker_client: &'a containers::DockerClient,
     network: &str,
 ) -> anyhow::Result<LakeIndexerCtx<'a>> {
-    let s3_bucket = "near-lake-custom".to_string();
-    let s3_region = "us-east-1".to_string();
-    let localstack =
-        LocalStack::run(docker_client, network, s3_bucket.clone(), s3_region.clone()).await?;
+    let s3_bucket = "near-lake-custom";
+    let s3_region = "us-east-1";
+    let localstack = LocalStack::run(docker_client, network, s3_bucket, s3_region).await?;
 
     let lake_indexer = containers::LakeIndexer::run(
         docker_client,
@@ -460,6 +461,8 @@ pub async fn initialize_lake_indexer<'a>(
             validator_key.secret_key.to_string().parse()?,
         ))
         .await?;
+
+    // let worker = near_workspaces::sandbox_with_builder_and_version(network_builder, "1.40.0").await?;
 
     Ok(LakeIndexerCtx {
         localstack,

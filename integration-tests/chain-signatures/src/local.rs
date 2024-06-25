@@ -39,27 +39,24 @@ impl Node {
         let sign_sk =
             near_crypto::SecretKey::from_seed(near_crypto::KeyType::ED25519, "integration-test");
 
-        let storage_options = ctx.storage_options.clone();
         let indexer_options = mpc_recovery_node::indexer::Options {
             s3_bucket: ctx.localstack.s3_bucket.clone(),
             s3_region: ctx.localstack.s3_region.clone(),
             s3_url: Some(ctx.localstack.s3_host_address.clone()),
             start_block_height: 0,
         };
-        let near_rpc = ctx.lake_indexer.rpc_host_address.clone();
-        let mpc_contract_id = ctx.mpc_contract.id().clone();
         let cli = mpc_recovery_node::cli::Cli::Start {
-            near_rpc: near_rpc.clone(),
-            mpc_contract_id: mpc_contract_id.clone(),
+            near_rpc: ctx.lake_indexer.rpc_host_address.clone(),
+            mpc_contract_id: ctx.mpc_contract.id().clone(),
             account_id: account_id.clone(),
             account_sk: account_sk.to_string().parse()?,
             web_port,
             cipher_pk: hex::encode(cipher_pk.to_bytes()),
             cipher_sk: hex::encode(cipher_sk.to_bytes()),
             sign_sk: Some(sign_sk.clone()),
-            indexer_options: indexer_options.clone(),
+            indexer_options,
             my_address: None,
-            storage_options: storage_options.clone(),
+            storage_options: ctx.storage_options.clone(),
             min_triples: cfg.triple_cfg.min_triples,
             max_triples: cfg.triple_cfg.max_triples,
             max_concurrent_introduction: cfg.triple_cfg.max_concurrent_introduction,
