@@ -161,6 +161,19 @@ impl Cli {
     }
 }
 
+/// This will whether this code is being ran on top of GCP or not.
+fn is_running_on_gcp() -> bool {
+    let resp = reqwest::blocking::Client::new()
+        .get("http://metadata.google.internal/computeMetadata/v1/instance/id")
+        .header("Metadata-Flavor", "Google")
+        .send();
+
+    match resp {
+        Ok(resp) => resp.status().is_success(),
+        _ => false,
+    }
+}
+
 fn spinup_indexer(
     options: &indexer::Options,
     mpc_contract_id: &AccountId,
@@ -215,7 +228,7 @@ pub fn run(cmd: Cli) -> anyhow::Result<()> {
         .with_thread_ids(true)
         .with_env_filter(EnvFilter::from_default_env());
     // Check if running in Google Cloud Run: https://cloud.google.com/run/docs/container-contract#services-env-vars
-    if std::env::var("K_SERVICE").is_ok() {
+    if std::env::var("K_SERVICE").is_ok() || is_running_on_gcp() {
         // Disable colored logging as it messes up GCP's log formatting
         subscriber = subscriber.with_ansi(false);
     }

@@ -1,5 +1,4 @@
 use mpc_keys::hpke;
-use near_crypto::{PublicKey, SecretKey};
 
 fn main() {
     let (cipher_sk, cipher_pk) = hpke::generate();
