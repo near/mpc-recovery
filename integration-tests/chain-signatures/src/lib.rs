@@ -459,7 +459,8 @@ pub async fn initialize_lake_indexer<'a>(
         .validator_key(ValidatorKey::Known(
             validator_key.account_id.to_string().parse()?,
             validator_key.secret_key.to_string().parse()?,
-        )).await?;
+        ))
+        .await?;
 
     // let worker = near_workspaces::sandbox_with_builder_and_version(network_builder, "1.40.0").await?;
 
