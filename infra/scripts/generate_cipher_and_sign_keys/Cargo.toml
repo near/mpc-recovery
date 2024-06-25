@@ -1,5 +1,5 @@
 [package]
-name = "generate_cipher_keys"
+name = "generate_cipher_and_sign_keys"
 version = "0.1.0"
 edition = "2021"
 
