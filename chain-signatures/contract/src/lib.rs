@@ -9,7 +9,8 @@ use near_sdk::collections::LookupMap;
 use near_sdk::serde::{Deserialize, Serialize};
 
 use near_sdk::{
-    env, log, near_bindgen, AccountId, BorshStorageKey, CryptoHash, Gas, GasWeight, NearToken, PromiseError, PublicKey,
+    env, log, near_bindgen, AccountId, BorshStorageKey, CryptoHash, Gas, GasWeight, NearToken,
+    PromiseError, PublicKey,
 };
 
 use primitives::{
@@ -80,7 +81,7 @@ pub struct YieldResumeRequest {
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, Debug)]
 pub enum VersionedMpcContract {
-    V0(MpcContract)
+    V0(MpcContract),
 }
 
 impl Default for VersionedMpcContract {
@@ -184,10 +185,10 @@ impl VersionedMpcContract {
     /// The fee changes based on how busy the network is.
     #[payable]
     pub fn sign(&mut self, request: SignRequest) {
-        let SignRequest { 
+        let SignRequest {
             payload,
             path,
-            key_version
+            key_version,
         } = request;
         let latest_key_version: u32 = self.latest_key_version();
         assert!(
@@ -591,10 +592,7 @@ impl VersionedMpcContract {
 #[near_bindgen]
 impl VersionedMpcContract {
     #[init]
-    pub fn init(
-        threshold: usize,
-        candidates: BTreeMap<AccountId, CandidateInfo>
-    ) -> Self {
+    pub fn init(threshold: usize, candidates: BTreeMap<AccountId, CandidateInfo>) -> Self {
         log!(
             "init: signer={}, treshhold={}, candidates={}",
             env::signer_account_id(),
@@ -612,7 +610,7 @@ impl VersionedMpcContract {
         epoch: u64,
         participants: BTreeMap<AccountId, ParticipantInfo>,
         threshold: usize,
-        public_key: PublicKey
+        public_key: PublicKey,
     ) -> Self {
         log!(
             "init_running: signer={}, epoch={}, participants={}, threshold={}, public_key={:?}",
@@ -642,7 +640,7 @@ impl VersionedMpcContract {
 
     pub fn state(&self) -> &ProtocolContractState {
         match self {
-            Self::V0(mpc_contract) => &mpc_contract.protocol_state
+            Self::V0(mpc_contract) => &mpc_contract.protocol_state,
         }
     }
 
@@ -681,20 +679,20 @@ impl VersionedMpcContract {
 
     fn mutable_state(&mut self) -> &mut ProtocolContractState {
         match self {
-            Self::V0(ref mut mpc_contract) => &mut mpc_contract.protocol_state
+            Self::V0(ref mut mpc_contract) => &mut mpc_contract.protocol_state,
         }
     }
 
     fn request_already_exists(&self, request: &SignatureRequest) -> bool {
         match self {
-            Self::V0(mpc_contract) => mpc_contract.pending_requests.contains_key(request)
+            Self::V0(mpc_contract) => mpc_contract.pending_requests.contains_key(request),
         }
     }
 
     fn signature_deposit(&self) -> u128 {
         const CHEAP_REQUESTS: u32 = 3;
         let pending_requests = match self {
-            Self::V0(mpc_contract) => mpc_contract.request_counter
+            Self::V0(mpc_contract) => mpc_contract.request_counter,
         };
         match pending_requests {
             0..=CHEAP_REQUESTS => 1,
