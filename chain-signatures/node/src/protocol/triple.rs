@@ -317,7 +317,7 @@ impl TripleManager {
         }
         let id0 = self.mine.pop_front()?;
         let id1 = self.mine.pop_front()?;
-        tracing::debug!(id0, id1, me = ?self.me, "trying to take two triples");
+        tracing::info!(id0, id1, me = ?self.me, "trying to take two triples");
 
         let take_two_result = self.take_two(id0, id1).await;
         match take_two_result {
@@ -468,7 +468,7 @@ impl TripleManager {
                         },
                     )),
                     Action::Return(output) => {
-                        tracing::debug!(
+                        tracing::info!(
                             id,
                             me = ?self.me,
                             elapsed = ?generator.timestamp.unwrap().elapsed(),
