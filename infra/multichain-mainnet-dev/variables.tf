@@ -1,7 +1,7 @@
 variable "project_id" {
   description = "The project ID to deploy resource into"
   type        = string
-  default     = "pagoda-discovery-platform-prod"
+  default     = "pagoda-discovery-platform-dev"
 }
 
 variable "subnetwork" {

@@ -65,7 +65,7 @@ module "gce-container" {
 
 resource "google_compute_global_address" "external_ips" {
   count        = length(var.node_configs)
-  name         = "multichain-mainnet-${count.index}"
+  name         = "multichain-mainnet-dev-${count.index}"
   address_type = "EXTERNAL"
   address      = var.node_configs["${count.index}"].ip_address
 }
@@ -77,7 +77,7 @@ module "mig_template" {
   subnetwork = "projects/pagoda-shared-infrastructure/regions/us-central1/subnetworks/prod-us-central1"
   region     = var.region
   service_account = {
-    email  = "mpc-recovery@pagoda-discovery-platform-prod.iam.gserviceaccount.com",
+    email  = "mpc-recovery@pagoda-discovery-platform-dev.iam.gserviceaccount.com",
     scopes = ["cloud-platform"]
   }
   name_prefix          = "multichain-mainnet-dev-${count.index}"

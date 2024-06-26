@@ -1,6 +1,6 @@
 terraform {
   backend "gcs" {
-    bucket = "multichain-terraform-prod"
+    bucket = "multichain-terraform-dev"
     prefix = "state/multichain-vm-test-mainnet"
   }
 
