@@ -234,20 +234,47 @@ impl MessageHandler for RunningState {
         let participants = ctx.mesh().active_participants();
         let mut triple_manager = self.triple_manager.write().await;
 
-        // remove the triple_id that has already failed from the triple_bins
+        // remove the triple_id that has already failed or taken from the triple_bins
+        // and refresh the timestamp of failed and taken
         queue
             .triple_bins
             .entry(self.epoch)
             .or_default()
-            .retain(|id, _| {
+            .retain(|id, queue| {
+                if let Some(first_msg) = queue.front() {
+                    // Skip this triple if its message already timed out
+                    if util::is_elapsed_longer_than_timeout(
+                        first_msg.timestamp,
+                        crate::types::PROTOCOL_TRIPLE_TIMEOUT,
+                    ) {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
                 let has_failed = triple_manager.failed_triples.contains_key(id);
                 if has_failed {
                     triple_manager.failed_triples.insert(*id, Instant::now());
                 }
-                !has_failed
+                let is_taken = triple_manager.taken.contains_key(id);
+                if is_taken {
+                    triple_manager.taken.insert(*id, Instant::now());
+                }
+                !has_failed && !is_taken
             });
 
         for (id, queue) in queue.triple_bins.entry(self.epoch).or_default() {
+            if let Some(first_msg) = queue.front() {
+                // Skip this triple if its message already timed out
+                if util::is_elapsed_longer_than_timeout(
+                    first_msg.timestamp,
+                    crate::types::PROTOCOL_TRIPLE_TIMEOUT,
+                ) {
+                    continue;
+                }
+            } else {
+                continue;
+            }
             let protocol = match triple_manager.get_or_generate(*id, participants) {
                 Ok(protocol) => protocol,
                 Err(err) => {
