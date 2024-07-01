@@ -203,6 +203,7 @@ impl MpcSignProtocol {
         let mut queue = MpcMessageQueue::default();
         let mut last_state_update = Instant::now();
         let mut last_pinged = Instant::now();
+        let mut is_first = true;
         loop {
             let protocol_time = Instant::now();
             tracing::debug!("trying to advance mpc recovery protocol");
@@ -224,7 +225,7 @@ impl MpcSignProtocol {
                 }
             }
 
-            let contract_state = if last_state_update.elapsed() > Duration::from_secs(1) {
+            let contract_state = if is_first || last_state_update.elapsed() > Duration::from_secs(1) {
                 let contract_state = match rpc_client::fetch_mpc_contract_state(
                     &self.ctx.rpc_client,
                     &self.ctx.mpc_contract_id,
@@ -251,7 +252,7 @@ impl MpcSignProtocol {
                 None
             };
 
-            if last_pinged.elapsed() > Duration::from_millis(300) {
+            if is_first || last_pinged.elapsed() > Duration::from_millis(300) {
                 self.ctx.mesh.ping().await;
                 last_pinged = Instant::now();
             }
@@ -340,6 +341,8 @@ impl MpcSignProtocol {
                 .with_label_values(&[&my_account_id])
                 .observe(protocol_time.elapsed().as_secs_f64());
             tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
+
+            is_first = false;
         }
     }
 }
