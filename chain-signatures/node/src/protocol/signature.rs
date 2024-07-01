@@ -531,18 +531,20 @@ impl SignatureManager {
         signer: &T,
         mpc_contract_id: &AccountId,
         my_account_id: &AccountId,
-    ) -> Result<(), near_fetch::Error> {
+    ) {
         for (receipt_id, request, time_added, signature) in self.signatures.drain(..) {
             let expected_public_key = derive_key(self.public_key, request.epsilon.scalar);
             // We do this here, rather than on the client side, so we can use the ecrecover system function on NEAR to validate our signature
-            let signature = into_eth_sig(
+            let Ok(signature) = into_eth_sig(
                 &expected_public_key,
                 &signature.big_r,
                 &signature.s,
                 Scalar::from_bytes(&request.payload_hash),
-            )
-            .map_err(|_| near_fetch::Error::InvalidArgs("Failed to generate a recovery ID"))?;
-            let response = rpc_client
+            ) else {
+                tracing::error!(%receipt_id, "Failed to generate a recovery ID");
+                break;
+            };
+            let response = match rpc_client
                 .call(signer, mpc_contract_id, "respond")
                 .args_json(serde_json::json!({
                     "request": request,
@@ -551,7 +553,25 @@ impl SignatureManager {
                 .max_gas()
                 .retry_exponential(10, 5)
                 .transact()
-                .await?;
+                .await
+            {
+                Ok(response) => response,
+                Err(err) => {
+                    tracing::error!(%receipt_id, error = ?err, "Failed to publish transaction");
+                    break;
+                }
+            };
+
+            match response.json() {
+                Ok(()) => {
+                    tracing::info!(%receipt_id, bi_r = signature.big_r.affine_point.to_base58(), s = ?signature.s, "published signature sucessfully")
+                }
+                Err(err) => {
+                    tracing::error!(%receipt_id, bi_r = signature.big_r.affine_point.to_base58(), s = ?signature.s, error = ?err, "smart contract threw error");
+                    break;
+                }
+            };
+
             crate::metrics::NUM_SIGN_SUCCESS
                 .with_label_values(&[my_account_id.as_str()])
                 .inc();
@@ -563,9 +583,7 @@ impl SignatureManager {
                     .with_label_values(&[my_account_id.as_str()])
                     .inc();
             }
-            tracing::info!(%receipt_id, big_r = signature.big_r.affine_point.to_base58(), s = ?signature.s, status = ?response.status(), "published signature response");
         }
-        Ok(())
     }
 
     /// Check whether or not the signature has been completed with this presignature_id.

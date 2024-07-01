@@ -437,17 +437,14 @@ impl CryptographicProtocol for RunningState {
             let info = self.fetch_participant(&p)?;
             messages.push(info.clone(), MpcMessage::Signature(msg));
         }
-        if let Err(err) = signature_manager
+        signature_manager
             .publish(
                 ctx.rpc_client(),
                 ctx.signer(),
                 ctx.mpc_contract_id(),
                 &my_account_id,
             )
-            .await
-        {
-            tracing::warn!(?err, "running: failed to publish signatures");
-        }
+            .await;
         drop(signature_manager);
         let failures = messages
             .send_encrypted(

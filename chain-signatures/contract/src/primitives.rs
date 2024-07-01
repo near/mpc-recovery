@@ -214,9 +214,3 @@ pub struct SignRequest {
     pub path: String,
     pub key_version: u32,
 }
-
-#[derive(Serialize, Deserialize, BorshDeserialize, BorshSerialize, Debug)]
-pub struct SignResult {
-    pub big_r: String,
-    pub s: String,
-}

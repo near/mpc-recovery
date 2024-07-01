@@ -79,7 +79,6 @@ fn serializeable_scalar_roundtrip() {
             assert_eq!(input, output, "Failed on {:?}", scalar);
         }
 
-        dbg!(scalar);
         // Test Serde via JSON
         {
             let serialized = serde_json::to_vec(&input).unwrap();
