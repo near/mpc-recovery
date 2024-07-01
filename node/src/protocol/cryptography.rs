@@ -189,6 +189,7 @@ impl CryptographicProtocol for WaitingForConsensusState {
         mut self,
         ctx: C,
     ) -> Result<NodeState, CryptographicError> {
+        tracing::debug!("Node state before progress: WaitingForConsensusState");
         let failures = self
             .messages
             .write()
@@ -218,6 +219,7 @@ impl CryptographicProtocol for ResharingState {
         mut self,
         ctx: C,
     ) -> Result<NodeState, CryptographicError> {
+        tracing::debug!("Node state before progress: ResharingState");
         // TODO: we are not using active potential participants here, but we should in the future.
         // Currently resharing protocol does not timeout and restart with new set of participants.
         // So if it picks up a participant that is not active, it will never be able to send a message to it.
@@ -342,6 +344,7 @@ impl CryptographicProtocol for RunningState {
         mut self,
         ctx: C,
     ) -> Result<NodeState, CryptographicError> {
+        tracing::debug!("Node state before progress: RunningState");
         let active = ctx.mesh().active_participants();
         if active.len() < self.threshold {
             tracing::info!(
@@ -465,7 +468,10 @@ impl CryptographicProtocol for NodeState {
             NodeState::Resharing(state) => state.progress(ctx).await,
             NodeState::Running(state) => state.progress(ctx).await,
             NodeState::WaitingForConsensus(state) => state.progress(ctx).await,
-            _ => Ok(self),
+            _ => {
+                tracing::debug!("Node state before progress: Starting or Started Or Joining");
+                Ok(self)
+            },
         }
     }
 }

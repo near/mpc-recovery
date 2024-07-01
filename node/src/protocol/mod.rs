@@ -270,6 +270,7 @@ impl MpcSignProtocol {
                     continue;
                 }
             };
+
             crate::metrics::PROTOCOL_LATENCY_ITER_CRYPTO
                 .with_label_values(&[&my_account_id])
                 .observe(crypto_time.elapsed().as_secs_f64());
@@ -285,6 +286,7 @@ impl MpcSignProtocol {
                     }
                 };
             }
+
             crate::metrics::PROTOCOL_LATENCY_ITER_CONSENSUS
                 .with_label_values(&[&my_account_id])
                 .observe(consensus_time.elapsed().as_secs_f64());
@@ -300,14 +302,34 @@ impl MpcSignProtocol {
                 .observe(message_time.elapsed().as_secs_f64());
 
             let sleep_ms = match state {
-                NodeState::Generating(_) => 500,
-                NodeState::Resharing(_) => 500,
-                NodeState::Running(_) => 100,
-
-                NodeState::Starting => 1000,
-                NodeState::Started(_) => 1000,
-                NodeState::WaitingForConsensus(_) => 1000,
-                NodeState::Joining(_) => 1000,
+                NodeState::Generating(_) => {
+                    tracing::debug!("Node state final: Generating");
+                    500
+                },
+                NodeState::Resharing(_) => {
+                    tracing::debug!("Node state final: Resharing");
+                    500
+                },
+                NodeState::Running(_) => {
+                    tracing::debug!("Node state final: Running");
+                    100
+                },
+                NodeState::Starting => {
+                    tracing::debug!("Node state final: Starting");
+                    1000
+                },
+                NodeState::Started(_) => {
+                    tracing::debug!("Node state final: Started");
+                    1000
+                },
+                NodeState::WaitingForConsensus(_) => {
+                    tracing::debug!("Node state final: WaitingForConsensus");
+                    1000
+                },
+                NodeState::Joining(_) => {
+                    tracing::debug!("Node state final: Joining");
+                    1000
+                },
             };
 
             let mut guard = self.state.write().await;

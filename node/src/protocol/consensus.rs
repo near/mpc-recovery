@@ -90,6 +90,7 @@ impl ConsensusProtocol for StartedState {
         ctx: C,
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
+        tracing::debug!("Node state before advance: StartedState");
         match self.persistent_node_data {
             Some(PersistentNodeData {
                 epoch,
@@ -241,6 +242,7 @@ impl ConsensusProtocol for GeneratingState {
         _ctx: C,
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
+        tracing::debug!("Node state before advance: GeneratingState");
         match contract_state {
             ProtocolState::Initializing(_) => {
                 tracing::debug!("generating(initializing): continuing generation, contract state has not been finalized yet");
@@ -291,6 +293,7 @@ impl ConsensusProtocol for WaitingForConsensusState {
         ctx: C,
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
+        tracing::debug!("Node state before advance: WaitingForConsensusState");
         match contract_state {
             ProtocolState::Initializing(contract_state) => {
                 tracing::debug!("waiting(initializing): waiting for consensus, contract state has not been finalized yet");
@@ -455,6 +458,7 @@ impl ConsensusProtocol for RunningState {
         ctx: C,
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
+        tracing::debug!("Node state before advance: RunningState");
         match contract_state {
             ProtocolState::Initializing(_) => Err(ConsensusError::ContractStateRollback),
             ProtocolState::Running(contract_state) => match contract_state.epoch.cmp(&self.epoch) {
@@ -529,6 +533,7 @@ impl ConsensusProtocol for ResharingState {
         _ctx: C,
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
+        tracing::debug!("Node state before advance: ResharingState");
         match contract_state {
             ProtocolState::Initializing(_) => Err(ConsensusError::ContractStateRollback),
             ProtocolState::Running(contract_state) => {
@@ -605,6 +610,7 @@ impl ConsensusProtocol for JoiningState {
         ctx: C,
         contract_state: ProtocolState,
     ) -> Result<NodeState, ConsensusError> {
+        tracing::debug!("Node state before advance: JoiningState");
         match contract_state {
             ProtocolState::Initializing(_) => Err(ConsensusError::ContractStateRollback),
             ProtocolState::Running(contract_state) => {
