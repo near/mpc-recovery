@@ -225,7 +225,7 @@ impl MpcSignProtocol {
                 }
             }
 
-            let contract_state = if is_first || last_state_update.elapsed() > Duration::from_secs(1) {
+            let contract_state = if true {
                 let contract_state = match rpc_client::fetch_mpc_contract_state(
                     &self.ctx.rpc_client,
                     &self.ctx.mpc_contract_id,
@@ -252,7 +252,7 @@ impl MpcSignProtocol {
                 None
             };
 
-            if is_first || last_pinged.elapsed() > Duration::from_millis(300) {
+            if last_pinged.elapsed() > Duration::from_millis(300) {
                 self.ctx.mesh.ping().await;
                 last_pinged = Instant::now();
             }

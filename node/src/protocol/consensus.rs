@@ -689,6 +689,7 @@ impl ConsensusProtocol for NodeState {
     ) -> Result<NodeState, ConsensusError> {
         match self {
             NodeState::Starting => {
+                tracing::debug!("Node state before advance: Starting");
                 let persistent_node_data = ctx.secret_storage().load().await?;
                 let triple_data = load_triples(ctx).await?;
                 Ok(NodeState::Started(StartedState {
